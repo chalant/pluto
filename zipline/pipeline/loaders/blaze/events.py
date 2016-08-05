@@ -17,7 +17,7 @@ from zipline.pipeline.loaders.utils import (
     check_data_query_args,
     normalize_data_query_bounds,
     normalize_timestamp_to_query_time,
-)
+    load_raw_data)
 from zipline.utils.input_validation import ensure_timezone, optionally
 from zipline.utils.preprocess import preprocess
 
@@ -90,34 +90,8 @@ class BlazeEventsLoader(PipelineLoader):
         self._data_query_tz = data_query_tz
 
     def load_adjusted_array(self, columns, dates, assets, mask):
-        data_query_time = self._data_query_time
-        data_query_tz = self._data_query_tz
-        lower_dt, upper_dt = normalize_data_query_bounds(
-            dates[0],
-            dates[-1],
-            data_query_time,
-            data_query_tz,
-        )
-
-        raw = ffill_query_in_range(
-            self._expr,
-            lower_dt,
-            upper_dt,
-            self._odo_kwargs,
-        )
-        sids = raw.loc[:, SID_FIELD_NAME]
-        raw.drop(
-            sids[~sids.isin(assets)].index,
-            inplace=True
-        )
-        if data_query_time is not None:
-            normalize_timestamp_to_query_time(
-                raw,
-                data_query_time,
-                data_query_tz,
-                inplace=True,
-                ts_field=TS_FIELD_NAME,
-            )
+        raw = load_raw_data(assets, dates, self._data_query_time,
+                            self._data_query_tz, self._expr, self._odo_kwargs)
 
         return EventsLoader(
             events=raw,
