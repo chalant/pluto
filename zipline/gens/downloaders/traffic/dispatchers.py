@@ -53,30 +53,7 @@ class Dispatcher:
 the client provide the request, the executor and ways of saving the result of the request...'''
 
 
-class Saver(ABC):
 
-	def __init__(self):
-		self._lock = Lock()
-		self._prb = None
-
-	def save(self, data):
-		with self._lock:
-			self._save(data)
-
-	@abstractmethod
-	def _save(self, data):
-		raise NotImplementedError
-
-
-class DailyEquityDataSaver(Saver):
-	def __init__(self, collection):
-		super(DailyEquityDataSaver, self).__init__()
-		self._collection = collection
-
-	def _save(self, data):
-		symbol = data['symbol']
-		self._collection.update_one({'symbol': symbol}, {'$push': {'series': {'$each': data['series']}}})
-		print("saved daily equity data for: {0}".format(symbol))
 
 # schedules a queue of requests to be delivered to a dispatcher...
 # TODO: handle time_to_execution must be UTC!!! right now the client is the one that provides it... maybe encapsulate

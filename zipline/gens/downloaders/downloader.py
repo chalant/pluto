@@ -6,12 +6,40 @@ from concurrent.futures import ThreadPoolExecutor
 from pandas import Timestamp
 from dateutil.parser import parse
 from tqdm import tqdm
-from zipline.gens.downloaders.traffic.dispatchers import DailyEquityDataSaver, Dispatcher, Schedule
+from zipline.gens.downloaders.traffic.dispatchers import Dispatcher, Schedule
 from zipline.gens.downloaders.traffic.executors import Yahoo, AlphaVantage
 from zipline.gens.downloaders.traffic.requests import create_equity_request
+from abc import ABC, abstractmethod
+from threading import Lock
 
 client = pm.MongoClient()
 database = client['Main']
+
+
+class Saver(ABC):
+
+	def __init__(self):
+		self._lock = Lock()
+		self._prb = None
+
+	def save(self, data):
+		with self._lock:
+			self._save(data)
+
+	@abstractmethod
+	def _save(self, data):
+		raise NotImplementedError
+
+
+class DailyEquityDataSaver(Saver):
+	def __init__(self, collection):
+		super(DailyEquityDataSaver, self).__init__()
+		self._collection = collection
+
+	def _save(self, data):
+		symbol = data['symbol']
+		self._collection.update_one({'symbol': symbol}, {'$push': {'series': {'$each': data['series']}}})
+		print("saved daily equity data for: {0}".format(symbol))
 
 
 def download():
