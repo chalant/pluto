@@ -20,19 +20,18 @@ class _RequestExecutor(ABC):
 		self._prb = None
 
 	def __call__(self):
-		if self._dispatcher_set:
+		current_dispatcher = None
+		while self._dispatcher_set:
 			self._executing = True
-			if self._current_dispatcher is None:
-				self._current_dispatcher = self._dispatcher_set.pop()
-			request = self._get_request(self._current_dispatcher)
+			if current_dispatcher is None:
+				current_dispatcher = self._dispatcher_set.pop()
+			request = self._get_request(current_dispatcher)
 			if request:
 				self._mark_used()
 				self._save(request)
 			else:
-				self._current_dispatcher = None
-			self.__call__()
-		else:
-			self._executing = False
+				current_dispatcher = None
+		self._executing = False
 
 	def _mark_used(self):
 		if not self._used:
@@ -114,6 +113,11 @@ class _AlphaVantage(_RequestExecutor):
 		return 2.1
 
 
+class _Google(_RequestExecutor):
+	def _execute(self, request):
+		pass
+
+
 class _Quandl(_RequestExecutor):
 	def _execute(self, request):
 		raise NotImplementedError
@@ -178,11 +182,13 @@ class _Yahoo(_RequestExecutor):
 	def _cool_down_time(self):
 		return 2.1
 
+
 _alv = None
 _yho = None
 
-def order_executor(name,api_key=None):
-	global _alv,_yho
+
+def order_executor(name, api_key=None):
+	global _alv, _yho
 	if name is 'AlphaVantage':
 		if not _alv:
 			if api_key is None:

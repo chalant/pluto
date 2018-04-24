@@ -10,7 +10,7 @@ class Request(ABC):
 
 
 class EquityRequest(Request):
-	def __init__(self, saver=None):
+	def __init__(self, saver):
 		super(EquityRequest, self).__init__(saver)
 		self._start_date = None
 		self._end_date = None
@@ -46,6 +46,15 @@ class EquityRequest(Request):
 	@end_date.setter
 	def end_date(self, value):
 		self._end_date = value
+
+class BatchEquityRequest(Request):
+	@property
+	def symbols(self):
+		return self._symbols
+
+	@symbols.setter
+	def symbols(self,values):
+		self._symbols = values
 
 
 def create_equity_request(saver, symbol, start_date=None, end_date=None, frequency='1D'):
