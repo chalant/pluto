@@ -1,5 +1,4 @@
 from time import sleep
-from abc import ABC, abstractmethod
 from collections import deque
 from threading import Lock, Condition
 from datetime import datetime
@@ -53,11 +52,6 @@ class Dispatcher:
 the client provide the request, the executor and ways of saving the result of the request...'''
 
 
-
-
-# schedules a queue of requests to be delivered to a dispatcher...
-# TODO: handle time_to_execution must be UTC!!! right now the client is the one that provides it... maybe encapsulate
-# this in a class...
 class Schedule:
 	def __init__(self, dispatcher, time_to_execution):
 		if isinstance(time_to_execution, datetime):
