@@ -7,7 +7,7 @@ from pandas import Timestamp
 from dateutil.parser import parse
 from tqdm import tqdm
 from zipline.gens.downloaders.traffic.dispatchers import Dispatcher, Schedule
-from zipline.gens.downloaders.traffic.executors import Yahoo, AlphaVantage
+from zipline.gens.downloaders.traffic.executors import order_executor
 from zipline.gens.downloaders.traffic.requests import create_equity_request
 from abc import ABC, abstractmethod
 from threading import Lock
@@ -65,8 +65,8 @@ def download():
 			sym = s['symbol']
 			symbols.append((sym, s['ipo year']))
 
-	av_executor = AlphaVantage("5B3LVTJKR827Y06N")  # api key...
-	y_executor = Yahoo()
+	av_executor = order_executor('AlphaVantage',"5B3LVTJKR827Y06N")  # api key...
+	y_executor = order_executor('Yahoo')
 
 	daily_hist_req_dispatcher = Dispatcher()  # by default, we get up-to 20 years worth of data...
 	bounded_equity_request = Dispatcher()  # for bounded requests (between a given datetime...)

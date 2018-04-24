@@ -10,7 +10,7 @@ from zipline.gens.downloaders.traffic.requests import EquityRequest
 from dateutil.parser import parse
 
 
-class RequestExecutor(ABC):
+class _RequestExecutor(ABC):
 	def __init__(self):
 		self._cool_down = self._cool_down_time()
 		self._used = False
@@ -67,11 +67,11 @@ class RequestExecutor(ABC):
 
 # TODO: make a singleton of these classes, since we can only have one of these... => get an instance through a factory
 # method...
-class AlphaVantage(RequestExecutor):
+class _AlphaVantage(_RequestExecutor):
 	api_url = "https://www.alphavantage.co/query?function={0}&{1}={2}&outputsize=full&apikey={3}&datatype=csv"
 
 	def __init__(self, api_key):
-		super(AlphaVantage, self).__init__()
+		super(_AlphaVantage, self).__init__()
 		self._api_key = api_key
 
 	def _execute(self, request):
@@ -114,12 +114,12 @@ class AlphaVantage(RequestExecutor):
 		return 2.1
 
 
-class Quandl(RequestExecutor):
+class _Quandl(_RequestExecutor):
 	def _execute(self, request):
 		raise NotImplementedError
 
 
-class Yahoo(RequestExecutor):
+class _Yahoo(_RequestExecutor):
 	def _execute(self, request):
 		start = self._create_date(request.start_date)
 		try:
@@ -177,3 +177,22 @@ class Yahoo(RequestExecutor):
 
 	def _cool_down_time(self):
 		return 2.1
+
+_alv = None
+_yho = None
+
+def order_executor(name,api_key=None):
+	global _alv,_yho
+	if name is 'AlphaVantage':
+		if not _alv:
+			if api_key is None:
+				_alv = _AlphaVantage("5B3LVTJKR827Y06N")
+			else:
+				_alv = _AlphaVantage(api_key)
+		return _alv
+	elif name is 'Yahoo':
+		if not _yho:
+			_yho = _Yahoo()
+		return _yho
+	else:
+		raise NotImplementedError
