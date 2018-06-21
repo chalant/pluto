@@ -2,25 +2,28 @@ from requests.exceptions import RequestException
 from yahoo_historical import Fetcher
 import math
 from dateutil.parser import parse
-from zipline.gens.downloaders.traffic.executors.executor import _RequestExecutor
-from zipline.gens.downloaders.traffic.requests import EquityRequest
+from zipline.gens.data.traffic.executors.executor import _RequestExecutor
+from zipline.gens.data.traffic.requests import EquityRequest
 from time import sleep
+from datetime import timedelta, datetime, time
 
 
+# fixme: when we specify the end date, it returns data for the day before... we maybe need to add one day?
+# if th
 class _Yahoo(_RequestExecutor):
-	#todo: find a better implementation for this... like use the built-in to_dict of pandas
+	# todo: find a better implementation for this... like use the built-in to_dict of pandas
 	def _execute(self, request):
-		if isinstance(request,EquityRequest):
+		if isinstance(request, EquityRequest):
 			start = request.start_date
 			start_arr = self._create_date(start)
 			end = request.end_date
 			try:
-				if request.frequency == '1D':
+				if request.interval == '1D':
 					if start == end:
 						f = Fetcher(request.symbol, start_arr)
 
 					else:
-						f = Fetcher(request.symbol, start_arr, self._create_date(end))
+						f = Fetcher(request.symbol, start_arr, self._create_date(end, True))
 				else:
 					raise NotImplementedError
 				historical = f.getHistorical()
@@ -63,22 +66,23 @@ class _Yahoo(_RequestExecutor):
 						 'Volume': t[volume],
 						 'Dividend': p,
 						 'Split': s})
-				documents = documents[::-1]
-				if start == end:
-					documents.pop()
-				return {'symbol': request.symbol, 'series': documents}
-			except RequestException as e:
-				print('unable to download data for {0}'.format(request.symbol),e)
+				documents.pop()
+				if documents[-1]['Date'] < datetime.combine(end, time.min):
+					return None
+				else:
+					return {'symbol': request.symbol, 'series': documents}
+			except RequestException:
 				return None
-			except Exception as e:
-				print('unable to download data for {0}'.format(request.symbol),e)
+			except Exception:
 				return None
 
-	def _create_date(self, datetime):
-		if datetime:
-			return [datetime.year, datetime.month, datetime.day]
+	def _create_date(self, datetime_, shift=False):
+		if datetime_:
+			if shift:
+				datetime_ = datetime_ + timedelta(days=1)
+			return [datetime_.year, datetime_.month, datetime_.day]
 		else:
 			return None
 
 	def _cool_down_time(self):
-		return 2.1 #todo: maybe use a random time between 0.1 and 2.1 secs
+		return 2.1  # todo: maybe use a random time between 0.1 and 2.1 secs

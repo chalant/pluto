@@ -1,4 +1,4 @@
-from zipline.gens.downloaders.traffic.executors import alpha_vantage, yahoo, wikipedia, tiingo
+from ..executors import alpha_vantage, yahoo, wikipedia, tiingo
 
 _alv = None
 _yho = None
@@ -27,10 +27,6 @@ def order_executor(name, api_key=None, full_access=False):
 	elif name is 'Tiingo':
 		if not api_key:
 			raise ValueError('Must provide a token')
-		else:
-			if not _tii:
-				return tiingo._Tiingo('tii', api_key=api_key, paid_account=full_access)
-			else:
-				return _tii
+		return tiingo._Tiingo('tii', api_key=api_key, paid_account=full_access)
 	else:
 		raise NotImplementedError

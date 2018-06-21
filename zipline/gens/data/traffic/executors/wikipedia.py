@@ -1,5 +1,5 @@
-from zipline.gens.downloaders.traffic.executors.executor import _RequestExecutor
-from zipline.gens.downloaders.traffic.requests import SandPConstituents
+from .executor import _RequestExecutor
+from ..requests import SandPConstituents
 import requests
 from bs4 import BeautifulSoup
 from dateutil.parser import parse
@@ -9,7 +9,7 @@ class WikipediaExecutor(_RequestExecutor):
 	url = "http://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
 	def _execute(self, request):
-		if type(request) is SandPConstituents:
+		if isinstance(request,SandPConstituents):
 			page = requests.get(self.url)
 			soup = BeautifulSoup(page.content, "html.parser")
 			return self._extract_table(soup.find_all('table', {'class': 'wikitable sortable'})[0])
