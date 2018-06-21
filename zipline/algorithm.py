@@ -1287,7 +1287,7 @@ class TradingAlgorithm(object):
 
     @api_method
     def symbols(self, *args):
-        """Lookup multuple Equities as a list.
+        """Lookup multiple Equities as a list.
 
         Parameters
         ----------

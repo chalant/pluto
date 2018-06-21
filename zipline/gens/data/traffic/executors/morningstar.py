@@ -1,4 +1,4 @@
-from zipline.gens.downloaders.traffic.executors.executor import _RequestExecutor
+from .executor import _RequestExecutor
 import requests
 from pandas import DataFrame
 import pandas as pd

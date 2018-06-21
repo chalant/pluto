@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from time import sleep
 from threading import Lock,Condition
+from logbook import Logger
 
+log = Logger('Executor')
 
 class _RequestExecutor(ABC):
 	def __init__(self, name):
@@ -29,8 +31,6 @@ class _RequestExecutor(ABC):
 						self._save(request)
 					else:
 						self._current_dispatcher = None
-
-			print('no more requests',self._name)
 			self._executing.notify()
 
 	def _check_used(self):
@@ -45,12 +45,15 @@ class _RequestExecutor(ABC):
 	def _save(self, request):
 		result = self._execute(request)
 		if result:
-			print('got result for {0} using'.format(request),self._name)
-			request.save(result)
+			msg = request.save(result)
 			if self._prb:
+				if msg:
+					self._prb.set_description('{} {}'.format(msg,self._name))
 				self._prb.update(1)
 		else:
-			print("couldn't execute request for {0} using {1}".format(request,self._name))
+			if self._prb:
+				self._prb.set_description("Couldn't execute request for {} using {}".format(request,self._name))
+				self._prb.update(1)
 			self._current_dispatcher.failed(self._name, request)
 
 	@abstractmethod
@@ -66,3 +69,29 @@ class _RequestExecutor(ABC):
 
 	def set_progressbar(self, progressbar):
 		self._prb = progressbar
+
+class Schedule(_RequestExecutor):
+	def __init__(self, executors, time_to_execution, thread_pool):  # wraps around a dispatcher
+		super(Schedule,self).__init__('Schedule')
+		self._time = time_to_execution
+		self._executors = executors
+		self._pool = thread_pool
+		self._progressbar = None
+		print('scheduled for execution in: ', time_to_execution, ' seconds')
+
+	def __call__(self):
+		sleep(self._time)
+		for executor in self._executors:  # submit executors...
+			if self._progressbar:
+				executor.set_progressbar(self._progressbar)
+			self._pool.submit(executor)
+
+	def _execute(self, request):
+		raise NotImplementedError
+
+	def _cool_down_time(self):
+		raise NotImplementedError
+
+	def set_progressbar(self, progressbar):
+		self._progressbar = progressbar
+

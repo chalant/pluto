@@ -14,15 +14,27 @@ We short the top 10% of stocks with the BEST returns over the past 5 days.
 
 # Import the libraries we will use here.
 import zipline.api as api
-from zipline.utils.events import date_rules,time_rules
-from zipline.pipeline import Pipeline
-from zipline.pipeline.factors import Returns
-from zipline.pipeline.filters import QTradableStocksUS
-from logging import Logger
+from zipline.algorithm import date_rules, time_rules
 from zipline import run_algorithm
 from zipline.pipeline.data.equity_pricing import USEquityPricing
 
+from zipline.pipeline import Pipeline
+from zipline.pipeline.factors import Returns
+from zipline.pipeline.filters import SP500Constituents  # s&p constituents...
+
+from datetime import datetime
+
+from pytz import UTC
+
+from logbook import Logger, StreamHandler
+
+import sys
+
+from matplotlib import pyplot as plt
+
+StreamHandler(sys.stdout).push_application()
 log = Logger('algo')
+
 
 def initialize(context):
 	"""
@@ -33,7 +45,10 @@ def initialize(context):
 	# the algorithm.
 	context.long_leverage = 0.5
 	context.short_leverage = -0.5
-	context.returns_lookback = 5 #here we need to specify the length of the look-back...
+	context.returns_lookback = 2  # here we need to specify the length of the look-back...
+	# Create and attach our pipeline (dynamic stock selector), defined below.
+	api.attach_pipeline(make_pipeline(context), 'mean_reversion_example')
+
 
 def make_pipeline(context):
 	"""
@@ -45,8 +60,7 @@ def make_pipeline(context):
 	"""
 
 	# Filter for stocks in the QTradableStocksUS universe. For more detail, see this post:
-	# https://www.quantopian.com/posts/working-on-our-best-universe-yet-qtradablestocksus
-	universe = QTradableStocksUS()
+	universe = SP500Constituents()  # a filter
 
 	# Create a Returns factor with a 5-day lookback window for all
 	# securities in our QTradableStocksUS Filter.
@@ -85,9 +99,6 @@ def before_trading_start(context, data):
 
 	# Record tracking variables at the end of each day.
 	api.schedule_function(record_vars, date_rules.every_day(), time_rules.market_close(minutes=1))
-
-	# Create and attach our pipeline (dynamic stock selector), defined below.
-	api.attach_pipeline(make_pipeline(context), 'mean_reversion_example')
 
 	# pipeline_output returns a pandas DataFrame with the results of our factors
 	# and filters.
@@ -165,4 +176,12 @@ def record_vars(context, data):
 	# leverage is plotted.
 	api.record(leverage=context.account.leverage, long_count=longs, short_count=shorts)
 
-perf = run_algorithm(initialize=initialize,before_trading_start=before_trading_start) #run the algorithm here...
+
+if __name__ == '__main__':
+	perf = run_algorithm(initialize=initialize, before_trading_start=before_trading_start,
+						 start=datetime(2017, 1, 2, tzinfo=UTC), end=datetime(2017, 12, 31, tzinfo=UTC),
+						 capital_base=1000000)
+	perf.leverage.plot()
+	perf.portfolio_value.plot()
+	plt.show()
+# run the algorithm here...
