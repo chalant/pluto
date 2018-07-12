@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import Iterable
+from collections import Iterable, namedtuple
 from copy import copy
 import operator as op
 import warnings
@@ -21,7 +21,6 @@ import logbook
 import pytz
 import pandas as pd
 from contextlib2 import ExitStack
-from pandas.tseries.tools import normalize_date
 import numpy as np
 
 from itertools import chain, repeat
@@ -34,14 +33,18 @@ from six import (
     string_types,
     viewkeys,
 )
+from trading_calendars.utils.pandas_utils import days_at_time
+from trading_calendars import get_calendar
 
 from zipline._protocol import handle_non_market_minutes
 from zipline.assets.synthetic import make_simple_equity_info
 from zipline.data.data_portal import DataPortal
+from zipline.data.resample import minute_panel_to_session_panel
 from zipline.data.us_equity_pricing import PanelBarReader
 from zipline.errors import (
     AttachPipelineAfterInitialize,
     CannotOrderDelistedAsset,
+    DuplicatePipelineName,
     HistoryInInitialize,
     IncompatibleCommissionModel,
     IncompatibleSlippageModel,
@@ -59,6 +62,7 @@ from zipline.errors import (
     UnsupportedCancelPolicy,
     UnsupportedDatetimeFormat,
     UnsupportedOrderParameters,
+    ZeroCapitalError
 )
 from zipline.finance.trading import TradingEnvironment
 from zipline.finance.blotter import Blotter
@@ -68,6 +72,7 @@ from zipline.finance.controls import (
     MaxOrderSize,
     MaxPositionSize,
     MaxLeverage,
+    MinLeverage,
     RestrictedListOrder
 )
 from zipline.finance.execution import (
@@ -76,7 +81,6 @@ from zipline.finance.execution import (
     StopLimitOrder,
     StopOrder,
 )
-from zipline.finance.performance import PerformanceTracker
 from zipline.finance.asset_restrictions import Restrictions
 from zipline.finance.cancel_policy import NeverCancel, CancelPolicy
 from zipline.finance.asset_restrictions import (
@@ -86,6 +90,7 @@ from zipline.finance.asset_restrictions import (
 )
 from zipline.assets import Asset, Equity, Future
 from zipline.gens.tradesimulation import AlgorithmSimulator
+from zipline.finance.metrics import MetricsTracker, load as load_metrics_set
 from zipline.pipeline import Pipeline
 from zipline.pipeline.engine import (
     ExplodingPipelineEngine,
@@ -106,10 +111,9 @@ from zipline.utils.input_validation import (
     optional,
 )
 from zipline.utils.numpy_utils import int64_dtype
-from zipline.utils.calendars.trading_calendar import days_at_time
-from zipline.utils.cache import CachedObject, Expired
-from zipline.utils.calendars import get_calendar
-from zipline.utils.compat import exc_clear
+from zipline.utils.pandas_utils import normalize_date
+from zipline.utils.cache import ExpiringCache
+from zipline.utils.pandas_utils import clear_dataframe_indexer_caches
 
 import zipline.utils.events
 from zipline.utils.events import (
@@ -126,7 +130,6 @@ from zipline.utils.math_utils import (
     tolerant_equals,
     round_if_near_integer,
 )
-from zipline.utils.pandas_utils import clear_dataframe_indexer_caches
 from zipline.utils.preprocess import preprocess
 from zipline.utils.security_list import SecurityList
 
@@ -139,6 +142,9 @@ from zipline.zipline_warnings import ZiplineDeprecationWarning
 
 
 log = logbook.Logger("ZiplineLog")
+
+# For creating and storing pipeline instances
+AttachedPipeline = namedtuple('AttachedPipeline', 'pipe chunks eager')
 
 
 class TradingAlgorithm(object):
@@ -172,8 +178,6 @@ class TradingAlgorithm(object):
         tracebacks. default: '<string>'.
     data_frequency : {'daily', 'minute'}, optional
         The duration of the bars.
-    instant_fill : bool, optional
-        Whether to fill orders immediately or on next bar. default: False
     equities_metadata : dict or DataFrame or file-like object, optional
         If dict is provided, it must have the following structure:
         * keys are the identifiers
@@ -207,6 +211,8 @@ class TradingAlgorithm(object):
         in the simulation with ``get_environment``. This allows algorithms
         to conditionally execute code based on platform it is running on.
         default: 'zipline'
+    adjustment_reader : AdjustmentReader
+        The interface to the adjustments.
     """
 
     def __init__(self, *args, **kwargs):
@@ -289,7 +295,7 @@ class TradingAlgorithm(object):
         # If a schedule has been provided, pop it. Otherwise, use NYSE.
         self.trading_calendar = kwargs.pop(
             'trading_calendar',
-            get_calendar("NYSE")
+            get_calendar('NYSE')
         )
 
         self.sim_params = kwargs.pop('sim_params', None)
@@ -300,16 +306,24 @@ class TradingAlgorithm(object):
                 trading_calendar=self.trading_calendar,
             )
 
-        self.perf_tracker = None
+        self.metrics_tracker = None
+        self._last_sync_time = pd.NaT
+        self._metrics_set = kwargs.pop('metrics_set', None)
+        if self._metrics_set is None:
+            self._metrics_set = load_metrics_set('default')
+
         # Pull in the environment's new AssetFinder for quick reference
         self.asset_finder = self.trading_environment.asset_finder
 
         # Initialize Pipeline API data.
         self.init_engine(kwargs.pop('get_pipeline_loader', None))
         self._pipelines = {}
-        # Create an always-expired cache so that we compute the first time data
-        # is requested.
-        self._pipeline_cache = CachedObject(None, pd.Timestamp(0, tz='UTC'))
+
+        # Create an already-expired cache so that we compute the first time
+        # data is requested.
+        self._pipeline_cache = ExpiringCache(
+            cleanup=clear_dataframe_indexer_caches
+        )
 
         self.blotter = kwargs.pop('blotter', None)
         self.cancel_policy = kwargs.pop('cancel_policy', NeverCancel())
@@ -323,12 +337,6 @@ class TradingAlgorithm(object):
         # The symbol lookup date specifies the date to use when resolving
         # symbols to sids, and can be set using set_symbol_lookup_date()
         self._symbol_lookup_date = None
-
-        self.portfolio_needs_update = True
-        self.account_needs_update = True
-        self.performance_needs_update = True
-        self._portfolio = None
-        self._account = None
 
         # If string is passed in, execute and get reference to
         # functions.
@@ -403,6 +411,10 @@ class TradingAlgorithm(object):
         if 'data_frequency' in kwargs:
             self.data_frequency = kwargs.pop('data_frequency')
 
+        capital_base = self.sim_params.capital_base
+        if capital_base <= 0:
+            raise ZeroCapitalError()
+
         # Prepare the algo for initialization
         self.initialized = False
         self.initialize_args = args
@@ -443,6 +455,8 @@ class TradingAlgorithm(object):
             self._initialize(self, *args, **kwargs)
 
     def before_trading_start(self, data):
+        self.compute_eager_pipelines()
+
         if self._before_trading_start is None:
             return
 
@@ -457,11 +471,6 @@ class TradingAlgorithm(object):
     def handle_data(self, data):
         if self._handle_data:
             self._handle_data(self, data)
-
-        # Unlike trading controls which remain constant unless placing an
-        # order, account controls can change each bar. Thus, must check
-        # every bar no matter if the algorithm places an order or not.
-        self.validate_account_controls()
 
     def analyze(self, perf):
         if self._analyze is None:
@@ -559,36 +568,44 @@ class TradingAlgorithm(object):
             benchmark_returns=benchmark_returns,
         )
 
+    def _create_metrics_tracker(self):
+        return MetricsTracker(
+            trading_calendar=self.trading_calendar,
+            first_session=self.sim_params.start_session,
+            last_session=self.sim_params.end_session,
+            capital_base=self.sim_params.capital_base,
+            emission_rate=self.sim_params.emission_rate,
+            data_frequency=self.sim_params.data_frequency,
+            asset_finder=self.asset_finder,
+            metrics=self._metrics_set,
+        )
+
     def _create_generator(self, sim_params):
         if sim_params is not None:
             self.sim_params = sim_params
 
-        if self.perf_tracker is None:
-            # HACK: When running with the `run` method, we set perf_tracker to
-            # None so that it will be overwritten here.
-            self.perf_tracker = PerformanceTracker(
-                sim_params=self.sim_params,
-                trading_calendar=self.trading_calendar,
-                env=self.trading_environment,
-            )
+        self.metrics_tracker = metrics_tracker = self._create_metrics_tracker()
 
-            # Set the dt initially to the period start by forcing it to change.
-            self.on_dt_changed(self.sim_params.start_session)
+        # Set the dt initially to the period start by forcing it to change.
+        self.on_dt_changed(self.sim_params.start_session)
 
         if not self.initialized:
             self.initialize(*self.initialize_args, **self.initialize_kwargs)
             self.initialized = True
+
+        benchmark_source = self._create_benchmark_source()
 
         self.trading_client = AlgorithmSimulator(
             self,
             sim_params,
             self.data_portal,
             self._create_clock(),
-            self._create_benchmark_source(),
+            benchmark_source,
             self.restrictions,
             universe_func=self._calculate_universe
         )
 
+        metrics_tracker.handle_start_of_simulation(benchmark_source)
         return self.trading_client.transform()
 
     def _calculate_universe(self):
@@ -598,6 +615,14 @@ class TradingAlgorithm(object):
 
         # our universe is all the assets passed into `run`.
         return self._assets_from_source
+
+    def compute_eager_pipelines(self):
+        """
+        Compute any pipelines attached with eager=True.
+        """
+        for name, pipe in self._pipelines.items():
+            if pipe.eager:
+                self.pipeline_output(name)
 
     def get_generator(self):
         """
@@ -618,9 +643,23 @@ class TradingAlgorithm(object):
               Daily performance metrics such as returns, alpha etc.
 
         """
+        # XXX: _assets_from_source is a backwards compatibility shim for old,
+        #      deprecated APIs that treat BarData like a dictionary with asset
+        #      keys. We initialize it differently depending on what kind of
+        #      data we're running against. This is kind of a mess...
         self._assets_from_source = []
 
-        if isinstance(data, DataPortal):
+        if data is None:
+            if self.data_portal is None:
+                raise ValueError(
+                    "Must pass a data portal to TradingAlgorithm() "
+                    "or to run()."
+                )
+            self._assets_from_source = self.asset_finder.retrieve_all(
+                self.asset_finder.sids
+            )
+
+        elif isinstance(data, DataPortal):
             self.data_portal = data
 
             # define the universe as all the assets in the assetfinder
@@ -681,26 +720,38 @@ class TradingAlgorithm(object):
                     )
                 )
 
-                if self.sim_params.data_frequency == 'daily':
-                    equity_reader_arg = 'equity_daily_reader'
-                elif self.sim_params.data_frequency == 'minute':
-                    equity_reader_arg = 'equity_minute_reader'
                 equity_reader = PanelBarReader(
                     self.trading_calendar,
                     copy_panel,
                     self.sim_params.data_frequency,
                 )
+                if self.sim_params.data_frequency == 'daily':
+                    equity_readers = {
+                        'equity_daily_reader': equity_reader,
+                    }
+                elif self.sim_params.data_frequency == 'minute':
+                    equity_readers = {
+                        'equity_minute_reader': equity_reader,
+                        'equity_daily_reader': PanelBarReader(
+                            self.trading_calendar,
+                            minute_panel_to_session_panel(
+                                copy_panel,
+                                self.trading_calendar,
+                            ),
+                            'daily',
+                        ),
+                    }
 
                 self.data_portal = DataPortal(
                     self.asset_finder,
                     self.trading_calendar,
                     first_trading_day=equity_reader.first_trading_day,
-                    **{equity_reader_arg: equity_reader}
+                    **equity_readers
                 )
 
-        # Force a reset of the performance tracker, in case
+        # Force a reset of the metrics tracker, in case
         # this is a repeat run of the algorithm.
-        self.perf_tracker = None
+        self.metrics_tracker = None
 
         # Create zipline and loop through simulated_trading.
         # Each iteration returns a perf dictionary
@@ -715,6 +766,7 @@ class TradingAlgorithm(object):
             self.analyze(daily_stats)
         finally:
             self.data_portal = None
+            self.metrics_tracker = None
 
         return daily_stats
 
@@ -844,7 +896,6 @@ class TradingAlgorithm(object):
             [p['period_close'] for p in daily_perfs], tz='UTC'
         )
         daily_stats = pd.DataFrame(daily_perfs, index=daily_dts)
-
         return daily_stats
 
     def calculate_capital_changes(self, dt, emission_rate, is_interday,
@@ -864,29 +915,16 @@ class TradingAlgorithm(object):
         except KeyError:
             return
 
-        if emission_rate == 'daily':
-            # If we are running daily emission, prices won't
-            # necessarily be synced at the end of every minute, and we
-            # need the up-to-date prices for capital change
-            # calculations. We want to sync the prices as of the
-            # last market minute, and this is okay from a data portal
-            # perspective as we have technically not "advanced" to the
-            # current dt yet.
-            self.perf_tracker.position_tracker.sync_last_sale_prices(
-                self.trading_calendar.previous_minute(
-                    dt
-                ),
-                False,
-                self.data_portal
-            )
-        self.perf_tracker.prepare_capital_change(is_interday)
-
+        self._sync_last_sale_prices()
         if capital_change['type'] == 'target':
             target = capital_change['value']
-            capital_change_amount = target - \
-                (self.updated_portfolio().portfolio_value -
-                 portfolio_value_adjustment)
-            self.portfolio_needs_update = True
+            capital_change_amount = (
+                target -
+                (
+                    self.portfolio.portfolio_value -
+                    portfolio_value_adjustment
+                )
+            )
 
             log.info('Processing capital change to target %s at %s. Capital '
                      'change delta is %s' % (target, dt,
@@ -902,8 +940,7 @@ class TradingAlgorithm(object):
             return
 
         self.capital_change_deltas.update({dt: capital_change_amount})
-        self.perf_tracker.process_capital_change(capital_change_amount,
-                                                 is_interday)
+        self.metrics_tracker.capital_change(capital_change_amount)
 
         yield {
             'capital_change':
@@ -1052,7 +1089,7 @@ class TradingAlgorithm(object):
 
         return csv_data_source
 
-    def add_event(self, rule=None, callback=None):
+    def add_event(self, rule, callback):
         """Adds an event to the algorithm's EventManager.
 
         Parameters
@@ -1503,7 +1540,7 @@ class TradingAlgorithm(object):
         for control in self.trading_controls:
             control.validate(asset,
                              amount,
-                             self.updated_portfolio(),
+                             self.portfolio,
                              self.get_datetime(),
                              self.trading_client.current_data)
 
@@ -1587,34 +1624,39 @@ class TradingAlgorithm(object):
     def recorded_vars(self):
         return copy(self._recorded_vars)
 
+    def _sync_last_sale_prices(self, dt=None):
+        """Sync the last sale prices on the metrics tracker to a given
+        datetime.
+
+        Parameters
+        ----------
+        dt : datetime
+            The time to sync the prices to.
+
+        Notes
+        -----
+        This call is cached by the datetime. Repeated calls in the same bar
+        are cheap.
+        """
+        if dt is None:
+            dt = self.datetime
+
+        if dt != self._last_sync_time:
+            self.metrics_tracker.sync_last_sale_prices(
+                dt,
+                self.data_portal,
+            )
+            self._last_sync_time = dt
+
     @property
     def portfolio(self):
-        return self.updated_portfolio()
-
-    def updated_portfolio(self):
-        if self.portfolio_needs_update:
-            self.perf_tracker.position_tracker.sync_last_sale_prices(
-                self.datetime, self._in_before_trading_start, self.data_portal)
-            self._portfolio = \
-                self.perf_tracker.get_portfolio(self.performance_needs_update)
-            self.portfolio_needs_update = False
-            self.performance_needs_update = False
-        return self._portfolio
+        self._sync_last_sale_prices()
+        return self.metrics_tracker.portfolio
 
     @property
     def account(self):
-        return self.updated_account()
-
-    def updated_account(self):
-        if self.account_needs_update:
-            self.perf_tracker.position_tracker.sync_last_sale_prices(
-                self.datetime, self._in_before_trading_start, self.data_portal)
-            self._account = \
-                self.perf_tracker.get_account(self.performance_needs_update)
-
-            self.account_needs_update = False
-            self.performance_needs_update = False
-        return self._account
+        self._sync_last_sale_prices()
+        return self.metrics_tracker.account
 
     def set_logger(self, logger):
         self.logger = logger
@@ -1628,12 +1670,7 @@ class TradingAlgorithm(object):
         group should happen here.
         """
         self.datetime = dt
-        self.perf_tracker.set_date(dt)
         self.blotter.set_date(dt)
-
-        self.portfolio_needs_update = True
-        self.account_needs_update = True
-        self.performance_needs_update = True
 
     @api_method
     @preprocess(tz=coerce_string(pytz.timezone))
@@ -1797,7 +1834,7 @@ class TradingAlgorithm(object):
         asset : Asset
             The asset that this order is for.
         percent : float
-            The percentage of the porfolio value to allocate to ``asset``.
+            The percentage of the portfolio value to allocate to ``asset``.
             This is specified as a decimal, for example: 0.50 means 50%.
         limit_price : float, optional
             The limit price for the order.
@@ -1991,7 +2028,7 @@ class TradingAlgorithm(object):
         asset : Asset
             The asset that this order is for.
         target : float
-            The desired percentage of the porfolio value to allocate to
+            The desired percentage of the portfolio value to allocate to
             ``asset``. This is specified as a decimal, for example:
             0.50 means 50%.
         limit_price : float, optional
@@ -2205,8 +2242,8 @@ class TradingAlgorithm(object):
 
     def validate_account_controls(self):
         for control in self.account_controls:
-            control.validate(self.updated_portfolio(),
-                             self.updated_account(),
+            control.validate(self.portfolio,
+                             self.account,
                              self.get_datetime(),
                              self.trading_client.current_data)
 
@@ -2221,6 +2258,21 @@ class TradingAlgorithm(object):
             be no maximum.
         """
         control = MaxLeverage(max_leverage)
+        self.register_account_control(control)
+
+    @api_method
+    def set_min_leverage(self, min_leverage, grace_period):
+        """Set a limit on the minimum leverage of the algorithm.
+
+        Parameters
+        ----------
+        min_leverage : float
+            The minimum leverage for the algorithm.
+        grace_period : pd.Timedelta
+            The offset from the start date used to enforce a minimum leverage.
+        """
+        deadline = self.sim_params.start_session + grace_period
+        control = MinLeverage(min_leverage, deadline)
         self.register_account_control(control)
 
     ####################
@@ -2380,7 +2432,7 @@ class TradingAlgorithm(object):
         name=string_types,
         chunks=(int, Iterable, type(None)),
     )
-    def attach_pipeline(self, pipeline, name, chunks=None):
+    def attach_pipeline(self, pipeline, name, chunks=None, eager=True):
         """Register a pipeline to be computed at the start of each day.
 
         Parameters
@@ -2393,7 +2445,11 @@ class TradingAlgorithm(object):
             The number of days to compute pipeline results for. Increasing
             this number will make it longer to get the first results but
             may improve the total runtime of the simulation. If an iterator
-            is passed, we will run in chunks based on values of the itereator.
+            is passed, we will run in chunks based on values of the iterator.
+            Default is True.
+        eager : bool, optional
+            Whether or not to compute this pipeline prior to
+            before_trading_start.
 
         Returns
         -------
@@ -2404,15 +2460,17 @@ class TradingAlgorithm(object):
         --------
         :func:`zipline.api.pipeline_output`
         """
-        if self._pipelines:
-            raise NotImplementedError("Multiple pipelines are not supported.")
         if chunks is None:
             # Make the first chunk smaller to get more immediate results:
             # (one week, then every half year)
             chunks = chain([5], repeat(126))
         elif isinstance(chunks, int):
             chunks = repeat(chunks)
-        self._pipelines[name] = pipeline, iter(chunks)
+
+        if name in self._pipelines:
+            raise DuplicatePipelineName(name=name)
+
+        self._pipelines[name] = AttachedPipeline(pipeline, iter(chunks), eager)
 
         # Return the pipeline to allow expressions like
         # p = attach_pipeline(Pipeline(), 'name')
@@ -2445,60 +2503,28 @@ class TradingAlgorithm(object):
         :func:`zipline.api.attach_pipeline`
         :meth:`zipline.pipeline.engine.PipelineEngine.run_pipeline`
         """
-        # NOTE: We don't currently support multiple pipelines, but we plan to
-        # in the future.
         try:
-            p, chunks = self._pipelines[name]
+            pipe, chunks, _ = self._pipelines[name]
         except KeyError:
             raise NoSuchPipeline(
                 name=name,
                 valid=list(self._pipelines.keys()),
             )
-        return self._pipeline_output(p, chunks)
+        return self._pipeline_output(pipe, chunks, name)
 
-    def _pipeline_output(self, pipeline, chunks):
+    def _pipeline_output(self, pipeline, chunks, name):
         """
         Internal implementation of `pipeline_output`.
         """
         today = normalize_date(self.get_datetime())
-        data = NO_DATA = object()
         try:
-            data = self._pipeline_cache.unwrap(today)
-        except Expired:
-            # We can't handle the exception in this block because in Python 3
-            # sys.exc_info isn't cleared until we leave the block.  See note
-            # below for why we need to clear exc_info.
-            pass
-
-        if data is NO_DATA:
-            # Try to deterministically garbage collect the previous result by
-            # removing any references to it. There are at least three sources
-            # of references:
-
-            # 1. self._pipeline_cache holds a reference.
-            # 2. The dataframe itself holds a reference via cached .iloc/.loc
-            #    accessors.
-            # 3. The traceback held in sys.exc_info includes stack frames in
-            #    which self._pipeline_cache is a local variable.
-
-            # We remove the above sources of references in reverse order:
-
-            # 3. Clear the traceback.  This is no-op in Python 3.
-            exc_clear()
-
-            # 2. Clear the .loc/.iloc caches.
-            clear_dataframe_indexer_caches(
-                self._pipeline_cache._unsafe_get_value()
-            )
-
-            # 1. Clear the reference to self._pipeline_cache.
-            self._pipeline_cache = None
-
+            data = self._pipeline_cache.get(name, today)
+        except KeyError:
             # Calculate the next block.
             data, valid_until = self._run_pipeline(
                 pipeline, today, next(chunks),
             )
-            self._pipeline_cache = CachedObject(data, valid_until)
+            self._pipeline_cache.set(name, data, valid_until)
 
         # Now that we have a cached result, try to return the data for today.
         try:

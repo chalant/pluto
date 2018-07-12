@@ -1,15 +1,29 @@
-from itertools import repeat
 import os
 import sqlite3
 from unittest import TestCase
+import warnings
 
 from contextlib2 import ExitStack
 from logbook import NullHandler, Logger
-from six import with_metaclass, iteritems
-from toolz import flip
 import pandas as pd
+from six import with_metaclass, iteritems
 import responses
+from toolz import flip, merge
+from trading_calendars import (
+    get_calendar,
+    register_calendar,
+)
 
+import zipline
+from zipline.algorithm import TradingAlgorithm
+from zipline.assets import Equity, Future
+from zipline.finance.asset_restrictions import NoRestrictions
+from zipline.pipeline import SimplePipelineEngine
+from zipline.pipeline.data import USEquityPricing
+from zipline.pipeline.loaders import USEquityPricingLoader
+from zipline.pipeline.loaders.testing import make_seeded_random_loader
+from zipline.protocol import BarData
+from zipline.utils.paths import ensure_directory
 from .core import (
     create_daily_bar_data,
     create_minute_bar_data,
@@ -42,23 +56,10 @@ from ..data.us_equity_pricing import (
     SQLiteAdjustmentReader,
     SQLiteAdjustmentWriter,
 )
-from ..finance.trading import TradingEnvironment
-from ..utils import factory
+from ..finance.trading import SimulationParameters, TradingEnvironment
 from ..utils.classproperty import classproperty
 from ..utils.final import FinalMeta, final
 
-import zipline
-from zipline.assets import Equity, Future
-from zipline.finance.asset_restrictions import NoRestrictions
-from zipline.pipeline import SimplePipelineEngine
-from zipline.pipeline.data import USEquityPricing
-from zipline.pipeline.loaders import USEquityPricingLoader
-from zipline.pipeline.loaders.testing import make_seeded_random_loader
-from zipline.protocol import BarData
-from zipline.utils.calendars import (
-    get_calendar,
-    register_calendar)
-from zipline.utils.paths import ensure_directory
 
 zipline_dir = os.path.dirname(zipline.__file__)
 
@@ -313,6 +314,8 @@ class WithAssetFinder(WithDefaultDateBounds):
     ASSET_FINDER_EQUITY_END_DATE : datetime
         The default end date to create equity data for. This defaults to
         ``END_DATE``.
+    ASSET_FINDER_EQUITY_NAMES: iterable[str]
+        The default names to use for the equities.
 
     Methods
     -------
@@ -347,6 +350,7 @@ class WithAssetFinder(WithDefaultDateBounds):
     """
     ASSET_FINDER_EQUITY_SIDS = ord('A'), ord('B'), ord('C')
     ASSET_FINDER_EQUITY_SYMBOLS = None
+    ASSET_FINDER_EQUITY_NAMES = None
     ASSET_FINDER_EQUITY_START_DATE = alias('START_DATE')
     ASSET_FINDER_EQUITY_END_DATE = alias('END_DATE')
 
@@ -370,6 +374,7 @@ class WithAssetFinder(WithDefaultDateBounds):
             cls.ASSET_FINDER_EQUITY_START_DATE,
             cls.ASSET_FINDER_EQUITY_END_DATE,
             cls.ASSET_FINDER_EQUITY_SYMBOLS,
+            cls.ASSET_FINDER_EQUITY_NAMES,
         )
 
     @classmethod
@@ -563,32 +568,30 @@ class WithSimParams(WithTradingEnvironment):
     """
     ZiplineTestCase mixin providing cls.sim_params as a class level fixture.
 
-    The arguments used to construct the trading environment may be overridded
-    by putting ``SIM_PARAMS_{argname}`` in the class dict except for the
-    trading environment which is overridden with the mechanisms provided by
-    ``WithTradingEnvironment``.
-
     Attributes
     ----------
-    SIM_PARAMS_YEAR : int
     SIM_PARAMS_CAPITAL_BASE : float
-    SIM_PARAMS_NUM_DAYS : int
     SIM_PARAMS_DATA_FREQUENCY : {'daily', 'minute'}
     SIM_PARAMS_EMISSION_RATE : {'daily', 'minute'}
-        Forwarded to ``factory.create_simulation_parameters``.
+        Forwarded to ``SimulationParameters``.
 
     SIM_PARAMS_START : datetime
     SIM_PARAMS_END : datetime
-        Forwarded to ``factory.create_simulation_parameters``. If not
+        Forwarded to ``SimulationParameters``. If not
         explicitly overridden these will be ``START_DATE`` and ``END_DATE``
+
+    Methods
+    -------
+    make_simparams(**overrides)
+        Construct a ``SimulationParameters`` using the defaults defined by
+        fixture configuration attributes. Any parameters to
+        ``SimulationParameters`` can be overridden by passing them by keyword.
 
     See Also
     --------
-    zipline.utils.factory.create_simulation_parameters
+    zipline.finance.trading.SimulationParameters
     """
-    SIM_PARAMS_YEAR = None
     SIM_PARAMS_CAPITAL_BASE = 1.0e5
-    SIM_PARAMS_NUM_DAYS = None
     SIM_PARAMS_DATA_FREQUENCY = 'daily'
     SIM_PARAMS_EMISSION_RATE = 'daily'
 
@@ -596,17 +599,17 @@ class WithSimParams(WithTradingEnvironment):
     SIM_PARAMS_END = alias('END_DATE')
 
     @classmethod
-    def make_simparams(cls):
-        return factory.create_simulation_parameters(
-            year=cls.SIM_PARAMS_YEAR,
-            start=cls.SIM_PARAMS_START,
-            end=cls.SIM_PARAMS_END,
-            num_days=cls.SIM_PARAMS_NUM_DAYS,
+    def make_simparams(cls, **overrides):
+        kwargs = dict(
+            start_session=cls.SIM_PARAMS_START,
+            end_session=cls.SIM_PARAMS_END,
             capital_base=cls.SIM_PARAMS_CAPITAL_BASE,
             data_frequency=cls.SIM_PARAMS_DATA_FREQUENCY,
             emission_rate=cls.SIM_PARAMS_EMISSION_RATE,
             trading_calendar=cls.trading_calendar,
         )
+        kwargs.update(overrides)
+        return SimulationParameters(**kwargs)
 
     @classmethod
     def init_class_fixtures(cls):
@@ -735,7 +738,7 @@ class WithEquityDailyBarData(WithTradingEnvironment):
         A class method that returns an iterator of (sid, dataframe) pairs
         which will be written to the bcolz files that the class's
         ``BcolzDailyBarReader`` will read from. By default this creates
-        some simple sythetic data with
+        some simple synthetic data with
         :func:`~zipline.testing.create_daily_bar_data`
 
     See Also
@@ -809,6 +812,102 @@ class WithEquityDailyBarData(WithTradingEnvironment):
         cls.equity_daily_bar_days = days
 
 
+class WithFutureDailyBarData(WithTradingEnvironment):
+    """
+    ZiplineTestCase mixin providing cls.make_future_daily_bar_data.
+
+    Attributes
+    ----------
+    FUTURE_DAILY_BAR_START_DATE : Timestamp
+        The date at to which to start creating data. This defaults to
+        ``START_DATE``.
+    FUTURE_DAILY_BAR_END_DATE = Timestamp
+        The end date up to which to create data. This defaults to ``END_DATE``.
+    FUTURE_DAILY_BAR_SOURCE_FROM_MINUTE : bool
+        If this flag is set, `make_future_daily_bar_data` will read data from
+        the minute bars defined by `WithFutureMinuteBarData`.
+        The current default is `False`, but could be `True` in the future.
+
+    Methods
+    -------
+    make_future_daily_bar_data() -> iterable[(int, pd.DataFrame)]
+        A class method that returns an iterator of (sid, dataframe) pairs
+        which will be written to the bcolz files that the class's
+        ``BcolzDailyBarReader`` will read from. By default this creates
+        some simple synthetic data with
+        :func:`~zipline.testing.create_daily_bar_data`
+
+    See Also
+    --------
+    WithFutureMinuteBarData
+    zipline.testing.create_daily_bar_data
+    """
+    FUTURE_DAILY_BAR_USE_FULL_CALENDAR = False
+    FUTURE_DAILY_BAR_START_DATE = alias('START_DATE')
+    FUTURE_DAILY_BAR_END_DATE = alias('END_DATE')
+    FUTURE_DAILY_BAR_SOURCE_FROM_MINUTE = None
+
+    @classproperty
+    def FUTURE_DAILY_BAR_LOOKBACK_DAYS(cls):
+        # If we're sourcing from minute data, then we almost certainly want the
+        # minute bar calendar to be aligned with the daily bar calendar, so
+        # re-use the same lookback parameter.
+        if cls.FUTURE_DAILY_BAR_SOURCE_FROM_MINUTE:
+            return cls.FUTURE_MINUTE_BAR_LOOKBACK_DAYS
+        else:
+            return 0
+
+    @classmethod
+    def _make_future_daily_bar_from_minute(cls):
+        assert issubclass(cls, WithFutureMinuteBarData), \
+            "Can't source daily data from minute without minute data!"
+        assets = cls.asset_finder.retrieve_all(cls.asset_finder.futures_sids)
+        minute_data = dict(cls.make_future_minute_bar_data())
+        for asset in assets:
+            yield asset.sid, minute_frame_to_session_frame(
+                minute_data[asset.sid],
+                cls.trading_calendars[Future])
+
+    @classmethod
+    def make_future_daily_bar_data(cls):
+        # Requires a WithFutureMinuteBarData to come before in the MRO.
+        # Resample that data so that daily and minute bar data are aligned.
+        if cls.FUTURE_DAILY_BAR_SOURCE_FROM_MINUTE:
+            return cls._make_future_daily_bar_from_minute()
+        else:
+            return create_daily_bar_data(
+                cls.future_daily_bar_days,
+                cls.asset_finder.futures_sids,
+            )
+
+    @classmethod
+    def init_class_fixtures(cls):
+        super(WithFutureDailyBarData, cls).init_class_fixtures()
+        trading_calendar = cls.trading_calendars[Future]
+        if cls.FUTURE_DAILY_BAR_USE_FULL_CALENDAR:
+            days = trading_calendar.all_sessions
+        else:
+            if trading_calendar.is_session(cls.FUTURE_DAILY_BAR_START_DATE):
+                first_session = cls.FUTURE_DAILY_BAR_START_DATE
+            else:
+                first_session = trading_calendar.minute_to_session_label(
+                    pd.Timestamp(cls.FUTURE_DAILY_BAR_START_DATE)
+                )
+
+            if cls.FUTURE_DAILY_BAR_LOOKBACK_DAYS > 0:
+                first_session = trading_calendar.sessions_window(
+                    first_session,
+                    -1 * cls.FUTURE_DAILY_BAR_LOOKBACK_DAYS
+                )[0]
+
+            days = trading_calendar.sessions_in_range(
+                first_session,
+                cls.FUTURE_DAILY_BAR_END_DATE,
+            )
+
+        cls.future_daily_bar_days = days
+
+
 class WithBcolzEquityDailyBarReader(WithEquityDailyBarData, WithTmpDir):
     """
     ZiplineTestCase mixin providing cls.bcolz_daily_bar_path,
@@ -875,6 +974,7 @@ class WithBcolzEquityDailyBarReader(WithEquityDailyBarData, WithTmpDir):
     @classmethod
     def init_class_fixtures(cls):
         super(WithBcolzEquityDailyBarReader, cls).init_class_fixtures()
+
         cls.bcolz_daily_bar_path = p = cls.make_bcolz_daily_bar_rootdir_path()
         days = cls.equity_daily_bar_days
 
@@ -892,6 +992,95 @@ class WithBcolzEquityDailyBarReader(WithEquityDailyBarData, WithTmpDir):
                 t, cls.BCOLZ_DAILY_BAR_READ_ALL_THRESHOLD)
         else:
             cls.bcolz_equity_daily_bar_reader = BcolzDailyBarReader(t)
+
+
+class WithBcolzFutureDailyBarReader(WithFutureDailyBarData, WithTmpDir):
+    """
+    ZiplineTestCase mixin providing cls.bcolz_daily_bar_path,
+    cls.bcolz_daily_bar_ctable, and cls.bcolz_future_daily_bar_reader
+    class level fixtures.
+
+    After init_class_fixtures has been called:
+    - `cls.bcolz_daily_bar_path` is populated with
+      `cls.tmpdir.getpath(cls.BCOLZ_DAILY_BAR_PATH)`.
+    - `cls.bcolz_daily_bar_ctable` is populated with data returned from
+      `cls.make_future_daily_bar_data`. By default this calls
+      :func:`zipline.pipeline.loaders.synthetic.make_future_daily_bar_data`.
+    - `cls.bcolz_future_daily_bar_reader` is a daily bar reader
+       pointing to the directory that was just written to.
+
+    Attributes
+    ----------
+    BCOLZ_DAILY_BAR_PATH : str
+        The path inside the tmpdir where this will be written.
+    FUTURE_DAILY_BAR_LOOKBACK_DAYS : int
+        The number of days of data to add before the first day. This is used
+        when a test needs to use history, in which case this should be set to
+        the largest history window that will be
+        requested.
+    FUTURE_DAILY_BAR_USE_FULL_CALENDAR : bool
+        If this flag is set the ``future_daily_bar_days`` will be the full
+        set of trading days from the trading environment. This flag overrides
+        ``FUTURE_DAILY_BAR_LOOKBACK_DAYS``.
+    BCOLZ_FUTURE_DAILY_BAR_READ_ALL_THRESHOLD : int
+        If this flag is set, use the value as the `read_all_threshold`
+        parameter to BcolzDailyBarReader, otherwise use the default
+        value.
+    FUTURE_DAILY_BAR_SOURCE_FROM_MINUTE : bool
+        If this flag is set, `make_future_daily_bar_data` will read data from
+        the minute bar reader defined by a `WithBcolzFutureMinuteBarReader`.
+
+    Methods
+    -------
+    make_bcolz_daily_bar_rootdir_path() -> string
+        A class method that returns the path for the rootdir of the daily
+        bars ctable. By default this is a subdirectory BCOLZ_DAILY_BAR_PATH in
+        the shared temp directory.
+
+    See Also
+    --------
+    WithBcolzFutureMinuteBarReader
+    WithDataPortal
+    zipline.testing.create_daily_bar_data
+    """
+    BCOLZ_FUTURE_DAILY_BAR_PATH = 'daily_future_pricing.bcolz'
+    BCOLZ_FUTURE_DAILY_BAR_READ_ALL_THRESHOLD = None
+    FUTURE_DAILY_BAR_SOURCE_FROM_MINUTE = False
+
+    # What to do when data being written is invalid, e.g. nan, inf, etc.
+    # options are: 'warn', 'raise', 'ignore'
+    BCOLZ_FUTURE_DAILY_BAR_INVALID_DATA_BEHAVIOR = 'warn'
+
+    BCOLZ_FUTURE_DAILY_BAR_WRITE_METHOD_NAME = 'write'
+
+    @classmethod
+    def make_bcolz_future_daily_bar_rootdir_path(cls):
+        return cls.tmpdir.makedir(cls.BCOLZ_FUTURE_DAILY_BAR_PATH)
+
+    @classmethod
+    def init_class_fixtures(cls):
+        super(WithBcolzFutureDailyBarReader, cls).init_class_fixtures()
+
+        p = cls.make_bcolz_future_daily_bar_rootdir_path()
+        cls.future_bcolz_daily_bar_path = p
+        days = cls.future_daily_bar_days
+
+        trading_calendar = cls.trading_calendars[Future]
+        cls.future_bcolz_daily_bar_ctable = t = getattr(
+            BcolzDailyBarWriter(p, trading_calendar, days[0], days[-1]),
+            cls.BCOLZ_FUTURE_DAILY_BAR_WRITE_METHOD_NAME,
+        )(
+            cls.make_future_daily_bar_data(),
+            invalid_data_behavior=(
+                cls.BCOLZ_FUTURE_DAILY_BAR_INVALID_DATA_BEHAVIOR
+            )
+        )
+
+        if cls.BCOLZ_FUTURE_DAILY_BAR_READ_ALL_THRESHOLD is not None:
+            cls.bcolz_future_daily_bar_reader = BcolzDailyBarReader(
+                t, cls.BCOLZ_FUTURE_DAILY_BAR_READ_ALL_THRESHOLD)
+        else:
+            cls.bcolz_future_daily_bar_reader = BcolzDailyBarReader(t)
 
 
 class WithBcolzEquityDailyBarReaderFromCSVs(WithBcolzEquityDailyBarReader):
@@ -918,13 +1107,7 @@ def _trading_days_for_minute_bars(calendar,
     return calendar.sessions_in_range(first_session, end_date)
 
 
-class _WithMinuteBarDataBase(WithTradingEnvironment):
-    MINUTE_BAR_LOOKBACK_DAYS = 0
-    MINUTE_BAR_START_DATE = alias('START_DATE')
-    MINUTE_BAR_END_DATE = alias('END_DATE')
-
-
-class WithEquityMinuteBarData(_WithMinuteBarDataBase):
+class WithEquityMinuteBarData(WithTradingEnvironment):
     """
     ZiplineTestCase mixin providing cls.equity_minute_bar_days.
 
@@ -956,9 +1139,9 @@ class WithEquityMinuteBarData(_WithMinuteBarDataBase):
     WithEquityDailyBarData
     zipline.testing.create_minute_bar_data
     """
-    EQUITY_MINUTE_BAR_LOOKBACK_DAYS = alias('MINUTE_BAR_LOOKBACK_DAYS')
-    EQUITY_MINUTE_BAR_START_DATE = alias('MINUTE_BAR_START_DATE')
-    EQUITY_MINUTE_BAR_END_DATE = alias('MINUTE_BAR_END_DATE')
+    EQUITY_MINUTE_BAR_LOOKBACK_DAYS = 0
+    EQUITY_MINUTE_BAR_START_DATE = alias('START_DATE')
+    EQUITY_MINUTE_BAR_END_DATE = alias('END_DATE')
 
     @classmethod
     def make_equity_minute_bar_data(cls):
@@ -983,7 +1166,7 @@ class WithEquityMinuteBarData(_WithMinuteBarDataBase):
         )
 
 
-class WithFutureMinuteBarData(_WithMinuteBarDataBase):
+class WithFutureMinuteBarData(WithTradingEnvironment):
     """
     ZiplineTestCase mixin providing cls.future_minute_bar_days.
 
@@ -1016,9 +1199,9 @@ class WithFutureMinuteBarData(_WithMinuteBarDataBase):
     --------
     zipline.testing.create_minute_bar_data
     """
-    FUTURE_MINUTE_BAR_LOOKBACK_DAYS = alias('MINUTE_BAR_LOOKBACK_DAYS')
-    FUTURE_MINUTE_BAR_START_DATE = alias('MINUTE_BAR_START_DATE')
-    FUTURE_MINUTE_BAR_END_DATE = alias('MINUTE_BAR_END_DATE')
+    FUTURE_MINUTE_BAR_LOOKBACK_DAYS = 0
+    FUTURE_MINUTE_BAR_START_DATE = alias('START_DATE')
+    FUTURE_MINUTE_BAR_END_DATE = alias('END_DATE')
 
     @classmethod
     def make_future_minute_bar_data(cls):
@@ -1333,12 +1516,15 @@ class WithEquityPricingPipelineEngine(WithAdjustmentReader,
             cls.bcolz_equity_daily_bar_reader,
             SQLiteAdjustmentReader(cls.adjustments_db_path),
         )
-        dispatcher = dict(
-            zip(USEquityPricing.columns, repeat(loader))
-        ).__getitem__
+
+        def get_loader(column):
+            if column in USEquityPricing.columns:
+                return loader
+            else:
+                raise AssertionError("No loader registered for %s" % column)
 
         cls.pipeline_engine = SimplePipelineEngine(
-            get_loader=dispatcher,
+            get_loader=get_loader,
             calendar=cls.nyse_sessions,
             asset_finder=cls.asset_finder,
         )
@@ -1549,3 +1735,112 @@ class WithCreateBarData(WithDataPortal):
             self.trading_calendar,
             restrictions or NoRestrictions()
         )
+
+
+class WithMakeAlgoKwargs(WithTradingEnvironment):
+    """
+    A fixture providing a `make_algo_kwargs` method producing Algo
+    keyword arguments.
+
+    Methods
+    -------
+    make_algo_kwargs(self, **overrides)
+    """
+    def make_algo_kwargs(self, **overrides):
+        return merge(
+            {'env': self.env},
+            overrides,
+        )
+
+    def merge_with_inherited_algo_kwargs(self,
+                                         overriding_type,
+                                         suite_overrides,
+                                         method_overrides):
+        """
+        Helper for subclasses overriding ``make_algo_kwargs``.
+
+        A common pattern for tests using `WithMakeAlgoKwargs` is that a
+        particular test suite has a set of default keywords it wants to use
+        everywhere, but also accepts test-specific overrides.
+
+        Test suites that fit that pattern can call this method and pass the
+        test class, suite-specific overrides, and method-specific overrides,
+        and this method takes care of fetching parent class overrides and
+        merging them with the suite- and instance-specific overrides.
+
+        Parameters
+        ----------
+        overriding_type : type
+            The type from which we're being called. This is forwarded to
+            super().make_algo_kwargs()
+        suite_overrides : dict
+            Keywords which should take precedence over kwargs returned by
+            super(overriding_type, self).make_algo_kwargs().  These are
+            generally keyword arguments that are constant within a test suite.
+        method_overrides : dict
+            Keywords which should take precedence over `suite_overrides` and
+            superclass kwargs.  These are generally keyword arguments that are
+            overridden on a per-test basis.
+        """
+        # NOTE: This is a weird invocation of super().
+        # Our goal here is to provide the behavior that the caller would get if
+        # they called super() in the normal way, so that we dispatch to the
+        # make_algo_kwargs() for the parent of the type that's calling
+        # into us. We achieve that goal by requiring the caller to tell us
+        # what type they're calling us from.
+        return super(overriding_type, self).make_algo_kwargs(
+            **merge(suite_overrides, method_overrides)
+        )
+
+
+class WithMakeAlgo(WithSimParams,
+                   WithLogger,
+                   WithDataPortal,
+                   WithMakeAlgoKwargs):
+    """
+    ZiplineTestCase mixin that provides a ``make_algo`` method.
+    """
+    START_DATE = pd.Timestamp('2014-12-29', tz='UTC')
+    END_DATE = pd.Timestamp('2015-1-05', tz='UTC')
+    SIM_PARAMS_DATA_FREQUENCY = 'minute'
+    DEFAULT_ALGORITHM_CLASS = TradingAlgorithm
+
+    @classproperty
+    def BENCHMARK_SID(cls):
+        """The sid to use as a benchmark.
+
+        Can be overridden to use an alternative benchmark.
+        """
+        return cls.asset_finder.sids[0]
+
+    def make_algo_kwargs(self, **overrides):
+        return self.merge_with_inherited_algo_kwargs(
+            WithMakeAlgo,
+            {
+                'sim_params': self.sim_params,
+                'data_portal': self.data_portal,
+                'benchmark_sid': self.BENCHMARK_SID,
+                'env': self.env,
+            },
+            overrides,
+        )
+
+    def make_algo(self, algo_class=None, **overrides):
+        if algo_class is None:
+            algo_class = self.DEFAULT_ALGORITHM_CLASS
+        return algo_class(**self.make_algo_kwargs(**overrides))
+
+    def run_algorithm(self, **overrides):
+        """
+        Create and run an TradingAlgorithm in memory.
+        """
+        return self.make_algo(**overrides).run()
+
+
+class WithWerror(object):
+    @classmethod
+    def init_class_fixtures(cls):
+        cls.enter_class_context(warnings.catch_warnings())
+        warnings.simplefilter('error')
+
+        super(WithWerror, cls).init_class_fixtures()

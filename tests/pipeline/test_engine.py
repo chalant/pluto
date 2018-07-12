@@ -5,6 +5,7 @@ from __future__ import division
 from collections import OrderedDict
 from itertools import product
 from operator import add, sub
+from unittest import skipIf
 
 from nose_parameterized import parameterized
 from numpy import (
@@ -51,6 +52,7 @@ from zipline.pipeline.factors import (
     ExponentialWeightedMovingAverage,
     ExponentialWeightedMovingStdDev,
     MaxDrawdown,
+    Returns,
     SimpleMovingAverage,
 )
 from zipline.pipeline.loaders.equity_pricing_loader import (
@@ -67,7 +69,6 @@ from zipline.pipeline.term import InputDates
 from zipline.testing import (
     AssetID,
     AssetIDPlusDay,
-    ExplodingObject,
     check_arrays,
     make_alternating_boolean_array,
     make_cascading_boolean_array,
@@ -77,6 +78,7 @@ from zipline.testing import (
 )
 from zipline.testing.fixtures import (
     WithAdjustmentReader,
+    WithEquityPricingPipelineEngine,
     WithSeededRandomPipelineEngine,
     WithTradingEnvironment,
     ZiplineTestCase,
@@ -84,6 +86,7 @@ from zipline.testing.fixtures import (
 from zipline.testing.predicates import assert_equal
 from zipline.utils.memoize import lazyval
 from zipline.utils.numpy_utils import bool_dtype, datetime64ns_dtype
+from zipline.utils.pandas_utils import new_pandas, skip_pipeline_new_pandas
 
 
 class RollingSumDifference(CustomFactor):
@@ -1296,6 +1299,7 @@ class ParameterizedFactorTestCase(WithTradingEnvironment, ZiplineTestCase):
 class StringColumnTestCase(WithSeededRandomPipelineEngine,
                            ZiplineTestCase):
 
+    @skipIf(new_pandas, skip_pipeline_new_pandas)
     def test_string_classifiers_produce_categoricals(self):
         """
         Test that string-based classifiers produce pandas categoricals as their
@@ -1435,10 +1439,9 @@ class PopulateInitialWorkspaceTestCase(WithConstantInputs, ZiplineTestCase):
             return ws
 
         def dispatcher(c):
-            if c is column:
-                # the base_term should never be loaded, its initial refcount
-                # should be zero
-                return ExplodingObject()
+            self.assertIsNot(
+                c, column, "Shouldn't need to dispatch precomputed term input!"
+            )
             return self.loader
 
         engine = SimplePipelineEngine(
@@ -1497,3 +1500,63 @@ class PopulateInitialWorkspaceTestCase(WithConstantInputs, ZiplineTestCase):
                 precomputed_term_value,
             ),
         )
+
+
+class ChunkedPipelineTestCase(WithEquityPricingPipelineEngine,
+                              ZiplineTestCase):
+
+    PIPELINE_START_DATE = Timestamp('2006-01-05', tz='UTC')
+    END_DATE = Timestamp('2006-12-29', tz='UTC')
+
+    def test_run_chunked_pipeline(self):
+        """
+        Test that running a pipeline in chunks produces the same result as if
+        it were run all at once
+        """
+        pipe = Pipeline(
+            columns={
+                'close': USEquityPricing.close.latest,
+                'returns': Returns(window_length=2),
+                'categorical': USEquityPricing.close.latest.quantiles(5)
+            },
+        )
+        pipeline_result = self.pipeline_engine.run_pipeline(
+            pipe,
+            start_date=self.PIPELINE_START_DATE,
+            end_date=self.END_DATE,
+        )
+        chunked_result = self.pipeline_engine.run_chunked_pipeline(
+            pipeline=pipe,
+            start_date=self.PIPELINE_START_DATE,
+            end_date=self.END_DATE,
+            chunksize=22
+        )
+        self.assertTrue(chunked_result.equals(pipeline_result))
+
+
+class MaximumRegressionTest(WithSeededRandomPipelineEngine,
+                            ZiplineTestCase):
+    ASSET_FINDER_EQUITY_SIDS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
+    def test_no_groupby_maximum(self):
+        # This is a regression test for a bug where factor.top(1) would fail
+        # when not passed a groupby parameter.
+
+        factor = TestingDataSet.float_col.latest
+        maximum = factor.top(1)
+        pipe = Pipeline({'factor': factor, 'maximum': maximum})
+        result = self.run_pipeline(
+            pipe, self.trading_days[-5], self.trading_days[-1]
+        )
+
+        # We should have one maximum every day.
+        maxes_per_day = result.groupby(level=0)['maximum'].sum()
+        self.assertTrue((maxes_per_day == 1).all())
+
+        # The maximum computed by pipeline should match the maximum computed by
+        # doing a groupby in pandas.
+        groupby_max = result.groupby(level=0).factor.max()
+        pipeline_max = (result.factor[result.maximum]
+                        .reset_index(level=1, drop=True))
+
+        assert_equal(groupby_max, pipeline_max)
