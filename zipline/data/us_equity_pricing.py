@@ -45,13 +45,13 @@ from pandas import (
     to_datetime,
     Timestamp,
 )
-from pandas.tslib import iNaT
 from six import (
     iteritems,
     string_types,
     viewkeys,
 )
 from toolz import compose
+from trading_calendars import get_calendar
 
 from zipline.data.session_bars import SessionBarReader
 from zipline.data.bar_reader import (
@@ -59,7 +59,6 @@ from zipline.data.bar_reader import (
     NoDataBeforeDate,
     NoDataOnDate,
 )
-from zipline.utils.calendars import get_calendar
 from zipline.utils.functional import apply
 from zipline.utils.preprocess import call
 from zipline.utils.input_validation import (
@@ -67,6 +66,7 @@ from zipline.utils.input_validation import (
     preprocess,
     verify_indices_all_unique,
 )
+from zipline.utils.numpy_utils import iNaT
 from zipline.utils.sqlite_utils import group_into_chunks, coerce_string_to_conn
 from zipline.utils.memoize import lazyval
 from zipline.utils.cli import maybe_show_progress
@@ -1280,7 +1280,7 @@ class SQLiteAdjustmentReader(object):
     :class:`zipline.data.us_equity_pricing.SQLiteAdjustmentWriter`
     """
 
-    @preprocess(conn=coerce_string_to_conn)
+    @preprocess(conn=coerce_string_to_conn(require_exists=True))
     def __init__(self, conn):
         self.conn = conn
 

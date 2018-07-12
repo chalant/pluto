@@ -198,6 +198,24 @@ def get_environment(field='platform'):
         Raised when ``field`` is not a valid option.
     """
 
+def get_open_orders(asset=None):
+    """Retrieve all of the current open orders.
+
+    Parameters
+    ----------
+    asset : Asset
+        If passed and not None, return only the open orders for the given
+        asset instead of all open orders.
+
+    Returns
+    -------
+    open_orders : dict[list[Order]] or list[Order]
+        If no asset is passed this will return a dict mapping Assets
+        to a list containing all the open orders for the asset.
+        If an asset is passed then this will return a list of the open
+        orders for this asset.
+    """
+
 def get_order(order_id):
     """Lookup an order based on the order id returned from one of the
     order functions.
@@ -267,7 +285,7 @@ def order_percent(asset, percent, limit_price=None, stop_price=None, style=None)
     asset : Asset
         The asset that this order is for.
     percent : float
-        The percentage of the porfolio value to allocate to ``asset``.
+        The percentage of the portfolio value to allocate to ``asset``.
         This is specified as a decimal, for example: 0.50 means 50%.
     limit_price : float, optional
         The limit price for the order.
@@ -356,7 +374,7 @@ def order_target_percent(asset, target, limit_price=None, stop_price=None, style
     asset : Asset
         The asset that this order is for.
     target : float
-        The desired percentage of the porfolio value to allocate to
+        The desired percentage of the portfolio value to allocate to
         ``asset``. This is specified as a decimal, for example:
         0.50 means 50%.
     limit_price : float, optional
@@ -542,6 +560,8 @@ def schedule_function(func, date_rule=None, time_rule=None, half_days=True, cale
         The rule for the times to execute this function.
     half_days : bool, optional
         Should this rule fire on half days?
+    calendar : Sentinel, optional
+        Calendar used to reconcile date and time rules.
 
     See Also
     --------
@@ -590,13 +610,15 @@ def set_cancel_policy(cancel_policy):
     :class:`zipline.api.NeverCancel`
     """
 
-def set_commission(commission):
-    """Sets the commission model for the simulation.
+def set_commission(us_equities=None, us_futures=None):
+    """Sets the commission models for the simulation.
 
     Parameters
     ----------
-    commission : CommissionModel
-        The commission model to use.
+    us_equities : EquityCommissionModel
+        The commission model to use for trading US equities.
+    us_futures : FutureCommissionModel
+        The commission model to use for trading US futures.
 
     See Also
     --------
@@ -681,13 +703,26 @@ def set_max_position_size(asset=None, max_shares=None, max_notional=None, on_err
         The maximum value to hold for an asset.
     """
 
-def set_slippage(slippage):
-    """Set the slippage model for the simulation.
+def set_min_leverage(min_leverage, grace_period):
+    """Set a limit on the minimum leverage of the algorithm.
 
     Parameters
     ----------
-    slippage : SlippageModel
-        The slippage model to use.
+    min_leverage : float
+        The minimum leverage for the algorithm.
+    grace_period : pd.Timedelta
+        The offset from the start date used to enforce a minimum leverage.
+    """
+
+def set_slippage(us_equities=None, us_futures=None):
+    """Set the slippage models for the simulation.
+
+    Parameters
+    ----------
+    us_equities : EquitySlippageModel
+        The slippage model to use for trading US equities.
+    us_futures : FutureSlippageModel
+        The slippage model to use for trading US futures.
 
     See Also
     --------
