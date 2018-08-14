@@ -17,93 +17,120 @@ from os import remove
 import sqlite3
 import warnings
 
+from abc import ABC
+
 from bcolz import (
-	carray,
-	ctable,
+    carray,
+    ctable,
 )
 from collections import namedtuple
 import logbook
 import numpy as np
 from numpy import (
-	array,
-	int64,
-	float64,
-	full,
-	iinfo,
-	integer,
-	issubdtype,
-	nan,
-	uint32,
+    array,
+    int64,
+    float64,
+    full,
+    iinfo,
+    integer,
+    issubdtype,
+    nan,
+    uint32,
+	datetime64,
 )
 from pandas import (
-	DataFrame,
-	DatetimeIndex,
-	isnull,
-	NaT,
-	read_csv,
-	read_sql,
-	to_datetime,
-	Timestamp,
+    DataFrame,
+    DatetimeIndex,
+    isnull,
+    NaT,
+    read_csv,
+    read_sql,
+    to_datetime,
+    Timestamp,
 )
+from pandas.tslib import iNaT
+
+from blaze import (data,
+				   join)
+
+from sqlalchemy import MetaData
+
 from six import (
-	iteritems,
-	string_types,
-	viewkeys,
+    iteritems,
+    string_types,
+    viewkeys,
 )
 from toolz import compose
 from trading_calendars import get_calendar
 
 from zipline.data.session_bars import SessionBarReader
 from zipline.data.bar_reader import (
-	NoDataAfterDate,
-	NoDataBeforeDate,
-	NoDataOnDate,
+    NoDataAfterDate,
+    NoDataBeforeDate,
+    NoDataOnDate,
 )
 from zipline.utils.functional import apply
 from zipline.utils.preprocess import call
 from zipline.utils.input_validation import (
-	expect_element,
-	preprocess,
-	verify_indices_all_unique,
+    expect_element,
+    preprocess,
+    verify_indices_all_unique,
 )
 from zipline.utils.numpy_utils import iNaT
-from zipline.utils.sqlite_utils import group_into_chunks, coerce_string_to_conn
+from zipline.utils.sqlite_utils import (
+	group_into_chunks,
+	coerce_string_to_conn,
+	check_and_create_engine)
 from zipline.utils.memoize import lazyval
 from zipline.utils.cli import maybe_show_progress
 from ._equities import _compute_row_slices, _read_bcolz_data
 from ._adjustments import load_adjustments_from_sqlite
 
+
 logger = logbook.Logger('UsEquityPricing')
 
 OHLC = frozenset(['open', 'high', 'low', 'close'])
 US_EQUITY_PRICING_BCOLZ_COLUMNS = (
-	'open', 'high', 'low', 'close', 'volume', 'day', 'id'
+    'open', 'high', 'low', 'close', 'volume', 'day', 'id'
 )
 SQLITE_ADJUSTMENT_COLUMN_DTYPES = {
-	'effective_date': integer,
-	'ratio': float,
-	'sid': integer,
+    'effective_date': integer,
+    'ratio': float,
+    'sid': integer,
 }
 SQLITE_ADJUSTMENT_TABLENAMES = frozenset(['splits', 'dividends', 'mergers'])
 
 SQLITE_DIVIDEND_PAYOUT_COLUMN_DTYPES = {
-	'sid': integer,
-	'ex_date': integer,
-	'declared_date': integer,
-	'record_date': integer,
-	'pay_date': integer,
-	'amount': float,
+    'sid': integer,
+    'ex_date': integer,
+    'declared_date': integer,
+    'record_date': integer,
+    'pay_date': integer,
+    'amount': float,
 }
 
 SQLITE_STOCK_DIVIDEND_PAYOUT_COLUMN_DTYPES = {
-	'sid': integer,
-	'ex_date': integer,
-	'declared_date': integer,
-	'record_date': integer,
-	'pay_date': integer,
-	'payment_sid': integer,
-	'ratio': float,
+    'sid': integer,
+    'ex_date': integer,
+    'declared_date': integer,
+    'record_date': integer,
+    'pay_date': integer,
+    'payment_sid': integer,
+    'ratio': float,
 }
+
+SQLITE_FUNDAMENTALS_COLUMN_DTYPES = {
+	'sid': integer,
+	'date': integer,
+	'value': float,
+}
+
+SQLITE_FUNDAMENTALS_ATTRIBUTES = {
+	'calendar_name' : object,
+	'start_session':integer,
+	'end_session':integer
+}
+
 UINT32_MAX = iinfo(uint32).max
 
 
@@ -493,7 +520,6 @@ class BcolzDailyBarReader(SessionBarReader):
 	--------
 	zipline.data.us_equity_pricing.BcolzDailyBarWriter
 	"""
-
 	def __init__(self, table, read_all_threshold=3000):
 		self._maybe_table_rootdir = table
 		# Cache of fully read np.array for the carrays in the daily bar table.
@@ -533,8 +559,8 @@ class BcolzDailyBarReader(SessionBarReader):
 		return {
 			int(asset_id): start_index
 			for asset_id, start_index in iteritems(
-			self._table.attrs['first_row'],
-		)
+				self._table.attrs['first_row'],
+			)
 		}
 
 	@lazyval
@@ -542,8 +568,8 @@ class BcolzDailyBarReader(SessionBarReader):
 		return {
 			int(asset_id): end_index
 			for asset_id, end_index in iteritems(
-			self._table.attrs['last_row'],
-		)
+				self._table.attrs['last_row'],
+			)
 		}
 
 	@lazyval
@@ -551,8 +577,8 @@ class BcolzDailyBarReader(SessionBarReader):
 		return {
 			int(id_): offset
 			for id_, offset in iteritems(
-			self._table.attrs['calendar_offset'],
-		)
+				self._table.attrs['calendar_offset'],
+			)
 		}
 
 	@lazyval
@@ -773,7 +799,6 @@ class PanelBarReader(SessionBarReader):
 	first_trading_day : pd.Timestamp
 		The first trading day in the dataset.
 	"""
-
 	@preprocess(panel=call(verify_indices_all_unique))
 	@expect_element(data_frequency={'daily', 'minute'})
 	def __init__(self, trading_calendar, panel, data_frequency):
@@ -817,10 +842,10 @@ class PanelBarReader(SessionBarReader):
 	def load_raw_arrays(self, columns, start_dt, end_dt, assets):
 		cal = self._calendar
 		return self.panel.loc[
-			   list(assets),
-			   start_dt:end_dt,
-			   list(columns)
-			   ].reindex(major_axis=cal[cal.slice_indexer(start_dt, end_dt)]).values.T
+			list(assets),
+			start_dt:end_dt,
+			list(columns)
+		].reindex(major_axis=cal[cal.slice_indexer(start_dt, end_dt)]).values.T
 
 	def get_value(self, sid, dt, field):
 		"""
@@ -868,30 +893,12 @@ class PanelBarReader(SessionBarReader):
 		return self._first_trading_day
 
 
-class SQLiteAdjustmentWriter(object):
+class SQLiteWriter(ABC):
 	"""
-	Writer for data to be read by SQLiteAdjustmentReader
-
-	Parameters
-	----------
-	conn_or_path : str or sqlite3.Connection
-		A handle to the target sqlite database.
-	equity_daily_bar_reader : BcolzDailyBarReader
-		Daily bar reader to use for dividend writes.
-	overwrite : bool, optional, default=False
-		If True and conn_or_path is a string, remove any existing files at the
-		given path before connecting.
-
-	See Also
-	--------
-	zipline.data.us_equity_pricing.SQLiteAdjustmentReader
+	Base class for SQLite writers
 	"""
 
-	def __init__(self,
-				 conn_or_path,
-				 equity_daily_bar_reader,
-				 calendar,
-				 overwrite=False):
+	def __init__(self, conn_or_path, overwrite=False):
 		if isinstance(conn_or_path, sqlite3.Connection):
 			self.conn = conn_or_path
 		elif isinstance(conn_or_path, string_types):
@@ -906,9 +913,6 @@ class SQLiteAdjustmentWriter(object):
 		else:
 			raise TypeError("Unknown connection type %s" % type(conn_or_path))
 
-		self._equity_daily_bar_reader = equity_daily_bar_reader
-		self._calendar = calendar
-
 	def _write(self, tablename, expected_dtypes, frame):
 		if frame is None or frame.empty:
 			# keeping the dtypes correct for empty frames is not easy
@@ -916,7 +920,7 @@ class SQLiteAdjustmentWriter(object):
 				np.array([], dtype=list(expected_dtypes.items())),
 			)
 		else:
-			if frozenset(frame.columns) != frozenset(expected_dtypes):
+			if frozenset(frame.columns) != viewkeys(expected_dtypes):
 				raise ValueError(
 					"Unexpected frame columns:\n"
 					"Expected Columns: %s\n"
@@ -943,8 +947,46 @@ class SQLiteAdjustmentWriter(object):
 			tablename,
 			self.conn,
 			if_exists='append',
-			chunksize=50000,
-		)
+			chunksize=50000,)
+
+	def close(self):
+		self.conn.close()
+
+	def __enter__(self):
+		return self
+
+	def __exit__(self, *exc_info):
+		self.close()
+
+
+class SQLiteAdjustmentWriter(SQLiteWriter):
+	"""
+	Writer for data to be read by SQLiteAdjustmentReader
+
+	Parameters
+	----------
+	conn_or_path : str or sqlite3.Connection
+		A handle to the target sqlite database.
+	equity_daily_bar_reader : BcolzDailyBarReader
+		Daily bar reader to use for dividend writes.
+	overwrite : bool, optional, default=False
+		If True and conn_or_path is a string, remove any existing files at the
+		given path before connecting.
+
+	See Also
+	--------
+	zipline.data.us_equity_pricing.SQLiteAdjustmentReader
+	"""
+
+	def __init__(self,
+				 conn_or_path,
+				 equity_daily_bar_reader,
+				 calendar,
+				 overwrite=False):
+		SQLiteWriter.__init__(self, conn_or_path, overwrite)
+
+		self._equity_daily_bar_reader = equity_daily_bar_reader
+		self._calendar = calendar
 
 	def write_frame(self, tablename, frame):
 		if tablename not in SQLITE_ADJUSTMENT_TABLENAMES:
@@ -1043,7 +1085,7 @@ class SQLiteAdjustmentWriter(object):
 					ratios[i] = ratio
 					# only assign effective_date when data is found
 					effective_dates[i] = ex_date
-			except NoDataOnDate as e:
+			except NoDataOnDate:
 				logger.warn("Couldn't compute ratio for dividend %s" % {
 					'sid': sid,
 					'ex_date': ex_date,
@@ -1055,7 +1097,7 @@ class SQLiteAdjustmentWriter(object):
 		# ratio vectors for which a ratio was not calculable.
 		effective_mask = effective_dates != -1
 		effective_dates = effective_dates[effective_mask]
-		effective_dates = effective_dates.astype('datetime64[ns]'). \
+		effective_dates = effective_dates.astype('datetime64[ns]').\
 			astype('datetime64[s]').astype(uint32)
 		sids = sids[effective_mask]
 		ratios = ratios[effective_mask]
@@ -1071,17 +1113,17 @@ class SQLiteAdjustmentWriter(object):
 			dividend_payouts = None
 		else:
 			dividend_payouts = dividends.copy()
-			dividend_payouts['ex_date'] = dividend_payouts['ex_date'].values. \
+			dividend_payouts['ex_date'] = dividend_payouts['ex_date'].values.\
 				astype('datetime64[s]').astype(integer)
 			dividend_payouts['record_date'] = \
-				dividend_payouts['record_date'].values. \
-					astype('datetime64[s]').astype(integer)
+				dividend_payouts['record_date'].values.\
+				astype('datetime64[s]').astype(integer)
 			dividend_payouts['declared_date'] = \
-				dividend_payouts['declared_date'].values. \
-					astype('datetime64[s]').astype(integer)
+				dividend_payouts['declared_date'].values.\
+				astype('datetime64[s]').astype(integer)
 			dividend_payouts['pay_date'] = \
-				dividend_payouts['pay_date'].values.astype('datetime64[s]'). \
-					astype(integer)
+				dividend_payouts['pay_date'].values.astype('datetime64[s]').\
+				astype(integer)
 
 		self.write_dividend_payouts(dividend_payouts)
 
@@ -1091,17 +1133,17 @@ class SQLiteAdjustmentWriter(object):
 		else:
 			stock_dividend_payouts = stock_dividends.copy()
 			stock_dividend_payouts['ex_date'] = \
-				stock_dividend_payouts['ex_date'].values. \
-					astype('datetime64[s]').astype(integer)
+				stock_dividend_payouts['ex_date'].values.\
+				astype('datetime64[s]').astype(integer)
 			stock_dividend_payouts['record_date'] = \
-				stock_dividend_payouts['record_date'].values. \
-					astype('datetime64[s]').astype(integer)
+				stock_dividend_payouts['record_date'].values.\
+				astype('datetime64[s]').astype(integer)
 			stock_dividend_payouts['declared_date'] = \
-				stock_dividend_payouts['declared_date']. \
-					values.astype('datetime64[s]').astype(integer)
+				stock_dividend_payouts['declared_date'].\
+				values.astype('datetime64[s]').astype(integer)
 			stock_dividend_payouts['pay_date'] = \
-				stock_dividend_payouts['pay_date']. \
-					values.astype('datetime64[s]').astype(integer)
+				stock_dividend_payouts['pay_date'].\
+				values.astype('datetime64[s]').astype(integer)
 		self.write_stock_dividend_payouts(stock_dividend_payouts)
 
 	def write_dividend_data(self, dividends, stock_dividends=None):
@@ -1261,8 +1303,8 @@ WHERE ex_date=? AND sid IN ({0})
 """
 
 StockDividend = namedtuple(
-	'StockDividend',
-	['asset', 'payment_asset', 'ratio', 'pay_date'])
+    'StockDividend',
+    ['asset', 'payment_asset', 'ratio', 'pay_date'])
 
 
 class SQLiteAdjustmentReader(object):
@@ -1281,9 +1323,9 @@ class SQLiteAdjustmentReader(object):
 	:class:`zipline.data.us_equity_pricing.SQLiteAdjustmentWriter`
 	"""
 
-    @preprocess(conn=coerce_string_to_conn(require_exists=True))
-    def __init__(self, conn):
-        self.conn = conn
+	@preprocess(conn=coerce_string_to_conn(require_exists=True))
+	def __init__(self, conn):
+		self.conn = conn
 
 		# Given the tables in the adjustments.db file, dict which knows which
 		# col names contain dates that have been coerced into ints.
@@ -1355,8 +1397,8 @@ class SQLiteAdjustmentReader(object):
 
 			for row in rows:
 				stock_div = StockDividend(
-					asset_finder.retrieve_asset(row[0]),  # asset
-					asset_finder.retrieve_asset(row[1]),  # payment_asset
+					asset_finder.retrieve_asset(row[0]),    # asset
+					asset_finder.retrieve_asset(row[1]),    # payment_asset
 					row[2],
 					Timestamp(row[3], unit='s', tz='UTC'))
 				stock_divs.append(stock_div)
@@ -1384,6 +1426,7 @@ class SQLiteAdjustmentReader(object):
 		"""
 
 		def _get_df_from_table(table_name, date_cols):
+
 			# Dates are stored in second resolution as ints in adj.db tables.
 			# Need to specifically convert them as UTC, not local time.
 			kwargs = (
@@ -1408,3 +1451,93 @@ class SQLiteAdjustmentReader(object):
 			)
 			for t_name, date_cols in self._datetime_int_cols.items()
 		}
+
+
+class SQLiteFundamentalsWriter(SQLiteWriter):
+	"""
+	Writer for data to be read by SQLiteFundamentalsReader
+	Parameters
+	----------
+	conn_or_path : str or sqlite3.Connection
+		A handle to the target sqlite database.
+	overwrite : bool, optional, default=False
+		If True and conn_or_path is a string, remove any existing files at the
+		given path before connecting.
+	See Also
+	--------
+	zipline.data.us_equity_pricing.SQLiteFundamentalsReader
+	"""
+
+	def __init__(self, conn_or_path,start_session,end_session,overwrite=False):
+		SQLiteWriter.__init__(self, conn_or_path, overwrite)
+		self._start_session = start_session
+		self._end_session = end_session
+
+	def write(self, fundamentals=None):
+		"""
+		Writes data to a SQLite file to be read by SQLiteFundamentalsReader.
+		Parameters
+		----------
+		fundamentals : pandas.DataFrame, optional
+			Dataframe containing fundamentals data. The format of this dataframe is:
+			  sid : int
+				  The asset id associated with this fundamentals.
+			  date : datetime64
+				  The date of the fundamental data
+			  name : string
+				  A name of the fundamental
+			  value : float
+				  A value of the fundamental
+		"""
+		if fundamentals is None:
+			return
+		for name in fundamentals['name'].unique():
+			df = fundamentals[fundamentals['name'] == name].copy()
+			df.drop('name', axis=1, inplace=True)
+			dates = df['date'].values.astype('datetime64[s]').astype(integer)
+			df['date'] = dates
+
+			self._write(
+				'fundamentals_{}'.format(name),
+				SQLITE_FUNDAMENTALS_COLUMN_DTYPES,
+				df)
+
+
+class SQLiteFundamentalsReader(object):
+	"""
+	Loads fundamentals from a SQLite database.
+	Expects data written in the format output by `SQLiteFundamentalsWriter`.
+	Parameters
+	----------
+	conn : str path from which to load data.
+	See Also
+	--------
+	:class:`zipline.data.us_equity_pricing.SQLiteFundamentalsWriter`
+	"""
+
+	def __init__(self, conn):
+		self.engine = check_and_create_engine(conn,require_exists=True)
+		self.conn = conn
+
+	@property
+	def columns(self):
+		meta = MetaData()
+		meta.reflect(bind=self.engine)
+		return list(meta.tables)
+
+	def read(self, names, first_date=None,last_date=None, assets=None):
+		expr = None
+		for name in names:
+			df = data('sqlite:///' + self.conn + '::{}'.format(name))
+			df = df[['sid', 'value', 'asof_date']]
+			df = df.relabel(value=name)
+			if expr is None:
+				expr = df
+			else:
+				expr = join(expr,df,['sid','asof_date'])
+		return expr
+
+
+
+
+

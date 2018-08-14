@@ -1,5 +1,5 @@
 from .executor import _RequestExecutor
-from ..requests import SandPConstituents
+from contrib.data.traffic.download.request import SandPConstituents
 import requests
 from bs4 import BeautifulSoup
 from dateutil.parser import parse
@@ -17,7 +17,7 @@ class WikipediaExecutor(_RequestExecutor):
 			return None
 
 	def _cool_down_time(self):
-		return 0
+		return 86400
 
 	# TODO: should probably add regex to find some keys like date, datetime etc...
 	def _extract_table(self, table):

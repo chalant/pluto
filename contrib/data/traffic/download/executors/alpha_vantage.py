@@ -1,7 +1,7 @@
 import requests
 from pandas import read_csv
 from io import StringIO
-from ..requests import EquityRequest
+from contrib.data.traffic.download.request import EquityRequest
 from .executor import _RequestExecutor
 from dateutil.parser import parse
 from logbook import Logger
@@ -11,8 +11,8 @@ log = Logger('Alpha Vantage')
 class _AlphaVantage(_RequestExecutor):
 	api_url = "https://www.alphavantage.co/query?function={0}&{1}={2}&outputsize=full&apikey={3}&datatype=csv"
 
-	def __init__(self, name, api_key):
-		super(_AlphaVantage, self).__init__(name)
+	def __init__(self, name, request_counter,api_key):
+		super(_AlphaVantage, self).__init__(name,request_counter)
 		self._api_key = api_key
 
 	def _execute(self, request):

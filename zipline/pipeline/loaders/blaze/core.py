@@ -824,7 +824,7 @@ class BlazeLoader(object):
                          deltas=None,
                          checkpoints=None,
                          odo_kwargs=None):
-        """Explicitly map a datset to a collection of blaze expressions.
+        """Explicitly map a dataset to a collection of blaze expressions.
 
         Parameters
         ----------

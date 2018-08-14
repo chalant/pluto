@@ -2,8 +2,8 @@ from requests.exceptions import RequestException
 from yahoo_historical import Fetcher
 import math
 from dateutil.parser import parse
-from zipline.gens.data.traffic.executors.executor import _RequestExecutor
-from zipline.gens.data.traffic.requests import EquityRequest
+from contrib.data.traffic.download.executors.executor import _RequestExecutor
+from contrib.data.traffic.download.request import EquityRequest
 from time import sleep
 from datetime import timedelta, datetime, time
 

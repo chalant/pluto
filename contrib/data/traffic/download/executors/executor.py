@@ -6,15 +6,15 @@ from logbook import Logger
 log = Logger('Executor')
 
 class _RequestExecutor(ABC):
-	def __init__(self, name):
+	def __init__(self, name, request_counter):
 		self._cool_down = self._cool_down_time()
-		self._used = False
 		self._dispatcher_set = set()
 		self._current_dispatcher = None
 		self._prb = None
 		self._current_dispatcher = None
 		self._name = name
 		self._executing = Condition(Lock())
+		self._request_counter = request_counter
 
 	def __call__(self):
 		with self._executing:
@@ -27,17 +27,10 @@ class _RequestExecutor(ABC):
 				else:
 					request = self._get_request(self._current_dispatcher)
 					if request:
-						self._check_used()
 						self._save(request)
 					else:
 						self._current_dispatcher = None
 			self._executing.notify()
-
-	def _check_used(self):
-		if not self._used:
-			self._used = True
-		else:
-			sleep(self._cool_down)
 
 	def _get_request(self, dispatcher):
 		return dispatcher.get_request(name=self._name)
@@ -46,10 +39,15 @@ class _RequestExecutor(ABC):
 		result = self._execute(request)
 		if result:
 			msg = request.save(result)
+			ctr = self._request_counter
 			if self._prb:
 				if msg:
 					self._prb.set_description('{} {}'.format(msg,self._name))
 				self._prb.update(1)
+			if ctr.counter >= ctr.max_requests:
+				sleep(self._cool_down)
+			else:
+				ctr.increment_counter()
 		else:
 			if self._prb:
 				self._prb.set_description("Couldn't execute request for {} using {}".format(request,self._name))
@@ -71,8 +69,8 @@ class _RequestExecutor(ABC):
 		self._prb = progressbar
 
 class Schedule(_RequestExecutor):
-	def __init__(self, executors, time_to_execution, thread_pool):  # wraps around a dispatcher
-		super(Schedule,self).__init__('Schedule')
+	def __init__(self, executors, time_to_execution, thread_pool, request_counter):  # wraps around a dispatcher
+		super(Schedule,self).__init__('Schedule', request_counter)
 		self._time = time_to_execution
 		self._executors = executors
 		self._pool = thread_pool
@@ -94,4 +92,27 @@ class Schedule(_RequestExecutor):
 
 	def set_progressbar(self, progressbar):
 		self._progressbar = progressbar
+
+class RequestsCounter(object):
+	def __init__(self,max_requests):
+		self._counter = 0
+		self._max_requests = max_requests
+		self._lock = Lock()
+
+	@property
+	def max_requests(self):
+		return self._max_requests
+
+	def increment_counter(self):
+		with self._lock:
+			self._counter += 1
+
+	@property
+	def counter(self):
+		with self._lock:
+			return self._counter
+
+
+
+
 

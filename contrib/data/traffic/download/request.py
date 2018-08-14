@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
-from functools import partial
 
+class Requester(ABC):
+	@abstractmethod
+	def get_request(self,**kwargs):
+		raise NotImplementedError
 
 class Request(ABC):
 	__slots__ = ['_saver']

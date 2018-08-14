@@ -150,6 +150,12 @@ def main(ctx, rebuild_input):
                 pd.__version__.replace('.', '-'),
             )
 
+        # we need to register the bundle; it is already ingested and saved in
+        # the example_data.tar.gz file
+        @register('test')
+        def nop_ingest(*args, **kwargs):
+            raise NotImplementedError('we cannot rebuild the test buindle')
+
             # allow users to run some analysis to make sure that the new
             # results check out
             console = InteractiveConsole({

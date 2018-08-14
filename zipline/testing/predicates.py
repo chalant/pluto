@@ -490,6 +490,37 @@ def asssert_mappingproxy_equal(result, expected, path=(), msg='', **kwargs):
         raise AssertionError('\n'.join(failures))
 
 
+@assert_equal.register(mappingproxy, mappingproxy)
+def asssert_mappingproxy_equal(result, expected, path=(), msg='', **kwargs):
+    # mappingproxies compare like dict but shouldn't compare to dicts
+    _check_sets(
+        set(result),
+        set(expected),
+        msg,
+        path + ('.keys()',),
+        'key',
+    )
+
+    failures = []
+    for k, resultv in iteritems(result):
+        # we know this exists because of the _check_sets call above
+        expectedv = expected[k]
+
+        try:
+            assert_equal(
+                resultv,
+                expectedv,
+                path=path + ('[%r]' % (k,),),
+                msg=msg,
+                **kwargs
+            )
+        except AssertionError as e:
+            failures.append(str(e))
+
+    if failures:
+        raise AssertionError('\n'.join(failures))
+
+
 @assert_equal.register(list, list)
 @assert_equal.register(tuple, tuple)
 def assert_sequence_equal(result, expected, path=(), msg='', **kwargs):
