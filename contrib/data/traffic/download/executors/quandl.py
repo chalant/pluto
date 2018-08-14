@@ -1,12 +1,12 @@
-from zipline.gens.downloaders.traffic.executors.executor import _RequestExecutor
-from zipline.gens.downloaders.traffic.requests import EquityRequest
+from contrib.data.traffic.download.executors.executor import _RequestExecutor
+from contrib.data.traffic.download.request import EquityRequest
 from datetime import datetime,date
 import math
 import quandl
 
 class _Quandl(_RequestExecutor):
-	def __init__(self,api_key,name=None):
-		super(_Quandl,self).__init__(name)
+	def __init__(self, api_key, requests_counter, name=None):
+		super(_Quandl,self).__init__(name, requests_counter)
 		quandl.ApiConfig.api_key = api_key
 
 	def _format_date(self,dt):

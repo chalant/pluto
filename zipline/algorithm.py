@@ -16,12 +16,16 @@ from collections import Iterable, namedtuple
 from copy import copy
 import operator as op
 import warnings
-from datetime import tzinfo, time
+from datetime import tzinfo, time,timedelta,datetime,date
 import logbook
 import pytz
 import pandas as pd
 from contextlib2 import ExitStack
+from pandas.tseries.tools import normalize_date
 import numpy as np
+from matplotlib import animation as an
+from matplotlib import pyplot as plt
+from matplotlib import dates
 
 from itertools import chain, repeat
 from numbers import Integral
@@ -139,7 +143,6 @@ from zipline.sources.requests_csv import PandasRequestsCSV
 from zipline.gens.sim_engine import MinuteSimulationClock
 from zipline.sources.benchmark_source import BenchmarkSource
 from zipline.zipline_warnings import ZiplineDeprecationWarning
-
 
 log = logbook.Logger("ZiplineLog")
 
@@ -338,6 +341,12 @@ class TradingAlgorithm(object):
         # symbols to sids, and can be set using set_symbol_lookup_date()
         self._symbol_lookup_date = None
 
+        self.portfolio_needs_update = True
+        self.account_needs_update = True
+        self.performance_needs_update = True
+        self._portfolio = None
+        self._account = None
+
         # If string is passed in, execute and get reference to
         # functions.
         self.algoscript = kwargs.pop('script', None)
@@ -440,7 +449,7 @@ class TradingAlgorithm(object):
         if get_loader is not None:
             self.engine = SimplePipelineEngine(
                 get_loader,
-                self.trading_calendar.all_sessions,
+                self.trading_calendar,
                 self.asset_finder,
             )
         else:
@@ -471,6 +480,11 @@ class TradingAlgorithm(object):
     def handle_data(self, data):
         if self._handle_data:
             self._handle_data(self, data)
+
+        # Unlike trading controls which remain constant unless placing an
+        # order, account controls can change each bar. Thus, must check
+        # every bar no matter if the algorithm places an order or not.
+        self.validate_account_controls()
 
     def analyze(self, perf):
         if self._analyze is None:
@@ -534,11 +548,13 @@ class TradingAlgorithm(object):
         execution_closes = \
             self.trading_calendar.execution_time_from_close(market_closes)
 
-        # FIXME generalize these values
+        cal = self.trading_calendar
+        t = datetime.combine(date.min, cal.open_time) - timedelta(minutes=15)
+        # FIXME generalize these values (update: changed, this, but not sure if it is correct...)
         before_trading_start_minutes = days_at_time(
             self.sim_params.sessions,
-            time(8, 45),
-            "US/Eastern"
+            t.time(),
+            cal.tz
         )
 
         return MinuteSimulationClock(
@@ -755,13 +771,65 @@ class TradingAlgorithm(object):
 
         # Create zipline and loop through simulated_trading.
         # Each iteration returns a perf dictionary
+        #TODO: this is my 'animation' implementation...
         try:
             perfs = []
-            for perf in self.get_generator():
-                perfs.append(perf)
+            # for perf in self.get_generator():
+            # 	perfs.append(perf)
+            # 	print(perf)
+            fig = plt.figure()
+            fig.suptitle('Performance')
+            ax = fig.add_subplot(2, 1, 1)
+            ax1 = fig.add_subplot(2,1,2,sharex=ax)
+            brk = plt.Line2D([], [], color='blue')
+            alg = plt.Line2D([], [], color='red')
+            fig.legend((brk,alg),('Benchmark','Algorithm'))
+            ax.grid(axis='y')
+            ax.add_line(brk)
+            ax.add_line(alg)
+            xdata, brk_data, alg_data = [], [], []
+            fig.autofmt_xdate()
 
+            def init():
+                ax.set_ylim(-1.0, 1.0)
+                ax.set_xlim(self.sim_params.start_session,self.sim_params.end_session)
+                # del xdata[:]
+                # del brk_data[:]
+                # del alg_data[:]
+                brk.set_data(xdata, brk_data)
+                alg.set_data(xdata, alg_data)
+                return [brk, alg]
+
+            def run(data):
+                d = data['daily_perf']
+                dt = d['period_close']
+                d2 = data['cumulative_risk_metrics']
+                d2d = d2['benchmark_period_return']
+                d22 = d2['algorithm_period_return']
+                xdata.append(dt)
+                brk_data.append(d2d)
+                alg_data.append(d22)
+                brk.set_data(xdata, brk_data)
+                alg.set_data(xdata, alg_data)
+                ymin, ymax = ax.get_ylim()
+                if d2d >= ymax or d22 >= ymax:
+                    if d2d >= d22:
+                        sc = d2d
+                    else:
+                        sc = d22
+                    ax.set_ylim(ymin, sc + ymax)
+                elif d2d < ymin or d22 < ymin:
+                    if d2d >= d22:
+                        sc = d22
+                    else:
+                        sc = d2d
+                    ax.set_ylim(sc + ymin, ymax)
+                perfs.append(data) #TODO : save this in the harddrive instead of the memory...
+                return [brk, alg]
+            ani = an.FuncAnimation(fig,run,self.get_generator(),init_func=init,blit=True)
             # convert perf dict to pandas dataframe
             daily_stats = self._create_daily_stats(perfs)
+            plt.show()
 
             self.analyze(daily_stats)
         finally:

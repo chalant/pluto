@@ -1,13 +1,13 @@
 from zipline.pipeline.filters.filter import CustomFilter
 import numpy as np
-from zipline.gens.data.traffic import database as db
+from contrib.data.traffic.storage import collections as db
 from datetime import datetime, date, time
 import zipline.api as api
 from zipline.errors import SymbolNotFound
 
 ''' A spy constituent filter returns each day's s and p constituent...'''
 
-finder = db.AssetFinder()
+finder = db.Assets()
 
 def to_datetime(date_):
 	dt = np.array([date_]).astype(datetime)[0]

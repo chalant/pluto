@@ -190,6 +190,7 @@ class SimplePipelineEngine(PipelineEngine):
     """
     __slots__ = (
         '_get_loader',
+        '_sessions',
         '_calendar',
         '_finder',
         '_root_mask_term',
@@ -204,6 +205,7 @@ class SimplePipelineEngine(PipelineEngine):
                  populate_initial_workspace=None):
         self._get_loader = get_loader
         self._calendar = calendar
+        self._sessions = calendar.all_sessions
         self._finder = asset_finder
 
         self._root_mask_term = AssetExists()
@@ -285,7 +287,7 @@ class SimplePipelineEngine(PipelineEngine):
         graph = pipeline.to_execution_plan(
             screen_name,
             self._root_mask_term,
-            self._calendar,
+            self._sessions,
             start_date,
             end_date,
         )
@@ -322,7 +324,7 @@ class SimplePipelineEngine(PipelineEngine):
     @copydoc(PipelineEngine.run_chunked_pipeline)
     def run_chunked_pipeline(self, pipeline, start_date, end_date, chunksize):
         ranges = compute_date_range_chunks(
-            self._calendar,
+            self._sessions,
             start_date,
             end_date,
             chunksize,
@@ -361,13 +363,13 @@ class SimplePipelineEngine(PipelineEngine):
             that existed for at least one day between `start_date` and
             `end_date`.
         """
-        calendar = self._calendar
+        sessions = self._sessions
         finder = self._finder
-        start_idx, end_idx = self._calendar.slice_locs(start_date, end_date)
+        start_idx, end_idx = sessions.slice_locs(start_date, end_date)
         if start_idx < extra_rows:
             raise NoFurtherDataError.from_lookback_window(
                 initial_message="Insufficient data to compute Pipeline:",
-                first_date=calendar[0],
+                first_date=sessions[0],
                 lookback_start=start_date,
                 lookback_length=extra_rows,
             )
@@ -375,8 +377,9 @@ class SimplePipelineEngine(PipelineEngine):
         # Build lifetimes matrix reaching back to `extra_rows` days before
         # `start_date.`
         lifetimes = finder.lifetimes(
-            calendar[start_idx - extra_rows:end_idx],
-            include_start_date=False
+            sessions[start_idx - extra_rows:end_idx],
+            include_start_date=False,
+            calendar=self._calendar
         )
 
         if lifetimes.index[extra_rows] != start_date:

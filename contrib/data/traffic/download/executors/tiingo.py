@@ -1,5 +1,5 @@
-from zipline.gens.data.traffic.executors.executor import _RequestExecutor
-from zipline.gens.data.traffic.requests import EquityRequest, MetaDataRequest
+from contrib.data.traffic.download.executors.executor import _RequestExecutor
+from contrib.data.traffic.download.request import EquityRequest, MetaDataRequest
 from datetime import datetime, date
 import requests
 from dateutil.parser import parse
@@ -21,13 +21,12 @@ from dateutil.parser import parse
    }
 '''
 
-#TODO: add a way the get the latest data...
+#TODO: add a way to get the latest data...
 class _Tiingo(_RequestExecutor):
 	base_url = "https://api.tiingo.com/tiingo/"
 
-	def __init__(self, name, api_key, paid_account=False):
-		self._counter = 0
-		super(_Tiingo, self).__init__(name)
+	def __init__(self, name, api_key, requests_counter, paid_account=False):
+		super(_Tiingo, self).__init__(name, requests_counter)
 		self._paid_account = paid_account
 		self._headers = {
 			'Content-Type': 'application/json',
@@ -47,10 +46,9 @@ class _Tiingo(_RequestExecutor):
 			try:
 				response = requests.get(url=url, headers=self._headers)
 				if response.status_code == requests.codes.ok:
-					self._counter += 1
 					return {'symbol': request.symbol, 'series': self._format_equity_data_from_json(response.json())}
 				else:
-					return None
+					return
 			except Exception:
 				return
 		elif isinstance(request, MetaDataRequest):
@@ -59,7 +57,6 @@ class _Tiingo(_RequestExecutor):
 			try:
 				response = requests.get(url=url, headers=self._headers)
 				if response.status_code == requests.codes.ok:
-					self._counter += 1
 					return self._format_meta_data_from_json(response.json())
 			except Exception:
 				return None
@@ -67,10 +64,7 @@ class _Tiingo(_RequestExecutor):
 			raise NotImplementedError
 
 	def _cool_down_time(self):
-		if self._counter == 20000:
-			return 3600
-		else:
-			return 0
+		return 3600
 
 	def _reformat_datetime(self, dt):
 		frt = "{0}-{1}-{2}"

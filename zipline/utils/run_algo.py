@@ -81,7 +81,9 @@ def _run(handle_data,
          environ,
          broker,
          state_filename,
-         realtime_bar_target):
+         realtime_bar_target,
+         loader_factory=None,
+         bundle_data=None):
     """Run a backtest for the given algorithm.
 
     This is shared between the cli and :func:`zipline.run_algo`.
@@ -142,12 +144,15 @@ def _run(handle_data,
             ),
         )
 
-    if bundle is not None:
-        bundle_data = bundles.load(
-            bundle,
-            environ,
-            bundle_timestamp,
-        )
+    if bundle_data is not None or bundle is not None:
+        if bundle is not None and bundle_data is None:
+            bundle_data = bundles.load(
+                bundle,
+                environ,
+                bundle_timestamp,
+            )
+        else:
+            bundle_data = bundle_data
 
         prefix, connstr = re.split(
             r'sqlite:///',
@@ -189,6 +194,8 @@ def _run(handle_data,
         def choose_loader(column):
             if column in USEquityPricing.columns:
                 return pipeline_loader
+            # elif column in SF1CoreFundamentals.columns:
+            #     return FundamentalsLoader(bundle_data.fundamental_reader)
             raise ValueError(
                 "No PipelineLoader registered for column %s." % column
             )
@@ -206,11 +213,11 @@ def _run(handle_data,
         start = pd.Timestamp.utcnow()
         end = start + pd.Timedelta('2 day')
 
-	if isinstance(metrics_set,six.string_types):
-		try:
-			metrics_set = metrics.load(metrics_set)
-		except ValueError as e:
-			raise _RunAlgoError(str(e))
+    if isinstance(metrics_set,six.string_types):
+        try:
+            metrics_set = metrics.load(metrics_set)
+        except ValueError as e:
+            raise _RunAlgoError(str(e))
 
     TradingAlgorithmClass = (partial(LiveTradingAlgorithm,
                                      broker=broker,
@@ -221,7 +228,7 @@ def _run(handle_data,
     perf = TradingAlgorithmClass(
         namespace=namespace,
         env=env,
-        get_pipeline_loader=choose_loader,
+        get_pipeline_loader = loader_factory or choose_loader,
         trading_calendar=trading_calendar,
         sim_params=create_simulation_parameters(
             start=start,
@@ -324,7 +331,9 @@ def run_algorithm(start,
                   strict_extensions=True,
                   environ=os.environ,
                   live_trading=False,
-                  tws_uri=None):
+                  tws_uri=None,
+                  loader_factory=None,
+                  bundle_data=None):
     """Run a trading algorithm.
 
     Parameters
@@ -437,5 +446,7 @@ def run_algorithm(start,
         environ=environ,
         broker=None,
         state_filename=None,
-        realtime_bar_target=None
+        realtime_bar_target=None,
+        loader_factory=None,
+        bundle_data=None
     )

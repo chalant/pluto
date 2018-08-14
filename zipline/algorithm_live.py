@@ -10,7 +10,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from datetime import time
+from datetime import timedelta,datetime,date
 import os.path
 import logbook
 import pandas as pd
@@ -25,7 +25,7 @@ from zipline.utils.api_support import (
     api_method,
     allowed_only_in_before_trading_start)
 
-from zipline.utils.calendars.trading_calendar import days_at_time
+from trading_calendars.trading_calendar import days_at_time
 from zipline.utils.serialization_utils import load_context, store_context
 
 log = logbook.Logger("Live Trading")
@@ -99,16 +99,15 @@ class LiveTradingAlgorithm(TradingAlgorithm):
         # for example, we only want to simulate over a subset of the full 24
         # hour calendar, so the execution times dictate a market open time of
         # 6:31am US/Eastern and a close of 5:00pm US/Eastern.
-        execution_opens = \
-            self.trading_calendar.execution_time_from_open(market_opens)
-        execution_closes = \
-            self.trading_calendar.execution_time_from_close(market_closes)
+        cal = self.trading_calendar
+        execution_opens = cal.execution_time_from_open(market_opens)
+        execution_closes = cal.execution_time_from_close(market_closes)
 
-        # FIXME generalize these values
+        t = datetime.combine(date.min, cal.open_time) - timedelta(minutes=15)
         before_trading_start_minutes = days_at_time(
             self.sim_params.sessions,
-            time(8, 45),
-            "US/Eastern"
+            t.time(),
+            cal.tz
         )
 
         return RealtimeClock(

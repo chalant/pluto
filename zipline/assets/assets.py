@@ -78,8 +78,6 @@ from zipline.utils.numpy_utils import as_column
 from zipline.utils.preprocess import preprocess
 from zipline.utils.sqlite_utils import group_into_chunks, coerce_string_to_eng
 
-from zipline.utils.calendars import get_calendar
-
 log = Logger('assets.py')
 
 # A set of fields that need to be converted to strings before building an
@@ -1253,7 +1251,7 @@ class AssetFinder(object):
         # Return a list of the sids of the found assets
         return [asset.sid for asset in matches]
 
-    def _compute_asset_lifetimes(self):
+    def _compute_asset_lifetimes(self,calendar=None):
         """
         Compute and cache a recarry of asset lifetimes.
         """
@@ -1283,7 +1281,7 @@ class AssetFinder(object):
 
         # shifting end_date   original idea from Peyman and Behnood
         if self.is_live:
-            cal = get_calendar("NYSE")
+            cal = calendar
             last_end_day_ns = max(lifetimes.end)
             last_end_day = pd.to_datetime(last_end_day_ns, unit='ns')
             shifted_last_end_day = cal.next_open(cal.next_open(last_end_day))
@@ -1299,7 +1297,7 @@ class AssetFinder(object):
             ('end', '<i8')
         ])
 
-    def lifetimes(self, dates, include_start_date):
+    def lifetimes(self, dates, include_start_date,calendar=None):
         """
         Compute a DataFrame representing asset lifetimes for the specified date
         range.
@@ -1336,7 +1334,7 @@ class AssetFinder(object):
         # those new assets available.  Mutability is not my favorite
         # programming feature.
         if self._asset_lifetimes is None:
-            self._asset_lifetimes = self._compute_asset_lifetimes()
+            self._asset_lifetimes = self._compute_asset_lifetimes(calendar)
         lifetimes = self._asset_lifetimes
 
         raw_dates = as_column(dates.asi8)

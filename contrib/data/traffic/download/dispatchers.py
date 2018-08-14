@@ -1,7 +1,5 @@
-from time import sleep
 from collections import deque
 from threading import Lock, Condition
-
 
 class Dispatcher:
 	'''Receives and dispatches requests from and to different threads...'''
