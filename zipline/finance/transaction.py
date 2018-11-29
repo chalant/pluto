@@ -53,7 +53,7 @@ class Transaction(object):
         del py['type']
         del py['asset']
 
-        # Adding 'sid' for backwards compatibility with downstrean consumers.
+        # Adding 'sid' for backwards compatibility with downstream consumers.
         py['sid'] = self.asset
 
         # If you think this looks dumb, that is because it is! We once stored

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+service Controller {
+    /*Controls a controllable. To be controllable, the client must first register, by providing
+    its name and url and implement a controllable_grpc class*/
+    rpc Register(Identity) returns (RegisterReply) {}
+}
+
+message Identity {
+    string name = 1;
+    string url = 2; // address to control the client...
+}
+
+message RegisterReply {
+    string url = 1; // an url for accessing service-per-client
+}

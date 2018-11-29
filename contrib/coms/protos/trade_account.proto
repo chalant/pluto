@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "contrib/coms/protos/protocol.proto";
+import "contrib/coms/protos/assets.proto";
+import "contrib/coms/protos/finance.proto";
+
+import "google/protobuf/empty.proto";
+
+service TradeAccount {
+    /*This should encapsulate the set of services available per account...*/
+    rpc SingleOrder (OrderParams) returns (Order);
+    rpc AccountState (google.protobuf.Empty) returns (Account);
+    rpc PortfolioState (google.protobuf.Empty) returns (Portfolio);
+    rpc PositionsState (google.protobuf.Empty) returns (stream AssetPositionPair);
+    rpc Orders (google.protobuf.Empty) returns (Order);
+    rpc Transactions (google.protobuf.Empty) returns (stream Transaction);
+    rpc BatchOrder (stream BatchOrderParams) returns (stream Order);
+    rpc CancelOrder (Order) returns (google.protobuf.Empty);
+    rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
+}
+
+message WarningMessage {
+    string message = 1;
+}
+
+message OrderParams {
+    enum ExecutionStyle {
+        MARKET_ORDER = 0;
+        LIMIT_ORDER = 1;
+        STOP_ORDER = 2;
+        STOP_LIMIT_ORDER = 3;
+    }
+    ExecutionStyle style = 1;
+    Asset asset = 2;
+    float amount = 3;
+    float limit_price = 4;
+    float stop_price = 5;
+    float limit_order = 6;
+    float exchange = 7;
+}
+
+message BatchOrderParams {
+    repeated OrderParams params = 1;
+}
