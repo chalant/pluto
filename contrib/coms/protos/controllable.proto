@@ -1,0 +1,22 @@
+syntax ='proto3';
+
+import "contrib/coms/protos/params.proto";
+import "contrib/coms/protos/metrics.proto";
+
+service Controllable {
+    rpc Run(RunParams) returns (stream PerformancePacket) {}
+}
+
+message PerformancePacket {
+    CumulativeMetrics cumulative_perf = 1;
+    PeriodPerformance daily_perf = 2;
+    PeriodPerformance minutely_perf = 3;
+    CumulativeRiskMetrics cumulative_risk_metrics = 4;
+}
+
+message PeriodPerformance {
+    CumulativeMetrics cumulative_metrics = 1;
+    PeriodCommonMetrics period_common_metrics = 2;
+}
+
+
