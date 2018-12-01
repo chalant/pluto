@@ -10,9 +10,9 @@ import pandas as pd
 from trading_calendars import get_calendar
 from toolz import curry, complement, take
 
+from ..adjustments import SQLiteAdjustmentReader, SQLiteAdjustmentWriter
+from ..bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
 from ..us_equity_pricing import (
-	BcolzDailyBarReader,
-	BcolzDailyBarWriter,
 	SQLiteAdjustmentReader,
 	SQLiteAdjustmentWriter,
 	SQLiteFundamentalsWriter,
@@ -429,48 +429,36 @@ def _make_bundle_core():
 				))
 				asset_db_writer = AssetDBWriter(assets_db_path)
 
-				adjustment_db_writer = stack.enter_context(
-					SQLiteAdjustmentWriter(
-						wd.getpath(*adjustment_db_relative(
-							name, timestr, environ=environ)),
-						BcolzDailyBarReader(daily_bars_path),
-						calendar.all_sessions,
-						overwrite=True,
-					)
-				)
-				fundamentals_db_writer = stack.enter_context(
-					SQLiteFundamentalsWriter(
-						wd.getpath(*fundamentals_db_relative(
-							name, timestr, environ=environ)),
-						start_session,
-						end_session,
-						overwrite = True,
-					)
-				)
-			else:
-				daily_bar_writer = None
-				minute_bar_writer = None
-				asset_db_writer = None
-				adjustment_db_writer = None
-				fundamentals_db_writer = None
-				if assets_versions:
-					raise ValueError('Need to ingest a bundle that creates '
-									 'writers in order to downgrade the assets'
-									 ' db.')
-			bundle.ingest(
-				environ,
-				asset_db_writer,
-				minute_bar_writer,
-				daily_bar_writer,
-				adjustment_db_writer,
-				fundamentals_db_writer,
-				calendar,
-				start_session,
-				end_session,
-				cache,
-				show_progress,
-				pth.data_path([name, timestr], environ=environ),
-			)
+                adjustment_db_writer = stack.enter_context(
+                    SQLiteAdjustmentWriter(
+                        wd.getpath(*adjustment_db_relative(
+                            name, timestr, environ=environ)),
+                        BcolzDailyBarReader(daily_bars_path),
+                        overwrite=True,
+                    )
+                )
+            else:
+                daily_bar_writer = None
+                minute_bar_writer = None
+                asset_db_writer = None
+                adjustment_db_writer = None
+                if assets_versions:
+                    raise ValueError('Need to ingest a bundle that creates '
+                                     'writers in order to downgrade the assets'
+                                     ' db.')
+            bundle.ingest(
+                environ,
+                asset_db_writer,
+                minute_bar_writer,
+                daily_bar_writer,
+                adjustment_db_writer,
+                calendar,
+                start_session,
+                end_session,
+                cache,
+                show_progress,
+                pth.data_path([name, timestr], environ=environ),
+            )
 
 			for version in sorted(set(assets_versions), reverse=True):
 				version_path = wd.getpath(*asset_db_relative(

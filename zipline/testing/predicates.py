@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 import datetime
 from functools import partial
-import inspect
 import re
 
 from nose.tools import (  # noqa
@@ -45,11 +44,12 @@ from six.moves import zip_longest
 from toolz import dissoc, keyfilter
 import toolz.curried.operator as op
 
+from zipline.assets import Asset
 from zipline.dispatch import dispatch
 from zipline.lib.adjustment import Adjustment
 from zipline.lib.labelarray import LabelArray
 from zipline.testing.core import ensure_doctest
-from zipline.utils.compat import mappingproxy
+from zipline.utils.compat import getargspec, mappingproxy
 from zipline.utils.functional import dzip_exact, instance
 from zipline.utils.math_utils import tolerant_equals
 
@@ -147,7 +147,7 @@ def keywords(func):
         return keywords(func.__init__)
     elif isinstance(func, partial):
         return keywords(func.func)
-    return inspect.getargspec(func).args
+    return getargspec(func).args
 
 
 def filter_kwargs(f, kwargs):
@@ -701,6 +701,15 @@ def assert_timestamp_and_datetime_equal(result,
         )
     )
 
+    if isinstance(result, pd.Timestamp) and isinstance(expected, pd.Timestamp):
+        assert_equal(
+            result.tz,
+            expected.tz,
+            path=path + ('.tz',),
+            msg=msg,
+            **kwargs
+        )
+
     result = pd.Timestamp(result)
     expected = pd.Timestamp(expected)
     if compare_nat_equal and pd.isnull(result) and pd.isnull(expected):
@@ -710,6 +719,7 @@ def assert_timestamp_and_datetime_equal(result,
         result,
         expected,
         path=path,
+        msg=msg,
         **kwargs
     )
 
@@ -737,6 +747,26 @@ def assert_slice_equal(result, expected, path=(), msg=''):
         _fmt_msg(msg),
         '\n'.join(filter(None, diffs)),
         _fmt_path(path),
+    )
+
+
+@assert_equal.register(Asset, Asset)
+def assert_asset_equal(result, expected, path=(), msg='', **kwargs):
+    if type(result) is not type(expected):
+        raise AssertionError(
+            '%sresult type differs from expected type: %s is not %s\n%s',
+            _fmt_msg(msg),
+            type(result).__name__,
+            type(expected).__name__,
+            _fmt_path(path),
+        )
+
+    assert_equal(
+        result.to_dict(),
+        expected.to_dict(),
+        path=path + ('.to_dict()',),
+        msg=msg,
+        **kwargs
     )
 
 

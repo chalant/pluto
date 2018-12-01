@@ -1,12 +1,12 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from contextlib import contextmanager
 import gzip
-from inspect import getargspec
 from itertools import (
     combinations,
     count,
     product,
 )
+import json
 import operator
 import os
 from os.path import abspath, dirname, join, realpath
@@ -29,7 +29,7 @@ from trading_calendars import get_calendar
 
 from zipline.assets import AssetFinder, AssetDBWriter
 from zipline.assets.synthetic import make_simple_equity_info
-from zipline.utils.compat import wraps
+from zipline.utils.compat import getargspec, wraps
 from zipline.data.data_portal import DataPortal
 from zipline.data.loader import get_benchmark_filename, INDEX_MAPPING
 from zipline.data.minute_bars import (
@@ -37,16 +37,15 @@ from zipline.data.minute_bars import (
     BcolzMinuteBarWriter,
     US_EQUITIES_MINUTES_PER_DAY
 )
-from zipline.data.us_equity_pricing import (
+from zipline.data.bcolz_daily_bars import (
     BcolzDailyBarReader,
     BcolzDailyBarWriter,
-    SQLiteAdjustmentWriter,
 )
-from zipline.finance.blotter import Blotter
-from zipline.finance.trading import TradingEnvironment
+from zipline.finance.blotter import SimulationBlotter
 from zipline.finance.order import ORDER_STATUS
 from zipline.lib.labelarray import LabelArray
-from zipline.pipeline.data import USEquityPricing
+from zipline.pipeline.data import EquityPricing
+from zipline.pipeline.domain import EquitySessionDomain
 from zipline.pipeline.engine import SimplePipelineEngine
 from zipline.pipeline.factors import CustomFactor
 from zipline.pipeline.loaders.testing import make_seeded_random_loader
@@ -701,12 +700,12 @@ def create_data_portal_from_trade_history(asset_finder, trading_calendar,
 
 
 class FakeDataPortal(DataPortal):
-    def __init__(self, env, trading_calendar=None,
+    def __init__(self, asset_finder, trading_calendar=None,
                  first_trading_day=None):
         if trading_calendar is None:
             trading_calendar = get_calendar("NYSE")
 
-        super(FakeDataPortal, self).__init__(env.asset_finder,
+        super(FakeDataPortal, self).__init__(asset_finder,
                                              trading_calendar,
                                              first_trading_day)
 
@@ -810,6 +809,7 @@ class tmp_assets_db(object):
             )
 
         frames['equities'] = equities
+
         self._frames = frames
         self._eng = None  # set in enter and exit
 
@@ -853,12 +853,17 @@ class tmp_asset_finder(tmp_assets_db):
     def __init__(self,
                  url='sqlite:///:memory:',
                  finder_cls=AssetFinder,
+                 future_chain_predicates=None,
                  **frames):
         self._finder_cls = finder_cls
+        self._future_chain_predicates = future_chain_predicates
         super(tmp_asset_finder, self).__init__(url=url, **frames)
 
     def __enter__(self):
-        return self._finder_cls(super(tmp_asset_finder, self).__enter__())
+        return self._finder_cls(
+            super(tmp_asset_finder, self).__enter__(),
+            future_chain_predicates=self._future_chain_predicates,
+        )
 
 
 def empty_asset_finder():
@@ -871,38 +876,6 @@ def empty_asset_finder():
     tmp_asset_finder
     """
     return tmp_asset_finder(equities=None)
-
-
-class tmp_trading_env(tmp_asset_finder):
-    """Create a temporary trading environment.
-
-    Parameters
-    ----------
-    load : callable, optional
-        Function that returns benchmark returns and treasury curves.
-    finder_cls : type, optional
-        The type of asset finder to create from the assets db.
-    **frames
-        Forwarded to ``tmp_assets_db``.
-
-    See Also
-    --------
-    empty_trading_env
-    tmp_asset_finder
-    """
-    def __init__(self, load=None, *args, **kwargs):
-        super(tmp_trading_env, self).__init__(*args, **kwargs)
-        self._load = load
-
-    def __enter__(self):
-        return TradingEnvironment(
-            load=self._load,
-            asset_db_path=super(tmp_trading_env, self).__enter__().engine,
-        )
-
-
-def empty_trading_env():
-    return tmp_trading_env(equities=None)
 
 
 class SubTestFailures(AssertionError):
@@ -1006,8 +979,24 @@ def subtest(iterator, *_names):
 
 
 class MockDailyBarReader(object):
+    def __init__(self, dates):
+        self.sessions = pd.DatetimeIndex(dates)
+
+    def load_raw_arrays(self, columns, start, stop, sids):
+        dates = self.sessions
+        if start < dates[0]:
+            raise ValueError('start date is out of bounds for this reader')
+        if stop > dates[-1]:
+            raise ValueError('stop date is out of bounds for this reader')
+
+        output_dates = dates[(dates >= start) & (dates <= stop)]
+        return [
+            np.full((len(output_dates), len(sids)), 100.0)
+            for _ in columns
+        ]
+
     def get_value(self, col, sid, dt):
-        return 100
+        return 100.0
 
 
 def create_mock_adjustment_data(splits=None, dividends=None, mergers=None):
@@ -1027,15 +1016,6 @@ def create_mock_adjustment_data(splits=None, dividends=None, mergers=None):
         dividends = pd.DataFrame(dividends)
 
     return splits, mergers, dividends
-
-
-def create_mock_adjustments(tempdir, days, splits=None, dividends=None,
-                            mergers=None):
-    path = tempdir.getpath("test_adjustments.db")
-    SQLiteAdjustmentWriter(path, MockDailyBarReader(), days).write(
-        *create_mock_adjustment_data(splits, dividends, mergers)
-    )
-    return path
 
 
 def assert_timestamp_equal(left, right, compare_nat_equal=True, msg=""):
@@ -1122,7 +1102,52 @@ def temp_pipeline_engine(calendar, sids, random_seed, symbols=None):
         yield SimplePipelineEngine(get_loader, calendar, finder)
 
 
-def parameter_space(__fail_fast=False, **params):
+def bool_from_envvar(name, default=False, env=None):
+    """
+    Get a boolean value from the environment, making a reasonable attempt to
+    convert "truthy" values to True and "falsey" values to False.
+
+    Strings are coerced to bools using ``json.loads(s.lower())``.
+
+    Parameters
+    ----------
+    name : str
+        Name of the environment variable.
+    default : bool, optional
+        Value to use if the environment variable isn't set. Default is False
+    env : dict-like, optional
+        Mapping in which to look up ``name``. This is a parameter primarily for
+        testing purposes. Default is os.environ.
+
+    Returns
+    -------
+    value : bool
+        ``env[name]`` coerced to a boolean, or ``default`` if ``name`` is not
+        in ``env``.
+    """
+    if env is None:
+        env = os.environ
+
+    value = env.get(name)
+    if value is None:
+        return default
+
+    try:
+        # Try to parse as JSON. This makes strings like "0", "False", and
+        # "null" evaluate as falsey values.
+        value = json.loads(value.lower())
+    except ValueError:
+        # If the value can't be parsed as json, assume it should be treated as
+        # a string for the purpose of evaluation.
+        pass
+
+    return bool(value)
+
+
+_FAIL_FAST_DEFAULT = bool_from_envvar('PARAMETER_SPACE_FAIL_FAST')
+
+
+def parameter_space(__fail_fast=_FAIL_FAST_DEFAULT, **params):
     """
     Wrapper around subtest that allows passing keywords mapping names to
     iterables of values.
@@ -1393,8 +1418,7 @@ class _TmpBarReader(with_metaclass(ABCMeta, tmp_dir)):
 
     Parameters
     ----------
-    env : TradingEnvironment
-        The trading env.
+
     days : pd.DatetimeIndex
         The days to write for.
     data : dict[int -> pd.DataFrame]
@@ -1408,21 +1432,20 @@ class _TmpBarReader(with_metaclass(ABCMeta, tmp_dir)):
         raise NotImplementedError('_reader')
 
     @abstractmethod
-    def _write(self, env, days, path, data):
+    def _write(self, cal, days, path, data):
         raise NotImplementedError('_write')
 
-    def __init__(self, env, days, data, path=None):
+    def __init__(self, cal, days, data, path=None):
         super(_TmpBarReader, self).__init__(path=path)
-        self._env = env
+        self._cal = cal
         self._days = days
         self._data = data
 
     def __enter__(self):
         tmpdir = super(_TmpBarReader, self).__enter__()
-        env = self._env
         try:
             self._write(
-                env,
+                self._cal,
                 self._days,
                 tmpdir.path,
                 self._data,
@@ -1438,8 +1461,8 @@ class tmp_bcolz_equity_minute_bar_reader(_TmpBarReader):
 
     Parameters
     ----------
-    env : TradingEnvironment
-        The trading env.
+    cal : TradingCalendar
+        The trading calendar for which we're writing data.
     days : pd.DatetimeIndex
         The days to write for.
     data : iterable[(int, pd.DataFrame)]
@@ -1461,8 +1484,8 @@ class tmp_bcolz_equity_daily_bar_reader(_TmpBarReader):
 
     Parameters
     ----------
-    env : TradingEnvironment
-        The trading env.
+    cal : TradingCalendar
+        The trading calendar for which we're writing data.
     days : pd.DatetimeIndex
         The days to write for.
     data : dict[int -> pd.DataFrame]
@@ -1478,7 +1501,7 @@ class tmp_bcolz_equity_daily_bar_reader(_TmpBarReader):
     _reader_cls = BcolzDailyBarReader
 
     @staticmethod
-    def _write(env, days, path, data):
+    def _write(cal, days, path, data):
         BcolzDailyBarWriter(path, days).write(data)
 
 
@@ -1553,11 +1576,11 @@ def ensure_doctest(f, name=None):
     return f
 
 
-class RecordBatchBlotter(Blotter):
+class RecordBatchBlotter(SimulationBlotter):
     """Blotter that tracks how its batch_order method was called.
     """
-    def __init__(self, data_frequency):
-        super(RecordBatchBlotter, self).__init__(data_frequency)
+    def __init__(self):
+        super(RecordBatchBlotter, self).__init__()
         self.order_batch_called = []
 
     def batch_order(self, *args, **kwargs):
@@ -1589,7 +1612,7 @@ class AssetIDPlusDay(CustomFactor):
 
 class OpenPrice(CustomFactor):
     window_length = 1
-    inputs = [USEquityPricing.open]
+    inputs = [EquityPricing.open]
 
     def compute(self, today, assets, out, open):
         out[:] = open
@@ -1621,6 +1644,37 @@ def prices_generating_returns(returns, starting_price):
         )
 
     return rounded_prices
+
+
+def random_tick_prices(starting_price,
+                       count,
+                       tick_size=0.01,
+                       tick_range=(-5, 7),
+                       seed=42):
+    """
+    Construct a time series of prices that ticks by a random multiple of
+    ``tick_size`` every period.
+
+    Parameters
+    ----------
+    starting_price : float
+        The first price of the series.
+    count : int
+        Number of price observations to return.
+    tick_size : float
+        Unit of price movement between observations.
+    tick_range : (int, int)
+        Pair of lower/upper bounds for different in the number of ticks
+        between price observations.
+    seed : int, optional
+        Seed to use for random number generation.
+    """
+    out = np.full(count, starting_price, dtype=float)
+    rng = np.random.RandomState(seed)
+    diff = rng.randint(tick_range[0], tick_range[1], size=len(out) - 1)
+    ticks = starting_price + diff.cumsum() * tick_size
+    out[1:] = ticks
+    return out
 
 
 def simulate_minutes_for_day(open_,
@@ -1713,3 +1767,33 @@ def simulate_minutes_for_day(open_,
         'low': prices.min(),
         'volume': volume,
     })
+
+
+def create_simple_domain(start, end, country_code):
+    """Create a new pipeline domain with a simple date_range index.
+    """
+    return EquitySessionDomain(pd.date_range(start, end), country_code)
+
+
+def write_hdf5_daily_bars(writer,
+                          asset_finder,
+                          country_codes,
+                          generate_data):
+    """Write an HDF5 file of pricing data using an HDF5DailyBarWriter.
+    """
+    asset_finder = asset_finder
+    for country_code in country_codes:
+        sids = asset_finder.equities_sids_for_country_code(country_code)
+        data_generator = generate_data(country_code=country_code, sids=sids)
+        writer.write_from_sid_df_pairs(country_code, data_generator)
+
+
+def exchange_info_for_domains(domains):
+    """
+    Build an exchange_info suitable for passing to an AssetFinder from a list
+    of EquityCalendarDomain.
+    """
+    return pd.DataFrame.from_records([
+        {'exchange': domain.calendar.name, 'country_code': domain.country_code}
+        for domain in domains
+    ])
