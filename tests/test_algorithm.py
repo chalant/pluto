@@ -117,7 +117,6 @@ from zipline.test_algorithms import (
     empty_positions,
     no_handle_data,
 )
-import zipline.test_algorithms as zta
 from zipline.testing.predicates import assert_equal
 from zipline.utils.api_support import ZiplineAPI
 from zipline.utils.context_tricks import CallbackManager, nop_context
@@ -377,9 +376,15 @@ def handle_data(context, data):
                 algo.order(algo.sid(1), 1)
 
                 # Won't be filled because the price is too low.
-                algo.order(algo.sid(2), 1, style=LimitOrder(0.01))
-                algo.order(algo.sid(2), 1, style=LimitOrder(0.01))
-                algo.order(algo.sid(2), 1, style=LimitOrder(0.01))
+                algo.order(
+                    algo.sid(2), 1, style=LimitOrder(0.01, asset=algo.sid(2))
+                )
+                algo.order(
+                    algo.sid(2), 1, style=LimitOrder(0.01, asset=algo.sid(2))
+                )
+                algo.order(
+                    algo.sid(2), 1, style=LimitOrder(0.01, asset=algo.sid(2))
+                )
 
                 all_orders = algo.get_open_orders()
                 self.assertEqual(list(all_orders.keys()), [1, 2])
@@ -413,7 +418,7 @@ def handle_data(context, data):
         self.run_algorithm(initialize=initialize, handle_data=handle_data)
 
     def test_schedule_function_custom_cal(self):
-        # run a simulation on the CME cal, and schedule a function
+        # run a simulation on the CMES cal, and schedule a function
         # using the NYSE cal
         algotext = """
 from zipline.api import (
@@ -447,7 +452,9 @@ def log_nyse_close(context, data):
 
         algo = self.make_algo(
             script=algotext,
-            trading_calendar=get_calendar("CME"),
+            sim_params=self.make_simparams(
+                trading_calendar=get_calendar("CMES"),
+            )
         )
         algo.run()
 
@@ -472,7 +479,7 @@ def log_nyse_close(context, data):
             from trading_calendars import get_calendar
 
             def initialize(context):
-                schedule_function(func=my_func, calendar=get_calendar('NYSE'))
+                schedule_function(func=my_func, calendar=get_calendar('XNYS'))
 
             def my_func(context, data):
                 pass
@@ -481,7 +488,9 @@ def log_nyse_close(context, data):
 
         algo = self.make_algo(
             script=erroring_algotext,
-            trading_calendar=get_calendar('CME'),
+            sim_params=self.make_simparams(
+                trading_calendar=get_calendar("CMES"),
+            ),
         )
 
         with self.assertRaises(ScheduleFunctionInvalidCalendar):
@@ -562,7 +571,7 @@ def log_nyse_close(context, data):
             handle_data=handle_data,
             create_event_context=CallbackManager(pre, post),
         )
-        algo.run(self.data_portal)
+        algo.run()
 
         self.assertEqual(len(expected_data), 780)
         self.assertEqual(collected_data_pre, expected_data)
@@ -596,7 +605,6 @@ def log_nyse_close(context, data):
             initialize=nop,
             handle_data=nop,
             sim_params=self.sim_params,
-            env=self.env,
         )
 
         # Schedule something for NOT Always.
@@ -804,42 +812,6 @@ class TestSetSymbolLookupDate(zf.WithMakeAlgo, zf.ZiplineTestCase):
         self.run_algorithm(initialize=initialize)
 
 
-class TestRunTwice(zf.WithMakeAlgo, zf.ZiplineTestCase):
-    #     January 2006
-    # Su Mo Tu We Th Fr Sa
-    #  1  2  3  4  5  6  7
-    #  8  9 10 11 12 13 14
-    # 15 16 17 18 19 20 21
-    # 22 23 24 25 26 27 28
-    # 29 30 31
-    START_DATE = pd.Timestamp('2006-01-03', tz='utc')
-    END_DATE = pd.Timestamp('2006-01-06', tz='utc')
-
-    ASSET_FINDER_EQUITY_SIDS = [0, 1, 133]
-    SIM_PARAMS_DATA_FREQUENCY = 'daily'
-    DATA_PORTAL_USE_MINUTE_DATA = False
-
-    # FIXME: Pass a benchmark source explicitly here.
-    BENCHMARK_SID = None
-
-    def test_run_twice(self):
-        algo = self.make_algo(script=zta.noop_algo)
-
-        res1 = algo.run()
-        # XXX: Calling run() twice only works if you pass a data portal
-        # explicitly on the second call, because we `del self.data_portal` at
-        # the end of an algorithm execution. Do we actually still care about
-        # the ability to double-run an algo?
-        res2 = algo.run(self.data_portal)
-
-        # There are some np.NaN values in the first row because there is not
-        # enough data to calculate the metric, e.g. beta.
-        res1 = res1.fillna(value=0)
-        res2 = res2.fillna(value=0)
-
-        np.testing.assert_array_equal(res1, res2)
-
-
 class TestPositions(zf.WithMakeAlgo, zf.ZiplineTestCase):
     START_DATE = pd.Timestamp('2006-01-03', tz='utc')
     END_DATE = pd.Timestamp('2006-01-06', tz='utc')
@@ -850,7 +822,7 @@ class TestPositions(zf.WithMakeAlgo, zf.ZiplineTestCase):
     SIM_PARAMS_DATA_FREQUENCY = 'daily'
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         frame = pd.DataFrame(
             {
                 'open': [90, 95, 100, 105],
@@ -861,7 +833,7 @@ class TestPositions(zf.WithMakeAlgo, zf.ZiplineTestCase):
             },
             index=cls.equity_daily_bar_days,
         )
-        return ((sid, frame) for sid in cls.asset_finder.equities_sids)
+        return ((sid, frame) for sid in sids)
 
     @classmethod
     def make_futures_info(cls):
@@ -873,7 +845,7 @@ class TestPositions(zf.WithMakeAlgo, zf.ZiplineTestCase):
                     'start_date': cls.START_DATE,
                     'end_date': cls.END_DATE,
                     'auto_close_date': cls.END_DATE + cls.trading_calendar.day,
-                    'exchange': 'CME',
+                    'exchange': 'CMES',
                     'multiplier': 100,
                 },
             },
@@ -1133,8 +1105,8 @@ class TestBeforeTradingStart(zf.WithMakeAlgo, zf.ZiplineTestCase):
         ])
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
-        for sid in cls.ASSET_FINDER_EQUITY_SIDS:
+    def make_equity_daily_bar_data(cls, country_code, sids):
+        for sid in sids:
             yield sid, create_daily_df_for_asset(
                 cls.trading_calendar,
                 cls.data_start,
@@ -1467,14 +1439,14 @@ class TestAlgoScript(zf.WithMakeAlgo, zf.ZiplineTestCase):
         return data
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         cal = cls.trading_calendars[Equity]
         sessions = cal.sessions_in_range(cls.START_DATE, cls.END_DATE)
         frame = pd.DataFrame({
             'close': 10., 'high': 10.5, 'low': 9.5, 'open': 10., 'volume': 100,
         }, index=sessions)
 
-        for sid in cls.sids:
+        for sid in sids:
             yield sid, frame
 
     def test_noop(self):
@@ -1577,7 +1549,17 @@ def handle_data(context, data):
 
             # verify order -> transaction -> portfolio position.
             # --------------
+            # XXX: This is the last remaining consumer of
+            #      create_daily_trade_source.
+            trades = factory.create_daily_trade_source(
+                [0], self.sim_params, self.asset_finder, self.trading_calendar
+            )
+            data_portal = create_data_portal_from_trade_history(
+                self.asset_finder, self.trading_calendar, tempdir,
+                self.sim_params, {0: trades}
+            )
             test_algo = self.make_algo(
+                data_portal=data_portal,
                 script="""
 from zipline.api import *
 
@@ -1603,12 +1585,7 @@ def handle_data(context, data):
     context.incr += 1
     """.format(commission_line),
             )
-            trades = factory.create_daily_trade_source(
-                [0], self.sim_params, self.env, self.trading_calendar)
-            data_portal = create_data_portal_from_trade_history(
-                self.env.asset_finder, self.trading_calendar, tempdir,
-                self.sim_params, {0: trades})
-            results = test_algo.run(data_portal)
+            results = test_algo.run()
 
             all_txns = [
                 val for sublist in results["transactions"].tolist()
@@ -1661,7 +1638,7 @@ def handle_data(context, data):
 
     def test_algo_record_vars(self):
         test_algo = self.make_algo(script=record_variables)
-        results = test_algo.run(self.data_portal)
+        results = test_algo.run()
 
         for i in range(1, 252):
             self.assertEqual(results.iloc[i-1]["incr"], i)
@@ -1675,7 +1652,7 @@ def handle_data(context, data):
     def test_batch_market_order_matches_multiple_manual_orders(self):
         share_counts = pd.Series([50, 100])
 
-        multi_blotter = RecordBatchBlotter(self.SIM_PARAMS_DATA_FREQUENCY)
+        multi_blotter = RecordBatchBlotter()
         multi_test_algo = self.make_algo(
             script=dedent("""\
                 from collections import OrderedDict
@@ -1699,10 +1676,10 @@ def handle_data(context, data):
             """).format(share_counts=list(share_counts)),
             blotter=multi_blotter,
         )
-        multi_stats = multi_test_algo.run(self.data_portal)
+        multi_stats = multi_test_algo.run()
         self.assertFalse(multi_blotter.order_batch_called)
 
-        batch_blotter = RecordBatchBlotter(self.SIM_PARAMS_DATA_FREQUENCY)
+        batch_blotter = RecordBatchBlotter()
         batch_test_algo = self.make_algo(
             script=dedent("""\
                 import pandas as pd
@@ -1744,7 +1721,7 @@ def handle_data(context, data):
     def test_batch_market_order_filters_null_orders(self):
         share_counts = [50, 0]
 
-        batch_blotter = RecordBatchBlotter(self.SIM_PARAMS_DATA_FREQUENCY)
+        batch_blotter = RecordBatchBlotter()
         batch_test_algo = self.make_algo(
             script=dedent("""\
                 import pandas as pd
@@ -1907,12 +1884,12 @@ def handle_data(context, data):
         algo = self.make_algo(script=script)
         if name == 'bad_kwargs':
             with self.assertRaises(TypeError) as cm:
-                algo.run(self.data_portal)
+                algo.run()
                 self.assertEqual('Keyword argument `sid` is no longer '
                                  'supported for get_open_orders. Use `asset` '
                                  'instead.', cm.exception.args[0])
         else:
-            algo.run(self.data_portal)
+            algo.run()
 
     def test_empty_positions(self):
         """
@@ -2032,7 +2009,7 @@ class TestCapitalChanges(zf.WithMakeAlgo, zf.ZiplineTestCase):
         yield cls.MINUTELY_SID, frame
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         days = cls.trading_calendar.sessions_in_range(
             cls.START_DATE,
             cls.END_DATE,
@@ -3193,7 +3170,7 @@ class TestAccountControls(zf.WithMakeAlgo,
     DATA_PORTAL_USE_MINUTE_DATA = False
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         frame = pd.DataFrame(data={
             'close': [10., 10., 11., 11.],
             'open': [10., 10., 11., 11.],
@@ -3574,7 +3551,7 @@ class TestOrderCancelation(zf.WithMakeAlgo, zf.ZiplineTestCase):
         )
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         yield 1, pd.DataFrame(
             {
                 'open': np.full(3, 1, dtype=np.float64),
@@ -3756,7 +3733,7 @@ class TestDailyEquityAutoClose(zf.WithMakeAlgo, zf.ZiplineTestCase):
         return cls.asset_info
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         cls.daily_data = make_trade_data_for_asset_info(
             dates=cls.test_days,
             asset_info=cls.asset_info,
@@ -4328,7 +4305,7 @@ class TestOrderAfterDelist(zf.WithMakeAlgo, zf.ZiplineTestCase):
     # FakeDataPortal with different mock data.
     def init_instance_fixtures(self):
         super(TestOrderAfterDelist, self).init_instance_fixtures()
-        self.data_portal = FakeDataPortal(self.env)
+        self.data_portal = FakeDataPortal(self.asset_finder)
 
     @parameterized.expand([
         ('auto_close_after_end_date', 1),

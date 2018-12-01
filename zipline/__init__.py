@@ -32,7 +32,8 @@ from ._version import get_versions
 # These need to happen after the other imports.
 from . algorithm import TradingAlgorithm
 from . import api
-
+from zipline import extensions as ext
+from zipline.finance.blotter import Blotter
 
 # PERF: Fire a warning if calendars were instantiated during zipline import.
 # Having calendars doesn't break anything per-se, but it makes zipline imports
@@ -50,6 +51,8 @@ del global_calendar_dispatcher
 
 __version__ = get_versions()['version']
 del get_versions
+
+extension_args = ext.Namespace()
 
 
 def load_ipython_extension(ipython):
@@ -73,8 +76,8 @@ if os.name == 'nt':
     _()
     del _
 
-
 __all__ = [
+    'Blotter',
     'TradingAlgorithm',
     'api',
     'data',
@@ -83,6 +86,7 @@ __all__ = [
     'gens',
     'run_algorithm',
     'utils',
+    'extension_args'
 ]
 
 

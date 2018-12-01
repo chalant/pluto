@@ -184,8 +184,10 @@ def create_returns_from_list(returns, sim_params):
                      data=returns)
 
 
-def create_daily_trade_source(sids, sim_params, env, trading_calendar,
-                              concurrent=False):
+def create_daily_trade_source(sids,
+                              sim_params,
+                              asset_finder,
+                              trading_calendar):
     """
     creates trade_count trades for each sid in sids list.
     first trade will be on sim_params.start_session, and daily
@@ -196,15 +198,16 @@ def create_daily_trade_source(sids, sim_params, env, trading_calendar,
         sids,
         timedelta(days=1),
         sim_params,
-        env=env,
+        asset_finder,
         trading_calendar=trading_calendar,
-        concurrent=concurrent,
     )
 
 
-def create_trade_source(sids, trade_time_increment, sim_params, env,
-                        trading_calendar, concurrent=False):
-
+def create_trade_source(sids,
+                        trade_time_increment,
+                        sim_params,
+                        asset_finder,
+                        trading_calendar):
     # If the sim_params define an end that is during market hours, that will be
     # used as the end of the data source
     if trading_calendar.is_open_on_minute(sim_params.end_session):
@@ -220,10 +223,8 @@ def create_trade_source(sids, trade_time_increment, sim_params, env,
         'start': sim_params.first_open,
         'end': end,
         'delta': trade_time_increment,
-        'filter': sids,
-        'concurrent': concurrent,
-        'env': env,
         'trading_calendar': trading_calendar,
+        'asset_finder': asset_finder,
     }
     source = SpecificEquityTrades(*args, **kwargs)
 

@@ -1,6 +1,5 @@
+import click
 import os
-import re
-from runpy import run_path
 import sys
 import warnings
 
@@ -8,8 +7,6 @@ from functools import partial
 
 import pandas as pd
 
-
-import click
 try:
     from pygments import highlight
     from pygments.lexers import PythonLexer
@@ -18,20 +15,24 @@ try:
 except ImportError:
     PYGMENTS = False
 import six
-from toolz import valfilter, concatv
+from toolz import concatv
 from trading_calendars import get_calendar
 
 from zipline.algorithm import TradingAlgorithm
 from zipline.data import bundles
+from zipline.data.loader import load_market_data
 from zipline.algorithm_live import LiveTradingAlgorithm
 from zipline.data.data_portal import DataPortal
 from zipline.finance import metrics
+from zipline.finance.trading import SimulationParameters
 from zipline.data.data_portal_live import DataPortalLive
-from zipline.finance.trading import TradingEnvironment
 from zipline.pipeline.data import USEquityPricing
 from zipline.pipeline.loaders import USEquityPricingLoader
-from zipline.utils.factory import create_simulation_parameters
+
 import zipline.utils.paths as pth
+from zipline.extensions import load
+from zipline.algorithm import TradingAlgorithm
+from zipline.finance.blotter import Blotter
 
 
 class _RunAlgoError(click.ClickException, ValueError):
@@ -68,7 +69,6 @@ def _run(handle_data,
          defines,
          data_frequency,
          capital_base,
-         data,
          bundle,
          bundle_timestamp,
          start,
@@ -79,15 +79,19 @@ def _run(handle_data,
          metrics_set,
          local_namespace,
          environ,
+         blotter,
+         benchmark_returns,
+         environ,
          broker,
          state_filename,
-         realtime_bar_target,
-         loader_factory=None,
-         bundle_data=None):
+         realtime_bar_target):
     """Run a backtest for the given algorithm.
 
     This is shared between the cli and :func:`zipline.run_algo`.
     """
+    if benchmark_returns is None:
+        benchmark_returns, _ = load_market_data(environ=environ)
+
     if algotext is not None:
         if local_namespace:
             ip = get_ipython()  # noqa
@@ -133,7 +137,7 @@ def _run(handle_data,
             click.echo(algotext)
 
     if trading_calendar is None:
-        trading_calendar = get_calendar('NYSE')
+        trading_calendar = get_calendar('XNYS')
 
     # date parameter validation
     if trading_calendar.session_distance(start, end) < 1:
@@ -144,69 +148,39 @@ def _run(handle_data,
             ),
         )
 
-    if bundle_data is not None or bundle is not None:
-        if bundle is not None and bundle_data is None:
-            bundle_data = bundles.load(
-                bundle,
-                environ,
-                bundle_timestamp,
-            )
-        else:
-            bundle_data = bundle_data
+    bundle_data = bundles.load(
+        bundle,
+        environ,
+        bundle_timestamp,
+    )
 
-        prefix, connstr = re.split(
-            r'sqlite:///',
-            str(bundle_data.asset_finder.engine.url),
-            maxsplit=1,
-        )
-        if prefix:
-            raise ValueError(
-                "invalid url %r, must begin with 'sqlite:///'" %
-                str(bundle_data.asset_finder.engine.url),
-            )
-        env = TradingEnvironment(
-            asset_db_path=connstr,
-            environ=environ,
-            trading_calendar=trading_calendar,
-            trading_day=trading_calendar.day,
-            trading_days=trading_calendar.schedule[start:end].index,
-        )
-        first_trading_day =\
-            bundle_data.equity_minute_bar_reader.first_trading_day
+    first_trading_day = \
+        bundle_data.equity_minute_bar_reader.first_trading_day
 
-        DataPortalClass = (partial(DataPortalLive, broker)
-                           if broker
-                           else DataPortal)
-        data = DataPortalClass(
-            env.asset_finder,
-            trading_calendar=trading_calendar,
-            first_trading_day=first_trading_day,
-            equity_minute_reader=bundle_data.equity_minute_bar_reader,
-            equity_daily_reader=bundle_data.equity_daily_bar_reader,
-            adjustment_reader=bundle_data.adjustment_reader,
-        )
+    DataPortalClass = (partial(DataPortalLive,broker)
+					   if broker
+					   else DataPortal)
 
-        pipeline_loader = USEquityPricingLoader(
-            bundle_data.equity_daily_bar_reader,
-            bundle_data.adjustment_reader,
-        )
+    data = DataPortalClass(
+        bundle_data.asset_finder,
+        trading_calendar=trading_calendar,
+        first_trading_day=first_trading_day,
+        equity_minute_reader=bundle_data.equity_minute_bar_reader,
+        equity_daily_reader=bundle_data.equity_daily_bar_reader,
+        adjustment_reader=bundle_data.adjustment_reader,
+    )
 
-        def choose_loader(column):
-            if column in USEquityPricing.columns:
-                return pipeline_loader
-            # elif column in SF1CoreFundamentals.columns:
-            #     return FundamentalsLoader(bundle_data.fundamental_reader)
-            raise ValueError(
-                "No PipelineLoader registered for column %s." % column
-            )
-    else:
-        env = TradingEnvironment(
-            environ=environ,
-            trading_calendar=trading_calendar,
-            trading_day=trading_calendar.day,
-            trading_days=trading_calendar.schedule[start:end].index,
+    pipeline_loader = USEquityPricingLoader(
+        bundle_data.equity_daily_bar_reader,
+        bundle_data.adjustment_reader,
+    )
+
+    def choose_loader(column):
+        if column in USEquityPricing.columns:
+            return pipeline_loader
+        raise ValueError(
+            "No PipelineLoader registered for column %s." % column
         )
-        choose_loader = None
 
     if broker:
         data_frequency = 'minute'
@@ -220,24 +194,32 @@ def _run(handle_data,
             raise _RunAlgoError(str(e))
 
     TradingAlgorithmClass = (partial(LiveTradingAlgorithm,
-                                     broker=broker,
-                                     state_filename=state_filename,
-                                     realtime_bar_target=realtime_bar_target)
-                             if broker else TradingAlgorithm)
+									 broker=broker,
+									 state_filename=state_filename,
+									 realtime_bar_target=realtime_bar_target)
+							 if broker else TradingAlgorithm)
+
+    if isinstance(blotter, six.string_types):
+        try:
+            blotter = load(Blotter, blotter)
+        except ValueError as e:
+            raise _RunAlgoError(str(e))
 
     perf = TradingAlgorithmClass(
         namespace=namespace,
-        env=env,
-        get_pipeline_loader = loader_factory or choose_loader,
+        data_portal=data,
+        get_pipeline_loader=choose_loader,
         trading_calendar=trading_calendar,
-        sim_params=create_simulation_parameters(
-            start=start,
-            end=end,
+        sim_params=SimulationParameters(
+            start_session=start,
+            end_session=end,
+            trading_calendar=trading_calendar,
             capital_base=capital_base,
             data_frequency=data_frequency,
-            trading_calendar=trading_calendar,
         ),
         metrics_set=metrics_set,
+        blotter=blotter,
+        benchmark_returns=benchmark_returns,
         **{
             'initialize': initialize,
             'handle_data': handle_data,
@@ -247,10 +229,7 @@ def _run(handle_data,
             'algo_filename': getattr(algofile, 'name', '<algorithm>'),
             'script': algotext,
         }
-    ).run(
-        data,
-        overwrite_sim_params=False,
-    )
+    ).run()
 
     if output == '-':
         click.echo(str(perf))
@@ -297,7 +276,9 @@ def load_extensions(default, extensions, strict, environ, reload=False):
         try:
             # load all of the zipline extensionss
             if ext.endswith('.py'):
-                run_path(ext, run_name='<extension>')
+                with open(ext) as f:
+                    ns = {}
+                    six.exec_(compile(f.read(), ext, 'exec'), ns, ns)
             else:
                 __import__(ext)
         except Exception as e:
@@ -321,20 +302,20 @@ def run_algorithm(start,
                   before_trading_start=None,
                   analyze=None,
                   data_frequency='daily',
-                  data=None,
-                  bundle=None,
+                  bundle='quantopian-quandl',
                   bundle_timestamp=None,
                   trading_calendar=None,
                   metrics_set='default',
+                  benchmark_returns=None,
                   default_extension=True,
                   extensions=(),
                   strict_extensions=True,
                   environ=os.environ,
-                  live_trading=False,
-                  tws_uri=None,
-                  loader_factory=None,
-                  bundle_data=None):
-    """Run a trading algorithm.
+                  blotter='default',
+				  live_trading=False,
+				  tws_uri=None):
+    """
+    Run a trading algorithm.
 
     Parameters
     ----------
@@ -361,19 +342,12 @@ def run_algorithm(start,
         performance data.
     data_frequency : {'daily', 'minute'}, optional
         The data frequency to run the algorithm at.
-    data : pd.DataFrame, pd.Panel, or DataPortal, optional
-        The ohlcv data to run the backtest with.
-        This argument is mutually exclusive with:
-        ``bundle``
-        ``bundle_timestamp``
     bundle : str, optional
         The name of the data bundle to use to load the data to run the backtest
         with. This defaults to 'quantopian-quandl'.
-        This argument is mutually exclusive with ``data``.
     bundle_timestamp : datetime, optional
         The datetime to lookup the bundle data for. This defaults to the
         current time.
-        This argument is mutually exclusive with ``data``.
     trading_calendar : TradingCalendar, optional
         The trading calendar to use for your backtest.
     metrics_set : iterable[Metric] or str, optional
@@ -392,6 +366,12 @@ def run_algorithm(start,
     environ : mapping[str -> str], optional
         The os environment to use. Many extensions use this to get parameters.
         This defaults to ``os.environ``.
+    blotter : str or zipline.finance.blotter.Blotter, optional
+        Blotter to use with this algorithm. If passed as a string, we look for
+        a blotter construction function registered with
+        ``zipline.extensions.register`` and call it with no parameters.
+        Default is a :class:`zipline.finance.blotter.SimulationBlotter` that
+        never cancels orders.
 
     Returns
     -------
@@ -404,25 +384,6 @@ def run_algorithm(start,
     """
     load_extensions(default_extension, extensions, strict_extensions, environ)
 
-    non_none_data = valfilter(bool, {
-        'data': data is not None,
-        'bundle': bundle is not None,
-    })
-    if not non_none_data:
-        # if neither data nor bundle are passed use 'quantopian-quandl'
-        bundle = 'quantopian-quandl'
-
-    elif len(non_none_data) != 1:
-        raise ValueError(
-            'must specify one of `data`, `data_portal`, or `bundle`,'
-            ' got: %r' % non_none_data,
-        )
-
-    elif 'bundle' not in non_none_data and bundle_timestamp is not None:
-        raise ValueError(
-            'cannot specify `bundle_timestamp` without passing `bundle`',
-        )
-
     return _run(
         handle_data=handle_data,
         initialize=initialize,
@@ -433,7 +394,6 @@ def run_algorithm(start,
         defines=(),
         data_frequency=data_frequency,
         capital_base=capital_base,
-        data=data,
         bundle=bundle,
         bundle_timestamp=bundle_timestamp,
         start=start,
@@ -444,9 +404,9 @@ def run_algorithm(start,
         metrics_set=metrics_set,
         local_namespace=False,
         environ=environ,
+        blotter=blotter,
+        benchmark_returns=benchmark_returns,
         broker=None,
         state_filename=None,
-        realtime_bar_target=None,
-        loader_factory=None,
-        bundle_data=None
+        realtime_bar_target=None
     )

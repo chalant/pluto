@@ -61,57 +61,66 @@ class FetcherTestCase(WithResponses,
                     'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
                     'end_date': pd.Timestamp('2007-01-01', tz='UTC'),
                     'symbol': 'AAPL',
-                    'asset_type': 'equity',
                     'exchange': 'nasdaq'
                 },
                 3766: {
                     'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
                     'end_date': pd.Timestamp('2007-01-01', tz='UTC'),
                     'symbol': 'IBM',
-                    'asset_type': 'equity',
                     'exchange': 'nasdaq'
                 },
                 5061: {
                     'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
                     'end_date': pd.Timestamp('2007-01-01', tz='UTC'),
                     'symbol': 'MSFT',
-                    'asset_type': 'equity',
                     'exchange': 'nasdaq'
                 },
                 14848: {
                     'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
                     'end_date': pd.Timestamp('2007-01-01', tz='UTC'),
                     'symbol': 'YHOO',
-                    'asset_type': 'equity',
                     'exchange': 'nasdaq'
                 },
                 25317: {
                     'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
                     'end_date': pd.Timestamp('2007-01-01', tz='UTC'),
                     'symbol': 'DELL',
-                    'asset_type': 'equity',
                     'exchange': 'nasdaq'
                 },
                 13: {
                     'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
                     'end_date': pd.Timestamp('2010-01-01', tz='UTC'),
                     'symbol': 'NFLX',
-                    'asset_type': 'equity',
                     'exchange': 'nasdaq'
+                },
+                9999999: {
+                    'start_date': pd.Timestamp('2006-01-01', tz='UTC'),
+                    'end_date': pd.Timestamp('2007-01-01', tz='UTC'),
+                    'symbol': 'AAPL',
+                    'exchange': 'non_us_exchange'
                 }
             },
             orient='index',
         )
 
-    def run_algo(self, code, sim_params=None, data_frequency="daily"):
+    @classmethod
+    def make_exchanges_info(cls, *args, **kwargs):
+        return pd.DataFrame.from_records([
+            {'exchange': 'nasdaq', 'country_code': 'US'},
+            {'exchange': 'non_us_exchange', 'country_code': 'CA'},
+        ])
+
+    def run_algo(self, code, sim_params=None):
         if sim_params is None:
             sim_params = self.sim_params
 
         test_algo = self.make_algo(
             script=code,
             sim_params=sim_params,
-            data_frequency=data_frequency,
-            data_portal=FetcherDataPortal(self.env, self.trading_calendar),
+            data_portal=FetcherDataPortal(
+                self.asset_finder,
+                self.trading_calendar,
+            ),
         )
         results = test_algo.run()
 
@@ -535,7 +544,7 @@ def handle_data(context, data):
     record(sid_count=len(actual))
     record(bar_count=context.bar_count)
     context.bar_count += 1
-        """, sim_params=sim_params, data_frequency="minute"
+        """, sim_params=sim_params,
         )
 
         self.assertEqual(3, len(results))
@@ -568,7 +577,7 @@ def initialize(context):
 
 def before_trading_start(context, data):
     record(Short_Interest = data.current(context.stock, 'dtc'))
-""", sim_params=sim_params, data_frequency="minute")
+""", sim_params=sim_params)
 
         values = results["Short_Interest"]
         np.testing.assert_array_equal(values[0:33], np.full(33, np.nan))
@@ -601,12 +610,12 @@ def initialize(context):
                date_column = 'Settlement Date',
                date_format = '%m/%d/%y')
     context.nflx = symbol('NFLX')
-    context.aapl = symbol('AAPL')
+    context.aapl = symbol('AAPL', country_code='US')
 
 def handle_data(context, data):
     assert np.isnan(data.current(context.nflx, 'invalid_column'))
     assert np.isnan(data.current(context.aapl, 'invalid_column'))
     assert np.isnan(data.current(context.aapl, 'dtc'))
-""", sim_params=sim_params, data_frequency="minute")
+""", sim_params=sim_params)
 
         self.assertEqual(3, len(results))
