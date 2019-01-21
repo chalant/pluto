@@ -532,6 +532,8 @@ class IBBroker(Broker):
         for symbol in self._tws.positions:
             ib_position = self._tws.positions[symbol]
             try:
+                #todo: instead of looking up the symbol in the asset_finder, we could
+                # fetch the symbol of placed orders...
                 z_position = zp.Position(symbol_lookup(symbol))
             except SymbolNotFound:
                 # The symbol might not have been ingested to the db therefore

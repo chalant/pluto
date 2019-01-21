@@ -7,10 +7,11 @@ service Controller {
 }
 
 message Identity {
-    string name = 1;
+    string name = 1; //name of the controllable
     string url = 2; // address to control the client...
 }
 
 message RegisterReply {
     string url = 1; // an url for accessing service-per-client
+    string token = 2;
 }

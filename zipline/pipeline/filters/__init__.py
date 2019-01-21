@@ -14,7 +14,6 @@ from .filter import (
     StaticSids,
 )
 from .smoothing import All, Any, AtLeastN
-from .universes import SP500Constituents
 
 __all__ = [
     'All',
@@ -33,5 +32,4 @@ __all__ = [
     'SingleAsset',
     'StaticAssets',
     'StaticSids',
-	'SP500Constituents'
 ]

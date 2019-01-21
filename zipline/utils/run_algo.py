@@ -18,7 +18,6 @@ import six
 from toolz import concatv
 from trading_calendars import get_calendar
 
-from zipline.algorithm import TradingAlgorithm
 from zipline.data import bundles
 from zipline.data.loader import load_market_data
 from zipline.algorithm_live import LiveTradingAlgorithm
@@ -81,7 +80,6 @@ def _run(handle_data,
          environ,
          blotter,
          benchmark_returns,
-         environ,
          broker,
          state_filename,
          realtime_bar_target):

@@ -2,7 +2,7 @@ from collections import deque
 from threading import Lock, Condition
 
 class Dispatcher:
-	'''Receives and dispatches requests from and to different threads...'''
+	'''Receives and stores requests and executors call it to fetch requests'''
 
 	def __init__(self):
 		super(Dispatcher, self).__init__()
@@ -14,14 +14,11 @@ class Dispatcher:
 		self._failed_tuple_queue = None
 
 	def _prepare_failed(self, name):
-		if self._failed:
-			if self._failed_tuple_queue:
-				return self._failed_tuple_queue.popleft()
-			else:
-				self._failed_tuple_queue = self._failed.popitem()[1]
-				return self._prepare_failed(name)
+		if self._failed_tuple_queue:
+			return self._failed_tuple_queue.popleft()
 		else:
-			return None
+			self._failed_tuple_queue = self._failed.popitem()[1]
+			return self._prepare_failed(name)
 
 	def _prepare_request(self, wait):
 		if self._queue:
@@ -38,8 +35,8 @@ class Dispatcher:
 
 	def get_request(self, name, wait=False):
 		with self._not_empty:
-			if self._failed and name not in self._failed:  # execute the failed requests first...
-				# if the executor isn't in the
+			#if the executor haven't received the failed request
+			if self._failed is not None and name not in self._failed:
 				request = self._prepare_failed(name)
 				if request:
 					return request

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Domain {
+    enum CountryCode {
+        AUSTRALIA = 0;
+        AUSTRIA = 1;
+        BELGIUM = 2;
+        BRAZIL = 3;
+        CANADA = 4;
+        CHINA = 5;
+        DENMARK = 6;
+        FINLAND = 7;
+        FRANCE = 8;
+        GERMANY = 9;
+        HONG_KONG = 10;
+        INDIA = 11;
+        IRELAND = 12;
+        ISRAEL = 13;
+        ITALY = 14;
+        JAPAN = 15;
+        NETHERLANDS = 16;
+        NEW_ZEALAND = 17;
+        NORWAY = 18;
+        PORTUGAL = 19;
+        SINGAPORE = 20;
+        SOUTH_KOREA = 21;
+        SPAIN = 22;
+        SWEDEN = 23;
+        SWITZERLAND = 24;
+        UNITED_KINGDOM = 25;
+        UNITED_STATES = 26;
+    }
+    /*a domain contains one or more country codes, that defines the bundle to be
+    constructed on the server side and returned*/
+    repeated CountryCode country_code = 1;
+    google.protobuf.Timestamp start_date = 2;
+
+}
+
+message Bundle {
+    bytes data = 1; //
+}
