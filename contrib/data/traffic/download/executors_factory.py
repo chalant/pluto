@@ -15,8 +15,7 @@ def order_executor(name, api_key=None, full_access=False):
 	if name is 'AlphaVantage':
 		return alpha_vantage._AlphaVantage(
 			'alpha vantage',
-			_ALPHA_VANTAGE_COUNTER,
-			"5B3LVTJKR827Y06N")
+			_ALPHA_VANTAGE_COUNTER,)
 
 	elif name is 'Yahoo':
 		return yahoo._Yahoo(
@@ -35,7 +34,6 @@ def order_executor(name, api_key=None, full_access=False):
 	elif name is 'Tiingo':
 		return tiingo._Tiingo(
 			'tiingo',
-			"595f4f7db226d74f0d20e6b80880b80e4ae67806",
 			_TIINGO_COUNTER,
 			paid_account=full_access)
 
