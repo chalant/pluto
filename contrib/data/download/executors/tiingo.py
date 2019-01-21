@@ -1,5 +1,5 @@
-from contrib.data.download import _RequestExecutor
-from contrib.data.download import EquityRequest, MetaDataRequest
+from contrib.data.download.executors.executor import _RequestExecutor
+from contrib.data.download.request import EquityRequest, MetaDataRequest
 from datetime import datetime, date
 import requests
 from dateutil.parser import parse

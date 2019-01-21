@@ -97,6 +97,7 @@ class AlgoController(object):
 		blotter.prune_orders(closed_orders)
 
 		for transaction in new_transactions:
+			#todo: these calls aren't necessary... since these are handled by the server.
 			metrics_tracker.process_transaction(transaction)
 
 			# since this order was modified, record it

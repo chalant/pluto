@@ -22,7 +22,8 @@ log = Logger('Blotter Live')
 
 
 class BlotterLive(Blotter):
-    def __init__(self, data_frequency, broker):
+    def __init__(self, data_frequency, broker, cancel_policy=None):
+        super(BlotterLive,self).__init__(cancel_policy)
         self.broker = broker
         self._processed_closed_orders = []
         self._processed_transactions = []

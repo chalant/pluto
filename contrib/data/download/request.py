@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from uuid import uuid4
 
 class Requester(ABC):
 	@abstractmethod
@@ -6,10 +7,15 @@ class Requester(ABC):
 		raise NotImplementedError
 
 class Request(ABC):
-	__slots__ = ['_saver']
+	__slots__ = ['_saver','_id']
 
 	def __init__(self, saver):
 		self._saver = saver
+		self._id = uuid4().hex
+
+	@property
+	def id(self):
+		return self._id
 
 	def save(self, data):
 		return self._saver.save(data)

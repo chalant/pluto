@@ -323,7 +323,7 @@ class AssetFinder(object):
 
         # Populated on first call to `lifetimes`.
         self._asset_lifetimes = {}
-		self.is_live = False
+        self.is_live = False
 
     @lazyval
     def exchange_info(self):
@@ -1416,7 +1416,7 @@ class AssetFinder(object):
 
         return matches, missing
 
-    def _compute_asset_lifetimes(self, country_codes):
+    def _compute_asset_lifetimes(self, country_codes,calendar=None):
         """
         Compute and cache a recarray of asset lifetimes.
         """
