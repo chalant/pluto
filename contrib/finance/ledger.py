@@ -1,18 +1,23 @@
-from contrib.coms.protos import account_service_pb2_grpc as acs
-
+from zipline.finance import position
+from zipline.protocol import (MutableView,Portfolio)
+from zipline.assets import Future
 from zipline.finance._finance_ext import (
-    PositionStats,
     calculate_position_tracker_stats,
+    PositionStats
 )
 
-class RemoteLedger(object):
+from collections import defaultdict
+
+class Ledger(object):
     '''we need this so that we can make sure that the trades were actually executed server
     side before updating any values...'''
-    def __init__(self,account):
+    def __init__(self, account, start_dt, capital, broker):
         '''account: an account from the server...'''
         self._account = account
         #todo: this must loaded from some file and saved at each end of session. (is concatenated)
         # problem: it gets bigger at each load... we might aggregate results every x period...
+
+
         self.daily_returns_array = []
         self._stats = PositionStats.new()
         self._in_sync = False
@@ -97,11 +102,3 @@ class RemoteLedger(object):
         if not self._transactions or not self._in_sync:
             self._transactions = self._account.transactions(dt)
         return self._transactions
-
-    #this is to accommodate the algorithm object
-    def sync_last_sale_prices(self,
-                              dt,
-                              data_portal,
-                              handle_non_market_minutes=False):
-        #handled by the broker
-        pass

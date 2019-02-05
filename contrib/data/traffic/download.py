@@ -23,7 +23,7 @@ if __name__ == '__main__':
 	with ThreadPoolExecutor() as pool:
 		today = Timestamp.utcnow()
 		for downloadable in downloadables:
-			download(get_downloader(downloadable,nyse_nasdaq),pool,today,True)
+			download(get_downloader(downloadable,nyse_nasdaq),pool,today)
 
 	# 	asset_finder.download(pool,Timestamp.utcnow(),True,exchanges=['NYSE','NASDAQ'])
 	# asset_finder.update_available_data()

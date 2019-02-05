@@ -122,6 +122,7 @@ class TWSConnection(EClientSocket, EWrapper):
         self.executions = defaultdict(OrderedDict)
         self.commissions = defaultdict(OrderedDict)
         self._execution_to_order_id = {}
+        self._order_id_to_execution_id = {}
         self.time_skew = None
         self.unrecoverable_error = False
 
@@ -499,7 +500,7 @@ class TWSConnection(EClientSocket, EWrapper):
 
 
 class IBBroker(Broker):
-    def __init__(self, tws_uri, account_id=None):
+    def __init__(self, tws_uri, start_dt, account_id=None):
         self._tws_uri = tws_uri
         self._orders = {}
         self._transactions = {}
@@ -532,8 +533,6 @@ class IBBroker(Broker):
         for symbol in self._tws.positions:
             ib_position = self._tws.positions[symbol]
             try:
-                #todo: instead of looking up the symbol in the asset_finder, we could
-                # fetch the symbol of placed orders...
                 z_position = zp.Position(symbol_lookup(symbol))
             except SymbolNotFound:
                 # The symbol might not have been ingested to the db therefore
@@ -559,13 +558,16 @@ class IBBroker(Broker):
         ib_account = self._tws.accounts[self.account_id][self.currency]
 
         z_portfolio = zp.Portfolio()
-        z_portfolio.capital_used = None  # TODO(tibor)
+        #todo: the starting cash should be the total cash value the first very first time we call
+        # the broker and should be stored permanently.
         z_portfolio.starting_cash = None  # TODO(tibor): Fill from state
         z_portfolio.portfolio_value = float(ib_account['EquityWithLoanValue'])
         z_portfolio.pnl = (float(ib_account['RealizedPnL']) +
                            float(ib_account['UnrealizedPnL']))
         z_portfolio.returns = None  # TODO(tibor): pnl / total_at_start
         z_portfolio.cash = float(ib_account['TotalCashValue'])
+        #todo: the start date is filled if we call the broker for the first time (we check this from
+        # some state file)
         z_portfolio.start_date = None  # TODO(tibor)
         z_portfolio.positions = self.positions
         z_portfolio.positions_value = float(ib_account['StockMarketValue'])
@@ -582,10 +584,12 @@ class IBBroker(Broker):
 
         z_account = zp.Account()
 
+        #todo: don't use total cash value but settled cash instead.
         z_account.settled_cash = float(ib_account['TotalCashValue-S'])
         z_account.accrued_interest = None  # TODO(tibor)
         z_account.buying_power = float(ib_account['BuyingPower'])
         z_account.equity_with_loan = float(ib_account['EquityWithLoanValue'])
+        #todo: this doesn't cover the commodities
         z_account.total_positions_value = float(ib_account['StockMarketValue'])
         z_account.total_positions_exposure = float(
             (z_account.total_positions_value /
@@ -676,6 +680,7 @@ class IBBroker(Broker):
             return None
 
     def order(self, asset, amount, style):
+        #todo: what about future contracts ?
         contract = Contract()
         contract.m_symbol = str(asset.symbol)
         contract.m_currency = self.currency
@@ -898,8 +903,7 @@ class IBBroker(Broker):
                     continue
 
                 try:
-                    commission = self._tws.commissions[ib_order_id][exec_id]\
-                        .m_commission
+                    commission = self._tws.commissions[ib_order_id][exec_id].m_commission
                 except KeyError:
                     log.warning(
                         "Commission not found for execution: {}".format(

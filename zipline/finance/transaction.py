@@ -22,13 +22,16 @@ from zipline.utils.input_validation import expect_types
 
 
 class Transaction(object):
+    __slots__ = ['asset','amount','dt','price','order_id','commission','type']
+
     @expect_types(asset=Asset)
-    def __init__(self, asset, amount, dt, price, order_id):
+    def __init__(self, asset, amount, dt, price, order_id, commission):
         self.asset = asset
         self.amount = amount
         self.dt = dt
         self.price = price
         self.order_id = order_id
+        self.commission = commission
         self.type = DATASOURCE_TYPE.TRANSACTION
 
     def __getitem__(self, name):
@@ -55,11 +58,6 @@ class Transaction(object):
 
         # Adding 'sid' for backwards compatibility with downstream consumers.
         py['sid'] = self.asset
-
-        # If you think this looks dumb, that is because it is! We once stored
-        # commission here, but haven't for over a year. I don't want to change
-        # the perf packet structure yet.
-        py['commission'] = None
 
         return py
 

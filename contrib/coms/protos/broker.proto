@@ -8,7 +8,7 @@ import "google/protobuf/empty.proto";
 
 import "contrib/coms/protos/data_bundle.proto";
 
-service ClientAccount {
+service Broker {
     /*This should encapsulate the set of services available per account...*/
     rpc SingleOrder (OrderParams) returns (Order);
     rpc AccountState (google.protobuf.Empty) returns (Account);

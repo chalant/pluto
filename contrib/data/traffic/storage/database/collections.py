@@ -42,6 +42,8 @@ from logging import Logger
 
 import tqdm
 
+#TODO: MUST REDO THIS SHIT! METADATA, EQUITY DATA...
+
 _DAILY_EQUITY_DATA = get_collection('equity data')
 _SP500_HISTORICAL_CONSTITUENTS = get_collection('S&P Historical Constituents')
 _SP500_CONSTITUENTS = get_collection('SP500 Constituents')

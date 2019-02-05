@@ -180,8 +180,9 @@ def _run(handle_data,
             "No PipelineLoader registered for column %s." % column
         )
 
+    emission_rate = 'daily'
     if broker:
-        data_frequency = 'minute'
+        emission_rate = 'minute'
         start = pd.Timestamp.utcnow()
         end = start + pd.Timedelta('2 day')
 
@@ -214,6 +215,7 @@ def _run(handle_data,
             trading_calendar=trading_calendar,
             capital_base=capital_base,
             data_frequency=data_frequency,
+            emission_rate=emission_rate
         ),
         metrics_set=metrics_set,
         blotter=blotter,
