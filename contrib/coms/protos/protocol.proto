@@ -37,6 +37,7 @@ message Position {
 }
 
 message Account {
+    //todo: add fields for commodities...
     float settled_cash = 1;
     float accrued_interest = 2;
     float buying_power = 3;
@@ -54,6 +55,7 @@ message Account {
     float leverage = 15;
     float net_leverage = 16;
     float net_liquidation = 17;
+    float sma = 18;
 }
 
 message Portfolio {

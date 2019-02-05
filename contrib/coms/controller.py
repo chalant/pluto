@@ -4,154 +4,18 @@ import grpc
 
 from google.protobuf import timestamp_pb2 as prt
 
-from contrib.coms.protos import params_pb2
 from contrib.coms.protos import controller_service_pb2 as ctl
 from contrib.coms.protos import controller_service_pb2_grpc as ctl_rpc
-from contrib.coms.protos import controllable_pb2 as cbl
-from contrib.coms.protos import controllable_pb2_grpc as cbl_rpc
-from contrib.coms.protos import account_service_pb2_grpc as ta_rpc
+from contrib.coms.protos import controllable_service_pb2 as cbl
+from contrib.coms.protos import controllable_service_pb2_grpc as cbl_rpc
+from contrib.coms.protos import broker_pb2_grpc as broker_rpc
 from contrib.coms.protos import data_bundle_pb2 as dtb
 from contrib.coms.utils import server_utils as srv
 from contrib.coms.utils import certification as crt
 from contrib.utils import files
 
-from zipline.finance import position
 
-from collections import defaultdict
-
-class Ledger(object):
-    def __init__(self, capital_base, data_frequency):
-        pass
-
-class Account(object):
-    '''should sit on top of the broker in order to "isolate" each virtual account from
-    the main account...
-    keeps track of its own portfolio etc.
-    this account must be updated at some frequency ex: each minute makes some calls to the
-    broker so that it gets updated... at each call, each field gets updated before delivering the
-    data...'''
-    #todo: should keep track of time so that we know when to update the values of the fields
-    # ex: update each minute... or we could update at each call? or when stuff has changed
-    # ex: when an order was made, at the next call for portfolio we will update the portfolio
-    # values
-    #todo: we need a way to update the account at some frequency
-    # (process the transactions etc.)
-    def __init__(self, id, token, capital, broker):
-        self._id = id
-        self._token = token
-        self._broker = broker
-
-        #keep track of the orders of this account
-        self._orders = {}
-        self._open_orders = defaultdict(dict)
-
-        self._new_orders = []
-
-        self._must_sync = False
-
-        #to keep track of executed orders
-        self._processed_transactions = []
-
-        self._closed_orders = []
-
-        self._positions = {}
-
-    def order(self, asset, amount, style, order_id=None):
-        order = self._broker.order(asset, amount, style)
-        self._new_orders.append(order)
-        self._open_orders[asset][order_id] = order
-        #tag as must sync, since we placed an order, next time each property is called, we
-        # must update the values of the account.
-        self._must_sync = True
-        return order.id
-
-    @property
-    def orders(self):
-        return self._orders
-
-    def _check_sync(self):
-        if self._must_sync:
-            self._process_transactions()
-
-    def _update_portfolio(self):
-        pass
-
-    @property
-    def portfolio(self):
-        return self._ledger.portfolio
-
-    @property
-    def positions(self):
-        self._check_sync()
-        raise NotImplementedError
-
-    @property
-    def transactions(self):
-        self._check_sync()
-        return self._processed_transactions
-
-    def _process_transactions(self):
-        #these should be the executed transactions of this accounts orders
-        transactions = list(self._broker.transactions.values())
-        #todo: update the account as-well.
-        #todo: update the portfolio
-        #we call the protected orders attribute to avoid re-updating the orders
-        #todo: check if we have to add commission to the order or if it is already done
-        # by the broker.
-        positions = self._broker._tws.positions
-
-        #todo: PROBLEM: not sure how to process last_trade_price (from transaction or ticker
-        # price? => apparently, we need to use the ticker data. PROBLEM: we need to be
-        # subscribed to an asset (which is limited using ib...) => There are "streaming" sources...
-        # since they are "push" types, they call some functions in order to update our data...
-        # right now we have two sources: ib and tiingo for real-time data...
-        # we need to add a data streaming feature, because we need it for updating the position
-        # the last sale prices are synced by using data from the data portal. But, by processing
-        # transactions, we might also need to fetch the last sale prices. Put the streaming sources
-        # in a custom DataPortal
-
-        self._processed_transactions = transactions
-
-        for order in self._broker.orders.values():
-            order_id = order.id
-            asset = order.asset
-            symbol = asset.symbol
-            if order_id in self._orders:
-                #remove any closed order
-                if not order.open:
-                    del self._orders[order_id]
-                    del self._positions[asset]
-                #update our orders with the new values
-                else:
-                    self._orders[order_id] = order
-                    ib_position = positions[symbol]
-                    self._positions[asset] = self._create_position(asset, ib_position)
-
-    def _create_position(self, asset, ib_position):
-        pos = position.Position(asset)
-        pos.amount = int(ib_position.position)
-        pos.cost_basis = float(ib_position.average_cost)
-
-        #todo: setup a ticker streaming so that we can fetch data for updates (last_trade_price,
-        # last_trade_dt)
-        #pos.last_sale_price = source.last_sale_price
-        #pos.last_sale_date = source.last_sale_date
-        return pos
-
-    @property
-    def account(self):
-        raise NotImplementedError
-
-    @property
-    def token(self):
-        return self._token
-
-    @property
-    def id(self):
-        return self._id
-
-
-class ClientAccountServicer(ta_rpc.ClientAccountServicer):
+class Broker(broker_rpc.BrokerServicer):
     '''encapsulates available services per-client'''
     #todo: must check the metadata...
 
@@ -218,7 +82,7 @@ class AccountServer(srv.Server):
     def __init__(self, bundle_factory, account_url, key=None, certificate=None):
         #todo: must check the metadata
         super(AccountServer, self).__init__(account_url, key, certificate)
-        self._acc = ClientAccountServicer(bundle_factory)
+        self._acc = Broker(bundle_factory)
 
     def add_token(self, token):
         self._acc.add_token(token)
@@ -228,7 +92,7 @@ class AccountServer(srv.Server):
         return self._acc._blotter
 
     def _add_servicer_to_server(self, server):
-        ta_rpc.add_ClientAccountServicer_to_server(self._acc,server)
+        broker_rpc.add_BrokerServicer_to_server(self._acc, server)
 
     @blotter.setter
     def blotter(self,value):
@@ -265,13 +129,13 @@ class Controllable(object):
         start_pr = self._datetime_to_timestamp_pb(start)
         end_pr = self._datetime_to_timestamp_pb(end)
         if data_frequency == 'daily':
-            df = params_pb2.RunParams.DAY
+            df = cbl.RunParams.DAY
         elif data_frequency == 'minutely':
-            df = params_pb2.RunParams.MINUTE
+            df = cbl.RunParams.MINUTE
         else:
             raise ValueError('No data frequency of type {} is supported'.format(data_frequency))
         for perf in self._ctr.Run(
-                params_pb2.RunParams(
+                cbl.RunParams(
                     capital_base=self._capital,
                     data_frequency=df,
                     start_session=start_pr,
@@ -320,7 +184,6 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
         # account through this channel.
         # the client must store this url permanently, so that it can be identified
         #add token to the client so that it can recognise clients
-        self._client_account.add_token(token)
         return ctl.RegisterReply(url=self._account_url,token = token)
 
     def _load_config(self, name):

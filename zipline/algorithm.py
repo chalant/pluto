@@ -492,16 +492,18 @@ class TradingAlgorithm(object):
 
     def _create_clock(self):
         """
-        If the clock property is not set, then create one based on frequency.
+        If the clock property is not set, then create one based on data frequency.
         """
-        trading_o_and_c = self.trading_calendar.schedule.ix[
-            self.sim_params.sessions]
+        sim_params = self.sim_params
+        sessions = sim_params.sessions
+        cal = self.trading_calendar
+        trading_o_and_c = self.trading_calendar.schedule.ix[sessions]
         market_closes = trading_o_and_c['market_close']
         minutely_emission = False
 
-        if self.sim_params.data_frequency == 'minute':
+        if sim_params.data_frequency == 'minute':
             market_opens = trading_o_and_c['market_open']
-            minutely_emission = self.sim_params.emission_rate == "minute"
+            minutely_emission = sim_params.emission_rate == "minute"
 
             # The calendar's execution times are the minutes over which we
             # actually want to run the clock. Typically the execution times
@@ -510,28 +512,24 @@ class TradingAlgorithm(object):
             # a subset of the full 24 hour calendar, so the execution times
             # dictate a market open time of 6:31am US/Eastern and a close of
             # 5:00pm US/Eastern.
-            execution_opens = \
-                self.trading_calendar.execution_time_from_open(market_opens)
-            execution_closes = \
-                self.trading_calendar.execution_time_from_close(market_closes)
+            execution_opens = cal.execution_time_from_open(market_opens)
+            execution_closes = cal.execution_time_from_close(market_closes)
         else:
             # in daily mode, we want to have one bar per session, timestamped
             # as the last minute of the session.
-            execution_closes = \
-                self.trading_calendar.execution_time_from_close(market_closes)
+            execution_closes = cal.execution_time_from_close(market_closes)
             execution_opens = execution_closes
 
-        cal = self.trading_calendar
-        t = datetime.combine(date.min, cal.open_time) - timedelta(minutes=15)
-        # FIXME generalize these values (update: changed, this, but not sure if it is correct...)
+        #FIXME: attempt for generalization;
+        t = datetime.combine(sim_params.start_session.date(), cal.open_time) - timedelta(minutes=15)
         before_trading_start_minutes = days_at_time(
-            self.sim_params.sessions,
+            sim_params.sessions,
             t.time(),
             cal.tz
         )
 
         return MinuteSimulationClock(
-            self.sim_params.sessions,
+            sim_params.sessions,
             execution_opens,
             execution_closes,
             before_trading_start_minutes,
@@ -688,7 +686,7 @@ class TradingAlgorithm(object):
     def calculate_capital_changes(self, dt, emission_rate, is_interday,
                                   portfolio_value_adjustment=0.0):
         """
-        If there is a capital change for a given dt, this means the the change
+        If there is a capital change for a given dt, this means that the change
         occurs before `handle_data` on the given dt. In the case of the
         change being a target value, the change will be computed on the
         portfolio value according to prices at the given dt

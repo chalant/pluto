@@ -13,4 +13,5 @@ message RunParams {
         DAY = 1;
     }
     DataFrequency data_frequency = 6;
+    string maximum_leverage = 7;
 }

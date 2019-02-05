@@ -3,9 +3,7 @@ from threading import Lock, Condition
 
 class Dispatcher:
 	'''Receives and stores requests and executors call it to fetch requests'''
-
 	def __init__(self):
-		super(Dispatcher, self).__init__()
 		self._queue = deque()
 		self._lock = Lock()
 		self._not_empty = Condition(self._lock)
@@ -13,12 +11,13 @@ class Dispatcher:
 		self._failed = {}
 		self._failed_tuple_queue = None
 
-	def _prepare_failed(self, name):
+	def _prepare_failed(self):
 		if self._failed_tuple_queue:
 			return self._failed_tuple_queue.popleft()
 		else:
-			self._failed_tuple_queue = self._failed.popitem()[1]
-			return self._prepare_failed(name)
+			failed_tuple_queue = self._failed.popitem()[1]
+			self._failed_tuple_queue = failed_tuple_queue
+			return failed_tuple_queue.popleft()
 
 	def _prepare_request(self, wait):
 		if self._queue:
@@ -35,13 +34,9 @@ class Dispatcher:
 
 	def get_request(self, name, wait=False):
 		with self._not_empty:
-			#if the executor haven't received the failed request
-			if self._failed is not None and name not in self._failed:
-				request = self._prepare_failed(name)
-				if request:
-					return request
-				else:
-					return self._prepare_request(wait)
+			#if we have a failed request give to the next executor
+			if self._failed and name not in self._failed:
+				return self._prepare_failed()
 			else:
 				return self._prepare_request(wait)
 
