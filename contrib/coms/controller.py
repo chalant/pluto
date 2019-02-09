@@ -4,40 +4,40 @@ import grpc
 
 from google.protobuf import timestamp_pb2 as prt
 
+from zipline.finance.execution import MarketOrder, StopLimitOrder, StopOrder, LimitOrder
+
 from contrib.coms.protos import controller_service_pb2 as ctl
 from contrib.coms.protos import controller_service_pb2_grpc as ctl_rpc
 from contrib.coms.protos import controllable_service_pb2 as cbl
 from contrib.coms.protos import controllable_service_pb2_grpc as cbl_rpc
 from contrib.coms.protos import broker_pb2_grpc as broker_rpc
+from contrib.coms.protos import broker_pb2 as br_msg
 from contrib.coms.protos import data_bundle_pb2 as dtb
+
 from contrib.coms.utils import server_utils as srv
 from contrib.coms.utils import certification as crt
+from contrib.coms.utils import conversions as cv
 from contrib.utils import files
 
 
 class Broker(broker_rpc.BrokerServicer):
     '''encapsulates available services per-client'''
-    #todo: must check the metadata...
 
-    def __init__(self, bundle_factory):
-        # the bundle factory is aggregated, for cashing purposes.
+    # todo: must check the metadata...
+
+    def __init__(self, broker, bundle_factory):
+        # the bundle factory is aggregated, for caching purposes.
         self._bundle_factory = bundle_factory
         self._tokens = set()
         self._accounts = {}
 
+        self._broker = broker
+
     def _check_metadata(self, context):
         metadata = dict(context.invocation_metadata())
         token = metadata['Token']
-        if not token in self._accounts:
-            context.abort(grpc.StatusCode.PERMISSION_DENIED,'The provided token is incorrect')
-            return None
-        else:
-            return token
-
-    def set_blotter(self,blotter):
-        #TODO: set the blotter that is responsible of handling trade requests etc.
-        #is dynamically set, depending on the modes we want to trade-in (simulation,paper-trade,live-trade)
-        self._blotter = blotter
+        if not token in self._tokens:
+            context.abort(grpc.StatusCode.PERMISSION_DENIED, 'The provided token is incorrect')
 
     def add_token(self, token):
         self._tokens.add(token)
@@ -46,29 +46,50 @@ class Broker(broker_rpc.BrokerServicer):
         self._accounts[account.token] = account
 
     def AccountState(self, request, context):
-        self._check_metadata(context)
+        # todo: these methods aren't necessary
+        raise NotImplementedError
 
     def PortfolioState(self, request, context):
-        return self._accounts[self._check_metadata(context)].portfolio
+        raise NotImplementedError
 
     def Orders(self, request, context):
-        pass
+        self._check_metadata(context)
+        for order in self._get_dict_values(self._broker.orders()):
+            yield cv.to_proto_order(order)
+
+    def _get_dict_values(self, dict_):
+        return dict_.values()
 
     def BatchOrder(self, request_iterator, context):
-        pass
+        raise NotImplementedError
 
     def CancelAllOrdersForAsset(self, request, context):
-        pass
+        raise NotImplementedError
 
     def PositionsState(self, request, context):
-        pass
+        raise NotImplementedError
 
     def Transactions(self, request, context):
-        pass
+        self._check_metadata(context)
+        for trx in self._get_dict_values(self._broker.transactions()):
+            yield cv.to_proto_transaction(trx)
 
     def SingleOrder(self, request, context):
-        #TODO: need to parse the request into zipline objects (ex: Asset object)
-        self._accounts[self._check_metadata(context)].order()
+        self._check_metadata(context)
+        req_style = request.style
+        style = None
+        if req_style == br_msg.OrderParams.MARKET_ORDER:
+            style = MarketOrder()
+        elif req_style == br_msg.OrderParams.LIMIT_ORDER:
+            style = LimitOrder(request.limit_price)
+        elif req_style == br_msg.OrderParams.STOP_ORDER:
+            style = StopOrder(request.stop_price)
+        elif req_style == br_msg.OrderParams.STOP_LIMIT_ORDER:
+            style = StopLimitOrder(request.limit_price, request.stop_price)
+        if style:
+            return cv.to_proto_order(self._broker.order(cv.to_zp_asset(request.asset), request.amount, style))
+        else:
+            context.abort(grpc.StatusCode.INVALID_ARGUMENT, 'unsupported order style argument')
 
     def GetDataBundle(self, request, context):
         '''creates a bundle based on the specified 'domains' and sends the bundle as a stream
@@ -80,7 +101,7 @@ class Broker(broker_rpc.BrokerServicer):
 
 class AccountServer(srv.Server):
     def __init__(self, bundle_factory, account_url, key=None, certificate=None):
-        #todo: must check the metadata
+        # todo: must check the metadata
         super(AccountServer, self).__init__(account_url, key, certificate)
         self._acc = Broker(bundle_factory)
 
@@ -95,9 +116,8 @@ class AccountServer(srv.Server):
         broker_rpc.add_BrokerServicer_to_server(self._acc, server)
 
     @blotter.setter
-    def blotter(self,value):
+    def blotter(self, value):
         self._acc.set_blotter(value)
-
 
 
 class Controllable(object):
@@ -151,7 +171,7 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
 
     # TODO: upon termination, we need to save the generated urls, and relaunch the services
     # that server on those urls.
-    def __init__(self, bundle_factory, account_url, key=None, certificate=None, ca = None):
+    def __init__(self, bundle_factory, account_url, key=None, certificate=None, ca=None):
         # list of controllables (strategies)
         self._controllables = []
         self._bundle_factory = bundle_factory
@@ -183,8 +203,8 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
         # send the generated access url to the client (through a secure channel). The client communicate with the
         # account through this channel.
         # the client must store this url permanently, so that it can be identified
-        #add token to the client so that it can recognise clients
-        return ctl.RegisterReply(url=self._account_url,token = token)
+        # add token to the client so that it can recognise clients
+        return ctl.RegisterReply(url=self._account_url, token=token)
 
     def _load_config(self, name):
         try:
@@ -199,11 +219,11 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
             return conf['token']
         except KeyError:
             token = str(uuid.uuid4())
-            self._config.store({client_name: {'url' : client_url, 'token': token}})
+            self._config.store({client_name: {'url': client_url, 'token': token}})
         return token
 
     def _create_channel(self, url):
-        return srv.create_channel(url,self._ca)
+        return srv.create_channel(url, self._ca)
 
 
 class ControllerCertificateFactory(crt.CertificateFactory):

@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n contrib/coms/protos/assets.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa6\x02\n\x05\x41sset\x12\x0b\n\x03sid\x18\x01 \x01(\x05\x12\x0e\n\x06symbol\x18\x02 \x01(\t\x12\x12\n\nasset_name\x18\x03 \x01(\t\x12.\n\nstart_date\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0c\x66irst_traded\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x33\n\x0f\x61uto_close_date\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x10\n\x08\x65xchange\x18\x08 \x01(\t\x12\x15\n\rexchange_full\x18\t \x01(\tb\x06proto3')
+  serialized_pb=_b('\n contrib/coms/protos/assets.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe3\x02\n\x05\x41sset\x12\x0b\n\x03sid\x18\x01 \x01(\x05\x12\x0e\n\x06symbol\x18\x02 \x01(\t\x12\x12\n\nasset_name\x18\x03 \x01(\t\x12.\n\nstart_date\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0c\x66irst_traded\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x33\n\x0f\x61uto_close_date\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x10\n\x08\x65xchange\x18\x08 \x01(\t\x12\x15\n\rexchange_full\x18\t \x01(\t\x12\x14\n\x0c\x63ountry_code\x18\n \x01(\t\x12\x11\n\ttick_size\x18\x0b \x01(\x02\x12\x12\n\nmultiplier\x18\x0c \x01(\x02\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
@@ -97,6 +97,27 @@ _ASSET = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='country_code', full_name='Asset.country_code', index=9,
+      number=10, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='tick_size', full_name='Asset.tick_size', index=10,
+      number=11, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='multiplier', full_name='Asset.multiplier', index=11,
+      number=12, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -110,7 +131,7 @@ _ASSET = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=70,
-  serialized_end=364,
+  serialized_end=425,
 )
 
 _ASSET.fields_by_name['start_date'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
