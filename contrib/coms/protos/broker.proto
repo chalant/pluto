@@ -14,8 +14,7 @@ service Broker {
     rpc AccountState (google.protobuf.Empty) returns (Account);
     rpc PortfolioState (google.protobuf.Empty) returns (Portfolio);
     rpc PositionsState (google.protobuf.Empty) returns (stream AssetPositionPair);
-    rpc Orders (google.protobuf.Empty) returns (Order);
-    //todo: for transactions, we need to also specify the dt we are looking for
+    rpc Orders (google.protobuf.Empty) returns (stream Order);
     rpc Transactions (google.protobuf.Empty) returns (stream Transaction);
     rpc BatchOrder (BatchOrderParams) returns (stream Order);
     rpc CancelOrder (Order) returns (google.protobuf.Empty);

@@ -1,11 +1,13 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
+import "contrib/coms/protos/assets.proto";
 
 message Transaction {
-    int32 sid = 1;
+    Asset asset = 1;
     float amount = 2;
     google.protobuf.Timestamp dt = 3;
     float price = 4;
     string order_id = 5;
+    float commission = 6;
 }

@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\"contrib/coms/protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a contrib/coms/protos/assets.proto\"\x8b\x03\n\x05Order\x12\n\n\x02id\x18\x01 \x01(\t\x12&\n\x02\x64t\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12+\n\x07\x63reated\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x61sset\x18\x05 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x06 \x01(\x02\x12\x0e\n\x06\x66illed\x18\x07 \x01(\x05\x12\x12\n\ncommission\x18\x08 \x01(\x02\x12\x1d\n\x06status\x18\x0e \x01(\x0e\x32\r.Order.Status\x12\x0c\n\x04stop\x18\t \x01(\x02\x12\r\n\x05limit\x18\n \x01(\x02\x12\x14\n\x0cstop_reached\x18\x0b \x01(\x08\x12\x15\n\rlimit_reached\x18\x0c \x01(\x08\x12\x17\n\x0f\x62roker_order_id\x18\r \x01(\x03\"D\n\x06Status\x12\x08\n\x04OPEN\x10\x00\x12\n\n\x06\x46ILLED\x10\x01\x12\x0c\n\x08\x43\x41NCELED\x10\x02\x12\x0c\n\x08REJECTED\x10\x03\x12\x08\n\x04HELD\x10\x04\"\x9f\x01\n\x08Position\x12\x0b\n\x03sid\x18\x01 \x01(\x05\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x12\n\ncost_basis\x18\x04 \x01(\x02\x12\x17\n\x0flast_sale_price\x18\x05 \x01(\x02\x12\x32\n\x0elast_sale_date\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xc3\x03\n\x07\x41\x63\x63ount\x12\x14\n\x0csettled_cash\x18\x01 \x01(\x02\x12\x18\n\x10\x61\x63\x63rued_interest\x18\x02 \x01(\x02\x12\x14\n\x0c\x62uying_power\x18\x03 \x01(\x02\x12\x18\n\x10\x65quity_with_loan\x18\x04 \x01(\x02\x12\x1d\n\x15total_positions_value\x18\x05 \x01(\x02\x12 \n\x18total_positions_exposure\x18\x06 \x01(\x02\x12\x13\n\x0bregt_equity\x18\x07 \x01(\x02\x12\x13\n\x0bregt_margin\x18\x08 \x01(\x02\x12\"\n\x1ainitial_margin_requirement\x18\t \x01(\x02\x12&\n\x1emaintenance_margin_requirement\x18\n \x01(\x02\x12\x17\n\x0f\x61vailable_funds\x18\x0b \x01(\x02\x12\x18\n\x10\x65xcess_liquidity\x18\x0c \x01(\x02\x12\x0f\n\x07\x63ushion\x18\r \x01(\x02\x12\x1c\n\x14\x64\x61y_trades_remaining\x18\x0e \x01(\x02\x12\x10\n\x08leverage\x18\x0f \x01(\x02\x12\x14\n\x0cnet_leverage\x18\x10 \x01(\x02\x12\x17\n\x0fnet_liquidation\x18\x11 \x01(\x02\"\x84\x02\n\tPortfolio\x12\x11\n\tcash_flow\x18\x01 \x01(\x02\x12\x14\n\x0cstating_cash\x18\x02 \x01(\x02\x12\x17\n\x0fportfolio_value\x18\x03 \x01(\x02\x12\x0b\n\x03pnl\x18\x04 \x01(\x02\x12\x0f\n\x07returns\x18\x05 \x01(\x02\x12\x0c\n\x04\x63\x61sh\x18\x06 \x01(\x02\x12$\n\x08position\x18\x07 \x03(\x0b\x32\x12.AssetPositionPair\x12.\n\nstart_date\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fpositions_value\x18\t \x01(\x02\x12\x1a\n\x12positions_exposure\x18\n \x01(\x02\"E\n\x11\x41ssetPositionPair\x12\x13\n\x03key\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x1b\n\x08position\x18\x02 \x01(\x0b\x32\t.Positionb\x06proto3')
+  serialized_pb=_b('\n\"contrib/coms/protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a contrib/coms/protos/assets.proto\"\x8b\x03\n\x05Order\x12\n\n\x02id\x18\x01 \x01(\t\x12&\n\x02\x64t\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12+\n\x07\x63reated\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x61sset\x18\x05 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x06 \x01(\x02\x12\x0e\n\x06\x66illed\x18\x07 \x01(\x05\x12\x12\n\ncommission\x18\x08 \x01(\x02\x12\x1d\n\x06status\x18\x0e \x01(\x0e\x32\r.Order.Status\x12\x0c\n\x04stop\x18\t \x01(\x02\x12\r\n\x05limit\x18\n \x01(\x02\x12\x14\n\x0cstop_reached\x18\x0b \x01(\x08\x12\x15\n\rlimit_reached\x18\x0c \x01(\x08\x12\x17\n\x0f\x62roker_order_id\x18\r \x01(\x03\"D\n\x06Status\x12\x08\n\x04OPEN\x10\x00\x12\n\n\x06\x46ILLED\x10\x01\x12\x0c\n\x08\x43\x41NCELED\x10\x02\x12\x0c\n\x08REJECTED\x10\x03\x12\x08\n\x04HELD\x10\x04\"\x92\x01\n\x08Position\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x03\x12\x12\n\ncost_basis\x18\x03 \x01(\x02\x12\x17\n\x0flast_sale_price\x18\x04 \x01(\x02\x12\x32\n\x0elast_sale_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xd0\x03\n\x07\x41\x63\x63ount\x12\x14\n\x0csettled_cash\x18\x01 \x01(\x02\x12\x18\n\x10\x61\x63\x63rued_interest\x18\x02 \x01(\x02\x12\x14\n\x0c\x62uying_power\x18\x03 \x01(\x02\x12\x18\n\x10\x65quity_with_loan\x18\x04 \x01(\x02\x12\x1d\n\x15total_positions_value\x18\x05 \x01(\x02\x12 \n\x18total_positions_exposure\x18\x06 \x01(\x02\x12\x13\n\x0bregt_equity\x18\x07 \x01(\x02\x12\x13\n\x0bregt_margin\x18\x08 \x01(\x02\x12\"\n\x1ainitial_margin_requirement\x18\t \x01(\x02\x12&\n\x1emaintenance_margin_requirement\x18\n \x01(\x02\x12\x17\n\x0f\x61vailable_funds\x18\x0b \x01(\x02\x12\x18\n\x10\x65xcess_liquidity\x18\x0c \x01(\x02\x12\x0f\n\x07\x63ushion\x18\r \x01(\x02\x12\x1c\n\x14\x64\x61y_trades_remaining\x18\x0e \x01(\x02\x12\x10\n\x08leverage\x18\x0f \x01(\x02\x12\x14\n\x0cnet_leverage\x18\x10 \x01(\x02\x12\x17\n\x0fnet_liquidation\x18\x11 \x01(\x02\x12\x0b\n\x03sma\x18\x12 \x01(\x02\"\x84\x02\n\tPortfolio\x12\x11\n\tcash_flow\x18\x01 \x01(\x02\x12\x14\n\x0cstating_cash\x18\x02 \x01(\x02\x12\x17\n\x0fportfolio_value\x18\x03 \x01(\x02\x12\x0b\n\x03pnl\x18\x04 \x01(\x02\x12\x0f\n\x07returns\x18\x05 \x01(\x02\x12\x0c\n\x04\x63\x61sh\x18\x06 \x01(\x02\x12$\n\x08position\x18\x07 \x03(\x0b\x32\x12.AssetPositionPair\x12.\n\nstart_date\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fpositions_value\x18\t \x01(\x02\x12\x1a\n\x12positions_exposure\x18\n \x01(\x02\"E\n\x11\x41ssetPositionPair\x12\x13\n\x03key\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x1b\n\x08position\x18\x02 \x01(\x0b\x32\t.Positionb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_assets__pb2.DESCRIPTOR,])
 
@@ -193,43 +193,36 @@ _POSITION = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='sid', full_name='Position.sid', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='asset', full_name='Position.asset', index=1,
-      number=2, type=11, cpp_type=10, label=1,
+      name='asset', full_name='Position.asset', index=0,
+      number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='amount', full_name='Position.amount', index=2,
+      name='amount', full_name='Position.amount', index=1,
+      number=2, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='cost_basis', full_name='Position.cost_basis', index=2,
       number=3, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='cost_basis', full_name='Position.cost_basis', index=3,
+      name='last_sale_price', full_name='Position.last_sale_price', index=3,
       number=4, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='last_sale_price', full_name='Position.last_sale_price', index=4,
-      number=5, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='last_sale_date', full_name='Position.last_sale_date', index=5,
-      number=6, type=11, cpp_type=10, label=1,
+      name='last_sale_date', full_name='Position.last_sale_date', index=4,
+      number=5, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -247,7 +240,7 @@ _POSITION = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=504,
-  serialized_end=663,
+  serialized_end=650,
 )
 
 
@@ -377,6 +370,13 @@ _ACCOUNT = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='sma', full_name='Account.sma', index=17,
+      number=18, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -389,7 +389,7 @@ _ACCOUNT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=666,
+  serialized_start=653,
   serialized_end=1117,
 )
 

@@ -11,4 +11,7 @@ message Asset {
     google.protobuf.Timestamp auto_close_date = 7;
     string exchange = 8;
     string exchange_full = 9;
+    string country_code = 10;
+    float tick_size = 11;
+    float multiplier = 12;
 }

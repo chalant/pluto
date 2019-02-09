@@ -39,7 +39,7 @@ class BrokerStub(object):
         request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
         response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.AssetPositionPair.FromString,
         )
-    self.Orders = channel.unary_unary(
+    self.Orders = channel.unary_stream(
         '/Broker/Orders',
         request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
         response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Order.FromString,
@@ -168,7 +168,7 @@ def add_BrokerServicer_to_server(servicer, server):
           request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
           response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.AssetPositionPair.SerializeToString,
       ),
-      'Orders': grpc.unary_unary_rpc_method_handler(
+      'Orders': grpc.unary_stream_rpc_method_handler(
           servicer.Orders,
           request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
           response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Order.SerializeToString,

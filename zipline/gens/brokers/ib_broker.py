@@ -506,13 +506,14 @@ class IBBroker(Broker):
         self._transactions = {}
 
         self._tws = TWSConnection(tws_uri)
-        self.account_id = (self._tws.managed_accounts[0] if account_id is None
-                           else account_id)
+        self.account_id = (
+            self._tws.managed_accounts[0] if account_id is None else account_id
+        )
         self.currency = 'USD'
 
         self._subscribed_assets = []
 
-        super(self.__class__, self).__init__()
+        super(IBBroker, self).__init__()
 
     @property
     def subscribed_assets(self):

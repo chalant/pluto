@@ -28,12 +28,11 @@ message Order {
 }
 
 message Position {
-    int32 sid = 1;
-    Asset asset = 2;
-    float amount = 3;
-    float cost_basis = 4;
-    float last_sale_price = 5;
-    google.protobuf.Timestamp last_sale_date = 6;
+    Asset asset = 1;
+    int64 amount = 2;
+    float cost_basis = 3;
+    float last_sale_price = 4;
+    google.protobuf.Timestamp last_sale_date = 5;
 }
 
 message Account {
