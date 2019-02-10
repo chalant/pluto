@@ -95,6 +95,7 @@ class Broker(broker_rpc.BrokerServicer):
         '''creates a bundle based on the specified 'domains' and sends the bundle as a stream
         of bytes.'''
         # note: returns data by chunks of 1KB by default.
+        self._check_metadata(context)
         for chunk in self._bundle_factory.get_bundle(request.country_code):
             yield dtb.Bundle(data=chunk)
 
@@ -144,7 +145,7 @@ class Controllable(object):
         ts.FromDatetime(datetime)
         return ts
 
-    def run(self, start, end, data_frequency='daily', metrics_set='default', live=False):
+    def run(self, start, end, max_leverage, data_frequency='daily', metrics_set='default', live=False):
         '''this function is an iterable (generator) '''
         start_pr = self._datetime_to_timestamp_pb(start)
         end_pr = self._datetime_to_timestamp_pb(end)
@@ -161,8 +162,10 @@ class Controllable(object):
                     start_session=start_pr,
                     end_session=end_pr,
                     metrics_set=metrics_set,
-                    live=live)):
-            yield perf
+                    live=live,
+                    maximum_leverage=max_leverage
+                )):
+            yield cv.from_proto_performance_packet(perf)
 
 
 class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):

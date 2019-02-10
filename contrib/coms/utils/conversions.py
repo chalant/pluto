@@ -7,6 +7,8 @@ from zipline.finance.position import Position
 
 from contrib.coms.protos import protocol_pb2 as pr
 from contrib.coms.protos import finance_pb2 as fin
+from contrib.coms.protos import metrics_pb2 as metrics
+from contrib.coms.protos import controllable_service_pb2 as cbl
 
 from google.protobuf import timestamp_pb2 as pr_ts
 
@@ -18,6 +20,7 @@ def to_proto_datetime(dt):
     ts = pr_ts.Timestamp()
     ts.FromDatetime(dt)
     return ts
+
 
 def to_datetime(proto_ts):
     return proto_ts.ToDatetime()
@@ -58,6 +61,7 @@ def to_zp_asset(pr_asset):
         pr_asset.multiplier
     )
 
+
 def to_zp_order(proto_order):
     return Order(
         proto_order.dt,
@@ -69,6 +73,7 @@ def to_zp_order(proto_order):
         proto_order.commission
     )
 
+
 def to_zp_transaction(proto_transaction):
     return Transaction(
         to_zp_asset(proto_transaction.asset),
@@ -79,6 +84,7 @@ def to_zp_transaction(proto_transaction):
         proto_transaction.commission
     )
 
+
 def to_zp_position(proto_position):
     return Position(
         to_zp_asset(proto_position.asset),
@@ -88,23 +94,151 @@ def to_zp_position(proto_position):
         to_datetime(proto_position.last_sale_date)
     )
 
+
 def to_proto_order(zp_order):
     return pr.Order(
-        dt = to_proto_datetime(zp_order.dt),
-        asset = to_proto_asset(zp_order.asset),
-        amount = zp_order.amount,
-        stop = zp_order.stop,
-        limit = zp_order.limit,
-        filled = zp_order.filled,
-        commission = zp_order.commission
+        dt=to_proto_datetime(zp_order.dt),
+        asset=to_proto_asset(zp_order.asset),
+        amount=zp_order.amount,
+        stop=zp_order.stop,
+        limit=zp_order.limit,
+        filled=zp_order.filled,
+        commission=zp_order.commission
     )
+
 
 def to_proto_transaction(zp_transaction):
     return fin.Transaction(
-        asset = to_proto_asset(zp_transaction.asset),
-        amount = zp_transaction.amount,
-        dt = zp_transaction.dt,
-        price = zp_transaction.price,
-        order_id = zp_transaction.order_id,
-        commission = zp_transaction.commission
+        asset=to_proto_asset(zp_transaction.asset),
+        amount=zp_transaction.amount,
+        dt=zp_transaction.dt,
+        price=zp_transaction.price,
+        order_id=zp_transaction.order_id,
+        commission=zp_transaction.commission
+    )
+
+
+def from_proto_performance_packet(proto_perf_packet):
+    def from_proto_cum_metrics(cum_metrics):
+        return {
+            'period_open': to_datetime(cum_metrics.period_open),
+            'period_close': to_datetime(cum_metrics.period_close),
+            'returns': cum_metrics.returns,
+            'pnl': cum_metrics.pnl,
+            'cash_flow': cum_metrics.cash_flow,
+            'starting_exposure': cum_metrics.starting_exposure,
+            'ending_exposure': cum_metrics.ending_exposure,
+            'starting_cash': cum_metrics.starting_cash,
+            'ending_cash': cum_metrics.ending_cash,
+            'longs_count': cum_metrics.long_count,
+            'shorts_count': cum_metrics.short_count,
+            'long_value': cum_metrics.long_value,
+            'short_value': cum_metrics.short_value,
+            'long_exposure': cum_metrics.long_exposure,
+            'short_exposure': cum_metrics.short_exposure,
+            'gross_leverage': cum_metrics.gross_leverage,
+            'net_leverage': cum_metrics.net_leverage
+        }
+
+    def from_proto_cum_risk_metrics(cum_risk_metrics):
+        return {
+            'algorithm_volatility': cum_risk_metrics.algorithm_volatility,
+            'benchmark_period_return': cum_risk_metrics.benchmark_period_return,
+            'benchmark_volatility': cum_risk_metrics.benchmark_volatility,
+            'algorithm_period_return': cum_risk_metrics.algorithm_period_return,
+            'alpha': cum_risk_metrics.alpha,
+            'beta': cum_risk_metrics.beta,
+            'sharpe': cum_risk_metrics.sharpe,
+            'sortino': cum_risk_metrics.sortino,
+            'max_drawdown': cum_risk_metrics.max_drawdown,
+            'max_leverage': cum_risk_metrics.max_leverage
+        }
+
+    def from_proto_period_performance(period_performance):
+        cum_metrics = period_performance.cumulative_metrics
+        pcm = period_performance.period_common_metrics
+        return {
+            'period_open': to_datetime(cum_metrics.period_open),
+            'period_close': to_datetime(cum_metrics.period_close),
+            'returns': cum_metrics.returns,
+            'pnl': cum_metrics.pnl,
+            'cash_flow': cum_metrics.cash_flow,
+            'starting_exposure': cum_metrics.starting_exposure,
+            'ending_exposure': cum_metrics.ending_exposure,
+            'starting_cash': cum_metrics.starting_cash,
+            'ending_cash': cum_metrics.ending_cash,
+            'longs_count': cum_metrics.long_count,
+            'shorts_count': cum_metrics.short_count,
+            'long_value': cum_metrics.long_value,
+            'short_value': cum_metrics.short_value,
+            'long_exposure': cum_metrics.long_exposure,
+            'short_exposure': cum_metrics.short_exposure,
+            'gross_leverage': cum_metrics.gross_leverage,
+            'net_leverage': cum_metrics.net_leverage,
+            'orders': [to_zp_order(order) for order in pcm.orders],
+            'transactions': [to_zp_transaction(trx) for trx in pcm.transactions],
+            'positions': [to_zp_position(pos) for pos in pcm.positions]
+        }
+
+    return {
+        'cumulative_perf': from_proto_cum_metrics(proto_perf_packet.cumulative_perf),
+        'daily_perf': from_proto_period_performance(proto_perf_packet.daily_perf),
+        'minutely_perf': from_proto_period_performance(proto_perf_packet.minutely_perf),
+        'cumulative_risk_metrics': from_proto_cum_risk_metrics(proto_perf_packet.cumulative_risk_metrics)
+    }
+
+
+def to_proto_performance_packet(perf_packet):
+    def to_proto_cum_metrics(cum_perf):
+        return metrics.CumulativeMetrics(
+            period_open=to_proto_datetime(cum_perf['period_open']),
+            period_close=to_proto_datetime(cum_perf['period_close']),
+            returns=cum_perf['returns'],
+            pnl=cum_perf['pnl'],
+            cash_flow=cum_perf['cash_flow'],
+            starting_exposure=cum_perf['starting_exposure'],
+            ending_exposure=cum_perf['ending_exposure'],
+            starting_value=cum_perf['starting_value'],
+            ending_value=cum_perf['ending_value'],
+            starting_cash=cum_perf['starting_cash'],
+            ending_cash=cum_perf['ending_cash'],
+            longs_count=cum_perf['longs_count'],
+            shorts_count=cum_perf['shorts_count'],
+            long_value=cum_perf['long_value'],
+            short_value=cum_perf['short_value'],
+            long_exposure=cum_perf['long_exposure'],
+            short_exposure=cum_perf['short_exposure'],
+            gross_leverage=cum_perf['gross_leverage'],
+            net_leverage=cum_perf['net_leverage']
+        )
+
+    def to_proto_period_perf(period_perf):
+        return cbl.PeriodPerformance(
+            cumulative_metrics=to_proto_cum_metrics(period_perf['cumulative_metrics']),
+            period_common_metrics=metrics.PeriodCommonMetrics(
+                orders=period_perf['orders'],
+                transactions=period_perf['transactions'],
+                positions=period_perf['positions']
+            )
+        )
+
+    def to_proto_risk_metrics(cum_risk_metrics):
+        return metrics.CumulativeRiskMetrics(
+            algorithm_volatility=cum_risk_metrics['algorithm_volatility'],
+            benchmark_period_return=cum_risk_metrics['benchmark_period_return'],
+            benchmark_volatility=cum_risk_metrics['benchmark_volatility'],
+            algorithm_period_return=cum_risk_metrics['algorithm_period_return'],
+            alpha=cum_risk_metrics['alpha'],
+            beta=cum_risk_metrics['beta'],
+            sharpe=cum_risk_metrics['sharpe'],
+            sortino=cum_risk_metrics['sortino'],
+            max_drawdown=cum_risk_metrics['max_drawdown'],
+            max_leverage=cum_risk_metrics['max_leverage']
+        )
+
+    return cbl.PerformancePacket(
+        cumulative_perf=to_proto_cum_metrics(perf_packet['cumulative_perf']),
+        daily_perf=to_proto_period_perf(perf_packet['daily_perf']),
+        minutely_perf=to_proto_period_perf(perf_packet['minutely_perf']),
+        cumulative_risk_metrics=to_proto_risk_metrics(perf_packet['cumulative_risk_metrics'])
     )
