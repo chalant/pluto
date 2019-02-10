@@ -60,11 +60,10 @@ class Broker(object):
         return [cv.to_zp_transaction(resp.message) for resp in self._with_metadata(self._stub.Transactions,Empty())]
 
     def cancel(self, order_id, relay_status=True):
-        pass
+        raise NotImplementedError
 
     def cancel_all_orders_for_asset(self, asset, warn=False, relay_status=True):
-        pass
-
+        raise NotImplementedError
 
     def _create_order_param(self, asset, style, amount):
         #todo: check the "get_stop_price" methods
