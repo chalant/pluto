@@ -2,8 +2,6 @@ import uuid
 
 import grpc
 
-from google.protobuf import timestamp_pb2 as prt
-
 from zipline.finance.execution import MarketOrder, StopLimitOrder, StopOrder, LimitOrder
 
 from contrib.coms.protos import controller_service_pb2 as ctl
@@ -20,7 +18,7 @@ from contrib.coms.utils import conversions as cv
 from contrib.utils import files
 
 
-class Broker(broker_rpc.BrokerServicer):
+class BrokerServicer(broker_rpc.BrokerServicer):
     '''encapsulates available services per-client'''
 
     # todo: must check the metadata...
@@ -100,25 +98,16 @@ class Broker(broker_rpc.BrokerServicer):
             yield dtb.Bundle(data=chunk)
 
 
-class AccountServer(srv.Server):
-    def __init__(self, bundle_factory, account_url, key=None, certificate=None):
-        # todo: must check the metadata
-        super(AccountServer, self).__init__(account_url, key, certificate)
-        self._acc = Broker(bundle_factory)
+class BrokerServer(srv.Server):
+    def __init__(self, bundle_factory, broker_url, broker, key=None, certificate=None):
+        super(BrokerServer, self).__init__(broker_url, key, certificate)
+        self._acc = BrokerServicer(bundle_factory, broker)
 
     def add_token(self, token):
         self._acc.add_token(token)
 
-    @property
-    def blotter(self):
-        return self._acc._blotter
-
     def _add_servicer_to_server(self, server):
         broker_rpc.add_BrokerServicer_to_server(self._acc, server)
-
-    @blotter.setter
-    def blotter(self, value):
-        self._acc.set_blotter(value)
 
 
 class Controllable(object):
@@ -140,15 +129,9 @@ class Controllable(object):
     def capital(self, value):
         self._capital = value
 
-    def _datetime_to_timestamp_pb(self, datetime):
-        ts = prt.Timestamp()
-        ts.FromDatetime(datetime)
-        return ts
-
     def run(self, start, end, max_leverage, data_frequency='daily', metrics_set='default', live=False):
         '''this function is an iterable (generator) '''
-        start_pr = self._datetime_to_timestamp_pb(start)
-        end_pr = self._datetime_to_timestamp_pb(end)
+
         if data_frequency == 'daily':
             df = cbl.RunParams.DAY
         elif data_frequency == 'minutely':
@@ -159,8 +142,8 @@ class Controllable(object):
                 cbl.RunParams(
                     capital_base=self._capital,
                     data_frequency=df,
-                    start_session=start_pr,
-                    end_session=end_pr,
+                    start_session=cv.to_datetime(start),
+                    end_session=cv.to_datetime(end),
                     metrics_set=metrics_set,
                     live=live,
                     maximum_leverage=max_leverage
@@ -174,35 +157,38 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
 
     # TODO: upon termination, we need to save the generated urls, and relaunch the services
     # that server on those urls.
-    def __init__(self, bundle_factory, account_url, key=None, certificate=None, ca=None):
+    def __init__(self, bundle_factory, broker_url, key=None, certificate=None, ca=None):
         # list of controllables (strategies)
-        self._controllables = []
+        self._controllables = {}
         self._bundle_factory = bundle_factory
         self._key = key
         self._cert = certificate
-        self._config = files.JsonFile('controller/config')
-        self._account_url = account_url
-        self._client_account = AccountServer(bundle_factory, account_url, key, certificate)
         self._ca = ca
+        self._config = files.JsonFile('controller/config')
+        self._account_url = broker_url
+
+        self._client_account = BrokerServer(bundle_factory, broker_url, key, certificate)
 
     # TODO: finish this function (registration of the controllable)
     def Register(self, request, context):
         '''the controllable calls this function to be registered'''
-        # clients to the controller first register here to be controlled.
-        # add the controllable to list...
-        # create the strategy url based on name, also resolve name conflicts
         # TODO: store the url permanently so that the client can be id-ed beyond run lifetime.
-        # The url uniquely identifies the strategy. => All metrics can be stored in the
-        # corresponding url folder? database?
-        client_url = request.url
+
+        #the controllable sends its url
+        controllable_url = request.url
         client_name = request.name
-        token = self._create_token(client_name, client_url)
+
+        #a token is generated
+        token = self._create_token(client_name, controllable_url)
         controllable = Controllable(
             client_name,
-            self._create_channel(client_url)
+            self._create_channel(controllable_url)
         )
+
+        #todo: when and how should we run the controllables? => should we schedule periodic back-testings?
+
         # keep track of controllables so that we can control them etc.
-        self._controllables.append(controllable)
+        self._controllables[token] = controllable
         # send the generated access url to the client (through a secure channel). The client communicate with the
         # account through this channel.
         # the client must store this url permanently, so that it can be identified
@@ -221,12 +207,19 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
             conf = self._load_config(client_name)
             return conf['token']
         except KeyError:
+            #create a token and store clients data...
             token = str(uuid.uuid4())
             self._config.store({client_name: {'url': client_url, 'token': token}})
         return token
 
     def _create_channel(self, url):
         return srv.create_channel(url, self._ca)
+
+    def start(self):
+        self._client_account.start()
+
+    def stop(self, grace=None):
+        self._client_account.stop(grace)
 
 
 class ControllerCertificateFactory(crt.CertificateFactory):
@@ -253,13 +246,13 @@ class ControllerCertificateFactory(crt.CertificateFactory):
 
 
 class ControllerServer(srv.Server):
-    def __init__(self, bundle_factory, controller_url, blotter_url, key=None, certificate=None):
+    def __init__(self, bundle_factory, controller_url, broker_url, key=None, certificate=None):
         '''the bundle_factory is an abstraction for creating data bundles.'''
         super(ControllerServer, self).__init__(controller_url, key, certificate)
         self._bdf = bundle_factory
         self._key = key
         self._cert = certificate
-        self._blt = blotter_url
+        self._blt = broker_url
 
     def _add_servicer_to_server(self, server):
         ctl_rpc.add_ControllerServicer_to_server(ControllerServicer(
