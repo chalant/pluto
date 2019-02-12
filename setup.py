@@ -350,7 +350,7 @@ conditional_arguments = {
 }
 
 setup(
-    name='zipline-core',
+    name='zipline-lib',
     url="https://github.com/chalant/zipline-core",
     version=versioneer.get_version(),
     cmdclass=LazyBuildExtCommandClass(versioneer.get_cmdclass()),
