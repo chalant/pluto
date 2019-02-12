@@ -158,5 +158,5 @@ class ControllableServer(srv.Server):
 
     def _add_servicer_to_server(self, server):
         url, token = self._register()
-        self._cbl = _ControllableServicer(self._str, url, token, self._ca)
-        cbl_grpc.add_ControllableServicer_to_server(self._cbl, server)
+        c = self._cbl = _ControllableServicer(self._str, url, token, self._ca)
+        cbl_grpc.add_ControllableServicer_to_server(c, server)

@@ -13,7 +13,7 @@ from contrib.coms.protos import controllable_service_pb2 as cbl
 from google.protobuf import timestamp_pb2 as pr_ts
 
 
-def to_proto_datetime(dt):
+def to_proto_timestamp(dt):
     # todo: what if it is a pandas.Timestamp?
     if dt is None:
         return
@@ -31,10 +31,10 @@ def to_proto_asset(zp_asset):
         sid=zp_asset.sid,
         symbol=zp_asset.symbol,
         asset_name=zp_asset.asset_name,
-        start_date=to_proto_datetime(zp_asset.start_date),
-        end_date=to_proto_datetime(zp_asset.end_date),
-        first_traded=to_proto_datetime(zp_asset.start_date),
-        auto_close_date=to_proto_datetime(zp_asset.auto_close_date),
+        start_date=to_proto_timestamp(zp_asset.start_date),
+        end_date=to_proto_timestamp(zp_asset.end_date),
+        first_traded=to_proto_timestamp(zp_asset.start_date),
+        auto_close_date=to_proto_timestamp(zp_asset.auto_close_date),
         exchange=zp_asset.exchange,
         exchange_full=zp_asset.exchange_full,
         country_code=zp_asset.country_code,
@@ -97,7 +97,7 @@ def to_zp_position(proto_position):
 
 def to_proto_order(zp_order):
     return pr.Order(
-        dt=to_proto_datetime(zp_order.dt),
+        dt=to_proto_timestamp(zp_order.dt),
         asset=to_proto_asset(zp_order.asset),
         amount=zp_order.amount,
         stop=zp_order.stop,
@@ -191,8 +191,8 @@ def from_proto_performance_packet(proto_perf_packet):
 def to_proto_performance_packet(perf_packet):
     def to_proto_cum_metrics(cum_perf):
         return metrics.CumulativeMetrics(
-            period_open=to_proto_datetime(cum_perf['period_open']),
-            period_close=to_proto_datetime(cum_perf['period_close']),
+            period_open=to_proto_timestamp(cum_perf['period_open']),
+            period_close=to_proto_timestamp(cum_perf['period_close']),
             returns=cum_perf['returns'],
             pnl=cum_perf['pnl'],
             cash_flow=cum_perf['cash_flow'],
