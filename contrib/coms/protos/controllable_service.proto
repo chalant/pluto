@@ -2,9 +2,11 @@ syntax ='proto3';
 
 import "contrib/coms/protos/metrics.proto";
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 service Controllable {
     rpc Run(RunParams) returns (stream PerformancePacket) {}
+    rpc Stop(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
 //initial running parameters for the strategy

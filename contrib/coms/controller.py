@@ -110,7 +110,7 @@ class BrokerServer(srv.Server):
         broker_rpc.add_BrokerServicer_to_server(self._acc, server)
 
 
-class Controllable(object):
+class ControllableStub(object):
     '''encapsulates utilities for remotely controlling a strategy.'''
 
     def __init__(self, name, controllable_channel):
@@ -180,7 +180,7 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
 
         #a token is generated
         token = self._create_token(client_name, controllable_url)
-        controllable = Controllable(
+        controllable = ControllableStub(
             client_name,
             self._create_channel(controllable_url)
         )

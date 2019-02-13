@@ -108,6 +108,10 @@ class _ControllableServicer(cbl_grpc.ControllableServicer):
         '''runs the strategy'''
         raise NotImplementedError
 
+    def Stop(self, request, context):
+        '''stop everything...'''
+        pass
+
 
 class ControllableServer(srv.Server):
     '''encapsulates a strategy. key and certificate are generated externally'''
