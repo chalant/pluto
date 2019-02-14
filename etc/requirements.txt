@@ -95,3 +95,5 @@ grpcio==1.18.0
 grpcio-tools==1.18.0
 
 kubernetes==8.0.1
+
+cryptography==2.5
