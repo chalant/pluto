@@ -93,3 +93,5 @@ iso3166==0.9
 #For remote procedure calls
 grpcio==1.18.0
 grpcio-tools==1.18.0
+
+kubernetes==8.0.1
