@@ -89,3 +89,7 @@ python-interface==1.4.0
 
 # Country Codes
 iso3166==0.9
+
+#RPC
+grpcio==1.18.0
+grpcio-tools==1.18.0
