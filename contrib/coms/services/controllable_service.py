@@ -4,10 +4,8 @@ from contrib.coms.utils import server_utils as srv
 from zipline.finance.blotter import SimulationBlotter
 
 class ControllableServicer(cbl_grpc.ControllableServicer):
-    def __init__(self, strategy, account_url, token, cert_auth=None):
+    def __init__(self, strategy, cert_auth=None):
         self._str = strategy
-        self._url = account_url
-        self._token = token
         self._ca = cert_auth
 
     def _create_blotter(self, url, live):
@@ -19,7 +17,12 @@ class ControllableServicer(cbl_grpc.ControllableServicer):
     def Run(self, request, context):
         # TODO: before running the algorithm, we must ingest the most recent data from some source.
         # the account stub must be encapsulated in a blotter
-        blotter = self._create_blotter(self._url, request.live)
+        #the url for accessing the broker.
+        url = request.broker_url
+        blotter = self._create_blotter(url, request.live)
         self._str.run(request, context, blotter)
         '''runs the strategy'''
+        raise NotImplementedError
+
+    def Stop(self, request, context):
         raise NotImplementedError
