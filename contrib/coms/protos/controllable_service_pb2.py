@@ -14,6 +14,7 @@ _sym_db = _symbol_database.Default()
 
 from contrib.coms.protos import metrics_pb2 as contrib_dot_coms_dot_protos_dot_metrics__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -21,9 +22,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n.contrib/coms/protos/controllable_service.proto\x1a!contrib/coms/protos/metrics.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9a\x02\n\tRunParams\x12\x14\n\x0c\x63\x61pital_base\x18\x01 \x01(\x02\x12\x31\n\rstart_session\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0b\x65nd_session\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04live\x18\x04 \x01(\x08\x12\x13\n\x0bmetrics_set\x18\x05 \x01(\t\x12\x30\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\x18.RunParams.DataFrequency\x12\x18\n\x10maximum_leverage\x18\x07 \x01(\t\"$\n\rDataFrequency\x12\n\n\x06MINUTE\x10\x00\x12\x07\n\x03\x44\x41Y\x10\x01\"\xcc\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics29\n\x0c\x43ontrollable\x12)\n\x03Run\x12\n.RunParams\x1a\x12.PerformancePacket\"\x00\x30\x01\x62\x06proto3')
+  serialized_pb=_b('\n.contrib/coms/protos/controllable_service.proto\x1a!contrib/coms/protos/metrics.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\"\xae\x02\n\tRunParams\x12\x14\n\x0c\x63\x61pital_base\x18\x01 \x01(\x02\x12\x31\n\rstart_session\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0b\x65nd_session\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04live\x18\x04 \x01(\x08\x12\x13\n\x0bmetrics_set\x18\x05 \x01(\t\x12\x30\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\x18.RunParams.DataFrequency\x12\x18\n\x10maximum_leverage\x18\x07 \x01(\t\x12\x12\n\nbroker_url\x18\x08 \x01(\t\"$\n\rDataFrequency\x12\n\n\x06MINUTE\x10\x00\x12\x07\n\x03\x44\x41Y\x10\x01\"\xcc\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics2s\n\x0c\x43ontrollable\x12)\n\x03Run\x12\n.RunParams\x1a\x12.PerformancePacket\"\x00\x30\x01\x12\x38\n\x04Stop\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x00\x62\x06proto3')
   ,
-  dependencies=[contrib_dot_coms_dot_protos_dot_metrics__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
+  dependencies=[contrib_dot_coms_dot_protos_dot_metrics__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,])
 
 
 
@@ -44,8 +45,8 @@ _RUNPARAMS_DATAFREQUENCY = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=365,
-  serialized_end=401,
+  serialized_start=414,
+  serialized_end=450,
 )
 _sym_db.RegisterEnumDescriptor(_RUNPARAMS_DATAFREQUENCY)
 
@@ -106,6 +107,13 @@ _RUNPARAMS = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='broker_url', full_name='RunParams.broker_url', index=7,
+      number=8, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -119,8 +127,8 @@ _RUNPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=119,
-  serialized_end=401,
+  serialized_start=148,
+  serialized_end=450,
 )
 
 
@@ -171,8 +179,8 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=404,
-  serialized_end=608,
+  serialized_start=453,
+  serialized_end=657,
 )
 
 
@@ -209,8 +217,8 @@ _PERIODPERFORMANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=610,
-  serialized_end=730,
+  serialized_start=659,
+  serialized_end=779,
 )
 
 _RUNPARAMS.fields_by_name['start_session'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
@@ -257,8 +265,8 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=732,
-  serialized_end=789,
+  serialized_start=781,
+  serialized_end=896,
   methods=[
   _descriptor.MethodDescriptor(
     name='Run',
@@ -267,6 +275,15 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_RUNPARAMS,
     output_type=_PERFORMANCEPACKET,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Stop',
+    full_name='Controllable.Stop',
+    index=1,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
 ])
