@@ -2,6 +2,7 @@
 import grpc
 
 from contrib.coms.protos import controllable_service_pb2 as contrib_dot_coms_dot_protos_dot_controllable__service__pb2
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
 class ControllableStub(object):
@@ -19,6 +20,11 @@ class ControllableStub(object):
         request_serializer=contrib_dot_coms_dot_protos_dot_controllable__service__pb2.RunParams.SerializeToString,
         response_deserializer=contrib_dot_coms_dot_protos_dot_controllable__service__pb2.PerformancePacket.FromString,
         )
+    self.Stop = channel.unary_unary(
+        '/Controllable/Stop',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
 
 
 class ControllableServicer(object):
@@ -32,6 +38,13 @@ class ControllableServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def Stop(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_ControllableServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -39,6 +52,11 @@ def add_ControllableServicer_to_server(servicer, server):
           servicer.Run,
           request_deserializer=contrib_dot_coms_dot_protos_dot_controllable__service__pb2.RunParams.FromString,
           response_serializer=contrib_dot_coms_dot_protos_dot_controllable__service__pb2.PerformancePacket.SerializeToString,
+      ),
+      'Stop': grpc.unary_unary_rpc_method_handler(
+          servicer.Stop,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
