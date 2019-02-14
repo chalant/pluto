@@ -20,6 +20,7 @@ message RunParams {
     }
     DataFrequency data_frequency = 6;
     string maximum_leverage = 7; //set the maximum leverage accorded to the strategy
+    string broker_url = 8;
 }
 
 message PerformancePacket {
