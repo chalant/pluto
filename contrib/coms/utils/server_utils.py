@@ -59,6 +59,7 @@ class Server(IServer):
         server = self._server
         if not self._registered:
             self._add_servicer_to_server(server)
+            self._registered = True
         server.start()
 
     def stop(self, grace=None):
