@@ -15,13 +15,8 @@ from kubernetes import (
     client
 )
 
-try:
-    config.load_incluster_config()
-except config.ConfigException:
-    config.load_kube_config()
 
-
-def create_channel(url,certificate=None):
+def create_channel(url, certificate=None):
     if not certificate:
         return insecure_channel(url)
     else:
