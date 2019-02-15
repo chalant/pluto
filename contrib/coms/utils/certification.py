@@ -318,8 +318,8 @@ class CertificateFactory(ABC):
             print('Saved certificate')
             return certificate
 
+    # todo sends a request to an authority: this could be abstracted...
     # sends a certificate request to register the server
-    #todo sends a request to an authority: this could be abstracted...
     def _send_certificate_request(self, body):
         try:
             api_instance = client.CertificatesV1beta1Api()

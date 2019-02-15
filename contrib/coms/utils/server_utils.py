@@ -41,26 +41,11 @@ class IServer(ABC):
 
 class Server(IServer):
     def __init__(self, server_address, key=None, certificate=None):
-        self._address = server_address
-        self._key = key
-        self._cert = certificate
-        self._server = None
+        self._server = self._get_server(server_address, key, certificate)
+        self._registered = False
 
-    def _get_server(self):
-        return self._get_server_internal(
-            self._key,
-            self._address,
-            self._cert,
-        )
-
-    def _get_server_internal(self, server_address, key=None, certificate=None):
-        if not self._server:
-            self._server = self._create_inner_server(
-                server_address,
-                key,
-                certificate
-            )
-        return self._server
+    def _get_server(self, address, key, certificate):
+        return self._create_inner_server(address, key, certificate)
 
     @abstractmethod
     def _add_servicer_to_server(self, server):
@@ -76,10 +61,10 @@ class Server(IServer):
         return srv
 
     def start(self):
-        server = self._get_server()
-        self._add_servicer_to_server(server)
+        server = self._server
+        if not self._registered:
+            self._add_servicer_to_server(server)
         server.start()
 
     def stop(self, grace=None):
-        server = self._get_server()
-        server.stop(grace)
+        self._server.stop(grace)
