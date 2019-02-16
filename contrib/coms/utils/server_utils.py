@@ -10,11 +10,6 @@ from grpc import (
     ssl_channel_credentials
 )
 
-from kubernetes import (
-    config,
-    client
-)
-
 
 def create_channel(url, certificate=None):
     if not certificate:
