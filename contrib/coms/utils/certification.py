@@ -32,6 +32,9 @@ BACKEND = default_backend()
 
 CONFIG = client.Configuration()
 
+def get_root_certificate():
+    with open(CONFIG.ssl_ca_cert) as f:
+        return f.read()
 
 class _NoneIterator(object):
     def __iter__(self):
@@ -320,9 +323,7 @@ class CertificateFactory(ABC):
             self._create_file(
                 path.join(
                     root_path,
-                    cert_name + ".crt"
-                )
-            ).store(certificate)
+                    cert_name + ".crt")).store(certificate)
             print('Saved certificate')
             return certificate
 
@@ -364,10 +365,7 @@ class CertificateFactory(ABC):
                 self._create_file(
                     path.join(
                         storage_dir,
-                        file_name
-                    )
-                ).load()
-            )
+                        file_name)).load())
             c = x509.load_pem_x509_certificate(cert, BACKEND)
             # isinstance(c,x509.Certificate)
             validity_dt = c.not_valid_after  # check for validity of the certificate...
