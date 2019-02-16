@@ -8,8 +8,9 @@ from datetime import datetime
 
 from typing import Iterable
 
-from kubernetes import client, watch
+from kubernetes import client, watch, config
 from kubernetes.client.rest import ApiException
+from kubernetes.config.config_exception import ConfigException
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -22,7 +23,14 @@ from cryptography import x509
 
 from contrib.utils import files
 
+try:
+    config.load_incluster_config()
+except ConfigException:
+    config.load_kube_config()
+
 BACKEND = default_backend()
+
+CONFIG = client.Configuration()
 
 
 class _NoneIterator(object):
