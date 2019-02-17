@@ -227,10 +227,9 @@ class ControllerCertificateFactory(crt.CertificateFactory):
         super(ControllerCertificateFactory, self).__init__()
         self._url = url
 
-    def _create_certificate(self, root_path, cert_name, key):
+    def _create_certificate(self, root_path, cert_name, key, subject):
         '''creates a certificate request or returns a certificate if one exists...'''
         # create the subject of the certificate request
-        subject = crt.CertificateSubject()
         subject.common_name = 'controller'
         subject.alternative_names = [self._url]
         # TODO: how do pod ip's,services etc work?
