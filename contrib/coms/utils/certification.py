@@ -318,7 +318,7 @@ class CertificateFactory(ABC):
             certificate = b64decode(self._send_certificate_request(
                 self._create_certificate(
                     root_path,
-                    cert_name, key)
+                    cert_name, key, CertificateSubject())
             ))
             self._create_file(
                 path.join(
@@ -355,7 +355,7 @@ class CertificateFactory(ABC):
             print("Exception when calling CertificatesV1beta1Api->create_certificate_signing_request: {}\n".format(e))
 
     @abstractmethod
-    def _create_certificate(self, root_path, cert_name, key):
+    def _create_certificate(self, root_path, cert_name, key, subject):
         raise NotImplementedError
 
     def _get_certificate(self, storage_dir, file_name):
