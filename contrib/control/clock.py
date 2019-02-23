@@ -177,11 +177,6 @@ class MinuteSimulationClock(Clock):
         for ts, evt in self._event_generator:
             yield ts, evt
 
-    def _get_minutes_for_list(self, minutes, minute_emission):
-        events_to_include = [BAR, MINUTE_END] if minute_emission else [BAR]
-        for status in itertools.product(minutes, events_to_include):
-            yield status
-
 
 class MinuteRealtimeClock(Clock):
     def __init__(self, calendar_name, ntp_server_address,
