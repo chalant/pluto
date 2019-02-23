@@ -236,10 +236,8 @@ class ControllerCertificateFactory(crt.CertificateFactory):
         # additional addresses: pod ip, pod dns, master IP...
         builder = crt.CertificateSigningRequestBuilder()
         builder.name = 'controller'
-        builder.usages = ['digital signature',
-                          'key encipherment',
-                          'data encipherment',
-                          'server auth']
+        builder.usages = ['digital signature','key encipherment',
+                          'data encipherment','server auth']
         builder.groups = ['system: authenticated']
         return builder.get_certificate_signing_request(subject, key)
 

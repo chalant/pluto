@@ -121,13 +121,11 @@ class AlgorithmSimulator(object):
             #on the server side, we could start processing the data...
             blotter.prune_orders(closed_orders)
 
-            #to avoid multiple calls to the blotter (since it can be remote)
-            orders = blotter.orders
             for transaction in new_transactions:
                 metrics_tracker.process_transaction(transaction)
 
                 # since this order was modified, record it
-                order = orders[transaction.order_id]
+                order = blotter.orders[transaction.order_id]
                 metrics_tracker.process_order(order)
 
             for commission in new_commissions:

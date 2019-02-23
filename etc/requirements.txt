@@ -97,3 +97,5 @@ grpcio-tools==1.18.0
 kubernetes==8.0.1
 
 cryptography==2.5
+
+ntplib==0.3.3
