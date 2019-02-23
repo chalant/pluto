@@ -2,6 +2,8 @@ from collections import OrderedDict
 
 import numpy as np
 
+import pandas as pd
+
 from google.protobuf.empty_pb2 import Empty
 
 from contrib.coms.protos import broker_pb2 as broker_msg
@@ -57,7 +59,7 @@ class Broker(object):
 
     @property
     def transactions(self):
-        return [cv.to_zp_transaction(resp.message) for resp in self._with_metadata(self._stub.Transactions,Empty())]
+        return [cv.to_zp_transaction(resp.message) for resp in self._with_metadata(self._stub.Transactions, Empty())]
 
     def cancel(self, order_id, relay_status=True):
         raise NotImplementedError
@@ -66,7 +68,7 @@ class Broker(object):
         raise NotImplementedError
 
     def _create_order_param(self, asset, style, amount):
-        #todo: check the "get_stop_price" methods
+        # todo: check the "get_stop_price" methods
         t = type(style)
         asset_ = cv.to_proto_asset(asset)
         if t is MarketOrder:
@@ -99,6 +101,7 @@ class Broker(object):
             )
         else:
             raise NotImplementedError
+
 
 # TODO: we need some immutable of the account, portfolio, positions etc. for the strategy developer
 class Account(object):
@@ -137,6 +140,15 @@ class Account(object):
         self._unpaid_dividends = {}
 
         self._payout_last_sale_prices = {}
+
+        self._previous_total_returns = 0
+
+        #todo: we need to load the series from some file, since this must be persisted
+        self._daily_returns_series = pd.Series(np.nan, )
+        self._daily_returns_array = {}
+
+    def _load_daily_returns_series(self):
+        return pd.Series(np.nan, )
 
     def order(self, asset, amount, style, order_id=None):
         order = self._broker.order(asset, amount, style)
@@ -181,6 +193,26 @@ class Account(object):
 
     def _get_dict_values(self, dict_):
         return dict_.values()
+
+    @property
+    def stats(self):
+        return self._compute_stats(self._positions)
+
+    @property
+    def todays_returns(self):
+        return ((self._portfolio.returns + 1) / (self._previous_total_returns + 1) - 1)
+
+    def start_of_session(self, session_label):
+        #todo: before clearing everything, save everything in a file.
+        # (use the session_label as index)
+        self._processed_transactions.clear()
+        self._orders_by_modified.clear()
+        self._orders_by_id.clear()
+
+        self._previous_total_returns = self._portfolio.returns
+
+    def end_of_bar(self, session_ix):
+        self._daily_returns_array[session_ix] = self.todays_returns
 
     @property
     def portfolio(self):
@@ -319,8 +351,7 @@ class Account(object):
             positions[asset].adjust_commission_cost_basis(asset, cost)
 
     # this function is called once a day (called externally by the trade_control or metrics tracker?)
-    def handle_market_open(self, midnight_dt):
-        data_portal = self._data_portal
+    def handle_market_open(self, midnight_dt, data_portal):
         positions = self._positions
         splits = data_portal.get_splits(tuple(positions.keys()), midnight_dt)
         portfolio = self._portfolio

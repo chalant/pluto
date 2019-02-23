@@ -239,6 +239,6 @@ def to_proto_performance_packet(perf_packet):
     return cbl.PerformancePacket(
         cumulative_perf=to_proto_cum_metrics(perf_packet['cumulative_perf']),
         daily_perf=to_proto_period_perf(perf_packet['daily_perf']),
-        minutely_perf=to_proto_period_perf(perf_packet['minutely_perf']),
+        minutely_perf=to_proto_period_perf(perf_packet['minute_perf']),
         cumulative_risk_metrics=to_proto_risk_metrics(perf_packet['cumulative_risk_metrics'])
     )
