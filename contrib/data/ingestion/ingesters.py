@@ -27,7 +27,7 @@ class Ingester(ABC):
 		self._metadata = metadata
 
 	@abstractmethod
-	def ingest(self, show_progress=False):
+	def ingest(self, timestamp=None,show_progress=False):
 		raise NotImplementedError
 
 
@@ -40,7 +40,7 @@ class MetaDataIngester(Ingester):
 		self._st_sess = start_session
 		self._end_sess = end_session
 
-	def ingest(self, show_progress=False):
+	def ingest(self, timestamp=None,show_progress=False):
 		'''todo : ingest metadata (with the asset_db_writer)'''
 		pass
 
@@ -63,7 +63,7 @@ class MinuteEquityIngester(Ingester):
 	def _write(self, generator, show_progress):
 		self._writer.write(generator, show_progress=show_progress)
 
-	def ingest(self, show_progress=False):
+	def ingest(self, timestamp=None,show_progress=False):
 		self._write(self._create_generator(self._collection, self._calendar, self._start_session, self._end_session),
 					show_progress)
 
@@ -86,6 +86,6 @@ class DailyEquityIngester(Ingester):
 	def _write(self, generator, show_progress):
 		self._writer.write(generator, show_progress = show_progress)
 
-	def ingest(self, show_progress=False):
+	def ingest(self, timestamp=None,show_progress=False):
 		self._write(self._create_generator(self._dec, self._calendar, self._start_session, self._end_session),
 					show_progress)

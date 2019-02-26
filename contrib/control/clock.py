@@ -28,15 +28,22 @@ class Events(IntEnum):
     BEFORE_TRADING_START_BAR = 4
     LIQUIDATE = 5
     STOP = 6
+    INITIALIZE = 7
 
 
-BAR, SESSION_START, SESSION_END, MINUTE_END, BEFORE_TRADING_START_BAR, LIQUIDATE, STOP = list(Events)
+BAR, SESSION_START, SESSION_END, MINUTE_END, BEFORE_TRADING_START_BAR, LIQUIDATE, STOP, INITIALIZE = list(Events)
 
+#TODO: should generate the INITIALIZE signal before
 
 class Clock(ABC):
     @abstractmethod
     @property
     def calendar(self):
+        raise NotImplementedError
+
+    @abstractmethod
+    @property
+    def calendar_name(self):
         raise NotImplementedError
 
     @abstractmethod
@@ -53,24 +60,24 @@ class MinuteEventGeneratorFactory(object):
         self._stop = False
         self._liquidate = False
         self._minute_emission = minute_emission
+        self._first_call_flag = False
 
     def stop(self, liquidate=False):
         self._stop = True
         self._liquidate = liquidate
 
-    def get_event_generator(self, calendar, end_dt):
+    def get_event_generator(self, calendar, end_dt, before_trading_starts_time):
         # loops every x frequency
-        start_ts = calendar.opens[0]
+        start_ts = calendar.all_sessions[0]
         start_dt = pd.Timestamp(start_ts.date()).tz_localize(tz='UTC')
 
         sessions = calendar.sessions_in_range(start_dt, end_dt)
         trading_o_and_c = calendar.schedule.ix[sessions]
         market_closes = trading_o_and_c['market_close']
 
-        t = datetime.combine(sessions[0].date(), calendar.open_time) - timedelta(minutes=15)
         before_trading_start_minutes = days_at_time(
             sessions,
-            t.time(),
+            before_trading_starts_time,
             calendar.tz
         )
 
@@ -96,6 +103,9 @@ class MinuteEventGeneratorFactory(object):
             bts_minute = pd.Timestamp(bts_nanos[idx], tz='UTC')
             regular_minutes = minutes_by_session[session_nano]
             if not self._stop:
+                if not self._first_call_flag:
+                    self._first_call_flag = True
+                    yield start_ts, INITIALIZE
                 yield start_ts, SESSION_START
 
                 if bts_minute > regular_minutes[-1]:
@@ -162,16 +172,17 @@ class MinuteSimulationClock(Clock):
         self._minute_emission = minute_emission
         self._egf = minute_event_generator_factory if not None else MinuteEventGeneratorFactory()
 
-        self._event_generator = self._egf.get_event_generator(calendar, end_dt)
+        self._event_generator = self._egf.get_event_generator(
+            calendar, end_dt, datetime.combine(datetime.min,calendar.open_time) - timedelta(minutes=15))
+
+    def calendar_name(self):
+        return self._calendar.name
 
     def stop(self, liquidate=False):
         self._egf.stop(liquidate)
 
     def calendar(self):
         return self._calendar
-
-    def _get_end_dt(self, sessions):
-        return sessions[-1]
 
     def __iter__(self):
         for ts, evt in self._event_generator:
@@ -196,7 +207,13 @@ class MinuteRealtimeClock(Clock):
         self._minute_counter = 0
         self._offset = 0
 
+        self._first_call_flag = False
+        self._time_idx = -1
+
         self._load_attributes(start_dt)
+
+    def calendar_name(self):
+        return self._cal_name
 
     def calendar(self):
         # returns the current calendar.
@@ -206,12 +223,13 @@ class MinuteRealtimeClock(Clock):
         self._egf.stop(liquidate)
 
     def _get_seconds(self, time_delta):
-        return time_delta.seconds
+        return time_delta.total_seconds()
 
     def __iter__(self):
-        opens = self._calendar.opens
+        #todo: should yield an initialize, signal if haven't been done yet.
+        sessions = self._calendar.all_sessions
         delta_seconds = self._get_seconds(
-            pd.Timestamp(opens[0]).tz_localize(tz='UTC') -
+            pd.Timestamp(sessions[0]).tz_localize(tz='UTC') -
             pd.Timestamp.utcfromtimestamp(time.time() + self._get_offset())
         )
 
@@ -222,7 +240,7 @@ class MinuteRealtimeClock(Clock):
         elif delta_seconds < 0:
             # sleep until the next open day.
             t0 = time.time()
-            start_ts = pd.Timestamp(opens[1]).tz_localize(tz='UTC')
+            start_ts = pd.Timestamp(sessions[1]).tz_localize(tz='UTC')
             self._load_attributes(self._calendar.all_sessions[1])
             time.sleep(
                 self._get_seconds(
@@ -251,26 +269,34 @@ class MinuteRealtimeClock(Clock):
         for ts, evt in self._current_generator:
             # for timing external computation
             t0 = time.time()
-            yield pd.Timestamp.utcfromtimestamp(time.time() + self._offset), evt
-
+            ts = pd.Timestamp.utcfromtimestamp(time.time() + self._offset)
+            yield ts, evt
             # update offset every 10 minutes
             minute_counter += 1
             if minute_counter == 10:
                 minute_counter = 0
                 ntp_stats = self._ntp_client.request(ntp_server_address)
                 self._offset = ntp_stats.offset
-
-            # todo: if delta is negative start right away.
             # we take into account the computation delay, so we don't "over-sleep"
-            if evt == SESSION_END:
+            if evt == SESSION_START:
+                #sleep until before trading starts
+                self._time_idx += 1
+                time.sleep(self._get_seconds(
+                    self._calendar.opens[self._time_idx].tz_localize(tz='UTC') -
+                    timedelta(minutes=15)) - ts - time.time() + t0)
+            elif evt == SESSION_END:
+                # sleep until next session start
                 end_dt = self._end_dt
                 if ts.date() == end_dt.date():
+                    #re-load all attributes
                     self._load_attributes(end_dt + pd.Timedelta('1 day'))
-                # sleep for a day
-                time.sleep(86400 - time.time() - t0)
-            else:
+                    time.sleep(self._calendar.all_sessions[1] - ts - time.time() + t0)
+                else:
+                    time.sleep(
+                        self._get_seconds(self._calendar.all_sessions[self._time_idx + 1]) - ts - time.time() + t0)
+            elif evt == BAR:
                 # sleep for a minute
-                time.sleep(60 - time.time() - t0)
+                time.sleep(60 - time.time() + t0)
 
     def _load_attributes(self, start_dt):
         self._start_dt = start_dt
@@ -278,4 +304,7 @@ class MinuteRealtimeClock(Clock):
         self._calendar = cal = get_calendar_in_range(self._cal_name, start_dt)
         self._end_dt = end_dt = cal.all_sessions[-1]
 
-        self._current_generator = self._egf.get_event_generator(cal, end_dt)
+        self._time_idx = -1
+
+        self._current_generator = self._egf.get_event_generator(
+            cal, end_dt, datetime.combine(datetime.min,cal.open_time) - timedelta(minutes=15))

@@ -15,7 +15,8 @@ from contrib.control.clock import (
 	SESSION_END,
 	BEFORE_TRADING_START_BAR,
 	MINUTE_END,
-	FINISH
+	LIQUIDATE,
+	STOP
 )
 
 log = Logger('Algorithm Control')
@@ -70,13 +71,13 @@ class AlgoController(object):
 	def get_simulation_dt(self):
 		return self._simulation_dt
 
-	def _create_bar_data(self, universe_func):
+	def _create_bar_data(self, universe_func, data_portal, get_simulation_dt, data_frequency, calendar,restrictions):
 		return BarData(
-			data_portal=self.data_portal,
-			simulation_dt_func=self.get_simulation_dt,
-			data_frequency=self._sim_params.data_frequency,
-			trading_calendar=self._algo.trading_calendar,
-			restrictions=self._restrictions,
+			data_portal=data_portal,
+			simulation_dt_func=get_simulation_dt,
+			data_frequency=data_frequency,
+			trading_calendar=calendar,
+			restrictions=restrictions,
 			universe_func=universe_func)
 
 	def _every_bar(self, algo, metrics_tracker, dt_to_use, current_data,
@@ -247,7 +248,7 @@ class AlgoController(object):
 		perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
 		return perf_message
 
-	def _get_minute_message(self, dt, algo, metrics_tracker):
+	def _get_minute_message(self, dt, algo, metrics_tracker, data_portal):
 		"""
 		Get a perf message for the given datetime.
 		"""
@@ -255,7 +256,7 @@ class AlgoController(object):
 
 		minute_message = metrics_tracker.handle_minute_close(
 			dt,
-			self.data_portal,
+			data_portal,
 		)
 
 		minute_message['minute_perf']['recorded_vars'] = rvars

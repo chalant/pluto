@@ -230,7 +230,6 @@ class AlgorithmSimulator(object):
                     )
 
                     yield minute_msg
-
             risk_message = metrics_tracker.handle_simulation_end(
                 self.data_portal,
             )
