@@ -38,9 +38,6 @@ class Strategy(ABC):
     def name(self):
         return self._name
 
-    def _from_proto_ts_datetime(self, proto_dt):
-        return proto_dt.ToDatetime()
-
     @abstractmethod
     def _initialize(self, context):
         "this must be implemented"
