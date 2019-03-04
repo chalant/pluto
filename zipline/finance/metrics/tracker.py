@@ -270,9 +270,8 @@ class MetricsTracker(object):
 
         self._current_session = session_label
 
-        cal = self._trading_calendar
         self._market_open, self._market_close = self._execution_open_and_close(
-            cal,
+            self._trading_calendar,
             session_label,
         )
 
