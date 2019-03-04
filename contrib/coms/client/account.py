@@ -608,3 +608,9 @@ class Account(object):
     def _compute_stats(self, positions):
         calculate_position_tracker_stats(positions, self._stats)
         return self._stats
+
+    def capital_change(self, amount):
+        portfolio = self._portfolio
+
+        portfolio.portfolio_value += amount
+        portfolio.cash += amount

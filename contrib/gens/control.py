@@ -1,3 +1,5 @@
+import pandas as pd
+
 from contextlib2 import ExitStack
 from copy import copy
 from logbook import Logger, Processor
@@ -6,7 +8,7 @@ from zipline.finance.order import ORDER_STATUS
 from zipline.protocol import BarData
 from zipline.utils.api_support import ZiplineAPI
 from zipline.data import bundles
-from zipline.data import data_portal
+from zipline.data import data_portal as dp
 from zipline.finance import metrics
 from zipline.finance import trading
 from zipline.finance import blotter
@@ -15,6 +17,8 @@ from zipline.pipeline import loaders
 
 from zipline import algorithm
 
+from contrib.finance.metrics import tracker
+from contrib.sources import benchmark_source as bs
 from contrib.control.clock import (
     BAR,
     SESSION_START,
@@ -26,14 +30,17 @@ from contrib.control.clock import (
     INITIALIZE
 )
 
+log = Logger("ZiplineLog")
+
+#todo: MetricsTracker and Account...
+
 '''This is the "main loop" => controls the algorithm, and handles shut-down signals etc.'''
 class AlgorithmController(object):
-    def __init__(self, strategy, clock, benchmark_source, restrictions, universe_func, bundler):
+    def __init__(self, account, strategy, clock, benchmark_asset, restrictions, universe_func, bundler):
         self._bundler = bundler
-        self._bundle = None
 
         self._strategy = strategy
-        self._account = None
+        self._account = account
         self._emission_rate = clock.emission_rate
 
         self._algo = None
@@ -43,15 +50,17 @@ class AlgorithmController(object):
 
         self._run_dt = None
 
-        self._benchmark_source = benchmark_source
+        #todo: need to validate the benchmark asset.
+        self._benchmark_source = bs.BenchmarkSource(benchmark_asset)
 
         self._universe_func = universe_func
 
         self._restrictions = restrictions
 
-        self._current_data = None
+        self._calendar = None
 
-        self._load_attributes()
+        self._current_data = None
+        self._metrics_tracker = tracker.MetricsTracker(account, )
 
         # Processor function for injecting the algo_dt into
         # user prints/logs.
@@ -61,59 +70,70 @@ class AlgorithmController(object):
 
         self._processor = Processor(inject_algo_dt)
 
+        #we put some algorithm attributes here to extend there life
+        self._capital_changes = {}
+        self._capital_change_deltas = {}
+
+        self._last_sync_time = pd.NaT
+
     def _get_run_dt(self):
         return self._run_dt
 
+    @property
+    def capital(self):
+        return self._capital
+
+    @capital.setter
+    def capital(self, value):
+        self._capital = value
+
     def run(self):
-        algo = self._algo
-        emission_rate = self._emission_rate
-        account = self._account
-        dp = self._data_portal
+        def every_bar(dt_to_use, metrics_tracker, algorithm, handle_data_func, current_data):
+            # syncs the account to the current bar...
+            metrics_tracker.update(dt_to_use)
 
-        current_data = self._current_data
-
-        def every_bar(dt_to_use, current_data=current_data,
-                      handle_data=algo.event_manager.handle_data):
-            for capital_change in calculate_minute_capital_changes(dt_to_use):
-                yield capital_change
+            # for capital_change in calculate_minute_capital_changes(
+            #         dt_to_use, metrics_tracker.portfolio,
+            #         emission_rate,data_portal, metrics_tracker):
+            #     yield capital_change
 
             self._run_dt = dt_to_use
-            algo.on_dt_changed(dt_to_use)
-            #update the account class...
-            account.update(dt_to_use)
-            handle_data(algo, current_data, dt_to_use)
+            algorithm.on_dt_changed(dt_to_use)
+            handle_data_func(algorithm, current_data, dt_to_use)
 
-        def once_a_day(midnight_dt, current_data=current_data, data_portal=dp):
-            for capital_change in algo.calculate_capital_changes(
-                    midnight_dt,emission_rate=emission_rate,is_interday=True):
-                yield capital_change
+            #this area is where new events occur from the handle_data_func (new orders etc.)
+
+        def once_a_day(midnight_dt, algorithm, data_portal, metrics_tracker, trading_calendar):
+            # for capital_change in self._calculate_capital_changes(
+            #         midnight_dt, portfolio, emission_rate, True, data_portal, metrics_tracker):
+            #     yield capital_change
 
             self._run_dt = midnight_dt
-            algo.on_dt_changed(midnight_dt)
+            algorithm.on_dt_changed(midnight_dt)
 
-            account.handle_market_open(midnight_dt, data_portal)
+            metrics_tracker.handle_market_open(midnight_dt, data_portal, trading_calendar)
 
         def on_exit():
             # Remove references to algo, data portal, et al to break cycles
             # and ensure deterministic cleanup of these objects when the
             # simulation finishes.
-            self.algo = None
+            self._algo = None
             self.benchmark_source = self.current_data = self.data_portal = None
 
         with ExitStack() as stack:
             stack.callback(on_exit)
             stack.enter_context(self._processor)
-            stack.enter_context(ZiplineAPI(algo))
+            #stack.enter_context(ZiplineAPI(self._algo)) #todo
+            #todo: the bundler has a data_frequency property?
+            if self._bundler.data_frequency == 'minute':
+                def execute_order_cancellation_policy(blotter, event):
+                    blotter.execute_cancel_policy(event)
 
-            if algo.data_frequency == 'minute':
-                def execute_order_cancellation_policy():
-                    algo.blotter.execute_cancel_policy(SESSION_END)
-
-                def calculate_minute_capital_changes(dt):
+                def calculate_minute_capital_changes(dt, portfolio, emission_rate, dt_portal, mtr_tracker):
                     # process any capital changes that came between the last
                     # and current minutes
-                    return algo.calculate_capital_changes(
-                        dt, emission_rate=emission_rate, is_interday=False)
+                    return self._calculate_capital_changes(
+                        dt, portfolio, emission_rate, False, dt_portal, mtr_tracker)
             else:
                 def execute_order_cancellation_policy():
                     pass
@@ -123,48 +143,65 @@ class AlgorithmController(object):
 
             for dt, action in self._clock:
                 if action == INITIALIZE:
-                    #todo: initialization of everything (account, metrics_tracker etc.)
-                    start_session = dt
+                    self._on_initialize(dt)
 
-                    pass
-                if action == BAR:
-                    for capital_change_packet in every_bar(dt):
-                        yield capital_change_packet
+                elif action == BAR:
+                    algo = self._algo
+                    every_bar(dt, self._metrics_tracker, algo, algo.event_manager.handle_data, self._current_data)
+
                 elif action == SESSION_START:
-                    for capital_change_packet in once_a_day(dt):
-                        yield capital_change_packet
+                    #re-initialize attributes
+                    self._on_session_start(dt)
+                    once_a_day(dt, self._algo, self._data_portal, self._metrics_tracker, self._clock.calendar)
+
                 elif action == SESSION_END:
-                    #todo: at each end of session, data ingestion is made, some things are re-loaded:
-                    # data_portal etc.
-                    positions = account.positions
-                    position_assets = algo.asset_finder.retrieve_all(positions)
-                    self._cleanup_expired_assets(dt, position_assets)
+                    algo = self._algo
+                    dp = self._data_portal
+                    metrics_tracker = self._metrics_tracker
+                    positions = metrics_tracker.positions
+                    position_assets = self._asset_finder.retrieve_all(positions)
+                    #todo: blotter?
+                    #todo: is this step necessary? (clean_expired_assets?) For
+                    self._cleanup_expired_assets(dt, self._blotter, position_assets, dp, metrics_tracker)
 
                     execute_order_cancellation_policy()
                     algo.validate_account_controls()
 
-                    yield self._get_daily_message(dt, algo, account, dp)
+                    yield self._get_daily_message(dt, algo, metrics_tracker, dp)
+
+                    self._on_session_end(dt)
+
                 elif action == BEFORE_TRADING_START_BAR:
-                    self.simulation_dt = dt
+                    algo = self._algo
+                    self._run_dt = dt
                     algo.on_dt_changed(dt)
-                    algo.before_trading_start(current_data)
+                    algo.before_trading_start(self._current_data)
+
                 elif action == MINUTE_END:
-                    minute_msg = self._get_minute_message(
+                    yield self._get_minute_message(
                         dt,
-                        algo,
-                        account,
-                        dp
+                        self._algo,
+                        self._metrics_tracker,
+                        self._data_portal
                     )
-                    yield minute_msg
+
+                    #if we have access to minute data, we should ingest data here.
+                    if self._bundler.data_frequency == 'minute':
+                        self._bundler.ingest()
+                        self._load_attributes(dt,False)
+                    #todo: perform a checkpoint in order to restore state from this point...
+                    # (should be non-blocking)
+
                 elif action == LIQUIDATE:
                     #todo
                     pass
+
                 elif action == STOP:
                     #todo
                     pass
-            # todo: the handle_simulation_end isn't necessary
-            risk_message = metrics_tracker.handle_simulation_end(
-                dp,
+            # todo: the handle_simulation_end isn't necessary?
+            risk_message = self._metrics_tracker.handle_simulation_end(
+                self._data_portal
             )
             yield risk_message
 
@@ -202,7 +239,7 @@ class AlgorithmController(object):
         minute_message['minute_perf']['recorded_vars'] = rvars
         return minute_message
 
-    def _cleanup_expired_assets(self, dt, position_assets, data_portal):
+    def _cleanup_expired_assets(self, dt, blotter, position_assets, data_portal, metrics_tracker):
         """
         Clear out any assets that have expired before starting a new sim day.
 
@@ -215,8 +252,6 @@ class AlgorithmController(object):
            close_position events for any assets that have reached their
            auto_close_date.
         """
-        algo = self._algo
-
         def past_auto_close_date(asset):
             acd = asset.auto_close_date
             return acd is not None and acd <= dt
@@ -224,14 +259,12 @@ class AlgorithmController(object):
         # Remove positions in any sids that have reached their auto_close date.
         assets_to_clear = \
             [asset for asset in position_assets if past_auto_close_date(asset)]
-        metrics_tracker = algo.metrics_tracker
         for asset in assets_to_clear:
             metrics_tracker.process_close_position(asset, dt, data_portal)
 
         # Remove open orders for any sids that have reached their auto close
         # date. These orders get processed immediately because otherwise they
         # would not be processed until the first bar of the next day.
-        blotter = algo.blotter
         assets_to_cancel = [
             asset for asset in blotter.open_orders
             if past_auto_close_date(asset)
@@ -249,7 +282,7 @@ class AlgorithmController(object):
     def _load_data_portal(self, calendar, asset_finder,first_trading_day,
                           equity_minute_bar_reader,equity_daily_bar_reader,
                           adjustment_reader):
-        return data_portal.DataPortal(
+        return dp.DataPortal(
             asset_finder,
             trading_calendar=calendar,
             first_trading_day=first_trading_day,
@@ -258,40 +291,14 @@ class AlgorithmController(object):
             adjustment_reader=adjustment_reader
         )
 
-    def _initialize(self, dt):
+    def _on_initialize(self, dt):
         # initialize all attributes
-        self._load_attributes()
+        self._load_attributes(dt,True)
 
-        def choose_loader(column):
-            if column in data.USEquityPricing.columns:
-                return self._pipeline_loader
-            raise ValueError(
-                "No PipelineLoader registered for column %s." % column
-            )
-
-        self._create_algorithm(
-            start_session=dt,
-            trading_calendar=self._clock.calendar,
-            data_portal=self._data_portal,
-            get_pipeline_loader=choose_loader,
-            emission_rate=self._emission_rate) #todo
-
-    def _create_algorithm(self,
-                          start_session,
-                          end_session,
-                          trading_calendar,
-                          capital_base,
-                          namespace,
-                          data_portal,
-                          get_pipeline_loader,
-                          calendar,
-                          emission_rate,
-                          blotter,
-                          data_frequency='daily',
-                          metrics_set='default',
-                          benchmark_returns=None):
-
-        self._algo = algorithm.TradingAlgorithm(
+    def _create_algorithm(self, start_session, end_session, capital_base,namespace,data_portal,
+                          get_pipeline_loader, calendar, emission_rate, blotter, data_frequency='daily',
+                          metrics_set='default', benchmark_returns=None):
+        return algorithm.TradingAlgorithm(
             namespace={},
             data_portal=data_portal,
             get_pipeline_loader=get_pipeline_loader,
@@ -315,13 +322,17 @@ class AlgorithmController(object):
             }
         )
 
-    def _load_attributes(self):
+    def _on_session_start(self, dt):
         # initialize all attributes
-        self._bundle = bundle = self._bundler.load()
+        self._load_attributes(dt)
+
+    def _load_attributes(self, dt, initialize=False):
+        bundle = self._bundler.load()
         equity_minute_reader = bundle.equity_minute_bar_reader
-        calendar = self._clock.calendar
+        self._calendar = calendar = self._clock.calendar
+        self._asset_finder = asset_finder = bundle.asset_finder
         self._data_portal = portal = self._load_data_portal(
-            self._clock.calendar, bundle.asset_finder, equity_minute_reader.first_trading_day,
+            self._clock.calendar, asset_finder, equity_minute_reader.first_trading_day,
             equity_minute_reader, bundle.equity_daily_bar_reader, bundle.adjustment_reader
         )
 
@@ -334,16 +345,106 @@ class AlgorithmController(object):
             self._restrictions
         )
 
-        self._pipeline_loader =  loaders.USEquityPricingLoader(
+        pipeline_loader = loaders.USEquityPricingLoader(
             # use the current bundle's readers
             bundle.equity_daily_bar_reader,
             bundle.adjustment_reader
         )
 
-    def _on_session_start(self, dt):
-        # re-load bundle and data_portal
-        self._load_attributes()
+        def choose_loader(column):
+            if column in data.USEquityPricing.columns:
+                return pipeline_loader
+            raise ValueError(
+                "No PipelineLoader registered for column %s." % column
+            )
+
+        self._algo = algo = self._create_algorithm(
+            start_session=dt,
+            calendar=self._clock.calendar,
+            data_portal=self._data_portal,
+            get_pipeline_loader=choose_loader,
+            emission_rate=self._emission_rate)  # todo
+
+        #initialize algorithm object
+        algo.on_dt_changed(dt)
+        if initialize:
+            algo.initialize()
+
+        #todo: handle_start_of_simulation (for metrics_tracker etc.)
 
     def _on_session_end(self, dt):
         self._bundler.ingest(timestamp=dt)
+
+    def _calculate_capital_changes(self, dt, portfolio, emission_rate, is_interday,
+                                  data_portal, metrics_tracker, portfolio_value_adjustment=0.0):
+        """
+        If there is a capital change for a given dt, this means that the change
+        occurs before `handle_data` on the given dt. In the case of the
+        change being a target value, the change will be computed on the
+        portfolio value according to prices at the given dt
+
+        `portfolio_value_adjustment`, if specified, will be removed from the
+        portfolio_value of the cumulative performance when calculating deltas
+        from target capital changes.
+        """
+        try:
+            capital_change = self._capital_changes[dt]
+        except KeyError:
+            return
+
+        self._sync_last_sale_prices(data_portal, metrics_tracker, dt)
+        if capital_change['type'] == 'target':
+            target = capital_change['value']
+            capital_change_amount = (
+                target -
+                (
+                    portfolio.portfolio_value -
+                    portfolio_value_adjustment
+                )
+            )
+
+            log.info('Processing capital change to target %s at %s. Capital '
+                     'change delta is %s' % (target, dt,
+                                             capital_change_amount))
+        elif capital_change['type'] == 'delta':
+            target = None
+            capital_change_amount = capital_change['value']
+            log.info('Processing capital change of delta %s at %s'
+                     % (capital_change_amount, dt))
+        else:
+            log.error("Capital change %s does not indicate a valid type "
+                      "('target' or 'delta')" % capital_change)
+            return
+
+        self._capital_change_deltas.update({dt: capital_change_amount})
+        metrics_tracker.capital_change(capital_change_amount)
+
+        yield {
+            'capital_change':
+                {'date': dt,
+                 'type': 'cash',
+                 'target': target,
+                 'delta': capital_change_amount}
+        }
+
+    def _sync_last_sale_prices(self, data_portal, metrics_tracker, dt):
+        """Sync the last sale prices on the metrics tracker to a given
+        datetime.
+
+        Parameters
+        ----------
+        dt : datetime
+            The time to sync the prices to.
+
+        Notes
+        -----
+        This call is cached by the datetime. Repeated calls in the same bar
+        are cheap.
+        """
+        if dt != self._last_sync_time:
+            metrics_tracker.sync_last_sale_prices(
+                dt,
+                data_portal,
+            )
+            self._last_sync_time = dt
 
