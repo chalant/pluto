@@ -11,7 +11,6 @@ from zipline.data import bundles
 from zipline.data import data_portal as dp
 from zipline.finance import metrics
 from zipline.finance import trading
-from zipline.finance import blotter
 from zipline.pipeline import data
 from zipline.pipeline import loaders
 
@@ -32,10 +31,13 @@ from contrib.control.clock import (
 
 log = Logger("ZiplineLog")
 
-#todo: MetricsTracker and Account...
 
-'''This is the "main loop" => controls the algorithm, and handles shut-down signals etc.'''
+# todo: MetricsTracker and Account...
+
 class AlgorithmController(object):
+    """This is the "main class". Handles signals from the controller, controls objects lifespan, executes
+    the strategy and data updates."""
+
     def __init__(self, account, strategy, clock, benchmark_asset, restrictions, universe_func, bundler):
         self._bundler = bundler
 
@@ -50,7 +52,7 @@ class AlgorithmController(object):
 
         self._run_dt = None
 
-        #todo: need to validate the benchmark asset.
+        # todo: need to validate the benchmark asset.
         self._benchmark_source = bs.BenchmarkSource(benchmark_asset)
 
         self._universe_func = universe_func
@@ -60,7 +62,7 @@ class AlgorithmController(object):
         self._calendar = None
 
         self._current_data = None
-        self._metrics_tracker = tracker.MetricsTracker(account, )
+        self._metrics_tracker = tracker.MetricsTracker(account)
 
         # Processor function for injecting the algo_dt into
         # user prints/logs.
@@ -70,49 +72,17 @@ class AlgorithmController(object):
 
         self._processor = Processor(inject_algo_dt)
 
-        #we put some algorithm attributes here to extend there life
-        self._capital_changes = {}
-        self._capital_change_deltas = {}
-
         self._last_sync_time = pd.NaT
+
+        self._capital_target = None
 
     def _get_run_dt(self):
         return self._run_dt
 
-    @property
-    def capital(self):
-        return self._capital
-
-    @capital.setter
-    def capital(self, value):
-        self._capital = value
+    def set_capital_target(self, value):
+        self._capital_target = value
 
     def run(self):
-        def every_bar(dt_to_use, metrics_tracker, algorithm, handle_data_func, current_data):
-            # syncs the account to the current bar...
-            metrics_tracker.update(dt_to_use)
-
-            # for capital_change in calculate_minute_capital_changes(
-            #         dt_to_use, metrics_tracker.portfolio,
-            #         emission_rate,data_portal, metrics_tracker):
-            #     yield capital_change
-
-            self._run_dt = dt_to_use
-            algorithm.on_dt_changed(dt_to_use)
-            handle_data_func(algorithm, current_data, dt_to_use)
-
-            #this area is where new events occur from the handle_data_func (new orders etc.)
-
-        def once_a_day(midnight_dt, algorithm, data_portal, metrics_tracker, trading_calendar):
-            # for capital_change in self._calculate_capital_changes(
-            #         midnight_dt, portfolio, emission_rate, True, data_portal, metrics_tracker):
-            #     yield capital_change
-
-            self._run_dt = midnight_dt
-            algorithm.on_dt_changed(midnight_dt)
-
-            metrics_tracker.handle_market_open(midnight_dt, data_portal, trading_calendar)
-
         def on_exit():
             # Remove references to algo, data portal, et al to break cycles
             # and ensure deterministic cleanup of these objects when the
@@ -123,45 +93,47 @@ class AlgorithmController(object):
         with ExitStack() as stack:
             stack.callback(on_exit)
             stack.enter_context(self._processor)
-            #stack.enter_context(ZiplineAPI(self._algo)) #todo
-            #todo: the bundler has a data_frequency property?
+            # stack.enter_context(ZiplineAPI(self._algo)) #todo
+            # todo: the bundler has a data_frequency property?
             if self._bundler.data_frequency == 'minute':
                 def execute_order_cancellation_policy(blotter, event):
                     blotter.execute_cancel_policy(event)
 
-                def calculate_minute_capital_changes(dt, portfolio, emission_rate, dt_portal, mtr_tracker):
-                    # process any capital changes that came between the last
-                    # and current minutes
-                    return self._calculate_capital_changes(
-                        dt, portfolio, emission_rate, False, dt_portal, mtr_tracker)
             else:
                 def execute_order_cancellation_policy():
                     pass
 
-                def calculate_minute_capital_changes(dt):
-                    return []
+            # has a longer lifespan
+            metrics_tracker = self._metrics_tracker
 
             for dt, action in self._clock:
                 if action == INITIALIZE:
-                    self._on_initialize(dt)
+                    # initialize all attributes
+                    self._load_attributes(dt, True)
 
                 elif action == BAR:
                     algo = self._algo
-                    every_bar(dt, self._metrics_tracker, algo, algo.event_manager.handle_data, self._current_data)
+                    # syncs the account to the current bar...
+                    yield self._update_metrics(algo, metrics_tracker, dt, self._data_portal, self._clock.calendar)
+
+                    algo.event_manager.handle_data(algo, self._current_data, dt)
+                    # this area is where new events occur from the handle_data_func (new orders etc.)
 
                 elif action == SESSION_START:
-                    #re-initialize attributes
-                    self._on_session_start(dt)
-                    once_a_day(dt, self._algo, self._data_portal, self._metrics_tracker, self._clock.calendar)
+                    # re-load attributes
+                    self._load_attributes(dt)
+                    #update metrics
+                    yield self._update_metrics(self._algo, metrics_tracker, dt, self._data_portal, self._clock.calendar)
+
+                    metrics_tracker.handle_market_open(dt, self._data_portal, self._clock.calendar)
 
                 elif action == SESSION_END:
                     algo = self._algo
                     dp = self._data_portal
-                    metrics_tracker = self._metrics_tracker
                     positions = metrics_tracker.positions
                     position_assets = self._asset_finder.retrieve_all(positions)
-                    #todo: blotter?
-                    #todo: is this step necessary? (clean_expired_assets?) For
+                    # todo: blotter?
+                    # todo: is this step necessary? (clean_expired_assets?)
                     self._cleanup_expired_assets(dt, self._blotter, position_assets, dp, metrics_tracker)
 
                     execute_order_cancellation_policy()
@@ -169,7 +141,8 @@ class AlgorithmController(object):
 
                     yield self._get_daily_message(dt, algo, metrics_tracker, dp)
 
-                    self._on_session_end(dt)
+                    # handle the session end (create and store bundle for future load)
+                    self._bundler.on_session_end(dt)
 
                 elif action == BEFORE_TRADING_START_BAR:
                     algo = self._algo
@@ -185,25 +158,20 @@ class AlgorithmController(object):
                         self._data_portal
                     )
 
-                    #if we have access to minute data, we should ingest data here.
-                    if self._bundler.data_frequency == 'minute':
-                        self._bundler.ingest()
-                        self._load_attributes(dt,False)
-                    #todo: perform a checkpoint in order to restore state from this point...
-                    # (should be non-blocking)
+                    # todo: this could be very slow... need a way to optimize this.
+                    if self._bundler.on_minute_end(dt):
+                        # reload all attributes if the bundler handles data-downloads...
+                        self._load_attributes(dt, False)
+
+                    # todo: perform a checkpoint in order to restore state from this point...
+                    # todo: we should be able to restore the state of the account from the broker...
+                    # (should be non-blocking) a sub-process?
 
                 elif action == LIQUIDATE:
-                    #todo
-                    pass
+                    metrics_tracker.handle_liquidation(dt)
 
                 elif action == STOP:
-                    #todo
-                    pass
-            # todo: the handle_simulation_end isn't necessary?
-            risk_message = self._metrics_tracker.handle_simulation_end(
-                self._data_portal
-            )
-            yield risk_message
+                    metrics_tracker.handle_stop(dt)
 
     def _create_bar_data(self, universe_func, data_portal, get_simulation_dt, data_frequency, calendar, restrictions):
         return BarData(
@@ -252,6 +220,7 @@ class AlgorithmController(object):
            close_position events for any assets that have reached their
            auto_close_date.
         """
+
         def past_auto_close_date(asset):
             acd = asset.auto_close_date
             return acd is not None and acd <= dt
@@ -279,8 +248,8 @@ class AlgorithmController(object):
                 metrics_tracker.process_order(order)
                 blotter.new_orders.remove(order)
 
-    def _load_data_portal(self, calendar, asset_finder,first_trading_day,
-                          equity_minute_bar_reader,equity_daily_bar_reader,
+    def _load_data_portal(self, calendar, asset_finder, first_trading_day,
+                          equity_minute_bar_reader, equity_daily_bar_reader,
                           adjustment_reader):
         return dp.DataPortal(
             asset_finder,
@@ -291,11 +260,7 @@ class AlgorithmController(object):
             adjustment_reader=adjustment_reader
         )
 
-    def _on_initialize(self, dt):
-        # initialize all attributes
-        self._load_attributes(dt,True)
-
-    def _create_algorithm(self, start_session, end_session, capital_base,namespace,data_portal,
+    def _create_algorithm(self, start_session, end_session, capital_base, namespace, data_portal,
                           get_pipeline_loader, calendar, emission_rate, blotter, data_frequency='daily',
                           metrics_set='default', benchmark_returns=None):
         return algorithm.TradingAlgorithm(
@@ -322,9 +287,12 @@ class AlgorithmController(object):
             }
         )
 
-    def _on_session_start(self, dt):
-        # initialize all attributes
-        self._load_attributes(dt)
+    def _update_metrics(self, algo, metrics_tracker, dt, data_portal, trading_calendar):
+        yield metrics_tracker.update(dt, data_portal, trading_calendar, self._capital_target)
+
+        self._capital_target = None
+        self._run_dt = dt
+        algo.on_dt_changed(dt)
 
     def _load_attributes(self, dt, initialize=False):
         bundle = self._bundler.load()
@@ -365,86 +333,9 @@ class AlgorithmController(object):
             get_pipeline_loader=choose_loader,
             emission_rate=self._emission_rate)  # todo
 
-        #initialize algorithm object
+        # initialize algorithm object
         algo.on_dt_changed(dt)
         if initialize:
             algo.initialize()
 
-        #todo: handle_start_of_simulation (for metrics_tracker etc.)
-
-    def _on_session_end(self, dt):
-        self._bundler.ingest(timestamp=dt)
-
-    def _calculate_capital_changes(self, dt, portfolio, emission_rate, is_interday,
-                                  data_portal, metrics_tracker, portfolio_value_adjustment=0.0):
-        """
-        If there is a capital change for a given dt, this means that the change
-        occurs before `handle_data` on the given dt. In the case of the
-        change being a target value, the change will be computed on the
-        portfolio value according to prices at the given dt
-
-        `portfolio_value_adjustment`, if specified, will be removed from the
-        portfolio_value of the cumulative performance when calculating deltas
-        from target capital changes.
-        """
-        try:
-            capital_change = self._capital_changes[dt]
-        except KeyError:
-            return
-
-        self._sync_last_sale_prices(data_portal, metrics_tracker, dt)
-        if capital_change['type'] == 'target':
-            target = capital_change['value']
-            capital_change_amount = (
-                target -
-                (
-                    portfolio.portfolio_value -
-                    portfolio_value_adjustment
-                )
-            )
-
-            log.info('Processing capital change to target %s at %s. Capital '
-                     'change delta is %s' % (target, dt,
-                                             capital_change_amount))
-        elif capital_change['type'] == 'delta':
-            target = None
-            capital_change_amount = capital_change['value']
-            log.info('Processing capital change of delta %s at %s'
-                     % (capital_change_amount, dt))
-        else:
-            log.error("Capital change %s does not indicate a valid type "
-                      "('target' or 'delta')" % capital_change)
-            return
-
-        self._capital_change_deltas.update({dt: capital_change_amount})
-        metrics_tracker.capital_change(capital_change_amount)
-
-        yield {
-            'capital_change':
-                {'date': dt,
-                 'type': 'cash',
-                 'target': target,
-                 'delta': capital_change_amount}
-        }
-
-    def _sync_last_sale_prices(self, data_portal, metrics_tracker, dt):
-        """Sync the last sale prices on the metrics tracker to a given
-        datetime.
-
-        Parameters
-        ----------
-        dt : datetime
-            The time to sync the prices to.
-
-        Notes
-        -----
-        This call is cached by the datetime. Repeated calls in the same bar
-        are cheap.
-        """
-        if dt != self._last_sync_time:
-            metrics_tracker.sync_last_sale_prices(
-                dt,
-                data_portal,
-            )
-            self._last_sync_time = dt
-
+        # todo: handle_start_of_simulation (for metrics_tracker etc.)

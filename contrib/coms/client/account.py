@@ -1,10 +1,11 @@
 from collections import OrderedDict
+from functools import partial
 
 import numpy as np
-
 import pandas as pd
-
 from google.protobuf.empty_pb2 import Empty
+from logbook import Logger
+
 
 from contrib.coms.protos import broker_pb2 as broker_msg
 from contrib.coms.protos import broker_pb2_grpc as broker_rpc
@@ -21,8 +22,11 @@ from zipline.finance.execution import (
 )
 from zipline.finance._finance_ext import (
     calculate_position_tracker_stats,
-    PositionStats
+    PositionStats,
+    update_position_last_sale_prices,
 )
+
+log = Logger("ZiplineLog")
 
 
 class Broker(object):
@@ -144,11 +148,17 @@ class Account(object):
         self._previous_total_returns = 0
 
         #todo: we need to load the series from some file, since this must be persisted
-        self._daily_returns_series = pd.Series(np.nan, )
-        self._daily_returns_array = {}
+        self._daily_returns_series = self._load_daily_returns_series()
+        self._daily_returns_array = None
+
+        self._new_session = False
 
     def _load_daily_returns_series(self):
-        return pd.Series(np.nan, )
+        #todo: load from file.
+        return pd.Series()
+
+    def _load_partial_returns_series(self):
+        return pd.Series()
 
     def order(self, asset, amount, style, order_id=None):
         order = self._broker.order(asset, amount, style)
@@ -171,20 +181,20 @@ class Account(object):
         return id_
 
     def orders(self, dt=None):
-        """Retrieve the dict-form of all of the orders in a given bar or for
-                the whole simulation.
+        """
+        Retrieve the dict-form of all of the orders in a given bar or for the whole simulation.
 
-                Parameters
-                ----------
-                dt : pd.Timestamp or None, optional
-                    The particular datetime to look up order for. If not passed, or
-                    None is explicitly passed, all of the orders will be returned.
+        Parameters
+        ----------
+        dt : pd.Timestamp or None, optional
+            The particular datetime to look up order for. If not passed, or
+            None is explicitly passed, all of the orders will be returned.
 
-                Returns
-                -------
-                orders : list[dict]
-                    The order information.
-                """
+        Returns
+        -------
+        orders : list[dict]
+            The order information.
+        """
         if dt is None:
             # orders by id is already flattened
             return [o.to_dict() for o in self._orders_by_id.values()]
@@ -202,6 +212,10 @@ class Account(object):
     def todays_returns(self):
         return ((self._portfolio.returns + 1) / (self._previous_total_returns + 1) - 1)
 
+    @property
+    def daily_returns(self):
+        return self._daily_returns_array
+
     def start_of_session(self, session_label):
         #todo: before clearing everything, save everything in a file.
         # (use the session_label as index)
@@ -210,9 +224,30 @@ class Account(object):
         self._orders_by_id.clear()
 
         self._previous_total_returns = self._portfolio.returns
+        self._new_session = True
 
-    def end_of_bar(self, session_ix):
-        self._daily_returns_array[session_ix] = self.todays_returns
+    def end_of_bar(self, dt):
+        #called before end_of_session
+        if self._new_session:
+            self._daily_returns_array = np.append(self._daily_returns_series.values, self.todays_returns)
+        else:
+            self._daily_returns_array[-1] = self.todays_returns
+
+    def end_of_session(self, dt):
+        self._daily_returns_series[dt] = self.todays_returns
+        self._new_session = False
+
+    def on_stop(self, dt):
+        #todo: save anything that needs to be stored (daily returns series)
+        pass
+
+    def on_liquidate(self, dt):
+        #todo: handle liquidation
+        pass
+
+    def on_minute_end(self, dt):
+        #todo: handle chekpoint
+        pass
 
     @property
     def portfolio(self):
@@ -252,20 +287,63 @@ class Account(object):
 
         return self._processed_transactions.get(dt, [])
 
-    def update(self, dt):
+    def update(self, dt, data_portal, trading_calendar, target_capital=None,
+               portfolio_value_adjustment=0.0, handle_non_market_minutes=False):
         '''Updates this account'''
         # todo: maybe store the last update datetime?
         # this function is called externally at some emission rate
-        self._update_account()
+        portfolio = self._portfolio
 
-    def _update_account(self):
+        #syncs with last_sale_price
+        #todo: if the data frequency is bigger than the emission_rate, don't sync until we've reached
+        # the next session with an offset of period "data_frequency"
+        if handle_non_market_minutes:
+            previous_minute = trading_calendar.previous_minute(dt)
+            get_price = partial(
+                data_portal.get_adjusted_value,
+                field='price',
+                dt=previous_minute,
+                perspective_dt=dt,
+                data_frequency=self.data_frequency,
+            )
+
+        else:
+            get_price = partial(
+                data_portal.get_scalar_asset_spot_value,
+                field='price',
+                dt=dt,
+                data_frequency=self.data_frequency,
+            )
+
+        update_position_last_sale_prices(self.positions, get_price, dt)
+
+        #update capital...
+        if target_capital is not None:
+            capital_change_amount = target_capital - (portfolio.portfolio_value - portfolio_value_adjustment)
+
+            portfolio.portfolio_value += capital_change_amount
+            portfolio.cash += capital_change_amount
+
+            log.info('Processing capital change to target %s at %s. Capital '
+                     'change delta is %s' % (target_capital, dt,
+                                             capital_change_amount))
+            yield {
+                'capital_change':
+                    {'date': dt,
+                     'type': 'cash',
+                     'target': target_capital,
+                     'delta': capital_change_amount}
+            }
+
+        self._update_account(portfolio)
+
+    def _update_account(self, portfolio):
         broker = self._broker
         '''filters transactions that concern this account.'''
         transactions = broker.transactions
         '''Updates the orders positions and transactions of this account'''
 
         orders = broker.orders
-        portfolio = self._portfolio
         positions = self._positions
         orders_by_id = self._orders_by_id
 
@@ -608,9 +686,3 @@ class Account(object):
     def _compute_stats(self, positions):
         calculate_position_tracker_stats(positions, self._stats)
         return self._stats
-
-    def capital_change(self, amount):
-        portfolio = self._portfolio
-
-        portfolio.portfolio_value += amount
-        portfolio.cash += amount
