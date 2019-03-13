@@ -12,35 +12,37 @@ class Metric(abc.ABC):
     def initialization(self, **kwargs):
         """
 
-        Keyword Args:
-             first_open_session: pandas.Timestamp
+        Keyword Arguments
+        -----------------
+        first_open_session: Timestamp
         """
         pass
 
     def end_of_bar(self, **kwargs):
         """
-
-        Keyword Args:
-            packet: dict
-            ledger: contrib.Account
-            dt: pandas.Timestamp
-            emission_rate: str
-            trading_calendar: TradingCalendar
-            data_portal: DataPortal
-            benchmark_source: contrib.BenchmarkSource
+        Keyword Arguments
+        -----------------
+        packet: dict
+        ledger: contrib.Account
+        dt: pandas.Timestamp
+        emission_rate: str
+        trading_calendar: TradingCalendar
+        data_portal: DataPortal
+        benchmark_source: contrib.BenchmarkSource
         """
         pass
 
     def end_of_session(self, **kwargs):
         """
 
-        Keyword Arguments:
-            packet
-            ledger
-            dt
-            trading_calendar
-            data_portal
-            benchmark_source
+        Keyword Arguments
+        -----------------
+        packet : dict
+        ledger : Account
+        dt : Timestamp
+        trading_calendar : TradingCalendar
+        data_portal : DataPortal
+        benchmark_source : BenchmarkSource
         """
         pass
 
@@ -48,11 +50,11 @@ class Metric(abc.ABC):
     def start_of_session(self, **kwargs):
         """
 
-        Keyword Arguments:
-            ledger:
-            session:
-            data_portal:
-
+        Keyword Arguments
+        -----------------
+        ledger : Account
+        session : Timestamp
+        data_portal : DataPortal
         """
         pass
 
