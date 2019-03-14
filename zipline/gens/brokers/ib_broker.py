@@ -906,16 +906,15 @@ class IBBroker(Broker):
                 try:
                     commission = self._tws.commissions[ib_order_id][exec_id].m_commission
                 except KeyError:
-                    log.warning(
-                        "Commission not found for execution: {}".format(
-                            exec_id))
+                    log.warning("Commission not found for execution: {}".format(exec_id))
                     commission = 0
 
                 exec_detail = execution['exec_detail']
                 is_buy = order.amount > 0
                 amount = (exec_detail.m_shares if is_buy
                           else -1 * exec_detail.m_shares)
-                tx = Transaction(
+
+                self._transactions[exec_id] = Transaction(
                     asset=order.asset,
                     amount=amount,
                     dt=pd.to_datetime(exec_detail.m_time, utc=True),
@@ -923,7 +922,6 @@ class IBBroker(Broker):
                     order_id=order.id,
                     commission=commission
                 )
-                self._transactions[exec_id] = tx
 
     def cancel_order(self, zp_order_id):
         ib_order_id = self.orders[zp_order_id].broker_order_id
