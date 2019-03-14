@@ -7,7 +7,7 @@ from logbook import Logger, Processor
 from zipline.finance.order import ORDER_STATUS
 from zipline.protocol import BarData
 from zipline.utils.api_support import ZiplineAPI
-from zipline.data import bundles
+
 from zipline.data import data_portal as dp
 from zipline.finance import metrics
 from zipline.finance import trading
@@ -16,7 +16,6 @@ from zipline.pipeline import loaders
 
 from zipline import algorithm
 
-from contrib.finance.metrics import tracker
 from contrib.sources import benchmark_source as bs
 from contrib.control.clock import (
     BAR,
@@ -38,17 +37,12 @@ class AlgorithmController(object):
     """This is the "main class". Handles signals from the controller, controls objects lifespan, executes
     the strategy and data updates."""
 
-    def __init__(self, account, strategy, clock, benchmark_asset, restrictions, universe_func, bundler):
-        self._bundler = bundler
-
+    def __init__(self, strategy, benchmark_asset, restrictions, universe_func):
         self._strategy = strategy
-        self._account = account
-        self._emission_rate = clock.emission_rate
 
         self._algo = None
 
         self._data_portal = None
-        self._clock = clock
 
         self._run_dt = None
 
@@ -59,16 +53,13 @@ class AlgorithmController(object):
 
         self._restrictions = restrictions
 
-        self._calendar = None
-
         self._current_data = None
-        self._metrics_tracker = tracker.MetricsTracker(account)
 
         # Processor function for injecting the algo_dt into
         # user prints/logs.
         def inject_algo_dt(record):
             if 'algo_dt' not in record.extra:
-                record.extra['algo_dt'] = self.simulation_dt
+                record.extra['algo_dt'] = self._get_run_dt
 
         self._processor = Processor(inject_algo_dt)
 
@@ -82,7 +73,21 @@ class AlgorithmController(object):
     def set_capital_target(self, value):
         self._capital_target = value
 
-    def run(self):
+    def run(self, clock, metrics_tracker, bundler, capital):
+        """
+
+        Parameters
+        ----------
+        clock: contrib.control.clock.Clock
+        metrics_tracker : contrib.finance.metrics.tracker.MetricsTracker
+        bundler
+        capital : float
+
+        Returns
+        -------
+        Iterable
+
+        """
         def on_exit():
             # Remove references to algo, data portal, et al to break cycles
             # and ensure deterministic cleanup of these objects when the
@@ -93,9 +98,10 @@ class AlgorithmController(object):
         with ExitStack() as stack:
             stack.callback(on_exit)
             stack.enter_context(self._processor)
+            # todo: this won't probably work, since the algo instance has a small lifespan
             # stack.enter_context(ZiplineAPI(self._algo)) #todo
-            # todo: the bundler has a data_frequency property?
-            if self._bundler.data_frequency == 'minute':
+            # todo: the bundler has a data_frequency property
+            if bundler.data_frequency == 'minute':
                 def execute_order_cancellation_policy(blotter, event):
                     blotter.execute_cancel_policy(event)
 
@@ -103,29 +109,34 @@ class AlgorithmController(object):
                 def execute_order_cancellation_policy():
                     pass
 
-            # has a longer lifespan
-            metrics_tracker = self._metrics_tracker
-
-            for dt, action in self._clock:
+            for dt, action in clock:
                 if action == INITIALIZE:
                     # initialize all attributes
-                    self._load_attributes(dt, True)
+                    self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, True)
+                    metrics_tracker.handle_initialization(dt, clock.calendar.session_open(dt), capital)
 
                 elif action == BAR:
                     algo = self._algo
-                    # syncs the account to the current bar...
-                    yield self._update_metrics(algo, metrics_tracker, dt, self._data_portal, self._clock.calendar)
+                    # compute capital changes and update account
+                    yield self._capital_changes_and_metrics_update(
+                        algo, metrics_tracker, dt, self._data_portal,
+                        clock.calendar, bundler.data_frequency
+                    )
 
                     algo.event_manager.handle_data(algo, self._current_data, dt)
                     # this area is where new events occur from the handle_data_func (new orders etc.)
+                    metrics_tracker.get_memento(dt)
 
                 elif action == SESSION_START:
                     # re-load attributes
-                    self._load_attributes(dt)
-                    #update metrics
-                    yield self._update_metrics(self._algo, metrics_tracker, dt, self._data_portal, self._clock.calendar)
+                    self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate)
+                    # compute eventual capital changes and update account
+                    yield self._capital_changes_and_metrics_update(
+                        self._algo, metrics_tracker, dt,
+                        self._data_portal, clock.calendar, bundler.data_frequency
+                    )
 
-                    metrics_tracker.handle_market_open(dt, self._data_portal, self._clock.calendar)
+                    metrics_tracker.handle_market_open(dt, self._data_portal, clock.calendar)
 
                 elif action == SESSION_END:
                     algo = self._algo
@@ -142,7 +153,7 @@ class AlgorithmController(object):
                     yield self._get_daily_message(dt, algo, metrics_tracker, dp)
 
                     # handle the session end (create and store bundle for future load)
-                    self._bundler.on_session_end(dt)
+                    bundler.on_session_end(dt)
 
                 elif action == BEFORE_TRADING_START_BAR:
                     algo = self._algo
@@ -154,14 +165,14 @@ class AlgorithmController(object):
                     yield self._get_minute_message(
                         dt,
                         self._algo,
-                        self._metrics_tracker,
+                        metrics_tracker,
                         self._data_portal
                     )
 
                     # todo: this could be very slow... need a way to optimize this.
-                    if self._bundler.on_minute_end(dt):
+                    if bundler.on_minute_end(dt):
                         # reload all attributes if the bundler handles data-downloads...
-                        self._load_attributes(dt, False)
+                        self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, False)
 
                     # todo: perform a checkpoint in order to restore state from this point...
                     # todo: we should be able to restore the state of the account from the broker...
@@ -287,20 +298,19 @@ class AlgorithmController(object):
             }
         )
 
-    def _update_metrics(self, algo, metrics_tracker, dt, data_portal, trading_calendar):
-        yield metrics_tracker.update(dt, data_portal, trading_calendar, self._capital_target)
+    def _capital_changes_and_metrics_update(self, algo, metrics_tracker, dt, data_portal,
+                                            trading_calendar, data_frequency):
+        yield metrics_tracker.update(dt, data_portal, trading_calendar, data_frequency, self._capital_target)
 
         self._capital_target = None
         self._run_dt = dt
         algo.on_dt_changed(dt)
 
-    def _load_attributes(self, dt, initialize=False):
-        bundle = self._bundler.load()
+    def _load_attributes(self, dt, bundle, calendar, emission_rate, initialize=False):
         equity_minute_reader = bundle.equity_minute_bar_reader
-        self._calendar = calendar = self._clock.calendar
         self._asset_finder = asset_finder = bundle.asset_finder
         self._data_portal = portal = self._load_data_portal(
-            self._clock.calendar, asset_finder, equity_minute_reader.first_trading_day,
+            calendar, asset_finder, equity_minute_reader.first_trading_day,
             equity_minute_reader, bundle.equity_daily_bar_reader, bundle.adjustment_reader
         )
 
@@ -328,10 +338,10 @@ class AlgorithmController(object):
 
         self._algo = algo = self._create_algorithm(
             start_session=dt,
-            calendar=self._clock.calendar,
+            calendar=calendar,
             data_portal=self._data_portal,
             get_pipeline_loader=choose_loader,
-            emission_rate=self._emission_rate)  # todo
+            emission_rate=emission_rate)  # todo
 
         # initialize algorithm object
         algo.on_dt_changed(dt)

@@ -4,6 +4,7 @@ from zipline.assets import Asset, ExchangeInfo
 from zipline.finance.order import Order
 from zipline.finance.transaction import Transaction
 from zipline.finance.position import Position
+from zipline import protocol
 
 from contrib.coms.protos import protocol_pb2 as pr
 from contrib.coms.protos import finance_pb2 as fin
@@ -92,6 +93,91 @@ def to_zp_position(proto_position):
         proto_position.cost_basis,
         proto_position.last_sale_price,
         to_datetime(proto_position.last_sale_date)
+    )
+
+
+def to_zp_portfolio(proto_portfolio):
+    portfolio = protocol.MutableView(protocol.Portfolio(to_datetime(proto_portfolio.start_date)))
+    portfolio.cash = proto_portfolio.cash
+    portfolio.cash_flow = proto_portfolio.cash_flow
+    portfolio.starting_cash = proto_portfolio.starting_cash
+    portfolio.pnl = proto_portfolio.pnl
+    portfolio.portfolio_value = proto_portfolio.portfolio_value
+    portfolio.returns = proto_portfolio.returns
+    portfolio.positions = {position.key: to_zp_position(position) for position in proto_portfolio.position}
+    portfolio.positions_value = proto_portfolio.positions_value
+    portfolio.positions_exposure = proto_portfolio.positions_exposure
+
+
+def to_zp_account(proto_account):
+    pass
+
+
+def to_proto_account(zp_account):
+    pass
+
+
+def to_proto_position(zp_position):
+    """
+
+    Parameters
+    ----------
+    zp_position : zipline.finance.position.Position
+
+    Returns
+    -------
+
+
+    """
+    return pr.Position(
+        asset=to_proto_asset(zp_position.asset),
+        amount=zp_position.amount,
+        cost_basis=zp_position.cost_basis,
+        last_sale_price=zp_position.last_sale_price,
+        last_sale_date=to_proto_timestamp(zp_position.last_sale_date)
+    )
+
+
+def to_proto_portfolio(zp_portfolio):
+    """
+
+    Parameters
+    ----------
+    zp_portfolio : protocol.Portfolio
+
+    Returns
+    -------
+
+    """
+    return pr.Portfolio(
+        cash_flow=zp_portfolio.cash_flow,
+        starting_cash=zp_portfolio.starting_cash,
+        portfolio_value=zp_portfolio.portfolio_value,
+        pnl=zp_portfolio.pnl,
+        returns=zp_portfolio.returns,
+        cash=zp_portfolio.cash,
+        positions=[pr.AssetPositionPair(key=asset, position=position)
+                   for asset, position in zp_portfolio.positions.items()],
+        start_date=to_proto_timestamp(zp_portfolio.start_date),
+        positions_value=zp_portfolio.positions_value,
+        positions_exposure=zp_portfolio.positions_exposure
+    )
+
+
+def to_proto_account(zp_account):
+    """
+
+    Parameters
+    ----------
+    zp_account : protocol.Account
+
+    Returns
+    -------
+
+    """
+
+    return pr.Account(
+
     )
 
 

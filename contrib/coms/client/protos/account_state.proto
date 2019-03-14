@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+import "contrib/coms/protos/protocol.proto";
+import "google/protobuf/timestamp.proto";
+
+
+message AccountState {
+    Portfolio portfolio = 1;
+    Account account = 2;
+    google.protobuf.Timestamp last_checkpoint = 3;
+    repeated Order orders = 4;
+}

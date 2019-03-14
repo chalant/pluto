@@ -6,12 +6,11 @@ import pandas as pd
 from google.protobuf.empty_pb2 import Empty
 from logbook import Logger
 
-
 from contrib.coms.protos import broker_pb2 as broker_msg
 from contrib.coms.protos import broker_pb2_grpc as broker_rpc
 from contrib.coms.utils import conversions as cv
 
-from zipline.finance import position
+from zipline.finance import position, order
 from zipline import protocol as prt
 from zipline.assets import Future
 from zipline.finance.execution import (
@@ -25,6 +24,10 @@ from zipline.finance._finance_ext import (
     PositionStats,
     update_position_last_sale_prices,
 )
+
+from contrib.coms.utils import conversions
+from contrib.utils import saving
+from contrib.coms.client.protos import account_state_pb2 as acc
 
 log = Logger("ZiplineLog")
 
@@ -107,14 +110,13 @@ class Broker(object):
             raise NotImplementedError
 
 
-# TODO: we need some immutable of the account, portfolio, positions etc. for the strategy developer
 class Account(object):
     '''Sits on top of the broker in order to "isolate" each virtual account from
     the main account...
     keeps track of its own portfolio etc.
     this account is called externally by the clock.'''
 
-    def __init__(self, token, start_dt, capital, broker_channel, data_portal):
+    def __init__(self, token, start_dt, capital, broker_channel):
         self._broker = Broker(broker_channel, token)
 
         # keep track of the orders of this account
@@ -138,8 +140,6 @@ class Account(object):
         self._im_account = prt.Account()
         self._account = prt.MutableView(self._im_account)
 
-        self._data_portal = data_portal
-
         self._unpaid_stock_dividends = {}
         self._unpaid_dividends = {}
 
@@ -147,14 +147,16 @@ class Account(object):
 
         self._previous_total_returns = 0
 
-        #todo: we need to load the series from some file, since this must be persisted
+        # todo: we need to load the series from some file, since this must be persisted
         self._daily_returns_series = self._load_daily_returns_series()
         self._daily_returns_array = None
 
         self._new_session = False
 
+        self._last_checkpoint = None
+
     def _load_daily_returns_series(self):
-        #todo: load from file.
+        # todo: load from file.
         return pd.Series()
 
     def _load_partial_returns_series(self):
@@ -217,7 +219,7 @@ class Account(object):
         return self._daily_returns_array
 
     def start_of_session(self, session_label):
-        #todo: before clearing everything, save everything in a file.
+        # todo: before clearing everything, save everything in a file.
         # (use the session_label as index)
         self._processed_transactions.clear()
         self._orders_by_modified.clear()
@@ -227,7 +229,7 @@ class Account(object):
         self._new_session = True
 
     def end_of_bar(self, dt):
-        #called before end_of_session
+        # called before end_of_session
         if self._new_session:
             self._daily_returns_array = np.append(self._daily_returns_series.values, self.todays_returns)
         else:
@@ -238,16 +240,96 @@ class Account(object):
         self._new_session = False
 
     def on_stop(self, dt):
-        #todo: save anything that needs to be stored (daily returns series)
+        # todo: save anything that needs to be stored (daily returns series)
         pass
 
     def on_liquidate(self, dt):
-        #todo: handle liquidation
+        # todo: handle liquidation
         pass
 
-    def on_minute_end(self, dt):
-        #todo: handle chekpoint
-        pass
+    def store_state(self, dt, path):
+        """
+
+        Parameters
+        ----------
+        dt : pandas.Timestamp
+
+        Returns
+        -------
+        saving.Memento
+
+        """
+        with open(path, "wb") as f:
+            f.write(
+                acc.AccountState(
+                    portfolio=conversions.to_proto_portfolio(self._im_port),
+                    account=conversions.to_proto_account(self._im_account),
+                    last_checkpoint=conversions.to_proto_timestamp(dt),
+                    orders=[order.to_dict() for order in self._orders_by_id.values()],
+                ).SerializeToString()
+            )
+
+    def restore_state(self, path):
+        def read_path(path):
+            with open(path, "rb") as f:
+                return f.read()
+
+        state = acc.AccountState()
+        state.ParseFromString(read_path(path))
+
+        self._im_port = portfolio = conversions.to_zp_portfolio(state.portfolio)
+        self._portfolio = prt.MutableView(self._im_port)
+        self._im_account = conversions.to_zp_account(state.account)
+        self._account = prt.MutableView(self._im_account)
+        # todo: we should optimise memory usage here...
+        self._positions = positions = portfolio.positions
+
+        self._orders_by_id = {order.id: conversions.to_zp_order(order) for order in state.orders}
+
+        last_checkpoint = state['last_checkpoint']
+
+        # fixme: does the broker keep the whole history of transactions? if not, we should do so on the
+        # server side.
+        broker = self._broker
+
+        for transaction in broker.transactions:
+            # only consider the transaction that occurred after the last checkpoint
+            if transaction.dt >= last_checkpoint:
+                self._update_per_transaction(transaction, positions, portfolio, broker.orders)
+
+    def _update_per_transaction(self, transaction, positions, portfolio, all_orders):
+        # only consider transactions from orders placed by this account
+        orders_by_id = self._orders_by_id
+
+        order_id = transaction.order_id
+        if order_id in orders_by_id:
+            order = all_orders[order_id]
+            commission = transaction.commission
+            asset = order.asset
+            # remove any closed order
+            if not order.open:
+                del orders_by_id[order_id]
+                # todo: save the closed orders? why?
+                self._closed_orders[order_id] = order
+            # update our orders with the new values
+            else:
+                # update the state of the order from the broker.
+                orders_by_id[order_id] = order
+                self._update_position(positions, asset, transaction)
+            self._update_cash(asset, transaction, positions, portfolio)
+            transaction_dict = transaction.to_dict()
+            trx_dt = transaction.dt
+            try:
+                self._append_to_list(self._processed_transactions[trx_dt], transaction_dict)
+            except KeyError:
+                self._processed_transactions[trx_dt] = [transaction_dict]
+            self._process_commission(positions, asset, commission)
+
+    def _order_from_dict(self, dict_order):
+        return order.Order(
+            dict_order['dt'], dict_order['asset'], dict_order['amount'], dict_order['stop'],
+            dict_order['limit'], dict_order['filled'], dict_order['commission'], dict_order['id']
+        )
 
     @property
     def portfolio(self):
@@ -281,21 +363,21 @@ class Account(object):
             # flatten the by-day transactions
             return [
                 txn
-                for by_day in self._processed_transactions
+                for by_day in self._processed_transactions.values()
                 for txn in by_day
             ]
 
         return self._processed_transactions.get(dt, [])
 
-    def update(self, dt, data_portal, trading_calendar, target_capital=None,
+    def update(self, dt, data_portal, trading_calendar, data_frequency, target_capital=None,
                portfolio_value_adjustment=0.0, handle_non_market_minutes=False):
         '''Updates this account'''
         # todo: maybe store the last update datetime?
         # this function is called externally at some emission rate
         portfolio = self._portfolio
 
-        #syncs with last_sale_price
-        #todo: if the data frequency is bigger than the emission_rate, don't sync until we've reached
+        # syncs with last_sale_price
+        # todo: if the data frequency is bigger than the emission_rate, don't sync until we've reached
         # the next session with an offset of period "data_frequency"
         if handle_non_market_minutes:
             previous_minute = trading_calendar.previous_minute(dt)
@@ -304,7 +386,7 @@ class Account(object):
                 field='price',
                 dt=previous_minute,
                 perspective_dt=dt,
-                data_frequency=self.data_frequency,
+                data_frequency=data_frequency,
             )
 
         else:
@@ -312,12 +394,14 @@ class Account(object):
                 data_portal.get_scalar_asset_spot_value,
                 field='price',
                 dt=dt,
-                data_frequency=self.data_frequency,
+                data_frequency=data_frequency,
             )
 
         update_position_last_sale_prices(self.positions, get_price, dt)
 
-        #update capital...
+        self._update_account(portfolio)
+
+        # update capital after updating the portfolio
         if target_capital is not None:
             capital_change_amount = target_capital - (portfolio.portfolio_value - portfolio_value_adjustment)
 
@@ -335,47 +419,16 @@ class Account(object):
                      'delta': capital_change_amount}
             }
 
-        self._update_account(portfolio)
-
     def _update_account(self, portfolio):
+        """Updates portfolio, account and positions"""
         broker = self._broker
-        '''filters transactions that concern this account.'''
-        transactions = broker.transactions
-        '''Updates the orders positions and transactions of this account'''
 
-        orders = broker.orders
         positions = self._positions
-        orders_by_id = self._orders_by_id
 
-        for transaction in transactions:
-            order = orders.get(transaction.order_id, None)
-            # only consider the orders placed from this account
-            if order is not None:
-                commission = transaction.commission
-                order_id = order.id
-                asset = order.asset
-
-                if order_id in orders_by_id:
-                    # remove any closed order
-                    if not order.open:
-                        del orders_by_id[order_id]
-                        # todo: save the closed orders? why?
-                        self._closed_orders[order_id] = order
-                    # update our orders with the new values
-                    else:
-                        # update the state of the order from the broker.
-                        orders_by_id[order_id] = order
-                        self._update_position(positions, asset, transaction)
-                    self._update_cash(asset, transaction, positions, portfolio)
-                    transaction_dict = transaction.to_dict()
-                    trx_dt = transaction.dt
-                    try:
-                        self._append_to_list(self._processed_transactions[trx_dt], transaction_dict)
-                    except KeyError:
-                        self._processed_transactions[trx_dt] = [transaction_dict]
-                    self._process_commission(positions, asset, commission)
+        for transaction in broker.transactions:
+            self._update_per_transaction(transaction, positions, portfolio, broker.orders)
         # update everything after processing transactions, commissions etc.
-        self._update_all(portfolio, positions)
+        self._update_all(portfolio, positions, broker.account)
 
     def _update_cash(self, asset, transaction, positions, portfolio):
         price = transaction.price
@@ -419,10 +472,10 @@ class Account(object):
     def _append_to_list(list_, element):
         list_.append(element)
 
-    def _update_all(self, portfolio, positions):
+    def _update_all(self, portfolio, positions, account):
         stats = self._compute_stats(positions)
-        self._update_portfolio(portfolio, stats)
-        self._update_zp_account(self._broker.account, portfolio, stats)
+        self._update_portfolio(portfolio, stats, positions)
+        self._update_zp_account(account, portfolio, stats)
 
     def _process_commission(self, positions, asset, cost):
         if asset in positions:
@@ -442,7 +495,7 @@ class Account(object):
             data_portal.adjustment_reader
         )
         # update everything
-        self._update_all(portfolio, positions)
+        self._update_all(portfolio, positions, self._account)
 
     def _process_splits(self, portfolio, positions, splits):
         if splits:
@@ -584,9 +637,10 @@ class Account(object):
 
         return net_cash_payment
 
-    def _update_portfolio(self, portfolio, stats):
+    def _update_portfolio(self, portfolio, stats, positions):
         start_value = portfolio.portfolio_value
 
+        portfolio.positions = positions
         # todo: the're some additional values to compute( net_value - futures maintenance margins?)
         portfolio.positions_value = position_value = stats.net_value
         portfolio.position_exposure = stats.net_exposure

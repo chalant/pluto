@@ -4,10 +4,18 @@ from functools import partial
 from dateutil.relativedelta import relativedelta
 
 from contrib.finance import metrics as mtr
+from contrib.utils import saving
 
 
-class MetricsTracker(object):
+class MetricsTracker(saving.Savable):
     def __init__(self, account, metrics=None):
+        """
+
+        Parameters
+        ----------
+        account : contrib.coms.client.account.Account
+        metrics : set
+        """
         self._account = account
 
         self._first_session = None
@@ -31,9 +39,16 @@ class MetricsTracker(object):
 
     def update(self, dt, data_portal, trading_calendar, target_capital=None,
                portfolio_value_adjustment=0.0, handle_non_market_minutes=False):
-        self._account.update(dt, data_portal, trading_calendar, target_capital, portfolio_value_adjustment,
-                             handle_non_market_minutes)
+        yield self._account.update(
+            dt, data_portal, trading_calendar, target_capital,
+            portfolio_value_adjustment, handle_non_market_minutes)
 
+
+    def store_state(self, dt, path):
+        self._account.store_state(dt, path)
+
+    def restore_state(self, path):
+        self._account.restore_state(path)
 
     def handle_minute_close(self, dt, data_portal):
         """
@@ -119,7 +134,7 @@ class MetricsTracker(object):
                 'period_open': self._first_session,
                 'period_close': dt,
             },
-            'progress': self._progress(self),
+            # 'progress': self._progress(self),
             'cumulative_risk_metrics': {},
         }
 
@@ -138,7 +153,7 @@ class MetricsTracker(object):
         return execution_open, execution_close
 
 
-    def handle_initialization(self, first_session, first_open_session, capital_base):
+    def handle_initialization(self, first_session, first_open_session, capital_base, account_state_path=None):
         """
 
         Handles initialization of the metrics tracker.
@@ -154,6 +169,9 @@ class MetricsTracker(object):
         self._first_session = first_session
         self._capital_base = capital_base
 
+        if account_state_path is not None:
+            self._account.restore_state(account_state_path)
+
         for metric in self._metrics:
             metric.initialization(first_open_session=first_open_session)
 
@@ -162,7 +180,7 @@ class MetricsTracker(object):
 
         Parameters
         ----------
-        dt : Timestamp
+        dt : pandas.Timestamp
             Time at which the stop signal was generated
         data_portal : DataPortal
 
@@ -174,8 +192,7 @@ class MetricsTracker(object):
 
         Parameters
         ----------
-        dt : Timestamp
+        dt : pandas.Timestamp
             Time at which the liquidation signal was generated
-        data_portal : DataPortal
 
         """

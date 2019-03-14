@@ -64,7 +64,7 @@ message Portfolio {
     float pnl = 4;
     float returns = 5;
     float cash = 6;
-    repeated AssetPositionPair position = 7;
+    repeated AssetPositionPair positions = 7;
     google.protobuf.Timestamp start_date = 8;
     float positions_value = 9;
     float positions_exposure = 10;
