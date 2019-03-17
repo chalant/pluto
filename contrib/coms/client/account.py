@@ -110,13 +110,24 @@ class Broker(object):
             raise NotImplementedError
 
 
-class Account(object):
-    '''Sits on top of the broker in order to "isolate" each virtual account from
+class AccountSaver(saving.Saver):
+    def __init__(self, state):
+        self._state = state
+
+    def to_bytes(self):
+        return self._state.SerializeToString()
+
+
+class Account(saving.Savable):
+    """
+
+    Sits on top of the broker in order to "isolate" each virtual account from
     the main account...
     keeps track of its own portfolio etc.
-    this account is called externally by the clock.'''
+    this account is called externally by the clock.
+    """
 
-    def __init__(self, token, start_dt, capital, broker_channel):
+    def __init__(self, token, broker_channel):
         self._broker = Broker(broker_channel, token)
 
         # keep track of the orders of this account
@@ -132,8 +143,10 @@ class Account(object):
 
         self._positions = {}
 
-        self._im_port = prt.Portfolio(start_dt, capital)
-        self._portfolio = prt.MutableView(self._im_port)
+        self._start_dt = None
+
+        self._im_port = None
+        self._portfolio = None
 
         self._stats = PositionStats.new()
 
@@ -148,19 +161,11 @@ class Account(object):
         self._previous_total_returns = 0
 
         # todo: we need to load the series from some file, since this must be persisted
-        self._daily_returns_series = self._load_daily_returns_series()
-        self._daily_returns_array = None
+        self._daily_returns_series = None
 
         self._new_session = False
 
         self._last_checkpoint = None
-
-    def _load_daily_returns_series(self):
-        # todo: load from file.
-        return pd.Series()
-
-    def _load_partial_returns_series(self):
-        return pd.Series()
 
     def order(self, asset, amount, style, order_id=None):
         order = self._broker.order(asset, amount, style)
@@ -207,6 +212,14 @@ class Account(object):
         return dict_.values()
 
     @property
+    def capital_base(self):
+        return self._im_port.starting_cash
+
+    @property
+    def first_session(self):
+        return self._start_dt
+
+    @property
     def stats(self):
         return self._compute_stats(self._positions)
 
@@ -216,7 +229,7 @@ class Account(object):
 
     @property
     def daily_returns(self):
-        return self._daily_returns_array
+        return self._daily_returns_series.values
 
     def start_of_session(self, session_label):
         # todo: before clearing everything, save everything in a file.
@@ -226,18 +239,27 @@ class Account(object):
         self._orders_by_id.clear()
 
         self._previous_total_returns = self._portfolio.returns
+
         self._new_session = True
 
     def end_of_bar(self, dt):
         # called before end_of_session
-        if self._new_session:
-            self._daily_returns_array = np.append(self._daily_returns_series.values, self.todays_returns)
-        else:
-            self._daily_returns_array[-1] = self.todays_returns
+        drs = self._daily_returns_series
+        if not self._new_session:
+            drs = drs.drop(drs.tail(1).index)
+        self._daily_returns_series = drs.append(pd.Series([self.todays_returns], index=[dt]))
 
     def end_of_session(self, dt):
         self._daily_returns_series[dt] = self.todays_returns
         self._new_session = False
+
+    def on_initialize(self, dt, capital):
+        self._start_dt = dt
+
+        self._im_port = prt.Portfolio(dt, capital)
+        self._portfolio = prt.MutableView(self._im_port)
+
+        self._daily_returns_series = pd.Series()
 
     def on_stop(self, dt):
         # todo: save anything that needs to be stored (daily returns series)
@@ -247,46 +269,35 @@ class Account(object):
         # todo: handle liquidation
         pass
 
-    def store_state(self, dt, path):
-        """
+    def get_state(self, dt):
+        return acc.AccountState(
+            portfolio=conversions.to_proto_portfolio(self._im_port),
+            account=conversions.to_proto_account(self._im_account),
+            last_checkpoint=conversions.to_proto_timestamp(dt),
+            orders=[order.to_dict() for order in self._orders_by_id.values()],
+            first_session=conversions.to_proto_timestamp(self._start_dt.to_datetime()),
+            daily_returns=[acc.Return(timestamp=ts, value=val) for ts, val in
+                               self._daily_returns_series.items()]
+        ).SerializeToString()
 
-        Parameters
-        ----------
-        dt : pandas.Timestamp
+    def _restore_state(self, state):
+        account = acc.AccountState()
+        account.ParseFromString(state)
 
-        Returns
-        -------
-        saving.Memento
-
-        """
-        with open(path, "wb") as f:
-            f.write(
-                acc.AccountState(
-                    portfolio=conversions.to_proto_portfolio(self._im_port),
-                    account=conversions.to_proto_account(self._im_account),
-                    last_checkpoint=conversions.to_proto_timestamp(dt),
-                    orders=[order.to_dict() for order in self._orders_by_id.values()],
-                ).SerializeToString()
-            )
-
-    def restore_state(self, path):
-        def read_path(path):
-            with open(path, "rb") as f:
-                return f.read()
-
-        state = acc.AccountState()
-        state.ParseFromString(read_path(path))
-
-        self._im_port = portfolio = conversions.to_zp_portfolio(state.portfolio)
-        self._portfolio = prt.MutableView(self._im_port)
-        self._im_account = conversions.to_zp_account(state.account)
-        self._account = prt.MutableView(self._im_account)
+        self._daily_returns_series = pd.Series(
+            {pd.Timestamp(conversions.to_datetime(r.timestamp)): r.value for r in account.daily_returns}
+        )
+        self._start_dt = pd.Timestamp(conversions.to_datetime(account.first_session), tz='UTC')
+        self._im_port = portfolio = conversions.to_zp_portfolio(account.portfolio)
+        self._portfolio = prt.MutableView(portfolio)
+        self._im_account = im_account = conversions.to_zp_account(account.account)
+        self._account = prt.MutableView(im_account)
         # todo: we should optimise memory usage here...
         self._positions = positions = portfolio.positions
 
         self._orders_by_id = {order.id: conversions.to_zp_order(order) for order in state.orders}
 
-        last_checkpoint = state['last_checkpoint']
+        last_checkpoint = account.last_checkpoint
 
         # fixme: does the broker keep the whole history of transactions? if not, we should do so on the
         # server side.

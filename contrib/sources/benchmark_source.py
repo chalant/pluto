@@ -9,6 +9,9 @@ class BenchmarkSource(object):
         self._minutes = pd.DatetimeIndex([])
         self._days = pd.DatetimeIndex([])
 
+        self._precalculated_series = None
+        self._daily_returns = None
+
 
     def on_session_end(self, dt, data_portal, trading_calendar):
         if self._emission_rate == 'daily':
