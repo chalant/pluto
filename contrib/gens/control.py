@@ -1,8 +1,10 @@
-import pandas as pd
+from functools import partial
 
 from contextlib2 import ExitStack
 from copy import copy
 from logbook import Logger, Processor
+
+import pandas as pd
 
 from zipline.finance.order import ORDER_STATUS
 from zipline.protocol import BarData
@@ -70,10 +72,13 @@ class AlgorithmController(object):
     def _get_run_dt(self):
         return self._run_dt
 
+    def set_broker(self, broker):
+        self._broker = broker
+
     def set_capital_target(self, value):
         self._capital_target = value
 
-    def run(self, clock, metrics_tracker, bundler, capital):
+    def run(self, clock, metrics_tracker, bundler, capital, account_state_storage_path):
         """
 
         Parameters
@@ -110,6 +115,7 @@ class AlgorithmController(object):
                     pass
 
             for dt, action in clock:
+                #signal generated ONCE per LIFECYCLE
                 if action == INITIALIZE:
                     # initialize all attributes
                     self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, True)
@@ -122,10 +128,14 @@ class AlgorithmController(object):
                         algo, metrics_tracker, dt, self._data_portal,
                         clock.calendar, bundler.data_frequency
                     )
+                    #store the state of the metrics_tracker and the account...
+
+                    #todo: make this non-blocking (sub-process) => ProcessPool
+                    with open(account_state_storage_path, "wb") as f:
+                        f.write(metrics_tracker.get_state(dt))
 
                     algo.event_manager.handle_data(algo, self._current_data, dt)
                     # this area is where new events occur from the handle_data_func (new orders etc.)
-                    metrics_tracker.get_memento(dt)
 
                 elif action == SESSION_START:
                     # re-load attributes
@@ -174,15 +184,14 @@ class AlgorithmController(object):
                         # reload all attributes if the bundler handles data-downloads...
                         self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, False)
 
-                    # todo: perform a checkpoint in order to restore state from this point...
-                    # todo: we should be able to restore the state of the account from the broker...
-                    # (should be non-blocking) a sub-process?
-
                 elif action == LIQUIDATE:
                     metrics_tracker.handle_liquidation(dt)
 
                 elif action == STOP:
+                    #todo: save the state of the tracker (and account) before shutting down...
                     metrics_tracker.handle_stop(dt)
+                    with open(account_state_storage_path,"wb") as f:
+                        f.write(metrics_tracker.get_state(dt))
 
     def _create_bar_data(self, universe_func, data_portal, get_simulation_dt, data_frequency, calendar, restrictions):
         return BarData(

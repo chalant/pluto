@@ -1,25 +1,8 @@
 import abc
 
-class Memento(abc.ABC):
-    """Encapsulates a method for storing state"""
-    def __init__(self, state):
-        self._state = state
-
-    def store_state(self, path):
-        self._write(path, self._state)
-
-    @abc.abstractmethod
-    def _write(self, path, state):
-        raise NotImplementedError
-
-class ByteMemento(Memento):
-    def _write(self, path, state):
-        with open(path, "wb") as f:
-            f.write(state)
-
 class Savable(abc.ABC):
     @abc.abstractmethod
-    def get_memento(self, dt):
+    def get_state(self, dt):
         """
         Parameters
         ----------
@@ -28,18 +11,23 @@ class Savable(abc.ABC):
 
         Returns
         -------
-        Memento
+        bytes
 
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def restore_state(self, memento):
+    def restore_state(self, state):
         """
 
         Parameters
         ----------
-        memento : Memento
+        state : bytes
 
         """
+        if not isinstance(state, bytes):
+            raise TypeError('Expected an argument of type {} got {}'.format(bytes, type(state)))
+        self._restore_state(state)
+
+    @abc.abstractmethod
+    def _restore_state(self, state):
         raise NotImplementedError

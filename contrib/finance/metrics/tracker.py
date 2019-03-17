@@ -3,12 +3,17 @@ from functools import partial
 
 from dateutil.relativedelta import relativedelta
 
+import pandas as pd
+
 from contrib.finance import metrics as mtr
 from contrib.utils import saving
+from contrib.coms.utils import conversions
+from contrib.coms.client import account as act
+from contrib.finance.metrics import tracker_state_pb2 as trs
 
 
 class MetricsTracker(saving.Savable):
-    def __init__(self, account, metrics=None):
+    def __init__(self, token, broker_channel, metrics=None):
         """
 
         Parameters
@@ -16,10 +21,10 @@ class MetricsTracker(saving.Savable):
         account : contrib.coms.client.account.Account
         metrics : set
         """
-        self._account = account
+        self._account = act.Account(token, broker_channel)
 
         self._first_session = None
-        self._first_market_open = None
+        self._first_open_session = None
         self._capital_base = None
 
         if metrics is None:
@@ -31,7 +36,7 @@ class MetricsTracker(saving.Savable):
 
     @property
     def account(self):
-        return self._account.account
+        return self._account.account #todo
 
     @property
     def positions(self):
@@ -44,11 +49,21 @@ class MetricsTracker(saving.Savable):
             portfolio_value_adjustment, handle_non_market_minutes)
 
 
-    def store_state(self, dt, path):
-        self._account.store_state(dt, path)
+    def get_state(self, dt):
+        return trs.TrackerState(
+            first_open_session=conversions.to_proto_timestamp(self._first_open_session.to_datetime()),
+            account_state=self._account.get_state(dt),
+            last_checkpoint=conversions.to_proto_timestamp(dt.to_datetime())
+        ).SerializeToString()
 
-    def restore_state(self, path):
-        self._account.restore_state(path)
+    def restore_state(self, state):
+        tr_state = trs.TrackerState()
+        tr_state.ParseFromString(state)
+
+        self._first_open_session = pd.Timestamp(conversions.to_datetime(tr_state.first_open_session),tz='UTC')
+
+        self._account.restore_state(tr_state.account_state)
+
 
     def handle_minute_close(self, dt, data_portal):
         """
@@ -65,15 +80,17 @@ class MetricsTracker(saving.Savable):
         A minute perf packet.
 
         """
-        self.sync_last_sale_prices(dt, data_portal)
-        first_session = self._first_session
+        # self.sync_last_sale_prices(dt, data_portal) <= this is already done at the update method...
+        account = self._account
+
+        first_session = account.first_session
 
         packet = {
             'period_start': first_session,
             'period_end': dt,
-            'capital_base': self._capital_base,
+            'capital_base': account.capital_base,
             'minute_perf': {
-                'period_open': self._market_open,
+                'period_open': self._first_open_session,
                 'period_close': dt,
             },
             'cumulative_perf': {
@@ -83,7 +100,7 @@ class MetricsTracker(saving.Savable):
             'progress': None,
             'cumulative_risk_metrics': {},
         }
-        ledger = self._account
+        ledger = account
 
         # updates returns at the end of the bar.
         ledger.end_of_bar(dt)
@@ -99,11 +116,11 @@ class MetricsTracker(saving.Savable):
 
         Parameters
         ----------
-        session_label : Timestamp
+        session_label : pandas.Timestamp
             The label of the session that is about to begin.
         data_portal : DataPortal
             The current data portal.
-        trading_calendar : TradingCalendar
+        trading_calendar : trading_calendars.TradingCalendar
 
         """
         ledger = self._account
@@ -160,17 +177,19 @@ class MetricsTracker(saving.Savable):
 
         Parameters
         ----------
-        first_session : Timestamp
-        first_open_session : Timestamp
+        first_session : pandas.Timestamp
+        first_open_session : pandas.Timestamp
         capital_base : float
 
         """
         self._first_open_session = first_open_session
         self._first_session = first_session
-        self._capital_base = capital_base
 
         if account_state_path is not None:
             self._account.restore_state(account_state_path)
+
+        else:
+            self._account.on_initialize(first_session, capital_base)
 
         for metric in self._metrics:
             metric.initialization(first_open_session=first_open_session)
