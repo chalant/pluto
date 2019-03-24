@@ -98,9 +98,9 @@ class BrokerServicer(broker_rpc.BrokerServicer):
             yield dtb.Bundle(data=chunk)
 
 
-class BrokerServer(srv.Server):
+class BrokerMainServer(srv.MainServerFactory):
     def __init__(self, bundle_factory, broker_url, broker, key=None, certificate=None):
-        super(BrokerServer, self).__init__(broker_url, key, certificate)
+        super(BrokerMainServer, self).__init__(broker_url, key, certificate)
         self._acc = BrokerServicer(bundle_factory, broker)
 
     def add_token(self, token):
@@ -167,7 +167,7 @@ class ControllerServicer(ctl_rpc.ControllerServicer, srv.IServer):
         self._config = files.JsonFile('controller/config')
         self._account_url = broker_url
 
-        self._client_account = BrokerServer(bundle_factory, broker_url, key, certificate)
+        self._client_account = BrokerMainServer(bundle_factory, broker_url, key, certificate)
 
     # TODO: finish this function (registration of the controllable)
     def Register(self, request, context):
@@ -242,10 +242,10 @@ class ControllerCertificateFactory(crt.CertificateFactory):
         return builder.get_certificate_signing_request(subject, key)
 
 
-class ControllerServer(srv.Server):
+class ControllerMainServer(srv.MainServerFactory):
     def __init__(self, bundle_factory, controller_url, broker_url, key=None, certificate=None):
         '''the bundle_factory is an abstraction for creating data bundles.'''
-        super(ControllerServer, self).__init__(controller_url, key, certificate)
+        super(ControllerMainServer, self).__init__(controller_url, key, certificate)
         self._bdf = bundle_factory
         self._key = key
         self._cert = certificate

@@ -18,44 +18,46 @@ def create_channel(url, certificate=None):
         return secure_channel(url, ssl_channel_credentials(certificate))
 
 
-class IServer(ABC):
+class ServerWrapper(ABC):
+    def __init__(self, server):
+        self._server = server
 
-    @abstractmethod
     def start(self):
-        raise NotImplementedError
+        if not self._started:
+            self._server.start()
+            self._started = True
 
-    @abstractmethod
     def stop(self, grace=None):
-        raise NotImplementedError
+        if self._started:
+            self._server.stop(grace)
 
-
-class Server(IServer):
-    def __init__(self, server_address, key=None, certificate=None):
-        self._server = self._get_server(server_address, key, certificate)
-        self._registered = False
-
-    def _get_server(self, address, key, certificate):
-        return self._create_inner_server(address, key, certificate)
-
+class ServerFactory(ABC):
     @abstractmethod
-    def _add_servicer_to_server(self, server):
+    def get_server(self, server_address, key=None, certificate=None):
+        """
+
+        Parameters
+        ----------
+        server_address
+        key
+        certificate
+
+        Returns
+        -------
+        ServerWrapper
+        """
         raise NotImplementedError
 
-    def _create_inner_server(self, url, key=None, certificate=None):
+
+class MainServerFactory(ServerFactory):
+    def get_server(self, server_address, key=None, certificate=None):
+        return self._create_server(server_address, key, certificate)
+
+    def _create_server(self, url, key=None, certificate=None):
         srv = server(ThreadPoolExecutor(max_workers=10))
-        if key:
+        if key and certificate:
             creds = ssl_server_credentials(((key, certificate),))
             srv.add_secure_port(url, server_credentials=creds)
         else:
             srv.add_insecure_port(url)
         return srv
-
-    def start(self):
-        server = self._server
-        if not self._registered:
-            self._add_servicer_to_server(server)
-            self._registered = True
-        server.start()
-
-    def stop(self, grace=None):
-        self._server.stop(grace)

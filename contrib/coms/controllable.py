@@ -106,7 +106,7 @@ class _ControllableServicer(cbl_grpc.ControllableServicer):
         raise NotImplementedError
 
 
-class ControllableServer(srv.Server):
+class ControllableMainServer(srv.MainServerFactory):
     '''encapsulates a strategy. key and certificate are generated externally'''
 
     def __init__(self, name, strategy, controller_url, controllable_url, key=None, certificate=None, ca=None):
@@ -115,7 +115,7 @@ class ControllableServer(srv.Server):
         self._url = controllable_url
         self._stub = ctr.ControllerStub(srv.create_channel(controller_url, ca))
         self._str = strategy
-        super(ControllableServer, self).__init__(
+        super(ControllableMainServer, self).__init__(
             controllable_url,
             key,
             certificate
@@ -157,3 +157,7 @@ class ControllableServer(srv.Server):
         url, token = self._register()
         c = self._cbl = _ControllableServicer(self._str, url, token, self._ca)
         cbl_grpc.add_ControllableServicer_to_server(c, server)
+
+def register_controllable(server, controller_address, contollable_address,
+                          certificate_authority=None):
+    pass

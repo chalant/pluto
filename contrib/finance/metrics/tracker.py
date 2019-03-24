@@ -57,12 +57,15 @@ class MetricsTracker(saving.Savable):
         ).SerializeToString()
 
     def restore_state(self, state):
+        account = self._account
+
         tr_state = trs.TrackerState()
         tr_state.ParseFromString(state)
 
         self._first_open_session = pd.Timestamp(conversions.to_datetime(tr_state.first_open_session),tz='UTC')
 
-        self._account.restore_state(tr_state.account_state)
+        account.restore_state(tr_state.account_state)
+
 
 
     def handle_minute_close(self, dt, data_portal):
@@ -139,8 +142,10 @@ class MetricsTracker(saving.Savable):
             metric.start_of_session(ledger=ledger, data_portal=data_portal)
 
     def handle_market_close(self, dt, data_portal):
+        first_session = self._account.first_session
+
         packet = {
-            'period_start': self._first_session,
+            'period_start': first_session,
             'period_end': dt,
             'capital_base': self._capital_base,
             'daily_perf': {
@@ -148,7 +153,7 @@ class MetricsTracker(saving.Savable):
                 'period_close': dt,
             },
             'cumulative_perf': {
-                'period_open': self._first_session,
+                'period_open': first_session,
                 'period_close': dt,
             },
             # 'progress': self._progress(self),
@@ -170,7 +175,7 @@ class MetricsTracker(saving.Savable):
         return execution_open, execution_close
 
 
-    def handle_initialization(self, first_session, first_open_session, capital_base, account_state_path=None):
+    def handle_initialization(self, first_session, first_open_session, capital_base):
         """
 
         Handles initialization of the metrics tracker.
@@ -185,11 +190,7 @@ class MetricsTracker(saving.Savable):
         self._first_open_session = first_open_session
         self._first_session = first_session
 
-        if account_state_path is not None:
-            self._account.restore_state(account_state_path)
-
-        else:
-            self._account.on_initialize(first_session, capital_base)
+        self._account.on_initialize(first_session, capital_base)
 
         for metric in self._metrics:
             metric.initialization(first_open_session=first_open_session)

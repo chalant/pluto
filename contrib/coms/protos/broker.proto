@@ -5,6 +5,7 @@ import "contrib/coms/protos/assets.proto";
 import "contrib/coms/protos/finance.proto";
 
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 
 import "contrib/coms/protos/data_bundle.proto";
 
@@ -40,6 +41,7 @@ message OrderParams {
     float stop_price = 5;
     float limit_order = 6;
     float exchange = 7;
+    google.protobuf.Timestamp order_dt = 8;
 }
 
 message BatchOrderParams {

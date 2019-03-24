@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+import "contrib/trading_calendars/protos/calendar.proto";
+
+service ClockServer {
+    rpc Listen (google.protobuf.Empty) returns (stream ClockEvent);
+    rpc GetCalendar(google.protobuf.Empty) returns (Calendar);
+    rpc EmissionRate(google.protobuf.Empty) returns (Rate);
+    rpc Register (RegistrationForm) returns (google.protobuf.Empty);
+}
+
+service ClockClient {
+    rpc Update(ClockEvent) returns (google.protobuf.Empty);
+}
+
+message Rate{
+    string emission_rate = 1;
+}
+
+enum Event {
+        INITIALIZE = 0;
+        SESSION_START = 1;
+        BAR = 2;
+        MINUTE_END = 3;
+        SESSION_END = 4;
+        BEFORE_TRADING_START = 5;
+        LIQUIDATE = 6;
+        STOP = 7;
+        CALENDAR = 8;
+    }
+
+message ClockEvent {
+    google.protobuf.Timestamp timestamp = 1;
+    Event event = 2;
+}
+
+
+message Attributes {
+    string calendar_name = 1;
+}
+
+message RegistrationForm {
+    string url = 1;
+    string calendar_name = 2;
+}
