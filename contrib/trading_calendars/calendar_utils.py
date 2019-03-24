@@ -3,6 +3,18 @@ from trading_calendars import calendar_utils as cu
 import pandas as pd
 
 def get_calendar_in_range(name, start_dt, end_dt=None):
+    """
+
+    Parameters
+    ----------
+    name
+    start_dt : pandas.Timestamp
+    end_dt
+
+    Returns
+    -------
+    trading_calendars.TradingCalendar
+    """
     dis = cu.global_calendar_dispatcher
     canonical_name = dis.resolve_alias(name)
     try:

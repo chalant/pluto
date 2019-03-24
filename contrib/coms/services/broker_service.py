@@ -12,7 +12,7 @@ class BrokerServicer(broker_rpc.BrokerServicer):
 
     # todo: must check the metadata...
 
-    def __init__(self, broker, bundle_factory):
+    def __init__(self, bundle_factory, broker):
         # the bundle factory is aggregated, for caching purposes.
         self._bundle_factory = bundle_factory
         self._tokens = set()

@@ -115,10 +115,8 @@ class AlgorithmSimulator(object):
 
             # handle any transactions and commissions coming out new orders
             # placed in the last bar
-            new_transactions, new_commissions, closed_orders = \
-                blotter.get_transactions(current_data)
-            #this signals that the simulation is done with the previous bar data.
-            #on the server side, we could start processing the data...
+            new_transactions, new_commissions, closed_orders = blotter.get_transactions(current_data)
+
             blotter.prune_orders(closed_orders)
 
             for transaction in new_transactions:

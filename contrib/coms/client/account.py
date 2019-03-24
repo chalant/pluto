@@ -32,7 +32,7 @@ from contrib.coms.client.protos import account_state_pb2 as acc
 log = Logger("ZiplineLog")
 
 
-class Broker(object):
+class BrokerStub(object):
     '''Zipline-Server client. Converts zipline objects into proto messages and vice-versa...'''
 
     def __init__(self, channel, token):
@@ -110,14 +110,6 @@ class Broker(object):
             raise NotImplementedError
 
 
-class AccountSaver(saving.Saver):
-    def __init__(self, state):
-        self._state = state
-
-    def to_bytes(self):
-        return self._state.SerializeToString()
-
-
 class Account(saving.Savable):
     """
 
@@ -128,7 +120,7 @@ class Account(saving.Savable):
     """
 
     def __init__(self, token, broker_channel):
-        self._broker = Broker(broker_channel, token)
+        self._broker = BrokerStub(broker_channel, token)
 
         # keep track of the orders of this account
         self._orders_by_id = OrderedDict()
@@ -277,7 +269,7 @@ class Account(saving.Savable):
             orders=[order.to_dict() for order in self._orders_by_id.values()],
             first_session=conversions.to_proto_timestamp(self._start_dt.to_datetime()),
             daily_returns=[acc.Return(timestamp=ts, value=val) for ts, val in
-                               self._daily_returns_series.items()]
+                           self._daily_returns_series.items()]
         ).SerializeToString()
 
     def _restore_state(self, state):

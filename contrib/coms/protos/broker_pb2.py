@@ -16,6 +16,7 @@ from contrib.coms.protos import protocol_pb2 as contrib_dot_coms_dot_protos_dot_
 from contrib.coms.protos import assets_pb2 as contrib_dot_coms_dot_protos_dot_assets__pb2
 from contrib.coms.protos import finance_pb2 as contrib_dot_coms_dot_protos_dot_finance__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from contrib.coms.protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_dot_data__bundle__pb2
 
 
@@ -24,9 +25,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n contrib/coms/protos/broker.proto\x1a\"contrib/coms/protos/protocol.proto\x1a contrib/coms/protos/assets.proto\x1a!contrib/coms/protos/finance.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a%contrib/coms/protos/data_bundle.proto\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x8b\x02\n\x0bOrderParams\x12*\n\x05style\x18\x01 \x01(\x0e\x32\x1b.OrderParams.ExecutionStyle\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\"Y\n\x0e\x45xecutionStyle\x12\x10\n\x0cMARKET_ORDER\x10\x00\x12\x0f\n\x0bLIMIT_ORDER\x10\x01\x12\x0e\n\nSTOP_ORDER\x10\x02\x12\x14\n\x10STOP_LIMIT_ORDER\x10\x03\"0\n\x10\x42\x61tchOrderParams\x12\x1c\n\x06params\x18\x01 \x03(\x0b\x32\x0c.OrderParams2\xec\x03\n\x06\x42roker\x12#\n\x0bSingleOrder\x12\x0c.OrderParams\x1a\x06.Order\x12\x30\n\x0c\x41\x63\x63ountState\x12\x16.google.protobuf.Empty\x1a\x08.Account\x12\x34\n\x0ePortfolioState\x12\x16.google.protobuf.Empty\x1a\n.Portfolio\x12>\n\x0ePositionsState\x12\x16.google.protobuf.Empty\x1a\x12.AssetPositionPair0\x01\x12*\n\x06Orders\x12\x16.google.protobuf.Empty\x1a\x06.Order0\x01\x12\x36\n\x0cTransactions\x12\x16.google.protobuf.Empty\x1a\x0c.Transaction0\x01\x12)\n\nBatchOrder\x12\x11.BatchOrderParams\x1a\x06.Order0\x01\x12-\n\x0b\x43\x61ncelOrder\x12\x06.Order\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12#\n\rGetDataBundle\x12\x07.Domain\x1a\x07.Bundle0\x01\x62\x06proto3')
+  serialized_pb=_b('\n contrib/coms/protos/broker.proto\x1a\"contrib/coms/protos/protocol.proto\x1a contrib/coms/protos/assets.proto\x1a!contrib/coms/protos/finance.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%contrib/coms/protos/data_bundle.proto\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xb9\x02\n\x0bOrderParams\x12*\n\x05style\x18\x01 \x01(\x0e\x32\x1b.OrderParams.ExecutionStyle\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"Y\n\x0e\x45xecutionStyle\x12\x10\n\x0cMARKET_ORDER\x10\x00\x12\x0f\n\x0bLIMIT_ORDER\x10\x01\x12\x0e\n\nSTOP_ORDER\x10\x02\x12\x14\n\x10STOP_LIMIT_ORDER\x10\x03\"0\n\x10\x42\x61tchOrderParams\x12\x1c\n\x06params\x18\x01 \x03(\x0b\x32\x0c.OrderParams2\xec\x03\n\x06\x42roker\x12#\n\x0bSingleOrder\x12\x0c.OrderParams\x1a\x06.Order\x12\x30\n\x0c\x41\x63\x63ountState\x12\x16.google.protobuf.Empty\x1a\x08.Account\x12\x34\n\x0ePortfolioState\x12\x16.google.protobuf.Empty\x1a\n.Portfolio\x12>\n\x0ePositionsState\x12\x16.google.protobuf.Empty\x1a\x12.AssetPositionPair0\x01\x12*\n\x06Orders\x12\x16.google.protobuf.Empty\x1a\x06.Order0\x01\x12\x36\n\x0cTransactions\x12\x16.google.protobuf.Empty\x1a\x0c.Transaction0\x01\x12)\n\nBatchOrder\x12\x11.BatchOrderParams\x1a\x06.Order0\x01\x12-\n\x0b\x43\x61ncelOrder\x12\x06.Order\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12#\n\rGetDataBundle\x12\x07.Domain\x1a\x07.Bundle0\x01\x62\x06proto3')
   ,
-  dependencies=[contrib_dot_coms_dot_protos_dot_protocol__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_assets__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_finance__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_data__bundle__pb2.DESCRIPTOR,])
+  dependencies=[contrib_dot_coms_dot_protos_dot_protocol__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_assets__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_finance__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_data__bundle__pb2.DESCRIPTOR,])
 
 
 
@@ -55,8 +56,8 @@ _ORDERPARAMS_EXECUTIONSTYLE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=423,
-  serialized_end=512,
+  serialized_start=502,
+  serialized_end=591,
 )
 _sym_db.RegisterEnumDescriptor(_ORDERPARAMS_EXECUTIONSTYLE)
 
@@ -87,8 +88,8 @@ _WARNINGMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=209,
-  serialized_end=242,
+  serialized_start=242,
+  serialized_end=275,
 )
 
 
@@ -148,6 +149,13 @@ _ORDERPARAMS = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='order_dt', full_name='OrderParams.order_dt', index=7,
+      number=8, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -161,8 +169,8 @@ _ORDERPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=245,
-  serialized_end=512,
+  serialized_start=278,
+  serialized_end=591,
 )
 
 
@@ -192,12 +200,13 @@ _BATCHORDERPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=514,
-  serialized_end=562,
+  serialized_start=593,
+  serialized_end=641,
 )
 
 _ORDERPARAMS.fields_by_name['style'].enum_type = _ORDERPARAMS_EXECUTIONSTYLE
 _ORDERPARAMS.fields_by_name['asset'].message_type = contrib_dot_coms_dot_protos_dot_assets__pb2._ASSET
+_ORDERPARAMS.fields_by_name['order_dt'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _ORDERPARAMS_EXECUTIONSTYLE.containing_type = _ORDERPARAMS
 _BATCHORDERPARAMS.fields_by_name['params'].message_type = _ORDERPARAMS
 DESCRIPTOR.message_types_by_name['WarningMessage'] = _WARNINGMESSAGE
@@ -234,8 +243,8 @@ _BROKER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=565,
-  serialized_end=1057,
+  serialized_start=644,
+  serialized_end=1136,
   methods=[
   _descriptor.MethodDescriptor(
     name='SingleOrder',

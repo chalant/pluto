@@ -12,6 +12,10 @@ import ntplib
 
 import time
 
+from contrib.coms.utils import server_utils as srv
+
+from contrib.control.clock import clock_pb2_grpc as cl_servicer
+
 from trading_calendars.utils.pandas_utils import days_at_time
 from contrib.trading_calendars.calendar_utils import get_calendar_in_range
 
@@ -59,7 +63,7 @@ class Clock(ABC):
         raise NotImplementedError
 
 
-class MinuteEventGeneratorFactory(object):
+class MinuteEventGenerator(object):
     def __init__(self, minute_emission=False):
         self._stop = False
         self._liquidate = False
@@ -70,10 +74,8 @@ class MinuteEventGeneratorFactory(object):
         self._stop = True
         self._liquidate = liquidate
 
-    def get_event_generator(self, calendar, end_dt, before_trading_starts_time):
+    def get_event_generator(self, calendar, start_dt, end_dt, before_trading_starts_time):
         # loops every x frequency
-        start_ts = calendar.all_sessions[0]
-        start_dt = pd.Timestamp(start_ts.date()).tz_localize(tz='UTC')
 
         sessions = calendar.sessions_in_range(start_dt, end_dt)
         trading_o_and_c = calendar.schedule.ix[sessions]
@@ -109,8 +111,8 @@ class MinuteEventGeneratorFactory(object):
             if not self._stop:
                 if not self._first_call_flag:
                     self._first_call_flag = True
-                    yield start_ts, INITIALIZE
-                yield start_ts, SESSION_START
+                    yield start_dt, INITIALIZE
+                yield start_dt, SESSION_START
 
                 if bts_minute > regular_minutes[-1]:
                     # before_trading_start is after the last close,
@@ -177,16 +179,25 @@ class MinuteClock(Clock):
 
 class MinuteSimulationClock(MinuteClock):
     def __init__(self, calendar, start_dt, end_dt,
-                 minute_emission=False, minute_event_generator_factory=None):
+                 minute_emission=False, minute_event_generator=None):
         super(MinuteSimulationClock,self).__init__(minute_emission)
+        """
+        Parameters
+        ----------
+        calendar : trading_calendars.TradingCalendar
+        start_dt : pandas.Timestamp
+        end_dt : pandas.Timestamp
+        
+        """
         self._calendar = calendar
         self._start_dt = start_dt
-        self._end_dt = end_dt
         self._minute_emission = minute_emission
-        self._egf = minute_event_generator_factory if not None else MinuteEventGeneratorFactory()
+        self._egf = minute_event_generator if not None else MinuteEventGenerator()
 
         self._event_generator = self._egf.get_event_generator(
-            calendar, end_dt, datetime.combine(datetime.min, calendar.open_time) - timedelta(minutes=15))
+            calendar, self._start_dt, end_dt,
+            datetime.combine(datetime.min, calendar.open_time) - timedelta(minutes=15)
+        )
 
     def calendar_name(self):
         return self._calendar.name
@@ -204,15 +215,22 @@ class MinuteSimulationClock(MinuteClock):
 
 class MinuteRealtimeClock(Clock):
     def __init__(self, calendar_name, ntp_server_address,
-                 start_dt=None, minute_emission=True, minute_event_generator_factory=None):
+                 start_dt=None, minute_emission=True, minute_event_generator=None):
         super(MinuteRealtimeClock,self).__init__(minute_emission)
+        """
+        
+        Parameters
+        ----------
+        start_dt : pandas.Timestamp
+        """
         self._cal_name = calendar_name
         self._calendar = None
+        #todo start_dt must be greater or equal to utc now
         self._start_dt = pd.Timestamp(pd.Timestamp.today().date(), tz='UTC') if start_dt is None else start_dt
         # the end_dt is the latest date of the calendar
         self._end_dt = None
 
-        self._egf = minute_event_generator_factory if not None else MinuteEventGeneratorFactory(minute_emission)
+        self._egf = minute_event_generator if not None else MinuteEventGenerator(minute_emission)
         self._current_generator = None
 
         self._ntp_client = ntplib.NTPClient()
@@ -321,4 +339,38 @@ class MinuteRealtimeClock(Clock):
         self._time_idx = -1
 
         self._current_generator = self._egf.get_event_generator(
-            cal, end_dt, datetime.combine(datetime.min, cal.open_time) - timedelta(minutes=15))
+            cal, start_dt, end_dt,
+            datetime.combine(datetime.min, cal.open_time) - timedelta(minutes=15)
+        )
+
+class ClockServicer(cl_servicer.ClockServicer):
+    def __init__(self, clock):
+        """
+
+        Parameters
+        ----------
+        clock : Clock
+        """
+        self._clock = clock
+        self._running = False
+
+    def GetCalendar(self, request, context):
+        #todo: convert this into a message
+        return self._clock.calendar
+
+    def Listen(self, request, context):
+        if not self._running:
+            for ts, evt in self._clock:
+                pass
+            pass
+
+    def EmissionRate(self, request, context):
+        pass
+
+class ClockMainServer(srv.MainServerFactory):
+    def __init__(self, clock, server_address,key=None, certificate=None):
+        super(ClockMainServer, self).__init__(server_address, key, certificate)
+        self._servicer = ClockServicer(clock)
+
+    def _add_servicer_to_server(self, server):
+        cl_servicer.add_ClockServicer_to_server(self._servicer,server)

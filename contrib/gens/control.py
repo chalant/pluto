@@ -1,4 +1,5 @@
 from functools import partial
+from concurrent import futures
 
 from contextlib2 import ExitStack
 from copy import copy
@@ -40,6 +41,15 @@ class AlgorithmController(object):
     the strategy and data updates."""
 
     def __init__(self, strategy, benchmark_asset, restrictions, universe_func):
+        """
+
+        Parameters
+        ----------
+        strategy
+        benchmark_asset
+        restrictions
+        universe_func
+        """
         self._strategy = strategy
 
         self._algo = None
@@ -78,7 +88,11 @@ class AlgorithmController(object):
     def set_capital_target(self, value):
         self._capital_target = value
 
-    def run(self, clock, metrics_tracker, bundler, capital, account_state_storage_path):
+    def _store_state(self, path, metrics_tracker, dt):
+        with open(path, "wb") as f:
+            f.write(metrics_tracker.get_state(dt))
+
+    def run(self, clock, metrics_tracker, bundler, capital, state_storage_path):
         """
 
         Parameters
@@ -87,12 +101,16 @@ class AlgorithmController(object):
         metrics_tracker : contrib.finance.metrics.tracker.MetricsTracker
         bundler
         capital : float
+        state_storage_path : str
 
         Returns
         -------
-        Iterable
+        generator
 
         """
+
+        pool = futures.ProcessPoolExecutor()
+
         def on_exit():
             # Remove references to algo, data portal, et al to break cycles
             # and ensure deterministic cleanup of these objects when the
@@ -119,20 +137,25 @@ class AlgorithmController(object):
                 if action == INITIALIZE:
                     # initialize all attributes
                     self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, True)
-                    metrics_tracker.handle_initialization(dt, clock.calendar.session_open(dt), capital)
+                    #check if there is a previously store state.
+                    try:
+                        with open(state_storage_path, "rb") as f:
+                            metrics_tracker.restore_state(f.read())
+                    except FileNotFoundError:
+                        metrics_tracker.handle_initialization(dt, clock.calendar.session_open(dt), capital)
 
                 elif action == BAR:
                     algo = self._algo
+
                     # compute capital changes and update account
                     yield self._capital_changes_and_metrics_update(
                         algo, metrics_tracker, dt, self._data_portal,
                         clock.calendar, bundler.data_frequency
                     )
-                    #store the state of the metrics_tracker and the account...
 
-                    #todo: make this non-blocking (sub-process) => ProcessPool
-                    with open(account_state_storage_path, "wb") as f:
-                        f.write(metrics_tracker.get_state(dt))
+                    self._run_dt = dt
+                    #make a checkpoint of the state or the tracker as a sub-process
+                    pool.submit(self._store_state, path=state_storage_path, metrics_tracker=metrics_tracker, dt=dt)
 
                     algo.event_manager.handle_data(algo, self._current_data, dt)
                     # this area is where new events occur from the handle_data_func (new orders etc.)
@@ -146,16 +169,15 @@ class AlgorithmController(object):
                         self._data_portal, clock.calendar, bundler.data_frequency
                     )
 
+                    self._run_dt = dt
                     metrics_tracker.handle_market_open(dt, self._data_portal, clock.calendar)
 
                 elif action == SESSION_END:
                     algo = self._algo
                     dp = self._data_portal
-                    positions = metrics_tracker.positions
-                    position_assets = self._asset_finder.retrieve_all(positions)
-                    # todo: blotter?
-                    # todo: is this step necessary? (clean_expired_assets?)
-                    self._cleanup_expired_assets(dt, self._blotter, position_assets, dp, metrics_tracker)
+                    # # todo: blotter?
+                    # # todo: is this step necessary? (clean_expired_assets?)
+                    # self._cleanup_expired_assets(dt, self._blotter, position_assets, dp, metrics_tracker)
 
                     execute_order_cancellation_policy()
                     algo.validate_account_controls()
@@ -190,7 +212,7 @@ class AlgorithmController(object):
                 elif action == STOP:
                     #todo: save the state of the tracker (and account) before shutting down...
                     metrics_tracker.handle_stop(dt)
-                    with open(account_state_storage_path,"wb") as f:
+                    with open(state_storage_path, "wb") as f:
                         f.write(metrics_tracker.get_state(dt))
 
     def _create_bar_data(self, universe_func, data_portal, get_simulation_dt, data_frequency, calendar, restrictions):
@@ -246,8 +268,7 @@ class AlgorithmController(object):
             return acd is not None and acd <= dt
 
         # Remove positions in any sids that have reached their auto_close date.
-        assets_to_clear = \
-            [asset for asset in position_assets if past_auto_close_date(asset)]
+        assets_to_clear = [asset for asset in position_assets if past_auto_close_date(asset)]
         for asset in assets_to_clear:
             metrics_tracker.process_close_position(asset, dt, data_portal)
 
@@ -280,6 +301,7 @@ class AlgorithmController(object):
             adjustment_reader=adjustment_reader
         )
 
+    #todo: we don't need a metrics_set here...
     def _create_algorithm(self, start_session, end_session, capital_base, namespace, data_portal,
                           get_pipeline_loader, calendar, emission_rate, blotter, data_frequency='daily',
                           metrics_set='default', benchmark_returns=None):
@@ -315,7 +337,7 @@ class AlgorithmController(object):
         self._run_dt = dt
         algo.on_dt_changed(dt)
 
-    def _load_attributes(self, dt, bundle, calendar, emission_rate, initialize=False):
+    def _load_attributes(self, dt, bundle, calendar, emission_rate, data_frequency='daily', initialize=False):
         equity_minute_reader = bundle.equity_minute_bar_reader
         self._asset_finder = asset_finder = bundle.asset_finder
         self._data_portal = portal = self._load_data_portal(
@@ -327,7 +349,7 @@ class AlgorithmController(object):
             self._universe_func,
             portal,
             self._get_run_dt,
-            'daily',
+            data_frequency,
             calendar,
             self._restrictions
         )
