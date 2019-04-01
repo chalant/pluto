@@ -23,7 +23,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n!contrib/control/clock/clock.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a/contrib/trading_calendars/protos/calendar.proto\"\x1d\n\x04Rate\x12\x15\n\remission_rate\x18\x01 \x01(\t\"R\n\nClockEvent\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\"#\n\nAttributes\x12\x15\n\rcalendar_name\x18\x01 \x01(\t\"6\n\x10RegistrationForm\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t*\x95\x01\n\x05\x45vent\x12\x0e\n\nINITIALIZE\x10\x00\x12\x11\n\rSESSION_START\x10\x01\x12\x07\n\x03\x42\x41R\x10\x02\x12\x0e\n\nMINUTE_END\x10\x03\x12\x0f\n\x0bSESSION_END\x10\x04\x12\x18\n\x14\x42\x45\x46ORE_TRADING_START\x10\x05\x12\r\n\tLIQUIDATE\x10\x06\x12\x08\n\x04STOP\x10\x07\x12\x0c\n\x08\x43\x41LENDAR\x10\x08\x32\xd6\x01\n\x0b\x43lockServer\x12/\n\x06Listen\x12\x16.google.protobuf.Empty\x1a\x0b.ClockEvent0\x01\x12\x30\n\x0bGetCalendar\x12\x16.google.protobuf.Empty\x1a\t.Calendar\x12-\n\x0c\x45missionRate\x12\x16.google.protobuf.Empty\x1a\x05.Rate\x12\x35\n\x08Register\x12\x11.RegistrationForm\x1a\x16.google.protobuf.Empty2<\n\x0b\x43lockClient\x12-\n\x06Update\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Emptyb\x06proto3')
+  serialized_pb=_b('\n!contrib/control/clock/clock.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a/contrib/trading_calendars/protos/calendar.proto\"\x83\x01\n\x10\x43\x61lendarMetadata\x12)\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1b\n\x08\x63\x61lendar\x18\x03 \x01(\x0b\x32\t.Calendar\"H\n\nAttributes\x12\x15\n\remission_rate\x18\x01 \x01(\t\x12#\n\x08\x63\x61lendar\x18\x02 \x01(\x0b\x32\x11.CalendarMetadata\"R\n\nClockEvent\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\"\xd7\x01\n\x19SimulationClockParameters\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12.\n\nstart_date\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12$\n\remission_rate\x18\x06 \x01(\x0e\x32\r.EmissionRate\"-\n\x17SimulationRunParameters\x12\x12\n\nsession_id\x18\x01 \x01(\t\"c\n\x17RealtimeClockParameters\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t\x12$\n\remission_rate\x18\x03 \x01(\x0e\x32\r.EmissionRate\"\x16\n\x05State\x12\r\n\x05\x61live\x18\x01 \x01(\x08*\x95\x01\n\x05\x45vent\x12\x0e\n\nINITIALIZE\x10\x00\x12\x11\n\rSESSION_START\x10\x01\x12\x07\n\x03\x42\x41R\x10\x02\x12\x0e\n\nMINUTE_END\x10\x03\x12\x0f\n\x0bSESSION_END\x10\x04\x12\x18\n\x14\x42\x45\x46ORE_TRADING_START\x10\x05\x12\r\n\tLIQUIDATE\x10\x06\x12\x08\n\x04STOP\x10\x07\x12\x0c\n\x08\x43\x41LENDAR\x10\x08* \n\x04Mode\x12\x0e\n\nSIMULATION\x10\x00\x12\x08\n\x04LIVE\x10\x01*%\n\x0c\x45missionRate\x12\n\n\x06MINUTE\x10\x00\x12\t\n\x05\x44\x41ILY\x10\x01\x32\x85\x01\n\x15SimulationClockRouter\x12\x33\n\x08Register\x12\x1a.SimulationClockParameters\x1a\x0b.Attributes\x12\x37\n\x03Run\x12\x18.SimulationRunParameters\x1a\x16.google.protobuf.Empty2H\n\x13RealtimeClockRouter\x12\x31\n\x08Register\x12\x18.RealtimeClockParameters\x1a\x0b.Attributes2y\n\rRealtimeClock\x12\x31\n\x08Register\x12\x18.RealtimeClockParameters\x1a\x0b.Attributes\x12\x35\n\x03Run\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xa9\x01\n\x0fSimulationClock\x12\x33\n\x08Register\x12\x1a.SimulationClockParameters\x1a\x0b.Attributes\x12\x35\n\x03Run\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12*\n\x08GetState\x12\x16.google.protobuf.Empty\x1a\x06.State2q\n\x0b\x43lockClient\x12-\n\x06Update\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x33\n\x0e\x43\x61lendarUpdate\x12\t.Calendar\x1a\x16.google.protobuf.Emptyb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2.DESCRIPTOR,])
 
@@ -72,12 +72,58 @@ _EVENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=357,
-  serialized_end=506,
+  serialized_start=831,
+  serialized_end=980,
 )
 _sym_db.RegisterEnumDescriptor(_EVENT)
 
 Event = enum_type_wrapper.EnumTypeWrapper(_EVENT)
+_MODE = _descriptor.EnumDescriptor(
+  name='Mode',
+  full_name='Mode',
+  filename=None,
+  file=DESCRIPTOR,
+  values=[
+    _descriptor.EnumValueDescriptor(
+      name='SIMULATION', index=0, number=0,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='LIVE', index=1, number=1,
+      serialized_options=None,
+      type=None),
+  ],
+  containing_type=None,
+  serialized_options=None,
+  serialized_start=982,
+  serialized_end=1014,
+)
+_sym_db.RegisterEnumDescriptor(_MODE)
+
+Mode = enum_type_wrapper.EnumTypeWrapper(_MODE)
+_EMISSIONRATE = _descriptor.EnumDescriptor(
+  name='EmissionRate',
+  full_name='EmissionRate',
+  filename=None,
+  file=DESCRIPTOR,
+  values=[
+    _descriptor.EnumValueDescriptor(
+      name='MINUTE', index=0, number=0,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='DAILY', index=1, number=1,
+      serialized_options=None,
+      type=None),
+  ],
+  containing_type=None,
+  serialized_options=None,
+  serialized_start=1016,
+  serialized_end=1053,
+)
+_sym_db.RegisterEnumDescriptor(_EMISSIONRATE)
+
+EmissionRate = enum_type_wrapper.EnumTypeWrapper(_EMISSIONRATE)
 INITIALIZE = 0
 SESSION_START = 1
 BAR = 2
@@ -87,20 +133,38 @@ BEFORE_TRADING_START = 5
 LIQUIDATE = 6
 STOP = 7
 CALENDAR = 8
+SIMULATION = 0
+LIVE = 1
+MINUTE = 0
+DAILY = 1
 
 
 
-_RATE = _descriptor.Descriptor(
-  name='Rate',
-  full_name='Rate',
+_CALENDARMETADATA = _descriptor.Descriptor(
+  name='CalendarMetadata',
+  full_name='CalendarMetadata',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='emission_rate', full_name='Rate.emission_rate', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
+      name='start', full_name='CalendarMetadata.start', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='end', full_name='CalendarMetadata.end', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='calendar', full_name='CalendarMetadata.calendar', index=2,
+      number=3, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -116,8 +180,46 @@ _RATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=148,
-  serialized_end=177,
+  serialized_start=149,
+  serialized_end=280,
+)
+
+
+_ATTRIBUTES = _descriptor.Descriptor(
+  name='Attributes',
+  full_name='Attributes',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='emission_rate', full_name='Attributes.emission_rate', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='calendar', full_name='Attributes.calendar', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=282,
+  serialized_end=354,
 )
 
 
@@ -154,63 +256,60 @@ _CLOCKEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=179,
-  serialized_end=261,
+  serialized_start=356,
+  serialized_end=438,
 )
 
 
-_ATTRIBUTES = _descriptor.Descriptor(
-  name='Attributes',
-  full_name='Attributes',
+_SIMULATIONCLOCKPARAMETERS = _descriptor.Descriptor(
+  name='SimulationClockParameters',
+  full_name='SimulationClockParameters',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='calendar_name', full_name='Attributes.calendar_name', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=263,
-  serialized_end=298,
-)
-
-
-_REGISTRATIONFORM = _descriptor.Descriptor(
-  name='RegistrationForm',
-  full_name='RegistrationForm',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='url', full_name='RegistrationForm.url', index=0,
+      name='url', full_name='SimulationClockParameters.url', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='calendar_name', full_name='RegistrationForm.calendar_name', index=1,
+      name='calendar_name', full_name='SimulationClockParameters.calendar_name', index=1,
       number=2, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='session_id', full_name='SimulationClockParameters.session_id', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='start_date', full_name='SimulationClockParameters.start_date', index=3,
+      number=4, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='end_date', full_name='SimulationClockParameters.end_date', index=4,
+      number=5, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='emission_rate', full_name='SimulationClockParameters.emission_rate', index=5,
+      number=6, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -223,32 +322,145 @@ _REGISTRATIONFORM = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=300,
-  serialized_end=354,
+  serialized_start=441,
+  serialized_end=656,
 )
 
+
+_SIMULATIONRUNPARAMETERS = _descriptor.Descriptor(
+  name='SimulationRunParameters',
+  full_name='SimulationRunParameters',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='session_id', full_name='SimulationRunParameters.session_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=658,
+  serialized_end=703,
+)
+
+
+_REALTIMECLOCKPARAMETERS = _descriptor.Descriptor(
+  name='RealtimeClockParameters',
+  full_name='RealtimeClockParameters',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='url', full_name='RealtimeClockParameters.url', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='calendar_name', full_name='RealtimeClockParameters.calendar_name', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='emission_rate', full_name='RealtimeClockParameters.emission_rate', index=2,
+      number=3, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=705,
+  serialized_end=804,
+)
+
+
+_STATE = _descriptor.Descriptor(
+  name='State',
+  full_name='State',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='alive', full_name='State.alive', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=806,
+  serialized_end=828,
+)
+
+_CALENDARMETADATA.fields_by_name['start'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_CALENDARMETADATA.fields_by_name['end'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_CALENDARMETADATA.fields_by_name['calendar'].message_type = contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2._CALENDAR
+_ATTRIBUTES.fields_by_name['calendar'].message_type = _CALENDARMETADATA
 _CLOCKEVENT.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _CLOCKEVENT.fields_by_name['event'].enum_type = _EVENT
-DESCRIPTOR.message_types_by_name['Rate'] = _RATE
-DESCRIPTOR.message_types_by_name['ClockEvent'] = _CLOCKEVENT
+_SIMULATIONCLOCKPARAMETERS.fields_by_name['start_date'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_SIMULATIONCLOCKPARAMETERS.fields_by_name['end_date'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_SIMULATIONCLOCKPARAMETERS.fields_by_name['emission_rate'].enum_type = _EMISSIONRATE
+_REALTIMECLOCKPARAMETERS.fields_by_name['emission_rate'].enum_type = _EMISSIONRATE
+DESCRIPTOR.message_types_by_name['CalendarMetadata'] = _CALENDARMETADATA
 DESCRIPTOR.message_types_by_name['Attributes'] = _ATTRIBUTES
-DESCRIPTOR.message_types_by_name['RegistrationForm'] = _REGISTRATIONFORM
+DESCRIPTOR.message_types_by_name['ClockEvent'] = _CLOCKEVENT
+DESCRIPTOR.message_types_by_name['SimulationClockParameters'] = _SIMULATIONCLOCKPARAMETERS
+DESCRIPTOR.message_types_by_name['SimulationRunParameters'] = _SIMULATIONRUNPARAMETERS
+DESCRIPTOR.message_types_by_name['RealtimeClockParameters'] = _REALTIMECLOCKPARAMETERS
+DESCRIPTOR.message_types_by_name['State'] = _STATE
 DESCRIPTOR.enum_types_by_name['Event'] = _EVENT
+DESCRIPTOR.enum_types_by_name['Mode'] = _MODE
+DESCRIPTOR.enum_types_by_name['EmissionRate'] = _EMISSIONRATE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-Rate = _reflection.GeneratedProtocolMessageType('Rate', (_message.Message,), dict(
-  DESCRIPTOR = _RATE,
+CalendarMetadata = _reflection.GeneratedProtocolMessageType('CalendarMetadata', (_message.Message,), dict(
+  DESCRIPTOR = _CALENDARMETADATA,
   __module__ = 'contrib.control.clock.clock_pb2'
-  # @@protoc_insertion_point(class_scope:Rate)
+  # @@protoc_insertion_point(class_scope:CalendarMetadata)
   ))
-_sym_db.RegisterMessage(Rate)
-
-ClockEvent = _reflection.GeneratedProtocolMessageType('ClockEvent', (_message.Message,), dict(
-  DESCRIPTOR = _CLOCKEVENT,
-  __module__ = 'contrib.control.clock.clock_pb2'
-  # @@protoc_insertion_point(class_scope:ClockEvent)
-  ))
-_sym_db.RegisterMessage(ClockEvent)
+_sym_db.RegisterMessage(CalendarMetadata)
 
 Attributes = _reflection.GeneratedProtocolMessageType('Attributes', (_message.Message,), dict(
   DESCRIPTOR = _ATTRIBUTES,
@@ -257,74 +469,183 @@ Attributes = _reflection.GeneratedProtocolMessageType('Attributes', (_message.Me
   ))
 _sym_db.RegisterMessage(Attributes)
 
-RegistrationForm = _reflection.GeneratedProtocolMessageType('RegistrationForm', (_message.Message,), dict(
-  DESCRIPTOR = _REGISTRATIONFORM,
+ClockEvent = _reflection.GeneratedProtocolMessageType('ClockEvent', (_message.Message,), dict(
+  DESCRIPTOR = _CLOCKEVENT,
   __module__ = 'contrib.control.clock.clock_pb2'
-  # @@protoc_insertion_point(class_scope:RegistrationForm)
+  # @@protoc_insertion_point(class_scope:ClockEvent)
   ))
-_sym_db.RegisterMessage(RegistrationForm)
+_sym_db.RegisterMessage(ClockEvent)
+
+SimulationClockParameters = _reflection.GeneratedProtocolMessageType('SimulationClockParameters', (_message.Message,), dict(
+  DESCRIPTOR = _SIMULATIONCLOCKPARAMETERS,
+  __module__ = 'contrib.control.clock.clock_pb2'
+  # @@protoc_insertion_point(class_scope:SimulationClockParameters)
+  ))
+_sym_db.RegisterMessage(SimulationClockParameters)
+
+SimulationRunParameters = _reflection.GeneratedProtocolMessageType('SimulationRunParameters', (_message.Message,), dict(
+  DESCRIPTOR = _SIMULATIONRUNPARAMETERS,
+  __module__ = 'contrib.control.clock.clock_pb2'
+  # @@protoc_insertion_point(class_scope:SimulationRunParameters)
+  ))
+_sym_db.RegisterMessage(SimulationRunParameters)
+
+RealtimeClockParameters = _reflection.GeneratedProtocolMessageType('RealtimeClockParameters', (_message.Message,), dict(
+  DESCRIPTOR = _REALTIMECLOCKPARAMETERS,
+  __module__ = 'contrib.control.clock.clock_pb2'
+  # @@protoc_insertion_point(class_scope:RealtimeClockParameters)
+  ))
+_sym_db.RegisterMessage(RealtimeClockParameters)
+
+State = _reflection.GeneratedProtocolMessageType('State', (_message.Message,), dict(
+  DESCRIPTOR = _STATE,
+  __module__ = 'contrib.control.clock.clock_pb2'
+  # @@protoc_insertion_point(class_scope:State)
+  ))
+_sym_db.RegisterMessage(State)
 
 
 
-_CLOCKSERVER = _descriptor.ServiceDescriptor(
-  name='ClockServer',
-  full_name='ClockServer',
+_SIMULATIONCLOCKROUTER = _descriptor.ServiceDescriptor(
+  name='SimulationClockRouter',
+  full_name='SimulationClockRouter',
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=509,
-  serialized_end=723,
+  serialized_start=1056,
+  serialized_end=1189,
   methods=[
   _descriptor.MethodDescriptor(
-    name='Listen',
-    full_name='ClockServer.Listen',
+    name='Register',
+    full_name='SimulationClockRouter.Register',
     index=0,
     containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    output_type=_CLOCKEVENT,
+    input_type=_SIMULATIONCLOCKPARAMETERS,
+    output_type=_ATTRIBUTES,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='GetCalendar',
-    full_name='ClockServer.GetCalendar',
+    name='Run',
+    full_name='SimulationClockRouter.Run',
     index=1,
     containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    output_type=contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2._CALENDAR,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='EmissionRate',
-    full_name='ClockServer.EmissionRate',
-    index=2,
-    containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    output_type=_RATE,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='Register',
-    full_name='ClockServer.Register',
-    index=3,
-    containing_service=None,
-    input_type=_REGISTRATIONFORM,
+    input_type=_SIMULATIONRUNPARAMETERS,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
 ])
-_sym_db.RegisterServiceDescriptor(_CLOCKSERVER)
+_sym_db.RegisterServiceDescriptor(_SIMULATIONCLOCKROUTER)
 
-DESCRIPTOR.services_by_name['ClockServer'] = _CLOCKSERVER
+DESCRIPTOR.services_by_name['SimulationClockRouter'] = _SIMULATIONCLOCKROUTER
+
+
+_REALTIMECLOCKROUTER = _descriptor.ServiceDescriptor(
+  name='RealtimeClockRouter',
+  full_name='RealtimeClockRouter',
+  file=DESCRIPTOR,
+  index=1,
+  serialized_options=None,
+  serialized_start=1191,
+  serialized_end=1263,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='Register',
+    full_name='RealtimeClockRouter.Register',
+    index=0,
+    containing_service=None,
+    input_type=_REALTIMECLOCKPARAMETERS,
+    output_type=_ATTRIBUTES,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_REALTIMECLOCKROUTER)
+
+DESCRIPTOR.services_by_name['RealtimeClockRouter'] = _REALTIMECLOCKROUTER
+
+
+_REALTIMECLOCK = _descriptor.ServiceDescriptor(
+  name='RealtimeClock',
+  full_name='RealtimeClock',
+  file=DESCRIPTOR,
+  index=2,
+  serialized_options=None,
+  serialized_start=1265,
+  serialized_end=1386,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='Register',
+    full_name='RealtimeClock.Register',
+    index=0,
+    containing_service=None,
+    input_type=_REALTIMECLOCKPARAMETERS,
+    output_type=_ATTRIBUTES,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Run',
+    full_name='RealtimeClock.Run',
+    index=1,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_REALTIMECLOCK)
+
+DESCRIPTOR.services_by_name['RealtimeClock'] = _REALTIMECLOCK
+
+
+_SIMULATIONCLOCK = _descriptor.ServiceDescriptor(
+  name='SimulationClock',
+  full_name='SimulationClock',
+  file=DESCRIPTOR,
+  index=3,
+  serialized_options=None,
+  serialized_start=1389,
+  serialized_end=1558,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='Register',
+    full_name='SimulationClock.Register',
+    index=0,
+    containing_service=None,
+    input_type=_SIMULATIONCLOCKPARAMETERS,
+    output_type=_ATTRIBUTES,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Run',
+    full_name='SimulationClock.Run',
+    index=1,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='GetState',
+    full_name='SimulationClock.GetState',
+    index=2,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=_STATE,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_SIMULATIONCLOCK)
+
+DESCRIPTOR.services_by_name['SimulationClock'] = _SIMULATIONCLOCK
 
 
 _CLOCKCLIENT = _descriptor.ServiceDescriptor(
   name='ClockClient',
   full_name='ClockClient',
   file=DESCRIPTOR,
-  index=1,
+  index=4,
   serialized_options=None,
-  serialized_start=725,
-  serialized_end=785,
+  serialized_start=1560,
+  serialized_end=1673,
   methods=[
   _descriptor.MethodDescriptor(
     name='Update',
@@ -332,6 +653,15 @@ _CLOCKCLIENT = _descriptor.ServiceDescriptor(
     index=0,
     containing_service=None,
     input_type=_CLOCKEVENT,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='CalendarUpdate',
+    full_name='ClockClient.CalendarUpdate',
+    index=1,
+    containing_service=None,
+    input_type=contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2._CALENDAR,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),

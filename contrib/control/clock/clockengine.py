@@ -1,6 +1,7 @@
-from enum import IntEnum
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
+import  uuid
+from concurrent import futures
 
 import itertools
 
@@ -8,50 +9,63 @@ import numpy as np
 
 import pandas as pd
 
+import google.protobuf.empty_pb2 as emp
+import grpc
+
 import ntplib
 
 import time
 
+from contrib.coms.utils import conversions as crv
 from contrib.coms.utils import server_utils as srv
-
 from contrib.control.clock import clock_pb2_grpc as cl_servicer
+from contrib.control.clock.clock_pb2 import (
+    BAR,
+    BEFORE_TRADING_START,
+    SESSION_START,
+    SESSION_END,
+    MINUTE_END,
+    INITIALIZE,
+    LIQUIDATE,
+    STOP,
+    CALENDAR
+)
+
+from contrib.control.clock import clock_pb2 as cl
 
 from trading_calendars.utils.pandas_utils import days_at_time
-from contrib.trading_calendars.calendar_utils import get_calendar_in_range
+from contrib.trading_calendars import calendar_utils as cu
 
 '''module for events extension...'''
 
 _nanos_in_minute = np.int64(60000000000)
 
 
-class Events(IntEnum):
-    BAR = 0
-    SESSION_START = 1
-    SESSION_END = 2
-    MINUTE_END = 3
-    BEFORE_TRADING_START_BAR = 4
-    LIQUIDATE = 5
-    STOP = 6
-    INITIALIZE = 7
+class ClockEngine(ABC):
+    @abstractmethod
+    @property
+    def alive(self):
+        """
 
+        Returns
+        -------
+        bool
+        """
 
-BAR, SESSION_START, SESSION_END, MINUTE_END, BEFORE_TRADING_START_BAR, LIQUIDATE, STOP, INITIALIZE = list(Events)
-
-
-class Clock(ABC):
     @abstractmethod
     @property
     def emission_rate(self):
-        raise NotImplementedError
+        """
 
-    @abstractmethod
+        Returns
+        -------
+        str
+
+        """
+
     @property
+    @abstractmethod
     def calendar(self):
-        raise NotImplementedError
-
-    @abstractmethod
-    @property
-    def calendar_name(self):
         raise NotImplementedError
 
     @abstractmethod
@@ -134,7 +148,7 @@ class MinuteEventGenerator(object):
                     ):
                         yield minute, evt
 
-                    yield bts_minute, BEFORE_TRADING_START_BAR
+                    yield bts_minute, BEFORE_TRADING_START
 
                     # emit all the minutes after bts_minute
                     for minute, evt in self._get_minutes_for_list(
@@ -168,7 +182,8 @@ class MinuteEventGenerator(object):
             )
         return minutes_by_session
 
-class MinuteClock(Clock):
+
+class MinuteClockEngine(ClockEngine):
     def __init__(self, minute_emission=False):
         self._minute_emission = minute_emission
 
@@ -177,10 +192,11 @@ class MinuteClock(Clock):
             return 'minute'
         return 'daily'
 
-class MinuteSimulationClock(MinuteClock):
+
+class MinuteSimulationClockEngine(MinuteClockEngine):
     def __init__(self, calendar, start_dt, end_dt,
                  minute_emission=False, minute_event_generator=None):
-        super(MinuteSimulationClock,self).__init__(minute_emission)
+        super(MinuteSimulationClockEngine, self).__init__(minute_emission)
         """
         Parameters
         ----------
@@ -213,28 +229,30 @@ class MinuteSimulationClock(MinuteClock):
             yield ts, evt
 
 
-class MinuteRealtimeClock(Clock):
-    def __init__(self, calendar_name, ntp_server_address,
+# TODO: should have a way of modifying the calendar while the program is running...
+# i.e: not changing the source code.
+class MinuteRealtimeClockEngine(ClockEngine):
+    def __init__(self, proto_calendar, ntp_server_address,
                  start_dt=None, minute_emission=True, minute_event_generator=None):
-        super(MinuteRealtimeClock,self).__init__(minute_emission)
+        super(MinuteRealtimeClockEngine, self).__init__(minute_emission)
         """
         
         Parameters
         ----------
         start_dt : pandas.Timestamp
         """
-        self._cal_name = calendar_name
         self._calendar = None
-        #todo start_dt must be greater or equal to utc now
+        self._proto_calendar = proto_calendar
+        # todo start_dt must be greater or equal to utc now
         self._start_dt = pd.Timestamp(pd.Timestamp.today().date(), tz='UTC') if start_dt is None else start_dt
         # the end_dt is the latest date of the calendar
         self._end_dt = None
+        self._update = False
 
         self._egf = minute_event_generator if not None else MinuteEventGenerator(minute_emission)
         self._current_generator = None
 
         self._ntp_client = ntplib.NTPClient()
-        self._offset_flag = False
         self._ntp_server_address = ntp_server_address
         self._minute_counter = 0
         self._offset = 0
@@ -247,9 +265,18 @@ class MinuteRealtimeClock(Clock):
     def calendar_name(self):
         return self._cal_name
 
-    def calendar(self):
+    def calendar_metadata(self):
         # returns the current calendar.
-        return self._calendar
+        #todo: if start dt and end dt are none, get the next "valid" session dt
+        # valid: the start_dt is after or at today.
+        return cl.CalendarMetadata(
+            start=crv.to_datetime(self._start_dt),
+            end=crv.to_proto_timestamp(self._end_dt),
+            calendar=self._proto_calendar)
+
+    def update_calendar(self, proto_calendar):
+        self._proto_calendar = proto_calendar
+        self._update = True
 
     def stop(self, liquidate=False):
         self._egf.stop(liquidate)
@@ -259,10 +286,14 @@ class MinuteRealtimeClock(Clock):
 
     def __iter__(self):
         # todo: should yield an initialize, signal if haven't been done yet.
+        ntp_stats = self._ntp_client.request(self._ntp_server_address)
+        offset = ntp_stats.offset
+        self._offset = offset
+
         sessions = self._calendar.all_sessions
         delta_seconds = self._get_seconds(
             pd.Timestamp(sessions[0]).tz_localize(tz='UTC') -
-            pd.Timestamp.utcfromtimestamp(time.time() + self._get_offset())
+            pd.Timestamp.utcfromtimestamp(time.time() + offset)
         )
 
         if delta_seconds > 0:
@@ -277,31 +308,29 @@ class MinuteRealtimeClock(Clock):
             time.sleep(
                 self._get_seconds(
                     pd.Timestamp(start_ts) -
-                    pd.Timestamp.utcfromtimestamp(time.time() + self._get_offset())) -
+                    pd.Timestamp.utcfromtimestamp(time.time() + offset)) -
                 time.time() - t0)
             return self._iter()
         else:
             # execute now
             return self._iter()
 
-    def _get_offset(self):
-        if not self._offset_flag:
-            ntp_stats = self._ntp_client.request(self._ntp_server_address)
-            self._offset_flag = True
-            offset = ntp_stats.offset
-            self._offset = offset
-            return offset
-        else:
-            return self._offset
-
     def _iter(self):
         ntp_server_address = self._ntp_server_address
         minute_counter = -1
-
+        #delay from update computation
+        t1 = 0
         for ts, evt in self._current_generator:
             # for timing external computation
             t0 = time.time()
             ts = pd.Timestamp.utcfromtimestamp(time.time() + self._offset)
+            if self._update:
+                self._load_attributes(ts)
+                self._update = False
+                #store computation time for the update
+                t1 = time.time() - t0
+                # skip since we have a new generator
+                continue
             yield ts, evt
             # update offset every 10 minutes
             minute_counter += 1
@@ -315,25 +344,28 @@ class MinuteRealtimeClock(Clock):
                 self._time_idx += 1
                 time.sleep(self._get_seconds(
                     self._calendar.opens[self._time_idx].tz_localize(tz='UTC') -
-                    timedelta(minutes=15)) - ts - time.time() + t0)
+                    timedelta(minutes=15)) - ts - time.time() + t0 + t1)
             elif evt == SESSION_END:
                 # sleep until next session start
                 end_dt = self._end_dt
                 if ts.date() == end_dt.date():
                     # re-load all attributes
                     self._load_attributes(end_dt + pd.Timedelta('1 day'))
-                    time.sleep(self._calendar.all_sessions[1] - ts - time.time() + t0)
+                    # yield a calendar event so that the clients may load a new calendar
+                    yield ts, CALENDAR
+                    time.sleep(self._calendar.all_sessions[1] - ts - time.time() + t0 + t1)
                 else:
                     time.sleep(
-                        self._get_seconds(self._calendar.all_sessions[self._time_idx + 1]) - ts - time.time() + t0)
+                        self._get_seconds(self._calendar.all_sessions[self._time_idx + 1]) - ts - time.time() + t0 + t1)
             elif evt == BAR:
                 # sleep for a minute
-                time.sleep(60 - time.time() + t0)
+                time.sleep(60 - time.time() + t0 + t1)
 
     def _load_attributes(self, start_dt):
         self._start_dt = start_dt
 
-        self._calendar = cal = get_calendar_in_range(self._cal_name, start_dt)
+        self._calendar = cal = cu.from_proto_calendar(self._proto_calendar, start_dt)
+
         self._end_dt = end_dt = cal.all_sessions[-1]
 
         self._time_idx = -1
@@ -343,34 +375,199 @@ class MinuteRealtimeClock(Clock):
             datetime.combine(datetime.min, cal.open_time) - timedelta(minutes=15)
         )
 
-class ClockServicer(cl_servicer.ClockServicer):
-    def __init__(self, clock):
+
+class SimulationClock(cl_servicer.SimulationClockServicer):
+    def __init__(self, proto_calendar, emission_rate, start_dt, end_dt, certificate=None):
+        self._observers = {}
+        self._certificate = certificate
+        self._calendar = cal = cu.from_proto_calendar(proto_calendar, start_dt, end_dt)
+        self._engine = MinuteSimulationClockEngine(cal, start_dt, end_dt, emission_rate==cl.MINUTE)
+        self._proto_calendar = proto_calendar
+        self._start_dt = start_dt
+        self._end_dt = end_dt
+
+    def Register(self, request, context):
+        url = request.url
+        observers = self._observers
+        observers[url] = cl_servicer.ClockClientStub(srv.create_channel(url, self._certificate))
+        return cl.Attributes(
+            calendar_metadata=cl.CalendarMetadata(
+                start=crv.to_proto_timestamp(self._start_dt),
+                end=crv.to_proto_timestamp(self._end_dt),
+                calendar=self._proto_calendar
+            ))
+
+    def Run(self, request, context):
+        listeners = self._observers.values()
+        for ts, evt in self._engine:
+            # notify observers with the new event
+            for listener in listeners:
+                listener.Update(cl.ClockEvent(
+                crv.to_proto_timestamp(ts),
+                event=evt
+            ))
+
+    def GetState(self, request, context):
+        pass
+
+class RealTimeClock(cl_servicer.RealtimeClockServicer):
+    def __init__(self, clock_engine, certificate=None):
         """
 
         Parameters
         ----------
-        clock : Clock
+        clock_engine: ClockEngine
         """
-        self._clock = clock
-        self._running = False
+        self._observers = {}
+        self._engine = clock_engine
+        self._certificate = certificate
 
-    def GetCalendar(self, request, context):
-        #todo: convert this into a message
-        return self._clock.calendar
+    def Register(self, request, context):
+        """
 
-    def Listen(self, request, context):
-        if not self._running:
-            for ts, evt in self._clock:
-                pass
+        Parameters
+        ----------
+        url : str
+        Raises
+        -------
+
+        """
+
+        listeners = self._observers
+        url = request.url
+
+        if url not in listeners:
+            listeners[url] = cl_servicer.ClockClientStub(srv.create_channel(url, self._certificate))
+        else:
+            # todo: must send an error message to indicate that the the connection was refused
+            # todo: what if the listener is not alive anymore?
             pass
 
-    def EmissionRate(self, request, context):
-        pass
+        return cl.Attributes(calendar_metadata=self._engine.calendar)
 
-class ClockMainServer(srv.MainServerFactory):
-    def __init__(self, clock, server_address,key=None, certificate=None):
-        super(ClockMainServer, self).__init__(server_address, key, certificate)
-        self._servicer = ClockServicer(clock)
+    def Run(self, request, context):
+        listeners = self._observers.values()
+        for ts, evt in self._engine:
+            if evt == CALENDAR or evt == INITIALIZE:
+                for listener in listeners:
+                    listener.ReceiveCalendar(self._engine.calendar)
+            clock_event = cl.ClockEvent(
+                crv.to_proto_timestamp(ts),
+                event=evt
+            )
+            # notify observers with the new event
+            for listener in listeners:
+                listener.Update(clock_event)
 
-    def _add_servicer_to_server(self, server):
-        cl_servicer.add_ClockServicer_to_server(self._servicer,server)
+class SimulationClockRouter(cl_servicer.SimulationClockRouterServicer):
+    def __init__(self, calendar_factories, base_address=None, certificate=None):
+        self._clocks = {}
+        self._factories = calendar_factories
+        self._base_address = base_address
+        self._certificate = certificate
+
+    def Register(self, request, context):
+        # for simulations, we classify each clock by id, so that two process with the same session_id
+        # can observe the same simulation clock.
+        clocks = self._clocks
+        sess_id = request.session_id
+        if sess_id not in clocks:
+            address = self._base_address
+            server = grpc.server(futures.ThreadPoolExecutor(10))
+            clock = SimulationClock(MinuteSimulationClockEngine(
+                self._factories[request.name].get_proto_calendar()),
+                request.emission_rate,
+                crv.to_datetime(request.start),
+                crv.to_datetime(request.end))
+            cl_servicer.add_SimulationClockServicer_to_server(clock, server)
+            clocks[sess_id] = stub = cl_servicer.SimulationClockStub(
+                address + '{}'.format(server.add_insecure_port(address + ':0')))
+            stub.Register(request, context)
+        else:
+            clocks[sess_id].Register(request, context)
+
+    def Run(self, request, context):
+        self._clocks[request.session_id].Run(emp.Empty())
+
+
+class RealtimeClockRouter(cl_servicer.RealtimeClockRouterServicer):
+    def __init__(self, calendar_factories, base_address=None, certificate=None):
+        """
+        This class controls the clocks: generates its own urls to communicate with the clock
+        Parameters
+        ----------
+        certificate
+        """
+        self._clocks = {}
+        self._factories = calendar_factories
+        self._running = False
+        self._listeners = {}
+        self._certificate = certificate
+        self._address = base_address if base_address else 'localhost'
+        self._servers = []
+
+    def add_clock(self, calendar_name, clock, server):
+        cl_servicer.add_ClockServerServicer_to_server(clock, server)
+        self._clocks[calendar_name] = clock
+
+
+    def _load_calendar(self, name):
+        """
+
+        Parameters
+        ----------
+        name
+
+        Returns
+        -------
+        trading_calendars.TradingCalendar
+
+        """
+        return
+
+    def stop(self, grace=None):
+        for server in self._servers:
+            server.stop(grace)
+
+    def Register(self, request, context):
+        # todo: clocks should run as sub-processes and we register each client to the clock
+        # by exchange name.
+        """
+        Notes
+        -----
+        The registration spawns a clock as a sub-process. Each clock is a server and is controlled
+        by the clock servicer (gateway). The servicer communicates with the other clocks through
+        messaging
+
+        Parameters
+        ----------
+        request
+        context
+
+        Returns
+        -------
+
+        """
+
+        name = request.name
+        clocks = self._clocks
+        base_address = self._address
+        if name not in clocks:
+            server = grpc.server(futures.ThreadPoolExecutor(10))
+            clock = RealTimeClock(MinuteRealtimeClockEngine(
+                self._factories[name],
+                request.emission_rate == cl.MINUTE), self._certificate)
+            cl_servicer.add_ClockServerServicer_to_server(
+                clock,
+                server
+            )
+            self._servers.append(server)
+            clocks[name] = stub = cl_servicer.ClockServerStub(
+                grpc.insecure_channel(base_address + ':{}'.format(server.add_insecure_port(base_address + ':0'))))
+            server.start()
+            # run the clock at the first registration
+            stub.Run(request)
+            stub.Register(request)
+        else:
+            #register to an already running clock...
+            self._clocks[name].Register(request)

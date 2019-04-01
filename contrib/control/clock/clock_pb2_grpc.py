@@ -6,7 +6,7 @@ from contrib.trading_calendars.protos import calendar_pb2 as contrib_dot_trading
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
-class ClockServerStub(object):
+class SimulationClockRouterStub(object):
   # missing associated documentation comment in .proto file
   pass
 
@@ -16,52 +16,75 @@ class ClockServerStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.Listen = channel.unary_stream(
-        '/ClockServer/Listen',
-        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.ClockEvent.FromString,
-        )
-    self.GetCalendar = channel.unary_unary(
-        '/ClockServer/GetCalendar',
-        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-        response_deserializer=contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2.Calendar.FromString,
-        )
-    self.EmissionRate = channel.unary_unary(
-        '/ClockServer/EmissionRate',
-        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.Rate.FromString,
-        )
     self.Register = channel.unary_unary(
-        '/ClockServer/Register',
-        request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.RegistrationForm.SerializeToString,
+        '/SimulationClockRouter/Register',
+        request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.SimulationClockParameters.SerializeToString,
+        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.FromString,
+        )
+    self.Run = channel.unary_unary(
+        '/SimulationClockRouter/Run',
+        request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.SimulationRunParameters.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
 
 
-class ClockServerServicer(object):
+class SimulationClockRouterServicer(object):
   # missing associated documentation comment in .proto file
   pass
 
-  def Listen(self, request, context):
+  def Register(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def GetCalendar(self, request, context):
+  def Run(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def EmissionRate(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
+
+def add_SimulationClockRouterServicer_to_server(servicer, server):
+  rpc_method_handlers = {
+      'Register': grpc.unary_unary_rpc_method_handler(
+          servicer.Register,
+          request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.SimulationClockParameters.FromString,
+          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.SerializeToString,
+      ),
+      'Run': grpc.unary_unary_rpc_method_handler(
+          servicer.Run,
+          request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.SimulationRunParameters.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+  }
+  generic_handler = grpc.method_handlers_generic_handler(
+      'SimulationClockRouter', rpc_method_handlers)
+  server.add_generic_rpc_handlers((generic_handler,))
+
+
+class RealtimeClockRouterStub(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def __init__(self, channel):
+    """Constructor.
+
+    Args:
+      channel: A grpc.Channel.
+    """
+    self.Register = channel.unary_unary(
+        '/RealtimeClockRouter/Register',
+        request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.RealtimeClockParameters.SerializeToString,
+        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.FromString,
+        )
+
+
+class RealtimeClockRouterServicer(object):
+  # missing associated documentation comment in .proto file
+  pass
 
   def Register(self, request, context):
     # missing associated documentation comment in .proto file
@@ -71,31 +94,151 @@ class ClockServerServicer(object):
     raise NotImplementedError('Method not implemented!')
 
 
-def add_ClockServerServicer_to_server(servicer, server):
+def add_RealtimeClockRouterServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'Listen': grpc.unary_stream_rpc_method_handler(
-          servicer.Listen,
-          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.ClockEvent.SerializeToString,
-      ),
-      'GetCalendar': grpc.unary_unary_rpc_method_handler(
-          servicer.GetCalendar,
-          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-          response_serializer=contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2.Calendar.SerializeToString,
-      ),
-      'EmissionRate': grpc.unary_unary_rpc_method_handler(
-          servicer.EmissionRate,
-          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.Rate.SerializeToString,
-      ),
       'Register': grpc.unary_unary_rpc_method_handler(
           servicer.Register,
-          request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.RegistrationForm.FromString,
+          request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.RealtimeClockParameters.FromString,
+          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.SerializeToString,
+      ),
+  }
+  generic_handler = grpc.method_handlers_generic_handler(
+      'RealtimeClockRouter', rpc_method_handlers)
+  server.add_generic_rpc_handlers((generic_handler,))
+
+
+class RealtimeClockStub(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def __init__(self, channel):
+    """Constructor.
+
+    Args:
+      channel: A grpc.Channel.
+    """
+    self.Register = channel.unary_unary(
+        '/RealtimeClock/Register',
+        request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.RealtimeClockParameters.SerializeToString,
+        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.FromString,
+        )
+    self.Run = channel.unary_unary(
+        '/RealtimeClock/Run',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+
+
+class RealtimeClockServicer(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def Register(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Run(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+
+def add_RealtimeClockServicer_to_server(servicer, server):
+  rpc_method_handlers = {
+      'Register': grpc.unary_unary_rpc_method_handler(
+          servicer.Register,
+          request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.RealtimeClockParameters.FromString,
+          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.SerializeToString,
+      ),
+      'Run': grpc.unary_unary_rpc_method_handler(
+          servicer.Run,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
-      'ClockServer', rpc_method_handlers)
+      'RealtimeClock', rpc_method_handlers)
+  server.add_generic_rpc_handlers((generic_handler,))
+
+
+class SimulationClockStub(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def __init__(self, channel):
+    """Constructor.
+
+    Args:
+      channel: A grpc.Channel.
+    """
+    self.Register = channel.unary_unary(
+        '/SimulationClock/Register',
+        request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.SimulationClockParameters.SerializeToString,
+        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.FromString,
+        )
+    self.Run = channel.unary_unary(
+        '/SimulationClock/Run',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+    self.GetState = channel.unary_unary(
+        '/SimulationClock/GetState',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.State.FromString,
+        )
+
+
+class SimulationClockServicer(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def Register(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Run(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def GetState(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+
+def add_SimulationClockServicer_to_server(servicer, server):
+  rpc_method_handlers = {
+      'Register': grpc.unary_unary_rpc_method_handler(
+          servicer.Register,
+          request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.SimulationClockParameters.FromString,
+          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.Attributes.SerializeToString,
+      ),
+      'Run': grpc.unary_unary_rpc_method_handler(
+          servicer.Run,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'GetState': grpc.unary_unary_rpc_method_handler(
+          servicer.GetState,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.State.SerializeToString,
+      ),
+  }
+  generic_handler = grpc.method_handlers_generic_handler(
+      'SimulationClock', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))
 
 
@@ -114,6 +257,11 @@ class ClockClientStub(object):
         request_serializer=contrib_dot_control_dot_clock_dot_clock__pb2.ClockEvent.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
+    self.CalendarUpdate = channel.unary_unary(
+        '/ClockClient/CalendarUpdate',
+        request_serializer=contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2.Calendar.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
 
 
 class ClockClientServicer(object):
@@ -127,12 +275,24 @@ class ClockClientServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def CalendarUpdate(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_ClockClientServicer_to_server(servicer, server):
   rpc_method_handlers = {
       'Update': grpc.unary_unary_rpc_method_handler(
           servicer.Update,
           request_deserializer=contrib_dot_control_dot_clock_dot_clock__pb2.ClockEvent.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'CalendarUpdate': grpc.unary_unary_rpc_method_handler(
+          servicer.CalendarUpdate,
+          request_deserializer=contrib_dot_trading__calendars_dot_protos_dot_calendar__pb2.Calendar.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
   }

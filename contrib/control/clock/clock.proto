@@ -5,44 +5,91 @@ import "google/protobuf/empty.proto";
 
 import "contrib/trading_calendars/protos/calendar.proto";
 
-service ClockServer {
-    rpc Listen (google.protobuf.Empty) returns (stream ClockEvent);
-    rpc GetCalendar(google.protobuf.Empty) returns (Calendar);
-    rpc EmissionRate(google.protobuf.Empty) returns (Rate);
-    rpc Register (RegistrationForm) returns (google.protobuf.Empty);
+
+service SimulationClockRouter {
+    rpc Register(SimulationClockParameters) returns (Attributes);
+    rpc Run(SimulationRunParameters) returns (google.protobuf.Empty);
 }
+
+service RealtimeClockRouter {
+    rpc Register(RealtimeClockParameters) returns (Attributes);
+}
+
+service RealtimeClock {
+    rpc Register(RealtimeClockParameters) returns (Attributes);
+    rpc Run(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+service SimulationClock {
+    rpc Register(SimulationClockParameters) returns (Attributes);
+    rpc Run(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc GetState(google.protobuf.Empty) returns (State);
+}
+
 
 service ClockClient {
-    rpc Update(ClockEvent) returns (google.protobuf.Empty);
+    rpc Update (ClockEvent) returns (google.protobuf.Empty);
+    rpc CalendarUpdate (Calendar) returns (google.protobuf.Empty);
 }
 
-message Rate{
-    string emission_rate = 1;
+message CalendarMetadata {
+    google.protobuf.Timestamp start = 1;
+    google.protobuf.Timestamp end = 2;
+    Calendar calendar = 3;
 }
+
+message Attributes {
+    CalendarMetadata calendar_metadata = 2;
+}
+
 
 enum Event {
-        INITIALIZE = 0;
-        SESSION_START = 1;
-        BAR = 2;
-        MINUTE_END = 3;
-        SESSION_END = 4;
-        BEFORE_TRADING_START = 5;
-        LIQUIDATE = 6;
-        STOP = 7;
-        CALENDAR = 8;
-    }
+    INITIALIZE = 0;
+    SESSION_START = 1;
+    BAR = 2;
+    MINUTE_END = 3;
+    SESSION_END = 4;
+    BEFORE_TRADING_START = 5;
+    LIQUIDATE = 6;
+    STOP = 7;
+    CALENDAR = 8;
+}
 
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
     Event event = 2;
 }
 
-
-message Attributes {
-    string calendar_name = 1;
+enum Mode {
+    SIMULATION=0;
+    LIVE=1;
 }
 
-message RegistrationForm {
+enum EmissionRate {
+    MINUTE=0;
+    DAILY=1;
+}
+
+message SimulationClockParameters {
     string url = 1;
     string calendar_name = 2;
+    string session_id = 3;
+    google.protobuf.Timestamp start_date = 4;
+    google.protobuf.Timestamp end_date = 5;
+    EmissionRate emission_rate = 6;
+}
+
+message SimulationRunParameters {
+    string session_id = 1;
+}
+
+message RealtimeClockParameters {
+    string url = 1;
+    string calendar_name = 2;
+    EmissionRate emission_rate = 3;
+}
+
+
+message State {
+    bool alive = 1;
 }
