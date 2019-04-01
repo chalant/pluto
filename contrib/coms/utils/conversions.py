@@ -1,3 +1,5 @@
+from pandas import Timestamp
+
 from contrib.coms.protos import assets_pb2 as pr_asset
 
 from zipline.assets import Asset, ExchangeInfo
@@ -16,8 +18,19 @@ from google.protobuf import timestamp_pb2 as pr_ts
 
 def to_proto_timestamp(dt):
     # todo: what if it is a pandas.Timestamp?
-    if dt is None:
-        return
+    """
+
+    Parameters
+    ----------
+    dt: pandas.Timestamp or datetime.datetime
+
+    Returns
+    -------
+    google.protobuf.timestamp_pb2.Timestamp
+    """
+
+    if isinstance(dt, Timestamp):
+        dt = dt.to_datetime().replace(tzinfo=None)
     ts = pr_ts.Timestamp()
     ts.FromDatetime(dt)
     return ts
@@ -25,6 +38,10 @@ def to_proto_timestamp(dt):
 
 def to_datetime(proto_ts):
     return proto_ts.ToDatetime()
+
+
+def to_pandas_timestamp(protos_ts, tz=None):
+    return Timestamp(to_datetime(protos_ts)).tz_localize(tz)
 
 
 def to_proto_asset(zp_asset):
