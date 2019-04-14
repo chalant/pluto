@@ -11,11 +11,11 @@ from grpc import (
 )
 
 
-def create_channel(url, certificate=None):
-    if not certificate:
+def create_channel(url, cert_auth=None):
+    if not cert_auth:
         return insecure_channel(url)
     else:
-        return secure_channel(url, ssl_channel_credentials(certificate))
+        return secure_channel(url, ssl_channel_credentials(cert_auth))
 
 
 class ServerWrapper(ABC):
@@ -61,3 +61,24 @@ class MainServerFactory(ServerFactory):
         else:
             srv.add_insecure_port(url)
         return srv
+
+def create_server(address, key_cert_pair=None):
+    """
+
+    Parameters
+    ----------
+    address : str
+    key_cert_pair : tuple
+
+    Returns
+    -------
+    grpc.Server
+
+    """
+    srv = server(ThreadPoolExecutor(max_workers=10))
+    if key_cert_pair:
+        srv.add_secure_port(address, server_credentials=ssl_server_credentials(key_cert_pair,))
+    else:
+        srv.add_insecure_port(address)
+    return srv
+

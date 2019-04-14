@@ -1,40 +1,22 @@
-syntax ='proto3';
+syntax = 'proto3';
 
-import "contrib/coms/protos/metrics.proto";
-import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
+import "contrib/coms/protos/data_bundle.proto";
+import "contrib/coms/protos/controller_service.proto";
+import "contrib/coms/protos/broker.proto";
+
+import "contrib/control/clock/clock.proto";
+
 service Controllable {
-    rpc Run(RunParams) returns (stream PerformancePacket) {}
-    rpc Stop(google.protobuf.Empty) returns (google.protobuf.Empty) {}
-}
-
-//initial running parameters for the strategy
-message RunParams {
-    float capital_base = 1;
-    google.protobuf.Timestamp start_session = 2;
-    google.protobuf.Timestamp end_session = 3;
-    bool live = 4; // indicates the trade behavior...
-    string metrics_set = 5; //indicates the set of metrics the strategy will use to track performance
-    enum DataFrequency {
-        MINUTE = 0;
-        DAY = 1;
-    }
-    DataFrequency data_frequency = 6;
-    string maximum_leverage = 7; //set the maximum leverage accorded to the strategy
-    string broker_url = 8;
-}
-
-message PerformancePacket {
-    CumulativeMetrics cumulative_perf = 1;
-    PeriodPerformance daily_perf = 2;
-    PeriodPerformance minutely_perf = 3;
-    CumulativeRiskMetrics cumulative_risk_metrics = 4;
-}
-
-message PeriodPerformance {
-    CumulativeMetrics cumulative_metrics = 1;
-    PeriodCommonMetrics period_common_metrics = 2;
+    rpc ReceiveDataBundle (Bundle) returns (google.protobuf.Empty);
+    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
+    rpc UpdateParameters (ParametersUpdateMessage) returns (google.protobuf.Empty);
+    rpc Initialize (InitialParameters) returns (google.protobuf.Empty);
+    rpc UpdateBroker (BrokerState) returns (google.protobuf.Empty);
+    rpc UpdateCalendar (CalendarMetadata) returns (google.protobuf.Empty);
+    //gets the domain on which the strategy operates.
+    rpc GetDomain(google.protobuf.Empty) returns (Domain)
 }
 
 

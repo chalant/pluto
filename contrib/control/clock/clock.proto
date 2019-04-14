@@ -7,23 +7,23 @@ import "contrib/trading_calendars/protos/calendar.proto";
 
 
 service SimulationClockRouter {
-    rpc Register(SimulationClockParameters) returns (Attributes);
-    rpc Run(SimulationRunParameters) returns (google.protobuf.Empty);
+    rpc Register (SimulationClockParameters) returns (Attributes);
+    rpc Run (SimulationRunParameters) returns (google.protobuf.Empty);
 }
 
 service RealtimeClockRouter {
-    rpc Register(RealtimeClockParameters) returns (Attributes);
+    rpc Register (RealtimeClockParameters) returns (Attributes);
 }
 
 service RealtimeClock {
-    rpc Register(RealtimeClockParameters) returns (Attributes);
-    rpc Run(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc Register (RealtimeClockParameters) returns (Attributes);
+    rpc Run (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 service SimulationClock {
-    rpc Register(SimulationClockParameters) returns (Attributes);
-    rpc Run(google.protobuf.Empty) returns (google.protobuf.Empty);
-    rpc GetState(google.protobuf.Empty) returns (State);
+    rpc Register (SimulationClockParameters) returns (Attributes);
+    rpc Run (google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc GetState (google.protobuf.Empty) returns (State);
 }
 
 
@@ -61,13 +61,13 @@ message ClockEvent {
 }
 
 enum Mode {
-    SIMULATION=0;
-    LIVE=1;
+    SIMULATION = 0;
+    LIVE = 1;
 }
 
-enum EmissionRate {
-    MINUTE=0;
-    DAILY=1;
+enum Frequency {
+    MINUTE = 0;
+    DAILY = 1;
 }
 
 message SimulationClockParameters {
@@ -76,7 +76,7 @@ message SimulationClockParameters {
     string session_id = 3;
     google.protobuf.Timestamp start_date = 4;
     google.protobuf.Timestamp end_date = 5;
-    EmissionRate emission_rate = 6;
+    Frequency emission_rate = 6;
 }
 
 message SimulationRunParameters {
@@ -86,7 +86,7 @@ message SimulationRunParameters {
 message RealtimeClockParameters {
     string url = 1;
     string calendar_name = 2;
-    EmissionRate emission_rate = 3;
+    Frequency emission_rate = 3;
 }
 
 

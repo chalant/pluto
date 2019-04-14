@@ -2,8 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
-message Domain {
-    enum CountryCode {
+enum CountryCode {
         AUSTRALIA = 0;
         AUSTRIA = 1;
         BELGIUM = 2;
@@ -32,13 +31,19 @@ message Domain {
         UNITED_KINGDOM = 25;
         UNITED_STATES = 26;
     }
+
+message Domain {
     /*a domain contains one or more country codes, that defines the bundle to be
     constructed on the server side and returned*/
     repeated CountryCode country_code = 1;
-    google.protobuf.Timestamp start_date = 2;
 
+}
+
+message BundleMetadata {
+    /* Contains information about the data contained in the bundle (column names etc.)*/
 }
 
 message Bundle {
     bytes data = 1; //
+    BundleMetadata metadata = 2;
 }
