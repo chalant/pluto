@@ -401,11 +401,13 @@ class SimulationClock(cl_servicer.SimulationClockServicer):
         listeners = self._observers.values()
         for ts, evt in self._engine:
             # notify observers with the new event
-            for listener in listeners:
-                listener.Update(cl.ClockEvent(
+            clock_event = cl.ClockEvent(
                 crv.to_proto_timestamp(ts),
                 event=evt
-            ))
+            )
+            #todo: we should call these in parallel
+            for listener in listeners:
+                listener.Update(clock_event)
 
     def GetState(self, request, context):
         pass
@@ -443,14 +445,14 @@ class RealTimeClock(cl_servicer.RealtimeClockServicer):
             # todo: what if the listener is not alive anymore?
             pass
 
-        return cl.Attributes(calendar_metadata=self._engine.calendar)
+        return cl.Attributes(calendar_metadata=self._engine.proto_calendar)
 
     def Run(self, request, context):
         listeners = self._observers.values()
         for ts, evt in self._engine:
             if evt == CALENDAR or evt == INITIALIZE:
                 for listener in listeners:
-                    listener.ReceiveCalendar(self._engine.calendar)
+                    listener.CalendarUpdate(self._engine.proto_calendar)
             clock_event = cl.ClockEvent(
                 crv.to_proto_timestamp(ts),
                 event=evt

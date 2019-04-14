@@ -12,13 +12,13 @@ class BrokerServicer(broker_rpc.BrokerServicer):
 
     # todo: must check the metadata...
 
-    def __init__(self, bundle_factory, broker):
+    def __init__(self, bundle_factory, broker_server):
         # the bundle factory is aggregated, for caching purposes.
         self._bundle_factory = bundle_factory
         self._tokens = set()
         self._accounts = {}
 
-        self._broker = broker
+        self._broker = broker_server
 
     def _check_metadata(self, context):
         metadata = dict(context.invocation_metadata())
@@ -58,7 +58,7 @@ class BrokerServicer(broker_rpc.BrokerServicer):
 
     def Transactions(self, request, context):
         self._check_metadata(context)
-        for trx in self._get_dict_values(self._broker.transactions()):
+        for trx in self._get_dict_values(self._broker.transactions(cv.to_pandas_timestamp(request.dt))):
             yield cv.to_proto_transaction(trx)
 
     def SingleOrder(self, request, context):

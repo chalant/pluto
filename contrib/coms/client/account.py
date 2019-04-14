@@ -8,7 +8,6 @@ from logbook import Logger
 
 from contrib.coms.protos import broker_pb2 as broker_msg
 from contrib.coms.protos import broker_pb2_grpc as broker_rpc
-from contrib.coms.utils import conversions as cv
 
 from zipline.finance import position, order
 from zipline import protocol as prt
@@ -25,19 +24,22 @@ from zipline.finance._finance_ext import (
     update_position_last_sale_prices,
 )
 
-from contrib.coms.utils import conversions
+from contrib.coms.utils import conversions as cv
 from contrib.utils import saving
 from contrib.coms.client.protos import account_state_pb2 as acc
 
 log = Logger("ZiplineLog")
 
-
-class BrokerStub(object):
+#todo: this should also be a broker listener...(receives updates from the broker server)
+# should be called before calling the algo-controller (by the controller process)
+class BrokerListener(object):
     '''Zipline-Server client. Converts zipline objects into proto messages and vice-versa...'''
 
     def __init__(self, channel, token):
         self._stub = broker_rpc.BrokerStub(channel)
         self._token = token
+        self._transactions = []
+        self._orders = {}
 
     def _with_metadata(self, rpc, params):
         '''If we're not registered, an RpcError will be raised. Registration is handled
@@ -58,15 +60,18 @@ class BrokerStub(object):
 
     @property
     def orders(self):
-        orders = {}
-        for resp in self._with_metadata(self._stub.Orders, Empty()):
-            order = cv.to_zp_asset(resp.message)
-            orders[order.id] = order
-        return orders
+        return self._orders
 
     @property
     def transactions(self):
-        return [cv.to_zp_transaction(resp.message) for resp in self._with_metadata(self._stub.Transactions, Empty())]
+        for transaction in self._transactions:
+            yield transaction
+
+    def get_transactions(self, dt):
+        """returns transactions starting from dt"""
+        for resp in self._with_metadata(self._stub.Transactions(cv.to_proto_timestamp(dt)), Empty()):
+            yield cv.to_zp_transaction(resp)
+
 
     def cancel(self, order_id, relay_status=True):
         raise NotImplementedError
@@ -109,6 +114,22 @@ class BrokerStub(object):
         else:
             raise NotImplementedError
 
+    def update(self, broker_data):
+        """updates the state of the broker, this is a remote method and must be called before
+        everything else."""
+        for transaction in broker_data.transactions:
+            self._transactions.append(cv.to_zp_transaction(transaction))
+
+        for order in broker_data.orders:
+            #over-writes the current orders states
+            self._orders[order.order_id] = order
+
+        self._account = cv.to_zp_account(broker_data.account)
+
+    def clear_transactions(self):
+        """this method is called after the transactions have been processed"""
+        self._transactions.clear()
+
 
 class Account(saving.Savable):
     """
@@ -119,8 +140,14 @@ class Account(saving.Savable):
     this account is called externally by the clock.
     """
 
-    def __init__(self, token, broker_channel):
-        self._broker = BrokerStub(broker_channel, token)
+    def __init__(self, broker):
+        """
+
+        Parameters
+        ----------
+        broker: BrokerListener
+        """
+        self._broker = broker
 
         # keep track of the orders of this account
         self._orders_by_id = OrderedDict()
@@ -130,8 +157,6 @@ class Account(saving.Savable):
 
         # to keep track of executed orders
         self._processed_transactions = {}
-
-        self._closed_orders = {}
 
         self._positions = {}
 
@@ -224,8 +249,6 @@ class Account(saving.Savable):
         return self._daily_returns_series.values
 
     def start_of_session(self, session_label):
-        # todo: before clearing everything, save everything in a file.
-        # (use the session_label as index)
         self._processed_transactions.clear()
         self._orders_by_modified.clear()
         self._orders_by_id.clear()
@@ -263,11 +286,11 @@ class Account(saving.Savable):
 
     def get_state(self, dt):
         return acc.AccountState(
-            portfolio=conversions.to_proto_portfolio(self._im_port),
-            account=conversions.to_proto_account(self._im_account),
-            last_checkpoint=conversions.to_proto_timestamp(dt),
+            portfolio=cv.to_proto_portfolio(self._im_port),
+            account=cv.to_proto_account(self._im_account),
+            last_checkpoint=cv.to_proto_timestamp(dt),
             orders=[order.to_dict() for order in self._orders_by_id.values()],
-            first_session=conversions.to_proto_timestamp(self._start_dt.to_datetime()),
+            first_session=cv.to_proto_timestamp(self._start_dt.to_datetime()),
             daily_returns=[acc.Return(timestamp=ts, value=val) for ts, val in
                            self._daily_returns_series.items()]
         ).SerializeToString()
@@ -277,17 +300,17 @@ class Account(saving.Savable):
         account.ParseFromString(state)
 
         self._daily_returns_series = pd.Series(
-            {pd.Timestamp(conversions.to_datetime(r.timestamp)): r.value for r in account.daily_returns}
+            {pd.Timestamp(cv.to_datetime(r.timestamp)): r.value for r in account.daily_returns}
         )
-        self._start_dt = pd.Timestamp(conversions.to_datetime(account.first_session), tz='UTC')
-        self._im_port = portfolio = conversions.to_zp_portfolio(account.portfolio)
+        self._start_dt = pd.Timestamp(cv.to_datetime(account.first_session), tz='UTC')
+        self._im_port = portfolio = cv.to_zp_portfolio(account.portfolio)
         self._portfolio = prt.MutableView(portfolio)
-        self._im_account = im_account = conversions.to_zp_account(account.account)
+        self._im_account = im_account = cv.to_zp_account(account.account)
         self._account = prt.MutableView(im_account)
         # todo: we should optimise memory usage here...
         self._positions = positions = portfolio.positions
 
-        self._orders_by_id = {order.id: conversions.to_zp_order(order) for order in state.orders}
+        self._orders_by_id = {order.id: cv.to_zp_order(order) for order in state.orders}
 
         last_checkpoint = account.last_checkpoint
 
@@ -295,10 +318,9 @@ class Account(saving.Savable):
         # server side.
         broker = self._broker
 
-        for transaction in broker.transactions:
+        for transaction in broker.get_transaction(last_checkpoint):
             # only consider the transaction that occurred after the last checkpoint
-            if transaction.dt >= last_checkpoint:
-                self._update_per_transaction(transaction, positions, portfolio, broker.orders)
+            self._update_per_transaction(transaction, positions, portfolio, broker.orders)
 
     def _update_per_transaction(self, transaction, positions, portfolio, all_orders):
         # only consider transactions from orders placed by this account
@@ -312,8 +334,6 @@ class Account(saving.Savable):
             # remove any closed order
             if not order.open:
                 del orders_by_id[order_id]
-                # todo: save the closed orders? why?
-                self._closed_orders[order_id] = order
             # update our orders with the new values
             else:
                 # update the state of the order from the broker.
@@ -372,8 +392,8 @@ class Account(saving.Savable):
 
         return self._processed_transactions.get(dt, [])
 
-    def update(self, dt, data_portal, trading_calendar, data_frequency, target_capital=None,
-               portfolio_value_adjustment=0.0, handle_non_market_minutes=False):
+    def update(self, dt, data_portal, trading_calendar, data_frequency, broker,
+               target_capital=None, portfolio_value_adjustment=0.0, handle_non_market_minutes=False):
         '''Updates this account'''
         # todo: maybe store the last update datetime?
         # this function is called externally at some emission rate
@@ -402,7 +422,7 @@ class Account(saving.Savable):
 
         update_position_last_sale_prices(self.positions, get_price, dt)
 
-        self._update_account(portfolio)
+        self._update_account(portfolio, broker)
 
         # update capital after updating the portfolio
         if target_capital is not None:
@@ -422,10 +442,8 @@ class Account(saving.Savable):
                      'delta': capital_change_amount}
             }
 
-    def _update_account(self, portfolio):
+    def _update_account(self, portfolio, broker):
         """Updates portfolio, account and positions"""
-        broker = self._broker
-
         positions = self._positions
 
         for transaction in broker.transactions:

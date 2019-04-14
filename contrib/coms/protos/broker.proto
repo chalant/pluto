@@ -12,15 +12,22 @@ import "contrib/coms/protos/data_bundle.proto";
 service Broker {
     /*This should encapsulate the set of services available per account...*/
     rpc SingleOrder (OrderParams) returns (Order);
-    rpc AccountState (google.protobuf.Empty) returns (Account);
     rpc PortfolioState (google.protobuf.Empty) returns (Portfolio);
     rpc PositionsState (google.protobuf.Empty) returns (stream AssetPositionPair);
-    rpc Orders (google.protobuf.Empty) returns (stream Order);
-    rpc Transactions (google.protobuf.Empty) returns (stream Transaction);
+    rpc Transactions (google.protobuf.Timestamp) returns (stream Transaction);
+    rpc AccountState(google.protobuf.Empty) returns (Account);
     rpc BatchOrder (BatchOrderParams) returns (stream Order);
     rpc CancelOrder (Order) returns (google.protobuf.Empty);
     rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
     rpc GetDataBundle(Domain) returns (stream Bundle); // bundle data is requested per account...
+}
+
+
+message BrokerState{
+    repeated Transaction transactions = 1;
+    repeated Order orders = 2;
+    Account account = 3;
+    google.protobuf.Timestamp timestamp = 4;
 }
 
 message WarningMessage {

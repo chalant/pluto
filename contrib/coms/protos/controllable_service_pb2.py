@@ -12,9 +12,11 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from contrib.coms.protos import metrics_pb2 as contrib_dot_coms_dot_protos_dot_metrics__pb2
-from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from contrib.coms.protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_dot_data__bundle__pb2
+from contrib.coms.protos import controller_service_pb2 as contrib_dot_coms_dot_protos_dot_controller__service__pb2
+from contrib.coms.protos import broker_pb2 as contrib_dot_coms_dot_protos_dot_broker__pb2
+from contrib.control.clock import clock_pb2 as contrib_dot_control_dot_clock_dot_clock__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -22,240 +24,13 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n.contrib/coms/protos/controllable_service.proto\x1a!contrib/coms/protos/metrics.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\"\xae\x02\n\tRunParams\x12\x14\n\x0c\x63\x61pital_base\x18\x01 \x01(\x02\x12\x31\n\rstart_session\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12/\n\x0b\x65nd_session\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04live\x18\x04 \x01(\x08\x12\x13\n\x0bmetrics_set\x18\x05 \x01(\t\x12\x30\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\x18.RunParams.DataFrequency\x12\x18\n\x10maximum_leverage\x18\x07 \x01(\t\x12\x12\n\nbroker_url\x18\x08 \x01(\t\"$\n\rDataFrequency\x12\n\n\x06MINUTE\x10\x00\x12\x07\n\x03\x44\x41Y\x10\x01\"\xcc\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics2s\n\x0c\x43ontrollable\x12)\n\x03Run\x12\n.RunParams\x1a\x12.PerformancePacket\"\x00\x30\x01\x12\x38\n\x04Stop\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n.contrib/coms/protos/controllable_service.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a%contrib/coms/protos/data_bundle.proto\x1a,contrib/coms/protos/controller_service.proto\x1a contrib/coms/protos/broker.proto\x1a!contrib/control/clock/clock.proto2\xeb\x02\n\x0c\x43ontrollable\x12\x34\n\x11ReceiveDataBundle\x12\x07.Bundle\x1a\x16.google.protobuf.Empty\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateMessage\x1a\x16.google.protobuf.Empty\x12\x38\n\nInitialize\x12\x12.InitialParameters\x1a\x16.google.protobuf.Empty\x12\x34\n\x0cUpdateBroker\x12\x0c.BrokerState\x1a\x16.google.protobuf.Empty\x12;\n\x0eUpdateCalendar\x12\x11.CalendarMetadata\x1a\x16.google.protobuf.Emptyb\x06proto3')
   ,
-  dependencies=[contrib_dot_coms_dot_protos_dot_metrics__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,])
+  dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_data__bundle__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_controller__service__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_broker__pb2.DESCRIPTOR,contrib_dot_control_dot_clock_dot_clock__pb2.DESCRIPTOR,])
 
 
 
-_RUNPARAMS_DATAFREQUENCY = _descriptor.EnumDescriptor(
-  name='DataFrequency',
-  full_name='RunParams.DataFrequency',
-  filename=None,
-  file=DESCRIPTOR,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='MINUTE', index=0, number=0,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='DAY', index=1, number=1,
-      serialized_options=None,
-      type=None),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=414,
-  serialized_end=450,
-)
-_sym_db.RegisterEnumDescriptor(_RUNPARAMS_DATAFREQUENCY)
-
-
-_RUNPARAMS = _descriptor.Descriptor(
-  name='RunParams',
-  full_name='RunParams',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='capital_base', full_name='RunParams.capital_base', index=0,
-      number=1, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='start_session', full_name='RunParams.start_session', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='end_session', full_name='RunParams.end_session', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='live', full_name='RunParams.live', index=3,
-      number=4, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='metrics_set', full_name='RunParams.metrics_set', index=4,
-      number=5, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='data_frequency', full_name='RunParams.data_frequency', index=5,
-      number=6, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='maximum_leverage', full_name='RunParams.maximum_leverage', index=6,
-      number=7, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='broker_url', full_name='RunParams.broker_url', index=7,
-      number=8, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-    _RUNPARAMS_DATAFREQUENCY,
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=148,
-  serialized_end=450,
-)
-
-
-_PERFORMANCEPACKET = _descriptor.Descriptor(
-  name='PerformancePacket',
-  full_name='PerformancePacket',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cumulative_perf', full_name='PerformancePacket.cumulative_perf', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='daily_perf', full_name='PerformancePacket.daily_perf', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='minutely_perf', full_name='PerformancePacket.minutely_perf', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='cumulative_risk_metrics', full_name='PerformancePacket.cumulative_risk_metrics', index=3,
-      number=4, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=453,
-  serialized_end=657,
-)
-
-
-_PERIODPERFORMANCE = _descriptor.Descriptor(
-  name='PeriodPerformance',
-  full_name='PeriodPerformance',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cumulative_metrics', full_name='PeriodPerformance.cumulative_metrics', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='period_common_metrics', full_name='PeriodPerformance.period_common_metrics', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=659,
-  serialized_end=779,
-)
-
-_RUNPARAMS.fields_by_name['start_session'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_RUNPARAMS.fields_by_name['end_session'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_RUNPARAMS.fields_by_name['data_frequency'].enum_type = _RUNPARAMS_DATAFREQUENCY
-_RUNPARAMS_DATAFREQUENCY.containing_type = _RUNPARAMS
-_PERFORMANCEPACKET.fields_by_name['cumulative_perf'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVEMETRICS
-_PERFORMANCEPACKET.fields_by_name['daily_perf'].message_type = _PERIODPERFORMANCE
-_PERFORMANCEPACKET.fields_by_name['minutely_perf'].message_type = _PERIODPERFORMANCE
-_PERFORMANCEPACKET.fields_by_name['cumulative_risk_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVERISKMETRICS
-_PERIODPERFORMANCE.fields_by_name['cumulative_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVEMETRICS
-_PERIODPERFORMANCE.fields_by_name['period_common_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._PERIODCOMMONMETRICS
-DESCRIPTOR.message_types_by_name['RunParams'] = _RUNPARAMS
-DESCRIPTOR.message_types_by_name['PerformancePacket'] = _PERFORMANCEPACKET
-DESCRIPTOR.message_types_by_name['PeriodPerformance'] = _PERIODPERFORMANCE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
-
-RunParams = _reflection.GeneratedProtocolMessageType('RunParams', (_message.Message,), dict(
-  DESCRIPTOR = _RUNPARAMS,
-  __module__ = 'contrib.coms.protos.controllable_service_pb2'
-  # @@protoc_insertion_point(class_scope:RunParams)
-  ))
-_sym_db.RegisterMessage(RunParams)
-
-PerformancePacket = _reflection.GeneratedProtocolMessageType('PerformancePacket', (_message.Message,), dict(
-  DESCRIPTOR = _PERFORMANCEPACKET,
-  __module__ = 'contrib.coms.protos.controllable_service_pb2'
-  # @@protoc_insertion_point(class_scope:PerformancePacket)
-  ))
-_sym_db.RegisterMessage(PerformancePacket)
-
-PeriodPerformance = _reflection.GeneratedProtocolMessageType('PeriodPerformance', (_message.Message,), dict(
-  DESCRIPTOR = _PERIODPERFORMANCE,
-  __module__ = 'contrib.coms.protos.controllable_service_pb2'
-  # @@protoc_insertion_point(class_scope:PeriodPerformance)
-  ))
-_sym_db.RegisterMessage(PeriodPerformance)
 
 
 
@@ -265,24 +40,60 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=781,
-  serialized_end=896,
+  serialized_start=234,
+  serialized_end=597,
   methods=[
   _descriptor.MethodDescriptor(
-    name='Run',
-    full_name='Controllable.Run',
+    name='ReceiveDataBundle',
+    full_name='Controllable.ReceiveDataBundle',
     index=0,
     containing_service=None,
-    input_type=_RUNPARAMS,
-    output_type=_PERFORMANCEPACKET,
+    input_type=contrib_dot_coms_dot_protos_dot_data__bundle__pb2._BUNDLE,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='Stop',
-    full_name='Controllable.Stop',
+    name='ClockUpdate',
+    full_name='Controllable.ClockUpdate',
     index=1,
     containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    input_type=contrib_dot_control_dot_clock_dot_clock__pb2._CLOCKEVENT,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='UpdateParameters',
+    full_name='Controllable.UpdateParameters',
+    index=2,
+    containing_service=None,
+    input_type=contrib_dot_coms_dot_protos_dot_controller__service__pb2._PARAMETERSUPDATEMESSAGE,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Initialize',
+    full_name='Controllable.Initialize',
+    index=3,
+    containing_service=None,
+    input_type=contrib_dot_coms_dot_protos_dot_controller__service__pb2._INITIALPARAMETERS,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='UpdateBroker',
+    full_name='Controllable.UpdateBroker',
+    index=4,
+    containing_service=None,
+    input_type=contrib_dot_coms_dot_protos_dot_broker__pb2._BROKERSTATE,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='UpdateCalendar',
+    full_name='Controllable.UpdateCalendar',
+    index=5,
+    containing_service=None,
+    input_type=contrib_dot_control_dot_clock_dot_clock__pb2._CALENDARMETADATA,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),

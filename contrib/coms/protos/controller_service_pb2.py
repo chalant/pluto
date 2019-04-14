@@ -3,6 +3,7 @@
 
 import sys
 _b=sys.version_info[0]<3 and (lambda x:x) or (lambda x:x.encode('latin1'))
+from google.protobuf.internal import enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
@@ -12,6 +13,10 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from contrib.coms.protos import metrics_pb2 as contrib_dot_coms_dot_protos_dot_metrics__pb2
+from contrib.coms.protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_dot_data__bundle__pb2
+from contrib.control.clock import clock_pb2 as contrib_dot_control_dot_clock_dot_clock__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -19,10 +24,103 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n,contrib/coms/protos/controller_service.proto\"%\n\x08Identity\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03url\x18\x02 \x01(\t\"+\n\rRegisterReply\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\r\n\x05token\x18\x02 \x01(\t25\n\nController\x12\'\n\x08Register\x12\t.Identity\x1a\x0e.RegisterReply\"\x00\x62\x06proto3')
+  serialized_pb=_b('\n,contrib/coms/protos/controller_service.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a!contrib/coms/protos/metrics.proto\x1a%contrib/coms/protos/data_bundle.proto\x1a!contrib/control/clock/clock.proto\"2\n\x0b\x43redentials\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\"\x08\n\x06Status\">\n\x08Identity\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03url\x18\x02 \x01(\t\x12\x17\n\x06\x64omain\x18\x03 \x01(\x0b\x32\x07.Domain\"+\n\rRegisterReply\x12\r\n\x05token\x18\x01 \x01(\t\x12\x0b\n\x03url\x18\x02 \x01(\t\"\xcc\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics\"\x9e\x01\n\x11InitialParameters\x12\"\n\x0e\x64\x61ta_frequency\x18\x01 \x01(\x0e\x32\n.Frequency\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x03 \x01(\x02\x12!\n\remission_rate\x18\x04 \x01(\x0e\x32\n.Frequency\x12\x17\n\x0f\x62\x65nchmark_asset\x18\x05 \x01(\t\"p\n\x17ParametersUpdateMessage\x12*\n\x10\x63ontroller_event\x18\x01 \x01(\x0e\x32\x10.ControllerEvent\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x03 \x01(\x02*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32\x80\x02\n\nController\x12%\n\x08Register\x12\t.Identity\x1a\x0e.RegisterReply\x12\x46\n\x18ReceivePerformancePacket\x12\x12.PerformancePacket\x1a\x16.google.protobuf.Empty\x12\x1d\n\x04Stop\x12\x0c.Credentials\x1a\x07.Status\x12 \n\x07\x43onnect\x12\x0c.Credentials\x1a\x07.Status\x12\x1e\n\x05Start\x12\x0c.Credentials\x1a\x07.Status\x12\"\n\tLiquidate\x12\x0c.Credentials\x1a\x07.Status2P\n\x06Worker\x12\x46\n\x18ReceivePerformancePacket\x12\x12.PerformancePacket\x1a\x16.google.protobuf.Empty2u\n\x10\x43ontrollerClient\x12\x1d\n\x04Stop\x12\x0c.Credentials\x1a\x07.Status\x12\x1e\n\x05Start\x12\x0c.Credentials\x1a\x07.Status\x12\"\n\tLiquidate\x12\x0c.Credentials\x1a\x07.Statusb\x06proto3')
+  ,
+  dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_metrics__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_data__bundle__pb2.DESCRIPTOR,contrib_dot_control_dot_clock_dot_clock__pb2.DESCRIPTOR,])
+
+_CONTROLLEREVENT = _descriptor.EnumDescriptor(
+  name='ControllerEvent',
+  full_name='ControllerEvent',
+  filename=None,
+  file=DESCRIPTOR,
+  values=[
+    _descriptor.EnumValueDescriptor(
+      name='CAPITAL_CHANGE', index=0, number=0,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='LEVERAGE_CHANGE', index=1, number=1,
+      serialized_options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='BROKER_UPDATE', index=2, number=2,
+      serialized_options=None,
+      type=None),
+  ],
+  containing_type=None,
+  serialized_options=None,
+  serialized_start=961,
+  serialized_end=1038,
+)
+_sym_db.RegisterEnumDescriptor(_CONTROLLEREVENT)
+
+ControllerEvent = enum_type_wrapper.EnumTypeWrapper(_CONTROLLEREVENT)
+CAPITAL_CHANGE = 0
+LEVERAGE_CHANGE = 1
+BROKER_UPDATE = 2
+
+
+
+_CREDENTIALS = _descriptor.Descriptor(
+  name='Credentials',
+  full_name='Credentials',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='user_name', full_name='Credentials.user_name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='password', full_name='Credentials.password', index=1,
+      number=2, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b(""),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=186,
+  serialized_end=236,
 )
 
 
+_STATUS = _descriptor.Descriptor(
+  name='Status',
+  full_name='Status',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=238,
+  serialized_end=246,
+)
 
 
 _IDENTITY = _descriptor.Descriptor(
@@ -46,6 +144,13 @@ _IDENTITY = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='domain', full_name='Identity.domain', index=2,
+      number=3, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -58,8 +163,8 @@ _IDENTITY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=48,
-  serialized_end=85,
+  serialized_start=248,
+  serialized_end=310,
 )
 
 
@@ -71,14 +176,14 @@ _REGISTERREPLY = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='url', full_name='RegisterReply.url', index=0,
+      name='token', full_name='RegisterReply.token', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='token', full_name='RegisterReply.token', index=1,
+      name='url', full_name='RegisterReply.url', index=1,
       number=2, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -96,13 +201,238 @@ _REGISTERREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=87,
-  serialized_end=130,
+  serialized_start=312,
+  serialized_end=355,
 )
 
+
+_PERFORMANCEPACKET = _descriptor.Descriptor(
+  name='PerformancePacket',
+  full_name='PerformancePacket',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='cumulative_perf', full_name='PerformancePacket.cumulative_perf', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='daily_perf', full_name='PerformancePacket.daily_perf', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='minutely_perf', full_name='PerformancePacket.minutely_perf', index=2,
+      number=3, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='cumulative_risk_metrics', full_name='PerformancePacket.cumulative_risk_metrics', index=3,
+      number=4, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=358,
+  serialized_end=562,
+)
+
+
+_PERIODPERFORMANCE = _descriptor.Descriptor(
+  name='PeriodPerformance',
+  full_name='PeriodPerformance',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='cumulative_metrics', full_name='PeriodPerformance.cumulative_metrics', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='period_common_metrics', full_name='PeriodPerformance.period_common_metrics', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=564,
+  serialized_end=684,
+)
+
+
+_INITIALPARAMETERS = _descriptor.Descriptor(
+  name='InitialParameters',
+  full_name='InitialParameters',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='data_frequency', full_name='InitialParameters.data_frequency', index=0,
+      number=1, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='capital', full_name='InitialParameters.capital', index=1,
+      number=2, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='maximum_leverage', full_name='InitialParameters.maximum_leverage', index=2,
+      number=3, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='emission_rate', full_name='InitialParameters.emission_rate', index=3,
+      number=4, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='benchmark_asset', full_name='InitialParameters.benchmark_asset', index=4,
+      number=5, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=687,
+  serialized_end=845,
+)
+
+
+_PARAMETERSUPDATEMESSAGE = _descriptor.Descriptor(
+  name='ParametersUpdateMessage',
+  full_name='ParametersUpdateMessage',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='controller_event', full_name='ParametersUpdateMessage.controller_event', index=0,
+      number=1, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='capital', full_name='ParametersUpdateMessage.capital', index=1,
+      number=2, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='maximum_leverage', full_name='ParametersUpdateMessage.maximum_leverage', index=2,
+      number=3, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=847,
+  serialized_end=959,
+)
+
+_IDENTITY.fields_by_name['domain'].message_type = contrib_dot_coms_dot_protos_dot_data__bundle__pb2._DOMAIN
+_PERFORMANCEPACKET.fields_by_name['cumulative_perf'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVEMETRICS
+_PERFORMANCEPACKET.fields_by_name['daily_perf'].message_type = _PERIODPERFORMANCE
+_PERFORMANCEPACKET.fields_by_name['minutely_perf'].message_type = _PERIODPERFORMANCE
+_PERFORMANCEPACKET.fields_by_name['cumulative_risk_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVERISKMETRICS
+_PERIODPERFORMANCE.fields_by_name['cumulative_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVEMETRICS
+_PERIODPERFORMANCE.fields_by_name['period_common_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._PERIODCOMMONMETRICS
+_INITIALPARAMETERS.fields_by_name['data_frequency'].enum_type = contrib_dot_control_dot_clock_dot_clock__pb2._FREQUENCY
+_INITIALPARAMETERS.fields_by_name['emission_rate'].enum_type = contrib_dot_control_dot_clock_dot_clock__pb2._FREQUENCY
+_PARAMETERSUPDATEMESSAGE.fields_by_name['controller_event'].enum_type = _CONTROLLEREVENT
+DESCRIPTOR.message_types_by_name['Credentials'] = _CREDENTIALS
+DESCRIPTOR.message_types_by_name['Status'] = _STATUS
 DESCRIPTOR.message_types_by_name['Identity'] = _IDENTITY
 DESCRIPTOR.message_types_by_name['RegisterReply'] = _REGISTERREPLY
+DESCRIPTOR.message_types_by_name['PerformancePacket'] = _PERFORMANCEPACKET
+DESCRIPTOR.message_types_by_name['PeriodPerformance'] = _PERIODPERFORMANCE
+DESCRIPTOR.message_types_by_name['InitialParameters'] = _INITIALPARAMETERS
+DESCRIPTOR.message_types_by_name['ParametersUpdateMessage'] = _PARAMETERSUPDATEMESSAGE
+DESCRIPTOR.enum_types_by_name['ControllerEvent'] = _CONTROLLEREVENT
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
+Credentials = _reflection.GeneratedProtocolMessageType('Credentials', (_message.Message,), dict(
+  DESCRIPTOR = _CREDENTIALS,
+  __module__ = 'contrib.coms.protos.controller_service_pb2'
+  # @@protoc_insertion_point(class_scope:Credentials)
+  ))
+_sym_db.RegisterMessage(Credentials)
+
+Status = _reflection.GeneratedProtocolMessageType('Status', (_message.Message,), dict(
+  DESCRIPTOR = _STATUS,
+  __module__ = 'contrib.coms.protos.controller_service_pb2'
+  # @@protoc_insertion_point(class_scope:Status)
+  ))
+_sym_db.RegisterMessage(Status)
 
 Identity = _reflection.GeneratedProtocolMessageType('Identity', (_message.Message,), dict(
   DESCRIPTOR = _IDENTITY,
@@ -118,6 +448,34 @@ RegisterReply = _reflection.GeneratedProtocolMessageType('RegisterReply', (_mess
   ))
 _sym_db.RegisterMessage(RegisterReply)
 
+PerformancePacket = _reflection.GeneratedProtocolMessageType('PerformancePacket', (_message.Message,), dict(
+  DESCRIPTOR = _PERFORMANCEPACKET,
+  __module__ = 'contrib.coms.protos.controller_service_pb2'
+  # @@protoc_insertion_point(class_scope:PerformancePacket)
+  ))
+_sym_db.RegisterMessage(PerformancePacket)
+
+PeriodPerformance = _reflection.GeneratedProtocolMessageType('PeriodPerformance', (_message.Message,), dict(
+  DESCRIPTOR = _PERIODPERFORMANCE,
+  __module__ = 'contrib.coms.protos.controller_service_pb2'
+  # @@protoc_insertion_point(class_scope:PeriodPerformance)
+  ))
+_sym_db.RegisterMessage(PeriodPerformance)
+
+InitialParameters = _reflection.GeneratedProtocolMessageType('InitialParameters', (_message.Message,), dict(
+  DESCRIPTOR = _INITIALPARAMETERS,
+  __module__ = 'contrib.coms.protos.controller_service_pb2'
+  # @@protoc_insertion_point(class_scope:InitialParameters)
+  ))
+_sym_db.RegisterMessage(InitialParameters)
+
+ParametersUpdateMessage = _reflection.GeneratedProtocolMessageType('ParametersUpdateMessage', (_message.Message,), dict(
+  DESCRIPTOR = _PARAMETERSUPDATEMESSAGE,
+  __module__ = 'contrib.coms.protos.controller_service_pb2'
+  # @@protoc_insertion_point(class_scope:ParametersUpdateMessage)
+  ))
+_sym_db.RegisterMessage(ParametersUpdateMessage)
+
 
 
 _CONTROLLER = _descriptor.ServiceDescriptor(
@@ -126,8 +484,8 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=132,
-  serialized_end=185,
+  serialized_start=1041,
+  serialized_end=1297,
   methods=[
   _descriptor.MethodDescriptor(
     name='Register',
@@ -138,9 +496,120 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
     output_type=_REGISTERREPLY,
     serialized_options=None,
   ),
+  _descriptor.MethodDescriptor(
+    name='ReceivePerformancePacket',
+    full_name='Controller.ReceivePerformancePacket',
+    index=1,
+    containing_service=None,
+    input_type=_PERFORMANCEPACKET,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Stop',
+    full_name='Controller.Stop',
+    index=2,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Connect',
+    full_name='Controller.Connect',
+    index=3,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Start',
+    full_name='Controller.Start',
+    index=4,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Liquidate',
+    full_name='Controller.Liquidate',
+    index=5,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
 ])
 _sym_db.RegisterServiceDescriptor(_CONTROLLER)
 
 DESCRIPTOR.services_by_name['Controller'] = _CONTROLLER
+
+
+_WORKER = _descriptor.ServiceDescriptor(
+  name='Worker',
+  full_name='Worker',
+  file=DESCRIPTOR,
+  index=1,
+  serialized_options=None,
+  serialized_start=1299,
+  serialized_end=1379,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='ReceivePerformancePacket',
+    full_name='Worker.ReceivePerformancePacket',
+    index=0,
+    containing_service=None,
+    input_type=_PERFORMANCEPACKET,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_WORKER)
+
+DESCRIPTOR.services_by_name['Worker'] = _WORKER
+
+
+_CONTROLLERCLIENT = _descriptor.ServiceDescriptor(
+  name='ControllerClient',
+  full_name='ControllerClient',
+  file=DESCRIPTOR,
+  index=2,
+  serialized_options=None,
+  serialized_start=1381,
+  serialized_end=1498,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='Stop',
+    full_name='ControllerClient.Stop',
+    index=0,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Start',
+    full_name='ControllerClient.Start',
+    index=1,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Liquidate',
+    full_name='ControllerClient.Liquidate',
+    index=2,
+    containing_service=None,
+    input_type=_CREDENTIALS,
+    output_type=_STATUS,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_CONTROLLERCLIENT)
+
+DESCRIPTOR.services_by_name['ControllerClient'] = _CONTROLLERCLIENT
 
 # @@protoc_insertion_point(module_scope)

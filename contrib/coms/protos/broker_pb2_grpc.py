@@ -7,6 +7,7 @@ from contrib.coms.protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_d
 from contrib.coms.protos import finance_pb2 as contrib_dot_coms_dot_protos_dot_finance__pb2
 from contrib.coms.protos import protocol_pb2 as contrib_dot_coms_dot_protos_dot_protocol__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
 class BrokerStub(object):
@@ -24,11 +25,6 @@ class BrokerStub(object):
         request_serializer=contrib_dot_coms_dot_protos_dot_broker__pb2.OrderParams.SerializeToString,
         response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Order.FromString,
         )
-    self.AccountState = channel.unary_unary(
-        '/Broker/AccountState',
-        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Account.FromString,
-        )
     self.PortfolioState = channel.unary_unary(
         '/Broker/PortfolioState',
         request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
@@ -39,15 +35,15 @@ class BrokerStub(object):
         request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
         response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.AssetPositionPair.FromString,
         )
-    self.Orders = channel.unary_stream(
-        '/Broker/Orders',
-        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Order.FromString,
-        )
     self.Transactions = channel.unary_stream(
         '/Broker/Transactions',
-        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        request_serializer=google_dot_protobuf_dot_timestamp__pb2.Timestamp.SerializeToString,
         response_deserializer=contrib_dot_coms_dot_protos_dot_finance__pb2.Transaction.FromString,
+        )
+    self.AccountState = channel.unary_unary(
+        '/Broker/AccountState',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Account.FromString,
         )
     self.BatchOrder = channel.unary_stream(
         '/Broker/BatchOrder',
@@ -82,13 +78,6 @@ class BrokerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def AccountState(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
   def PortfolioState(self, request, context):
     # missing associated documentation comment in .proto file
     pass
@@ -103,16 +92,16 @@ class BrokerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Orders(self, request, context):
+  def Transactions(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Transactions(self, request, context):
-    """todo: for transactions, we need to also specify the dt we are looking for
-    """
+  def AccountState(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
@@ -153,11 +142,6 @@ def add_BrokerServicer_to_server(servicer, server):
           request_deserializer=contrib_dot_coms_dot_protos_dot_broker__pb2.OrderParams.FromString,
           response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Order.SerializeToString,
       ),
-      'AccountState': grpc.unary_unary_rpc_method_handler(
-          servicer.AccountState,
-          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Account.SerializeToString,
-      ),
       'PortfolioState': grpc.unary_unary_rpc_method_handler(
           servicer.PortfolioState,
           request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
@@ -168,15 +152,15 @@ def add_BrokerServicer_to_server(servicer, server):
           request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
           response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.AssetPositionPair.SerializeToString,
       ),
-      'Orders': grpc.unary_stream_rpc_method_handler(
-          servicer.Orders,
-          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Order.SerializeToString,
-      ),
       'Transactions': grpc.unary_stream_rpc_method_handler(
           servicer.Transactions,
-          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          request_deserializer=google_dot_protobuf_dot_timestamp__pb2.Timestamp.FromString,
           response_serializer=contrib_dot_coms_dot_protos_dot_finance__pb2.Transaction.SerializeToString,
+      ),
+      'AccountState': grpc.unary_unary_rpc_method_handler(
+          servicer.AccountState,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_protocol__pb2.Account.SerializeToString,
       ),
       'BatchOrder': grpc.unary_stream_rpc_method_handler(
           servicer.BatchOrder,
@@ -201,4 +185,46 @@ def add_BrokerServicer_to_server(servicer, server):
   }
   generic_handler = grpc.method_handlers_generic_handler(
       'Broker', rpc_method_handlers)
+  server.add_generic_rpc_handlers((generic_handler,))
+
+
+class BrokerListenerStub(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def __init__(self, channel):
+    """Constructor.
+
+    Args:
+      channel: A grpc.Channel.
+    """
+    self.Update = channel.unary_unary(
+        '/BrokerListener/Update',
+        request_serializer=contrib_dot_coms_dot_protos_dot_broker__pb2.BrokerState.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+
+
+class BrokerListenerServicer(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def Update(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+
+def add_BrokerListenerServicer_to_server(servicer, server):
+  rpc_method_handlers = {
+      'Update': grpc.unary_unary_rpc_method_handler(
+          servicer.Update,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_broker__pb2.BrokerState.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+  }
+  generic_handler = grpc.method_handlers_generic_handler(
+      'BrokerListener', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

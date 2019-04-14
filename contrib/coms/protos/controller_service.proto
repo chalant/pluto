@@ -1,17 +1,109 @@
 syntax = "proto3";
 
+import "google/protobuf/empty.proto";
+import "contrib/coms/protos/metrics.proto";
+import "contrib/coms/protos/data_bundle.proto";
+
+import "contrib/control/clock/clock.proto";
+
 service Controller {
-    /*Controls a controllable. To be controllable, the client must first register, by providing
-    its name and url and implement a controllable_grpc class*/
-    rpc Register(Identity) returns (RegisterReply) {}
+    rpc Register(StrategyID) returns (google.protobuf.Empty);
+    rpc ReceivePerformancePacket(PerformancePacket) returns (google.protobuf.Empty);
+    rpc Stop(stream Strategy) returns (StopStatus);
+    rpc Liquidate(stream Strategy) returns (LiquidationStatus);
+    rpc Run(RunParams) returns (google.protobuf.Empty)
+    rpc StrategyList(Filter) returns (stream StrategyMetadata)
+    rpc AssignCapital(stream CapitalAssignment) returns (CapitalAssignmentStatus)
 }
 
-message Identity {
+message CapitalAssignment {
+    string name = 1;
+    float capital = 2;
+}
+
+message CapitalAssignmentStatus {
+
+}
+
+message Strategy {
+    string name = 1;
+}
+
+message Filter {
+    string status = 1;
+}
+
+message StrategyMetadata {
+    //todo: returns information about the strategy
+    string name = 1;
+    Domain domain = 2;
+}
+
+enum RunMode {
+    SIMULATION = 0;
+    PAPER = 2;
+    LIVE = 3;
+}
+
+message RunParams {
+    repeated string names = 1;
+    RunMode mode = 2;
+}
+
+message Credentials {
+    string user_name = 1;
+    bytes password = 2;
+}
+
+message LiquidationStatus {
+
+}
+
+message StopStatus {
+
+}
+
+
+message StrategyID {
     string name = 1; //name of the controllable
-    string url = 2; // address to control the client...
+    string address = 2; // address to control the strategy
 }
 
 message RegisterReply {
-    string url = 1; // an url for accessing service-per-client
-    string token = 2;
+    string token = 1;
+    string url = 2;
+}
+
+message PerformancePacket {
+    CumulativeMetrics cumulative_perf = 1;
+    PeriodPerformance daily_perf = 2;
+    PeriodPerformance minutely_perf = 3;
+    CumulativeRiskMetrics cumulative_risk_metrics = 4;
+}
+
+message PeriodPerformance {
+    CumulativeMetrics cumulative_metrics = 1;
+    PeriodCommonMetrics period_common_metrics = 2;
+}
+
+enum ControllerEvent {
+    CAPITAL_CHANGE = 0;
+    LEVERAGE_CHANGE = 1;
+    BROKER_UPDATE = 2;
+}
+
+
+message InitialParameters {
+    Frequency data_frequency = 1;
+    float capital = 2;
+    float maximum_leverage = 3;
+    Frequency emission_rate = 4;
+    string benchmark_asset = 5;
+}
+
+
+message ParametersUpdateMessage {
+    ControllerEvent controller_event = 1;
+    float capital = 2;
+    float maximum_leverage = 3;
 }

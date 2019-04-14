@@ -20,16 +20,6 @@ from zipline.pipeline import loaders
 from zipline import algorithm
 
 from contrib.sources import benchmark_source as bs
-from contrib.control.clock.clock_pb2 import (
-    BAR,
-    SESSION_START,
-    SESSION_END,
-    MINUTE_END,
-    BEFORE_TRADING_START,
-    LIQUIDATE,
-    STOP,
-    INITIALIZE
-)
 
 log = Logger("ZiplineLog")
 
@@ -40,16 +30,18 @@ class AlgorithmController(object):
     """This is the "main class". Handles signals from the controller, controls objects lifespan, executes
     the strategy and data updates."""
 
-    def __init__(self, strategy, benchmark_asset, restrictions, universe_func):
+    def __init__(self, strategy, benchmark_asset, restrictions):
         """
 
         Parameters
         ----------
         strategy
         benchmark_asset
-        restrictions
-        universe_func
+        restrictions : zipline.finance.asset_restrictions.Restrictions
         """
+
+        self._stack = ExitStack()
+
         self._strategy = strategy
 
         self._algo = None
@@ -60,8 +52,6 @@ class AlgorithmController(object):
 
         # todo: need to validate the benchmark asset.
         self._benchmark_source = bs.BenchmarkSource(benchmark_asset)
-
-        self._universe_func = universe_func
 
         self._restrictions = restrictions
 
@@ -79,6 +69,8 @@ class AlgorithmController(object):
 
         self._capital_target = None
 
+        self._pool = futures.ProcessPoolExecutor()
+
     def _get_run_dt(self):
         return self._run_dt
 
@@ -88,34 +80,69 @@ class AlgorithmController(object):
     def set_capital_target(self, value):
         self._capital_target = value
 
-    def _store_state(self, path, metrics_tracker, dt):
+    def _store_state(self, path, state):
         with open(path, "wb") as f:
-            f.write(metrics_tracker.get_state(dt))
+            f.write(state)
 
-    def update(self, dt, action, calendar, metrics_tracker, bundler, capital, emission_rate, state_storage_path):
+    def on_liquidate(self, dt, metrics_tracker):
+        metrics_tracker.handle_liquidation(dt)
+
+    def on_initialize(self, dt, metrics_tracker, bundler, calendar, emission_rate, capital, state_storage_path):
+        # initialize all attributes
+        self._load_attributes(dt, bundler.load(), calendar, emission_rate, initialize=True)
+        # check if there is a previously store state.
+        try:
+            with open(state_storage_path, "rb") as f:
+                metrics_tracker.restore_state(f.read())
+        except FileNotFoundError:
+            metrics_tracker.handle_initialization(dt, calendar.session_open(dt), capital)
+
+    def on_bar(self, dt, metrics_tracker, calendar, bundler, broker):
         """
 
         Parameters
         ----------
         dt
-        action
-        calendar
         metrics_tracker
+        calendar
         bundler
-        capital
-        emission_rate
-        state_storage_path
+        broker
 
         Returns
         -------
 
         """
-        pool = futures.ProcessPoolExecutor()
+        algo = self._algo
 
-        # todo: this won't probably work, since the algo instance has a small lifespan
-        # stack.enter_context(ZiplineAPI(self._algo)) #todo
-        # todo: the bundler has a data_frequency property
-        if bundler.data_frequency == 'minute':
+        # compute capital changes and update account
+        return self._capital_changes_and_metrics_update(
+            algo, metrics_tracker, dt, self._data_portal,
+            calendar, bundler.data_frequency, broker)
+
+        self._run_dt = dt
+        # make a checkpoint of the state of the tracker as a sub-process
+        self._pool.submit(self._store_state, path=state_storage_path, state=metrics_tracker.get_state(dt))
+
+        algo.event_manager.handle_data(algo, self._current_data, dt)
+        # this area is where new events occur from the handle_data_func (new orders etc.)
+
+    def on_session_start(self, dt, bundler, calendar, emission_rate, metrics_tracker):
+        # re-load attributes
+        self._load_attributes(dt, bundler.load(), calendar, emission_rate)
+        # compute eventual capital changes and update account
+        return self._capital_changes_and_metrics_update(
+            self._algo, metrics_tracker, dt,
+            self._data_portal, calendar, bundler.data_frequency
+        )
+
+        self._run_dt = dt
+        metrics_tracker.handle_market_open(dt, self._data_portal, calendar)
+
+    def on_session_end(self, dt, metrics_tracker, data_frequency):
+        algo = self._algo
+        dp = self._data_portal
+
+        if data_frequency == 'minute':
             def execute_order_cancellation_policy(blotter, event):
                 blotter.execute_cancel_policy(event)
 
@@ -123,226 +150,41 @@ class AlgorithmController(object):
             def execute_order_cancellation_policy():
                 pass
 
-        def on_exit():
-            # Remove references to algo, data portal, et al to break cycles
-            # and ensure deterministic cleanup of these objects when the
-            # simulation finishes.
-            self._algo = None
-            self.benchmark_source = self.current_data = self.data_portal = None
+        execute_order_cancellation_policy()
+        algo.validate_account_controls()
 
-        # signal generated ONCE per LIFECYCLE
-        if action == INITIALIZE:
-            # initialize all attributes
-            self._load_attributes(dt, bundler.load(), calendar, emission_rate, initialize=True)
-            # check if there is a previously store state.
-            try:
-                with open(state_storage_path, "rb") as f:
-                    metrics_tracker.restore_state(f.read())
-            except FileNotFoundError:
-                metrics_tracker.handle_initialization(dt, calendar.session_open(dt), capital)
+        return self._get_daily_message(dt, algo, metrics_tracker, dp)
 
-        elif action == BAR:
-            algo = self._algo
+        # handle the session end (create and store bundle for future load)
+        bundler.on_session_end(dt)
 
-            # compute capital changes and update account
-            yield self._capital_changes_and_metrics_update(
-                algo, metrics_tracker, dt, self._data_portal,
-                calendar, bundler.data_frequency
-            )
+    def on_before_trading_start(self, dt):
+        algo = self._algo
+        self._run_dt = dt
+        algo.on_dt_changed(dt)
+        algo.before_trading_start(self._current_data)
 
-            self._run_dt = dt
-            # make a checkpoint of the state of the tracker as a sub-process
-            pool.submit(self._store_state, path=state_storage_path, metrics_tracker=metrics_tracker, dt=dt)
+    def on_minute_end(self, dt, metrics_tracker):
+        return self._get_minute_message(
+            dt,
+            self._algo,
+            metrics_tracker,
+            self._data_portal
+        )
 
-            algo.event_manager.handle_data(algo, self._current_data, dt)
-            # this area is where new events occur from the handle_data_func (new orders etc.)
+    def on_stop(self, dt, metrics_tracker, state_storage_path):
+        # save the state of the tracker (and account) before shutting down...
+        metrics_tracker.handle_stop(dt)
+        with open(state_storage_path, "wb") as f:
+            f.write(metrics_tracker.get_state(dt))
 
-        elif action == SESSION_START:
-            # re-load attributes
-            self._load_attributes(dt, bundler.load(), calendar, emission_rate)
-            # compute eventual capital changes and update account
-            yield self._capital_changes_and_metrics_update(
-                self._algo, metrics_tracker, dt,
-                self._data_portal, calendar, bundler.data_frequency
-            )
-
-            self._run_dt = dt
-            metrics_tracker.handle_market_open(dt, self._data_portal, calendar)
-
-        elif action == SESSION_END:
-            algo = self._algo
-            dp = self._data_portal
-            # # todo: blotter?
-            # # todo: is this step necessary? (clean_expired_assets?)
-            # self._cleanup_expired_assets(dt, self._blotter, position_assets, dp, metrics_tracker)
-
-            execute_order_cancellation_policy()
-            algo.validate_account_controls()
-
-            yield self._get_daily_message(dt, algo, metrics_tracker, dp)
-
-            # handle the session end (create and store bundle for future load)
-            bundler.on_session_end(dt)
-
-        elif action == BEFORE_TRADING_START:
-            algo = self._algo
-            self._run_dt = dt
-            algo.on_dt_changed(dt)
-            algo.before_trading_start(self._current_data)
-
-        elif action == MINUTE_END:
-            yield self._get_minute_message(
-                dt,
-                self._algo,
-                metrics_tracker,
-                self._data_portal
-            )
-
-            # todo: this could be very slow... need a way to optimize this.
-            if bundler.on_minute_end(dt):
-                # reload all attributes if the bundler handles data-downloads...
-                self._load_attributes(dt, bundler.load(), calendar, emission_rate, initialize=False)
-
-        elif action == LIQUIDATE:
-            metrics_tracker.handle_liquidation(dt)
-
-        elif action == STOP:
-            # todo: save the state of the tracker (and account) before shutting down...
-            metrics_tracker.handle_stop(dt)
-            with open(state_storage_path, "wb") as f:
-                f.write(metrics_tracker.get_state(dt))
-
-    # def run(self, clock, metrics_tracker, bundler, capital, state_storage_path):
-    #     """
-    #
-    #     Parameters
-    #     ----------
-    #     clock: contrib.control.clock.Clock
-    #     metrics_tracker : contrib.finance.metrics.tracker.MetricsTracker
-    #     bundler
-    #     capital : float
-    #     state_storage_path : str
-    #
-    #     Returns
-    #     -------
-    #     generator
-    #
-    #     """
-    #
-    #     pool = futures.ProcessPoolExecutor()
-    #
-    #     def on_exit():
-    #         # Remove references to algo, data portal, et al to break cycles
-    #         # and ensure deterministic cleanup of these objects when the
-    #         # simulation finishes.
-    #         self._algo = None
-    #         self.benchmark_source = self.current_data = self.data_portal = None
-    #
-    #     with ExitStack() as stack:
-    #         stack.callback(on_exit)
-    #         stack.enter_context(self._processor)
-    #         # todo: this won't probably work, since the algo instance has a small lifespan
-    #         # stack.enter_context(ZiplineAPI(self._algo)) #todo
-    #         # todo: the bundler has a data_frequency property
-    #         if bundler.data_frequency == 'minute':
-    #             def execute_order_cancellation_policy(blotter, event):
-    #                 blotter.execute_cancel_policy(event)
-    #
-    #         else:
-    #             def execute_order_cancellation_policy():
-    #                 pass
-    #
-    #         for dt, action in clock:
-    #             #signal generated ONCE per LIFECYCLE
-    #             if action == INITIALIZE:
-    #                 # initialize all attributes
-    #                 self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, initialize=True)
-    #                 #check if there is a previously store state.
-    #                 try:
-    #                     with open(state_storage_path, "rb") as f:
-    #                         metrics_tracker.restore_state(f.read())
-    #                 except FileNotFoundError:
-    #                     metrics_tracker.handle_initialization(dt, clock.calendar.session_open(dt), capital)
-    #
-    #             elif action == BAR:
-    #                 algo = self._algo
-    #
-    #                 # compute capital changes and update account
-    #                 yield self._capital_changes_and_metrics_update(
-    #                     algo, metrics_tracker, dt, self._data_portal,
-    #                     clock.calendar, bundler.data_frequency
-    #                 )
-    #
-    #                 self._run_dt = dt
-    #                 #make a checkpoint of the state or the tracker as a sub-process
-    #                 pool.submit(self._store_state, path=state_storage_path, metrics_tracker=metrics_tracker, dt=dt)
-    #
-    #                 algo.event_manager.handle_data(algo, self._current_data, dt)
-    #                 # this area is where new events occur from the handle_data_func (new orders etc.)
-    #
-    #             elif action == SESSION_START:
-    #                 # re-load attributes
-    #                 self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate)
-    #                 # compute eventual capital changes and update account
-    #                 yield self._capital_changes_and_metrics_update(
-    #                     self._algo, metrics_tracker, dt,
-    #                     self._data_portal, clock.calendar, bundler.data_frequency
-    #                 )
-    #
-    #                 self._run_dt = dt
-    #                 metrics_tracker.handle_market_open(dt, self._data_portal, clock.calendar)
-    #
-    #             elif action == SESSION_END:
-    #                 algo = self._algo
-    #                 dp = self._data_portal
-    #                 # # todo: blotter?
-    #                 # # todo: is this step necessary? (clean_expired_assets?)
-    #                 # self._cleanup_expired_assets(dt, self._blotter, position_assets, dp, metrics_tracker)
-    #
-    #                 execute_order_cancellation_policy()
-    #                 algo.validate_account_controls()
-    #
-    #                 yield self._get_daily_message(dt, algo, metrics_tracker, dp)
-    #
-    #                 # handle the session end (create and store bundle for future load)
-    #                 bundler.on_session_end(dt)
-    #
-    #             elif action == BEFORE_TRADING_START:
-    #                 algo = self._algo
-    #                 self._run_dt = dt
-    #                 algo.on_dt_changed(dt)
-    #                 algo.before_trading_start(self._current_data)
-    #
-    #             elif action == MINUTE_END:
-    #                 yield self._get_minute_message(
-    #                     dt,
-    #                     self._algo,
-    #                     metrics_tracker,
-    #                     self._data_portal
-    #                 )
-    #
-    #                 # todo: this could be very slow... need a way to optimize this.
-    #                 if bundler.on_minute_end(dt):
-    #                     # reload all attributes if the bundler handles data-downloads...
-    #                     self._load_attributes(dt, bundler.load(), clock.calendar, clock.emission_rate, False)
-    #
-    #             elif action == LIQUIDATE:
-    #                 metrics_tracker.handle_liquidation(dt)
-    #
-    #             elif action == STOP:
-    #                 #todo: save the state of the tracker (and account) before shutting down...
-    #                 metrics_tracker.handle_stop(dt)
-    #                 with open(state_storage_path, "wb") as f:
-    #                     f.write(metrics_tracker.get_state(dt))
-
-    def _create_bar_data(self, universe_func, data_portal, get_simulation_dt, data_frequency, calendar, restrictions):
+    def _create_bar_data(self, data_portal, get_simulation_dt, data_frequency, calendar, restrictions):
         return BarData(
             data_portal=data_portal,
             simulation_dt_func=get_simulation_dt,
             data_frequency=data_frequency,
             trading_calendar=calendar,
-            restrictions=restrictions,
-            universe_func=universe_func)
+            restrictions=restrictions)
 
     def _get_daily_message(self, dt, algo, metrics_tracker, data_portal):
         """
@@ -450,12 +292,14 @@ class AlgorithmController(object):
         )
 
     def _capital_changes_and_metrics_update(self, algo, metrics_tracker, dt, data_portal,
-                                            trading_calendar, data_frequency):
-        yield metrics_tracker.update(dt, data_portal, trading_calendar, data_frequency, self._capital_target)
+                                            trading_calendar, data_frequency, broker):
+        cap_change = metrics_tracker.update(dt, data_portal, trading_calendar,
+                                            data_frequency, self._capital_target, broker)
 
         self._capital_target = None
         self._run_dt = dt
         algo.on_dt_changed(dt)
+        return cap_change
 
     def _load_attributes(self, dt, bundle, calendar, emission_rate, data_frequency='daily', initialize=False):
         equity_minute_reader = bundle.equity_minute_bar_reader
@@ -466,7 +310,6 @@ class AlgorithmController(object):
         )
 
         self._current_data = self._create_bar_data(
-            self._universe_func,
             portal,
             self._get_run_dt,
             data_frequency,
@@ -500,3 +343,20 @@ class AlgorithmController(object):
             algo.initialize()
 
         # todo: handle_start_of_simulation (for metrics_tracker etc.)
+
+    def __enter__(self):
+        stack = self._stack
+        stack.enter_context(self._processor)
+        stack.enter_context(ZiplineAPI(self._algo))
+        def on_exit():
+            # Remove references to algo, data portal, et al to break cycles
+            # and ensure deterministic cleanup of these objects when the
+            # simulation finishes.
+            self._algo = None
+            self.benchmark_source = self.current_data = self.data_portal = None
+
+        stack.callback(on_exit)
+
+    def __exit__(self ,*exc_details):
+        self._stack.close()
+

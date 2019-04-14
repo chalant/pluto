@@ -31,8 +31,11 @@ from contrib.control import clock
 
 
 class SimulationBroker(object):
-    def __init__(self, equity_slippage=None, future_slippage=None,
+    def __init__(self, data_frequency, metrics_tracker, data_portal, calendar, restrictions, equity_slippage=None, future_slippage=None,
                  equity_commission=None, future_commission=None,cancel_policy=None):
+
+        self._metrics_tracker = metrics_tracker
+
         self._cancel_policy = cancel_policy if cancel_policy else NeverCancel()
         self._open_orders = defaultdict(list)
 
@@ -58,8 +61,10 @@ class SimulationBroker(object):
 
         self._data_portal = None
 
-        self._current_data = None
-        self._asset_finder = None
+        self._current_data = self._create_bar_data(
+            data_portal, self._get_run_dt,
+            data_frequency, calendar, restrictions
+        )
 
         self._run_dt = None
 
@@ -77,52 +82,25 @@ class SimulationBroker(object):
 
         self._transactions = []
 
-    def _create_bar_data(self, universe_func, data_portal, get_dt, data_frequency, calendar, restrictions):
+    def _create_bar_data(self, data_portal, get_dt, data_frequency, calendar, restrictions):
         return BarData(
             data_portal=data_portal,
             simulation_dt_func=get_dt,
             data_frequency=data_frequency,
             trading_calendar=calendar,
-            restrictions=restrictions,
-            universe_func=universe_func)
+            restrictions=restrictions)
 
     def _get_run_dt(self):
         return self._run_dt
 
-    # todo: we need an offset: each of these events must be generated BEFORE the events of the client-side (say
-    # a minute)
-    def run(self, bundler, trading_calendar, capital_base, start_dt,
-            end_dt, restrictions, universe_func, emission_rate='daily'):
-        """
-
-        Parameters
-        ----------
-        bundler
-        trading_calendar : trading_calendars.TradingCalendar
-        capital_base : float
-        start_dt : pandas.Timestamp
-        end_dt : pandas.Timestamp
-        restrictions
-        universe_func
-        emission_rate
-
-        Returns
-        -------
-
-        """
-
-        cl = clock.MinuteSimulationClock(trading_calendar, start_dt, end_dt)
-        for dt, evt in cl:
-            if evt == clock.INITIALIZE:
-                self._load_attributes(
-                    bundler.load(), cl.calendar, normalize_date(start_dt), normalize_date(end_dt),
-                    capital_base, restrictions, universe_func, emission_rate, bundler.data_frequency
-                )
-            elif evt == clock.SESSION_END:
-                #todo: update the state of the broker...
-                self._cleanup_expired_assets(dt, )
-            elif evt == clock.BAR:
-                self._update(self._current_data, self._blotter, self._metrics_tracker)
+    #todo: this gets updated by the controller, and returns orders and transactions
+    #observers the clock as-well.
+    def update(self, dt, evt):
+        if evt == clock.SESSION_END:
+            # todo: update the state of the broker...
+            self._cleanup_expired_assets(dt, )
+        elif evt == clock.BAR:
+            self._update(self._current_data, self._blotter, self._metrics_tracker)
 
     def _load_data_portal(self, calendar, asset_finder, first_trading_day,
                           equity_minute_bar_reader, equity_daily_bar_reader, adjustment_reader):
@@ -131,14 +109,12 @@ class SimulationBroker(object):
             equity_daily_bar_reader, equity_minute_bar_reader, adjustment_reader
         )
 
-    def _load_attributes(self, bundle, calendar, start_dt, end_dt, capital_base,
-                         restrictions, universe_func, emission_rate, data_frequency):
+    def _load_attributes(self, bundle, calendar, restrictions, universe_func, data_frequency):
 
         equity_minute_reader = bundle.equity_minute_bar_reader
         self._asset_finder = asset_finder = bundle.asset_finder
 
         self._current_data = self._create_bar_data(
-            universe_func,
             self._load_data_portal(
                 calendar, asset_finder, equity_minute_reader.first_trading_day,
                 equity_minute_reader, bundle.equity_daily_bar_reader, bundle.adjustment_reader
@@ -147,11 +123,6 @@ class SimulationBroker(object):
             data_frequency,
             calendar,
             restrictions
-        )
-
-        self._metrics_tracker = tracker.MetricsTracker(
-            calendar, start_dt, end_dt, capital_base, emission_rate,
-            data_frequency, asset_finder, load('default')
         )
 
     def _update(self, bar_data, blotter, metrics_tracker):
