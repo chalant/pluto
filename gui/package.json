@@ -1,0 +1,25 @@
+{
+  "name": "zipline-gui",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "chalant",
+  "license": "MIT",
+  "dependencies": {
+    "chartist": "^0.11.0",
+    "electron": "5.0.0",
+    "monaco-editor": "^0.16.2",
+    "request-light": "^0.2.4",
+    "requirejs": "^2.3.6",
+    "typescript": "^3.4.5",
+    "vscode-base-languageclient": "^4.4.0",
+    "vscode-json-languageservice": "^3.2.0",
+    "vscode-languageserver": "^5.2.1"
+  },
+  "devDependencies": {
+    "vscode": "^1.1.33"
+  },
+  "scripts": {
+    "start": "electron .",
+    "compile": "tsc"
+  }
+}
