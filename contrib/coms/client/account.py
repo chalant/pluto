@@ -32,27 +32,16 @@ log = Logger("ZiplineLog")
 
 #todo: this should also be a broker listener...(receives updates from the broker server)
 # should be called before calling the algo-controller (by the controller process)
-class BrokerListener(object):
+class BrokerClient(object):
     '''Zipline-Server client. Converts zipline objects into proto messages and vice-versa...'''
 
-    def __init__(self, channel, token):
+    def __init__(self, channel):
         self._stub = broker_rpc.BrokerStub(channel)
-        self._token = token
         self._transactions = []
         self._orders = {}
 
-    def _with_metadata(self, rpc, params):
-        '''If we're not registered, an RpcError will be raised. Registration is handled
-        externally.'''
-        return rpc(params, metadata=(('Token', self._token)))
-
     def order(self, asset, amount, style, order_id=None):
-        return cv.to_zp_asset(
-            self._with_metadata(
-                self._stub.SingleOrder,
-                self._create_order_param(asset, style, amount)
-            )
-        )
+        return cv.to_zp_asset(self._stub.SingleOrder(order_params = self._create_order_param(asset, style, amount)))
 
     @property
     def account(self):
@@ -69,7 +58,7 @@ class BrokerListener(object):
 
     def get_transactions(self, dt):
         """returns transactions starting from dt"""
-        for resp in self._with_metadata(self._stub.Transactions(cv.to_proto_timestamp(dt)), Empty()):
+        for resp in self._stub.Transactions(dt=cv.to_proto_timestamp(dt)), Empty():
             yield cv.to_zp_transaction(resp)
 
 
@@ -145,7 +134,7 @@ class Account(saving.Savable):
 
         Parameters
         ----------
-        broker: BrokerListener
+        broker: BrokerClient
         """
         self._broker = broker
 

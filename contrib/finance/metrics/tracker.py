@@ -13,7 +13,7 @@ from contrib.finance.metrics import tracker_state_pb2 as trs
 
 
 class MetricsTracker(saving.Savable):
-    def __init__(self, broker_listener, metrics=None):
+    def __init__(self, broker_client, metrics=None):
         """
 
         Parameters
@@ -21,7 +21,7 @@ class MetricsTracker(saving.Savable):
         account : contrib.coms.client.account.Account
         metrics : set
         """
-        self._account = act.Account(broker_listener)
+        self._account = act.Account(broker_client)
 
         self._first_session = None
         self._first_open_session = None

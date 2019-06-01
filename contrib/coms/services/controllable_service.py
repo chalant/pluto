@@ -24,7 +24,7 @@ class ControllableServicer(cbl_grpc.ControllableServicer):
         #register to the controller
         creds = self._stub.Register(ctl_msg.Identity(name=strategy.name, url=address))
         self._worker = ctl_srv.WorkerStub(srv.create_channel(creds.url, certificate_auth))
-        self._broker = broker = account.BrokerListener(channel, creds.token)
+        self._broker = broker = account.BrokerClient(channel, creds.token)
         self._metrics_tracker = tracker.MetricsTracker(broker)
         #register to the controller.
 

@@ -7,8 +7,6 @@ import "contrib/coms/protos/finance.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
-import "contrib/coms/protos/data_bundle.proto";
-
 service Broker {
     /*This should encapsulate the set of services available per account...*/
     rpc SingleOrder (OrderParams) returns (Order);
@@ -19,7 +17,6 @@ service Broker {
     rpc BatchOrder (BatchOrderParams) returns (stream Order);
     rpc CancelOrder (Order) returns (google.protobuf.Empty);
     rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
-    rpc GetDataBundle(Domain) returns (stream Bundle); // bundle data is requested per account...
 }
 
 

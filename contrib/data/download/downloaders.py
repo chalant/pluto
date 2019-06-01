@@ -47,7 +47,7 @@ class Downloadable(ABC):
 		raise NotImplementedError
 
 
-# TODO: each downloader should keep track of its last update, so that it doesn't download stuff that
+#TODO: each downloader should keep track of its last update, so that it doesn't download stuff that
 # it has already downloaded...
 class Downloader(object):
 	def __init__(self):

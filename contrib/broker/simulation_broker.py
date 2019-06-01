@@ -27,12 +27,9 @@ from zipline.finance.commission import (
     PerShare,
 )
 
-from contrib.control import clock
-
-
 class SimulationBroker(object):
-    def __init__(self, data_frequency, metrics_tracker, data_portal, calendar, restrictions, equity_slippage=None, future_slippage=None,
-                 equity_commission=None, future_commission=None,cancel_policy=None):
+    def __init__(self,  metrics_tracker, equity_slippage=None,
+                 future_slippage=None, equity_commission=None, future_commission=None,cancel_policy=None):
 
         self._metrics_tracker = metrics_tracker
 
@@ -59,71 +56,19 @@ class SimulationBroker(object):
             ),
         }
 
-        self._data_portal = None
-
-        self._current_data = self._create_bar_data(
-            data_portal, self._get_run_dt,
-            data_frequency, calendar, restrictions
-        )
-
-        self._run_dt = None
-
-        # Processor function for injecting the algo_dt into
-        # user prints/logs.
-        def inject_algo_dt(record):
-            if 'algo_dt' not in record.extra:
-                record.extra['algo_dt'] = self._get_run_dt
-
-        self._processor = Processor(inject_algo_dt)
-
-        self._last_sync_time = pd.NaT
-
-        self._metrics_tracker = None
-
         self._transactions = []
-
-    def _create_bar_data(self, data_portal, get_dt, data_frequency, calendar, restrictions):
-        return BarData(
-            data_portal=data_portal,
-            simulation_dt_func=get_dt,
-            data_frequency=data_frequency,
-            trading_calendar=calendar,
-            restrictions=restrictions)
-
-    def _get_run_dt(self):
-        return self._run_dt
-
     #todo: this gets updated by the controller, and returns orders and transactions
     #observers the clock as-well.
-    def update(self, dt, evt):
-        if evt == clock.SESSION_END:
-            # todo: update the state of the broker...
-            self._cleanup_expired_assets(dt, )
-        elif evt == clock.BAR:
-            self._update(self._current_data, self._blotter, self._metrics_tracker)
 
-    def _load_data_portal(self, calendar, asset_finder, first_trading_day,
-                          equity_minute_bar_reader, equity_daily_bar_reader, adjustment_reader):
-        return dp.DataPortal(
-            asset_finder, calendar, first_trading_day,
-            equity_daily_bar_reader, equity_minute_bar_reader, adjustment_reader
-        )
+    def on_session_end(self,dt):
+        # todo: update the state of the broker...
+        self._cleanup_expired_assets(dt, )
 
-    def _load_attributes(self, bundle, calendar, restrictions, universe_func, data_frequency):
+    def on_bar(self, dt, bar_data):
+        self._update(bar_data, self._blotter, self._metrics_tracker)
 
-        equity_minute_reader = bundle.equity_minute_bar_reader
-        self._asset_finder = asset_finder = bundle.asset_finder
-
-        self._current_data = self._create_bar_data(
-            self._load_data_portal(
-                calendar, asset_finder, equity_minute_reader.first_trading_day,
-                equity_minute_reader, bundle.equity_daily_bar_reader, bundle.adjustment_reader
-            ),
-            self._get_run_dt,
-            data_frequency,
-            calendar,
-            restrictions
-        )
+    def on_stop(self, dt):
+        pass
 
     def _update(self, bar_data, blotter, metrics_tracker):
         """

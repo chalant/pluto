@@ -373,7 +373,6 @@ class TradingAlgorithm(object):
             )
             # Optional analyze function, gets called after run
             self._analyze = self.namespace.get('analyze')
-
         else:
             self._initialize = initialize or (lambda self: None)
             self._handle_data = handle_data

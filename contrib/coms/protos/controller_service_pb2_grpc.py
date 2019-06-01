@@ -2,6 +2,7 @@
 import grpc
 
 from contrib.coms.protos import controller_service_pb2 as contrib_dot_coms_dot_protos_dot_controller__service__pb2
+from contrib.coms.protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_dot_data__bundle__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
@@ -15,35 +16,50 @@ class ControllerStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.Register = channel.unary_unary(
-        '/Controller/Register',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Identity.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.RegisterReply.FromString,
+    self.Deploy = channel.unary_unary(
+        '/Controller/Deploy',
+        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Strategy.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+    self.GetEnvironment = channel.unary_unary(
+        '/Controller/GetEnvironment',
+        request_serializer=contrib_dot_coms_dot_protos_dot_data__bundle__pb2.Domain.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Environment.FromString,
         )
     self.ReceivePerformancePacket = channel.unary_unary(
         '/Controller/ReceivePerformancePacket',
         request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.PerformancePacket.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
-    self.Stop = channel.unary_unary(
+    self.Stop = channel.stream_unary(
         '/Controller/Stop',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
+        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.ID.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.StopStatus.FromString,
         )
-    self.Connect = channel.unary_unary(
-        '/Controller/Connect',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
-        )
-    self.Start = channel.unary_unary(
-        '/Controller/Start',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
-        )
-    self.Liquidate = channel.unary_unary(
+    self.Liquidate = channel.stream_unary(
         '/Controller/Liquidate',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
+        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.ID.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.LiquidationStatus.FromString,
+        )
+    self.Run = channel.unary_stream(
+        '/Controller/Run',
+        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.RunParams.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.PerformancePacket.FromString,
+        )
+    self.StrategyList = channel.unary_stream(
+        '/Controller/StrategyList',
+        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Filter.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Metadata.FromString,
+        )
+    self.AssignCapital = channel.stream_unary(
+        '/Controller/AssignCapital',
+        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.CapitalAssignment.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.CapitalAssignmentStatus.FromString,
+        )
+    self.GetDataBundle = channel.unary_unary(
+        '/Controller/GetDataBundle',
+        request_serializer=contrib_dot_coms_dot_protos_dot_data__bundle__pb2.Domain.SerializeToString,
+        response_deserializer=contrib_dot_coms_dot_protos_dot_data__bundle__pb2.Bundle.FromString,
         )
 
 
@@ -51,7 +67,14 @@ class ControllerServicer(object):
   # missing associated documentation comment in .proto file
   pass
 
-  def Register(self, request, context):
+  def Deploy(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def GetEnvironment(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -65,28 +88,42 @@ class ControllerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Stop(self, request, context):
+  def Stop(self, request_iterator, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Connect(self, request, context):
+  def Liquidate(self, request_iterator, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Start(self, request, context):
+  def Run(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Liquidate(self, request, context):
+  def StrategyList(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def AssignCapital(self, request_iterator, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def GetDataBundle(self, request, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -96,155 +133,52 @@ class ControllerServicer(object):
 
 def add_ControllerServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'Register': grpc.unary_unary_rpc_method_handler(
-          servicer.Register,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Identity.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.RegisterReply.SerializeToString,
+      'Deploy': grpc.unary_unary_rpc_method_handler(
+          servicer.Deploy,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Strategy.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'GetEnvironment': grpc.unary_unary_rpc_method_handler(
+          servicer.GetEnvironment,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_data__bundle__pb2.Domain.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Environment.SerializeToString,
       ),
       'ReceivePerformancePacket': grpc.unary_unary_rpc_method_handler(
           servicer.ReceivePerformancePacket,
           request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.PerformancePacket.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
-      'Stop': grpc.unary_unary_rpc_method_handler(
+      'Stop': grpc.stream_unary_rpc_method_handler(
           servicer.Stop,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.ID.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.StopStatus.SerializeToString,
       ),
-      'Connect': grpc.unary_unary_rpc_method_handler(
-          servicer.Connect,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
-      ),
-      'Start': grpc.unary_unary_rpc_method_handler(
-          servicer.Start,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
-      ),
-      'Liquidate': grpc.unary_unary_rpc_method_handler(
+      'Liquidate': grpc.stream_unary_rpc_method_handler(
           servicer.Liquidate,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.ID.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.LiquidationStatus.SerializeToString,
+      ),
+      'Run': grpc.unary_stream_rpc_method_handler(
+          servicer.Run,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.RunParams.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.PerformancePacket.SerializeToString,
+      ),
+      'StrategyList': grpc.unary_stream_rpc_method_handler(
+          servicer.StrategyList,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Filter.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Metadata.SerializeToString,
+      ),
+      'AssignCapital': grpc.stream_unary_rpc_method_handler(
+          servicer.AssignCapital,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.CapitalAssignment.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.CapitalAssignmentStatus.SerializeToString,
+      ),
+      'GetDataBundle': grpc.unary_unary_rpc_method_handler(
+          servicer.GetDataBundle,
+          request_deserializer=contrib_dot_coms_dot_protos_dot_data__bundle__pb2.Domain.FromString,
+          response_serializer=contrib_dot_coms_dot_protos_dot_data__bundle__pb2.Bundle.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
       'Controller', rpc_method_handlers)
-  server.add_generic_rpc_handlers((generic_handler,))
-
-
-class WorkerStub(object):
-  # missing associated documentation comment in .proto file
-  pass
-
-  def __init__(self, channel):
-    """Constructor.
-
-    Args:
-      channel: A grpc.Channel.
-    """
-    self.ReceivePerformancePacket = channel.unary_unary(
-        '/Worker/ReceivePerformancePacket',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.PerformancePacket.SerializeToString,
-        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-        )
-
-
-class WorkerServicer(object):
-  # missing associated documentation comment in .proto file
-  pass
-
-  def ReceivePerformancePacket(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-
-def add_WorkerServicer_to_server(servicer, server):
-  rpc_method_handlers = {
-      'ReceivePerformancePacket': grpc.unary_unary_rpc_method_handler(
-          servicer.ReceivePerformancePacket,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.PerformancePacket.FromString,
-          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-      ),
-  }
-  generic_handler = grpc.method_handlers_generic_handler(
-      'Worker', rpc_method_handlers)
-  server.add_generic_rpc_handlers((generic_handler,))
-
-
-class ControllerClientStub(object):
-  # missing associated documentation comment in .proto file
-  pass
-
-  def __init__(self, channel):
-    """Constructor.
-
-    Args:
-      channel: A grpc.Channel.
-    """
-    self.Stop = channel.unary_unary(
-        '/ControllerClient/Stop',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
-        )
-    self.Start = channel.unary_unary(
-        '/ControllerClient/Start',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
-        )
-    self.Liquidate = channel.unary_unary(
-        '/ControllerClient/Liquidate',
-        request_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.SerializeToString,
-        response_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.FromString,
-        )
-
-
-class ControllerClientServicer(object):
-  # missing associated documentation comment in .proto file
-  pass
-
-  def Stop(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-  def Start(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-  def Liquidate(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-
-def add_ControllerClientServicer_to_server(servicer, server):
-  rpc_method_handlers = {
-      'Stop': grpc.unary_unary_rpc_method_handler(
-          servicer.Stop,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
-      ),
-      'Start': grpc.unary_unary_rpc_method_handler(
-          servicer.Start,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
-      ),
-      'Liquidate': grpc.unary_unary_rpc_method_handler(
-          servicer.Liquidate,
-          request_deserializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Credentials.FromString,
-          response_serializer=contrib_dot_coms_dot_protos_dot_controller__service__pb2.Status.SerializeToString,
-      ),
-  }
-  generic_handler = grpc.method_handlers_generic_handler(
-      'ControllerClient', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

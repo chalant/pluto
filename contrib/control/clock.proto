@@ -26,12 +26,6 @@ service SimulationClock {
     rpc GetState (google.protobuf.Empty) returns (State);
 }
 
-
-service ClockClient {
-    rpc Update (ClockEvent) returns (google.protobuf.Empty);
-    rpc CalendarUpdate (Calendar) returns (google.protobuf.Empty);
-}
-
 message CalendarMetadata {
     google.protobuf.Timestamp start = 1;
     google.protobuf.Timestamp end = 2;
@@ -58,11 +52,6 @@ enum Event {
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
     Event event = 2;
-}
-
-enum Mode {
-    SIMULATION = 0;
-    LIVE = 1;
 }
 
 enum Frequency {
