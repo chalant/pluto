@@ -90,7 +90,7 @@ class AlgorithmController(object):
     def on_initialize(self, dt, metrics_tracker, bundler, calendar, emission_rate, capital, state_storage_path):
         # initialize all attributes
         self._load_attributes(dt, bundler.load(), calendar, emission_rate, initialize=True)
-        # check if there is a previously store state.
+        # check if there is a previously stored state.
         try:
             with open(state_storage_path, "rb") as f:
                 metrics_tracker.restore_state(f.read())
@@ -112,6 +112,9 @@ class AlgorithmController(object):
         -------
 
         """
+
+
+
         algo = self._algo
 
         # compute capital changes and update account

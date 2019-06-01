@@ -30,13 +30,40 @@ enum CountryCode {
         SWITZERLAND = 24;
         UNITED_KINGDOM = 25;
         UNITED_STATES = 26;
-    }
+}
+
+enum Operator {
+        /*How multiple domain elements should be combined*/
+        INTERSECTION=0; //only consider overlapping sessions
+        UNION=1; //consider any open session
+        DIFFERENCE=2; //excludes sessions that do not intersect...
+        SYM_DIFF=3;
+}
+
+enum DataSet {
+        EQUITY=0;
+}
+
+message DomainOperation {
+        Domain domain1 = 1;
+        Domain domain2 = 2;
+        Operator operator = 3;
+}
 
 message Domain {
-    /*a domain contains one or more country codes, that defines the bundle to be
-    constructed on the server side and returned*/
-    repeated CountryCode country_code = 1;
+        /*A domain is either a single base domain or a combination of two domains*/
+        oneof element{
+                DomainOperation operation = 1;
+                BaseDomain base = 2;
+        }
+}
 
+message BaseDomain {
+        /*a base_domain contains one country codes, that defines the bundle to be
+        constructed on the server side. A domain is either a leaf or a combination
+        or a combination of another domain*/
+        CountryCode country_code = 1; //default us?
+        DataSet data_set = 2; //default equity?
 }
 
 message BundleMetadata {
@@ -44,6 +71,5 @@ message BundleMetadata {
 }
 
 message Bundle {
-    bytes data = 1; //
-    BundleMetadata metadata = 2;
+    bytes data = 1;
 }

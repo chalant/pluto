@@ -151,7 +151,7 @@ class CSVDIRBundle:
 		adjustment_writer.write(splits=divs_splits['splits'],
 								dividends=divs_splits['divs'])
 
-	def _pricing_iter(self, csvdir, symbols, metadata, divs_splits, show_progress,fundamentals_writer=None):
+	def _pricing_iter(self, csvdir, symbols, metadata, divs_splits, show_progress, fundamentals_writer=None):
 		with tqdm(symbols, desc='Loading custom pricing data: ') as it:
 			files = os.listdir(csvdir)
 			for sid, symbol in enumerate(it):

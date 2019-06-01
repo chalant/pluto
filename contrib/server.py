@@ -7,6 +7,7 @@ import grpc
 
 from concurrent import futures
 
+
 from contrib.coms.protos import controller_service_pb2_grpc as ctl_rpc
 
 
@@ -14,16 +15,19 @@ class ControllerServicer(ctl_rpc.ControllerServicer):
     def __init__(self):
         pass
 
-    def Register(self, request, context):
+    def Deploy(self, request, context):
+        pass
+
+    def GetEnvironment(self, request, context):
+        pass
+
+    def GetDataBundle(self, request, context):
         pass
 
     def ReceivePerformancePacket(self, request, context):
         pass
 
     def Stop(self, request, context):
-        pass
-
-    def Start(self, request, context):
         pass
 
 
@@ -50,6 +54,7 @@ def start_server(address):
     server.add_insecure_port(address)
     ctl_rpc.add_ControllerServicer_to_server(ControllerServicer(), server)
     server.start()
+    click.echo('Server listening at : {}'.format(address))
     try:
         while True:
             time.sleep(86400)
@@ -57,7 +62,7 @@ def start_server(address):
         server.stop(0)
 
 #todo: must pass some credentials before running the server...
-@click.command('start')
+@click.command()
 @click.option('--address', default='[::]:50051')
 def start_command(address):
    start_server(address)

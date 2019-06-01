@@ -1,0 +1,35 @@
+syntax = 'proto3';
+
+import "google/protobuf/empty.proto";
+
+import "contrib/coms/protos/data_bundle.proto";
+import "contrib/coms/protos/broker.proto";
+import "contrib/control/controller.proto";
+
+import "google/protobuf/timestamp.proto";
+
+import "contrib/control/clock.proto";
+
+//TODO: State: bytes...
+
+service Controllable {
+    /*A service to be controller by a controller service*/
+    //the controller calls this method to send a data bundle to the controllable
+    rpc UpdateDataBundle (stream Bundle) returns (google.protobuf.Empty);
+    //rpc UpdateParameters (ParametersUpdateMessage) returns (google.protobuf.Empty);
+    //called to initialize the controllable
+    rpc Initialize (InitializationParameters) returns (google.protobuf.Empty);
+    //TODO: should return the state of the strategy run session at each update...
+    rpc Update(UpdateData) returns (stream SessionState);
+    //receives periodic calendar updates
+    rpc UpdateCalendar (CalendarMetadata) returns (google.protobuf.Empty);
+    //TODO: should return the state of the controllable after it stopped...
+    rpc Stop(StopParams) returns (stream SessionState);
+}
+
+message UpdateData{
+    google.protobuf.Timestamp timestamp = 1;
+    Event event = 2;
+    BrokerState broker_state = 3;
+}
+
