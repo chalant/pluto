@@ -1,11 +1,10 @@
-from abc import abstractmethod
-
 from google.protobuf.timestamp_pb2 import Timestamp
 
 import datetime as dt
 
-from contrib.coms.protos import clock_pb2
-from contrib.coms.protos import clock_pb2_grpc
+from protos import clock_pb2
+from protos import clock_pb2_grpc
+
 
 class ClockServer(clock_pb2_grpc.ClockServicer):
 	def __init__(self,time_source):

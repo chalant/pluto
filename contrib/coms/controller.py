@@ -4,13 +4,9 @@ import grpc
 
 from zipline.finance.execution import MarketOrder, StopLimitOrder, StopOrder, LimitOrder
 
-from contrib.coms.protos import controller_service_pb2 as ctl
-from contrib.coms.protos import controller_service_pb2_grpc as ctl_rpc
-from contrib.coms.protos import controllable_service_pb2 as cbl
-from contrib.coms.protos import controllable_service_pb2_grpc as cbl_rpc
-from contrib.coms.protos import broker_pb2_grpc as broker_rpc
-from contrib.coms.protos import broker_pb2 as br_msg
-from contrib.coms.protos import data_bundle_pb2 as dtb
+from protos import controller_service_pb2 as ctl, controllable_service_pb2_grpc as cbl_rpc, \
+    controllable_service_pb2 as cbl, broker_pb2_grpc as broker_rpc, broker_pb2 as br_msg, \
+    controller_service_pb2_grpc as ctl_rpc, data_bundle_pb2 as dtb
 
 from contrib.coms.utils import server_utils as srv
 from contrib.coms.utils import certification as crt

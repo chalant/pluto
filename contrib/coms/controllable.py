@@ -2,9 +2,8 @@ from abc import ABC, abstractmethod
 
 from uuid import uuid4
 
-from contrib.coms.protos import controllable_service_pb2 as cbl
-from contrib.coms.protos import controllable_service_pb2_grpc as cbl_grpc
-from contrib.coms.protos import controller_service_pb2_grpc as ctr
+from protos import controllable_service_pb2 as cbl, controller_service_pb2_grpc as ctr
+from protos import controllable_service_pb2_grpc as cbl_grpc
 from contrib.coms.utils import certification as crt
 from contrib.coms.utils import server_utils as srv
 from contrib.utils import files

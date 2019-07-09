@@ -7,7 +7,6 @@ requirejs.config({
     nodeRequire: require
 });
 (function() {
-    const grpc = require('grpc') // this shall be a grpc client.
     const path = require('path');
     const amdLoader = require('./node_modules/monaco-editor/min/vs/loader.js');
     const amdRequire = amdLoader.require;
@@ -117,5 +116,10 @@ requirejs.config({
         ipcRenderer.on('error', (e, args) => {
             console.log("ERROR!!!")
         })
+
+        editor.updateOptions({contextmenu: false}) //removes the context menu of monaco to avoid basic copies
+                                                   //copies are requested from and made by the server in order to avoid illegal duplicates
+        
+                                                   //todo: add a custom context menu!!!
     });
 })();

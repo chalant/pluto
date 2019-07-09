@@ -6,8 +6,7 @@ import pandas as pd
 from google.protobuf.empty_pb2 import Empty
 from logbook import Logger
 
-from contrib.coms.protos import broker_pb2 as broker_msg
-from contrib.coms.protos import broker_pb2_grpc as broker_rpc
+from protos import broker_pb2 as broker_msg, broker_pb2_grpc as broker_rpc
 
 from zipline.finance import position, order
 from zipline import protocol as prt

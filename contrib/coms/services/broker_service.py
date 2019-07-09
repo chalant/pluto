@@ -2,9 +2,7 @@ import grpc
 
 from zipline.finance.execution import MarketOrder, StopLimitOrder, StopOrder, LimitOrder
 
-from contrib.coms.protos import broker_pb2_grpc as broker_rpc
-from contrib.coms.protos import broker_pb2 as br_msg
-from contrib.coms.protos import data_bundle_pb2 as dtb
+from protos import broker_pb2_grpc as broker_rpc, broker_pb2 as br_msg, data_bundle_pb2 as dtb
 from contrib.coms.utils import conversions as cv
 
 class BrokerServicer(broker_rpc.BrokerServicer):

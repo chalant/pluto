@@ -11,6 +11,7 @@ from contrib.coms.client import account
 import grpc
 
 import click
+from . import domain
 
 from . import controllable_pb2_grpc as ctbl_rpc
 from contrib.control.clock_pb2 import (
@@ -25,18 +26,30 @@ from contrib.control.clock_pb2 import (
     CALENDAR
 )
 
+#TODO: Two multiple types of controllables: a simulation controllable runs its own clock
+# for performance reasons.
+
 
 class Controllable(ctbl_rpc.ControllableServicer):
     def __init__(self, server):
         self._calendar = None
         ctbl_rpc.add_ControllableServicer_to_server(self, server)
+        self._domain = None
 
     def _with_metadata(self, rpc, params):
         '''If we're not registered, an RpcError will be raised. Registration is handled
         externally.'''
         return rpc(params, metadata=(('Token', self._token)))
 
+    def Initialize(self, request, context):
+        self._domain = domain.compute_domain(request.domain)
+
     def Update(self, request, context):
+        '''Note: an update call might arrive while the step is executing..., so
+        we must queue the update message... => the step must be a thread that pulls data
+        from the queue...
+        '''
+        #TODO: this shouldn't block an empty message must be sent right-away...
         self._update(
             pd.Timestamp(conversions.to_datetime(request.timestamp)).tz_localize('UTC'),
             request.event,
@@ -59,10 +72,9 @@ def cli():
     pass
 
 @cli.command()
-@click.argument('strategy_script')
 @click.argument('server_url')
 @cli.argument('url')
-def register(strategy_script, server_url, url):
+def register(server_url, url):
     #TODO: run the controllable server
     pass
 

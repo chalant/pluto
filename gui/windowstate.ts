@@ -249,6 +249,7 @@ export class WindowStateTracker{
 
     titleBar : Element
     outputWindow : HTMLDivElement
+    sideBar : HTMLElement
 
     expandedOutputWindow : ExpandedOutputWindowState
     shrunkOuputWindow : ShrunkOutputWindowState
@@ -270,6 +271,7 @@ export class WindowStateTracker{
         this.activityStateTracker = activityStateTracker
 
         this.mainWindow = mainWindow
+        this.sideBar = document.getElementById('sidebar')
 
         //TODO: should create the buttons etc. here...
         const runButton = this.runButton = document.getElementById('run')

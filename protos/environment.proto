@@ -1,0 +1,48 @@
+syntax = 'proto3';
+
+import "protos/data_bundle.proto";
+
+message ControllerEnvironment {
+    //multiple strategies that share the same domain
+    repeated SessionsDomain sess_doms = 1;
+}
+
+message UserEnvironment {
+    string id = 1;
+    bytes environment = 2;
+    bytes strategy = 3;
+}
+
+message StrategyEnvironment {
+    string id = 1;
+    string domain_id = 2;
+}
+
+message StrategyGroup {
+    CompoundDomainDef domain_def = 1;
+    repeated string str_ids = 2;
+}
+
+message HubStore {
+    string domain_id = 1;
+    StrategyGroup group = 2;
+}
+
+//this is meant to be sent to the controllable...
+message Session {
+    string id = 1;
+    bytes strategy = 3;
+}
+
+//this is to be sent to the controllable...
+message SessionDomain {
+    CompoundDomainDef domain_def = 1;
+    Session session = 2;
+}
+
+//to be sent to the controller
+message SessionsDomain {
+    //multiple sessions per domain_def
+    repeated Session sessions = 1;
+    CompoundDomainDef domain_def = 2;
+}

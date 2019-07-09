@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+import "protos/metrics.proto";
+
+import "protos/clock.proto";
+
+import "protos/data.proto";
+
+service Controller {
+    //This method is a callback for controllables: each controllable sends back a performance
+    //packet to the controller
+    rpc PerformancePacketUpdate (stream Data) returns (google.protobuf.Empty);
+    rpc Stop (StopParams) returns (StopStatus);
+    //runs a strategy with initial parameters
+    //this will pull the strategy from the store and run it.
+    //can run multiple strategies at the same time...
+    rpc Run (stream RunParams) returns (Status);
+    //we can watch the performance of the strategy in real-time...
+    /*rpc Watch (StrategyID) returns (stream Data);*/
+    //dynamically updates capital and/or leverage of a running strategy
+    rpc UpdateLevCap (LevCap) returns (CapitalAssignmentStatus);
+    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
+    //TODO: should be able to check for available domains.
+    rpc UploadStrategy(stream Data) returns (google.protobuf.Empty)
+}
+
+message Status {
+    string state = 1;
+}
+
+message LevCap {
+    float capital = 1;
+    float max_leverage = 2;
+    string id = 3; //strategy id
+}
+
+message CapitalAssignmentStatus {
+
+}
+
+
+message RunParams {
+    string strategy_id = 1;
+    int64 capital = 2;
+    float max_leverage = 3;
+    //TODO: the benchmark asset should be set depending on the domain (not manually)
+    // the emission_rate and the data frequency should be inferred from the domain
+    //start date and end date should be inferred from the environment
+    Frequency emission_rate = 4;
+    string benchmark_asset = 5;
+    Frequency data_frequency = 6;
+}
+
+message StopParams {
+    string id = 1;
+    bool liquidate = 2;
+}
+
+
+message StopStatus {
+
+}
+
+message PerformancePacket {
+    CumulativeMetrics cumulative_perf = 1;
+    PeriodPerformance daily_perf = 2;
+    PeriodPerformance minutely_perf = 3;
+    CumulativeRiskMetrics cumulative_risk_metrics = 4;
+    string id = 5;
+}
+
+message PeriodPerformance {
+    CumulativeMetrics cumulative_metrics = 1;
+    PeriodCommonMetrics period_common_metrics = 2;
+}
+
+enum ControllerEvent {
+    CAPITAL_CHANGE = 0;
+    LEVERAGE_CHANGE = 1;
+    BROKER_UPDATE = 2;
+}
+
+message ParametersUpdateMessage {
+    ControllerEvent controller_event = 1;
+    float capital = 2;
+    float maximum_leverage = 3;
+}
