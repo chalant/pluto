@@ -79,4 +79,4 @@ TAGS
 
 *.dSYM/
 
-node_modules/
+gui/node_modules/
