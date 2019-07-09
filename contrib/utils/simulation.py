@@ -6,22 +6,14 @@ from contrib.control import algocontrol as ac
 
 from contrib.finance.metrics import tracker
 from contrib.coms.client import account
-from contrib.coms.protos import broker_pb2_grpc as br
+from protos import broker_pb2_grpc as br
 
 from contrib.broker import simulation_broker as sb
 
 from contrib.control.clock_pb2 import (
-    STOP,
-    SESSION_END,
-    SESSION_START,
     BAR,
-    BEFORE_TRADING_START,
-    LIQUIDATE,
-    MINUTE_END,
     INITIALIZE
 )
-
-from contrib.control import clockengine
 
 import grpc
 

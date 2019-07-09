@@ -12,7 +12,7 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-from contrib.coms.protos import protocol_pb2 as contrib_dot_coms_dot_protos_dot_protocol__pb2
+from protos import protocol_pb2 as contrib_dot_coms_dot_protos_dot_protocol__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 

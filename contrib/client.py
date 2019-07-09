@@ -2,8 +2,7 @@ import click
 
 import grpc
 
-from contrib.coms.utils import server_utils
-from contrib.coms.protos import controller_service_pb2_grpc as ctrl
+from protos import controller_service_pb2_grpc as ctrl
 
 #todo: on the first run of this script, the user is prompted to put a password and
 # a username.

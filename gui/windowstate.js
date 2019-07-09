@@ -188,6 +188,7 @@ class WindowStateTracker {
         this.currentState = this.initialWindowState;
         this.activityStateTracker = activityStateTracker;
         this.mainWindow = mainWindow;
+        this.sideBar = document.getElementById('sidebar');
         //TODO: should create the buttons etc. here...
         const runButton = this.runButton = document.getElementById('run');
         this.body = document.getElementsByTagName('body')[0];

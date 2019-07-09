@@ -1,17 +1,13 @@
 from pandas import Timestamp
 
-from contrib.coms.protos import assets_pb2 as pr_asset
+from protos import assets_pb2 as pr_asset, controllable_service_pb2 as cbl, finance_pb2 as fin, metrics_pb2 as metrics, \
+    protocol_pb2 as pr
 
 from zipline.assets import Asset, ExchangeInfo
 from zipline.finance.order import Order
 from zipline.finance.transaction import Transaction
 from zipline.finance.position import Position
 from zipline import protocol
-
-from contrib.coms.protos import protocol_pb2 as pr
-from contrib.coms.protos import finance_pb2 as fin
-from contrib.coms.protos import metrics_pb2 as metrics
-from contrib.coms.protos import controllable_service_pb2 as cbl
 
 from google.protobuf import timestamp_pb2 as pr_ts
 

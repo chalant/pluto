@@ -14,9 +14,9 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from contrib.coms.protos import metrics_pb2 as contrib_dot_coms_dot_protos_dot_metrics__pb2
-from contrib.coms.protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_dot_data__bundle__pb2
+from protos import metrics_pb2 as contrib_dot_coms_dot_protos_dot_metrics__pb2
 from contrib.control import clock_pb2 as contrib_dot_control_dot_clock__pb2
+from contrib.control import data_pb2 as contrib_dot_control_dot_data__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -24,33 +24,10 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n contrib/control/controller.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a!contrib/coms/protos/metrics.proto\x1a%contrib/coms/protos/data_bundle.proto\x1a\x1b\x63ontrib/control/clock.proto\";\n\x18InitializationParameters\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\x12\r\n\x05state\x18\x02 \x01(\x0c\"\x1d\n\x0cSessionState\x12\r\n\x05state\x18\x01 \x01(\x0c\"$\n\x10\x44\x65ploymentStatus\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\"1\n\x06Status\x12\x1b\n\x06status\x18\x01 \x01(\x0e\x32\x0b.StatusEnum\x12\n\n\x02id\x18\x02 \x01(\t\";\n\x06LevCap\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\"\x19\n\x17\x43\x61pitalAssignmentStatus\"\"\n\x0b\x45nvironment\x12\x13\n\x0b\x65nvironment\x18\x01 \x01(\x0c\"\x1a\n\x08Strategy\x12\x0e\n\x06script\x18\x01 \x01(\x0c\"%\n\x06\x46ilter\x12\x1b\n\x06status\x18\x01 \x01(\x0e\x32\x0b.StatusEnum\"\x9e\x01\n\tRunParams\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x03\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12!\n\remission_rate\x18\x04 \x01(\x0e\x32\n.Frequency\x12\x17\n\x0f\x62\x65nchmark_asset\x18\x05 \x01(\t\x12\"\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\n.Frequency\"+\n\nStopParams\x12\n\n\x02id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0c\n\nStopStatus\"\x10\n\x02ID\x12\n\n\x02id\x18\x01 \x01(\t\"\xcc\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics\"p\n\x17ParametersUpdateMessage\x12*\n\x10\x63ontroller_event\x18\x01 \x01(\x0e\x32\x10.ControllerEvent\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x03 \x01(\x02*&\n\nStatusEnum\x12\x0b\n\x07Running\x10\x00\x12\x0b\n\x07Pending\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32\x89\x03\n\nController\x12*\n\x06\x44\x65ploy\x12\t.Strategy\x1a\x11.DeploymentStatus(\x01\x30\x01\x12\x45\n\x17PerformancePacketUpdate\x12\x12.PerformancePacket\x1a\x16.google.protobuf.Empty\x12 \n\x04Stop\x12\x0b.StopParams\x1a\x0b.StopStatus\x12\x1a\n\x03Run\x12\n.RunParams\x1a\x07.Status\x12\"\n\x05Watch\x12\x03.ID\x1a\x12.PerformancePacket0\x01\x12\x1f\n\x0bGetStrategy\x12\x03.ID\x1a\t.Strategy0\x01\x12)\n\x0eGetEnvironment\x12\x07.Domain\x1a\x0c.Environment0\x01\x12\'\n\x0fGetStrategyList\x12\x07.Filter\x1a\t.Strategy0\x01\x12\x31\n\x0cUpdateLevCap\x12\x07.LevCap\x1a\x18.CapitalAssignmentStatusb\x06proto3')
+  serialized_pb=_b('\n contrib/control/controller.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a!contrib/coms/protos/metrics.proto\x1a\x1b\x63ontrib/control/clock.proto\x1a\x1a\x63ontrib/control/data.proto\"\x17\n\x06Status\x12\r\n\x05state\x18\x01 \x01(\t\";\n\x06LevCap\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x02 \x01(\x02\x12\n\n\x02id\x18\x03 \x01(\t\"\x19\n\x17\x43\x61pitalAssignmentStatus\"\xa7\x01\n\tRunParams\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x03\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12!\n\remission_rate\x18\x04 \x01(\x0e\x32\n.Frequency\x12\x17\n\x0f\x62\x65nchmark_asset\x18\x05 \x01(\t\x12\"\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\n.Frequency\"+\n\nStopParams\x12\n\n\x02id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0c\n\nStopStatus\"\xd8\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\n\n\x02id\x18\x05 \x01(\t\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics\"p\n\x17ParametersUpdateMessage\x12*\n\x10\x63ontroller_event\x18\x01 \x01(\x0e\x32\x10.ControllerEvent\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x03 \x01(\x02*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32\xef\x01\n\nController\x12:\n\x17PerformancePacketUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12 \n\x04Stop\x12\x0b.StopParams\x1a\x0b.StopStatus\x12\x1c\n\x03Run\x12\n.RunParams\x1a\x07.Status(\x01\x12\x31\n\x0cUpdateLevCap\x12\x07.LevCap\x1a\x18.CapitalAssignmentStatus\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Emptyb\x06proto3')
   ,
-  dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_metrics__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_data__bundle__pb2.DESCRIPTOR,contrib_dot_control_dot_clock__pb2.DESCRIPTOR,])
+  dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,contrib_dot_coms_dot_protos_dot_metrics__pb2.DESCRIPTOR,contrib_dot_control_dot_clock__pb2.DESCRIPTOR,contrib_dot_control_dot_data__pb2.DESCRIPTOR,])
 
-_STATUSENUM = _descriptor.EnumDescriptor(
-  name='StatusEnum',
-  full_name='StatusEnum',
-  filename=None,
-  file=DESCRIPTOR,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='Running', index=0, number=0,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='Pending', index=1, number=1,
-      serialized_options=None,
-      type=None),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=1221,
-  serialized_end=1259,
-)
-_sym_db.RegisterEnumDescriptor(_STATUSENUM)
-
-StatusEnum = enum_type_wrapper.EnumTypeWrapper(_STATUSENUM)
 _CONTROLLEREVENT = _descriptor.EnumDescriptor(
   name='ControllerEvent',
   full_name='ControllerEvent',
@@ -72,118 +49,16 @@ _CONTROLLEREVENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1261,
-  serialized_end=1338,
+  serialized_start=954,
+  serialized_end=1031,
 )
 _sym_db.RegisterEnumDescriptor(_CONTROLLEREVENT)
 
 ControllerEvent = enum_type_wrapper.EnumTypeWrapper(_CONTROLLEREVENT)
-Running = 0
-Pending = 1
 CAPITAL_CHANGE = 0
 LEVERAGE_CHANGE = 1
 BROKER_UPDATE = 2
 
-
-
-_INITIALIZATIONPARAMETERS = _descriptor.Descriptor(
-  name='InitializationParameters',
-  full_name='InitializationParameters',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='strategy', full_name='InitializationParameters.strategy', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='state', full_name='InitializationParameters.state', index=1,
-      number=2, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=168,
-  serialized_end=227,
-)
-
-
-_SESSIONSTATE = _descriptor.Descriptor(
-  name='SessionState',
-  full_name='SessionState',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='state', full_name='SessionState.state', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=229,
-  serialized_end=258,
-)
-
-
-_DEPLOYMENTSTATUS = _descriptor.Descriptor(
-  name='DeploymentStatus',
-  full_name='DeploymentStatus',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='strategy', full_name='DeploymentStatus.strategy', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=260,
-  serialized_end=296,
-)
 
 
 _STATUS = _descriptor.Descriptor(
@@ -194,15 +69,8 @@ _STATUS = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='status', full_name='Status.status', index=0,
-      number=1, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='id', full_name='Status.id', index=1,
-      number=2, type=9, cpp_type=9, label=1,
+      name='state', full_name='Status.state', index=0,
+      number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -219,8 +87,8 @@ _STATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=298,
-  serialized_end=347,
+  serialized_start=157,
+  serialized_end=180,
 )
 
 
@@ -232,23 +100,23 @@ _LEVCAP = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='id', full_name='LevCap.id', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
+      name='capital', full_name='LevCap.capital', index=0,
+      number=1, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='capital', full_name='LevCap.capital', index=1,
+      name='max_leverage', full_name='LevCap.max_leverage', index=1,
       number=2, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='max_leverage', full_name='LevCap.max_leverage', index=2,
-      number=3, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
+      name='id', full_name='LevCap.id', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -264,8 +132,8 @@ _LEVCAP = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=349,
-  serialized_end=408,
+  serialized_start=182,
+  serialized_end=241,
 )
 
 
@@ -288,101 +156,8 @@ _CAPITALASSIGNMENTSTATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=410,
-  serialized_end=435,
-)
-
-
-_ENVIRONMENT = _descriptor.Descriptor(
-  name='Environment',
-  full_name='Environment',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='environment', full_name='Environment.environment', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=437,
-  serialized_end=471,
-)
-
-
-_STRATEGY = _descriptor.Descriptor(
-  name='Strategy',
-  full_name='Strategy',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='script', full_name='Strategy.script', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=473,
-  serialized_end=499,
-)
-
-
-_FILTER = _descriptor.Descriptor(
-  name='Filter',
-  full_name='Filter',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='Filter.status', index=0,
-      number=1, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=501,
-  serialized_end=538,
+  serialized_start=243,
+  serialized_end=268,
 )
 
 
@@ -394,7 +169,7 @@ _RUNPARAMS = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='id', full_name='RunParams.id', index=0,
+      name='strategy_id', full_name='RunParams.strategy_id', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -447,8 +222,8 @@ _RUNPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=541,
-  serialized_end=699,
+  serialized_start=271,
+  serialized_end=438,
 )
 
 
@@ -485,8 +260,8 @@ _STOPPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=701,
-  serialized_end=744,
+  serialized_start=440,
+  serialized_end=483,
 )
 
 
@@ -509,39 +284,8 @@ _STOPSTATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=746,
-  serialized_end=758,
-)
-
-
-_ID = _descriptor.Descriptor(
-  name='ID',
-  full_name='ID',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='id', full_name='ID.id', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=760,
-  serialized_end=776,
+  serialized_start=485,
+  serialized_end=497,
 )
 
 
@@ -580,6 +324,13 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='id', full_name='PerformancePacket.id', index=4,
+      number=5, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -592,8 +343,8 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=779,
-  serialized_end=983,
+  serialized_start=500,
+  serialized_end=716,
 )
 
 
@@ -630,8 +381,8 @@ _PERIODPERFORMANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=985,
-  serialized_end=1105,
+  serialized_start=718,
+  serialized_end=838,
 )
 
 
@@ -675,12 +426,10 @@ _PARAMETERSUPDATEMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1107,
-  serialized_end=1219,
+  serialized_start=840,
+  serialized_end=952,
 )
 
-_STATUS.fields_by_name['status'].enum_type = _STATUSENUM
-_FILTER.fields_by_name['status'].enum_type = _STATUSENUM
 _RUNPARAMS.fields_by_name['emission_rate'].enum_type = contrib_dot_control_dot_clock__pb2._FREQUENCY
 _RUNPARAMS.fields_by_name['data_frequency'].enum_type = contrib_dot_control_dot_clock__pb2._FREQUENCY
 _PERFORMANCEPACKET.fields_by_name['cumulative_perf'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVEMETRICS
@@ -690,46 +439,17 @@ _PERFORMANCEPACKET.fields_by_name['cumulative_risk_metrics'].message_type = cont
 _PERIODPERFORMANCE.fields_by_name['cumulative_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._CUMULATIVEMETRICS
 _PERIODPERFORMANCE.fields_by_name['period_common_metrics'].message_type = contrib_dot_coms_dot_protos_dot_metrics__pb2._PERIODCOMMONMETRICS
 _PARAMETERSUPDATEMESSAGE.fields_by_name['controller_event'].enum_type = _CONTROLLEREVENT
-DESCRIPTOR.message_types_by_name['InitializationParameters'] = _INITIALIZATIONPARAMETERS
-DESCRIPTOR.message_types_by_name['SessionState'] = _SESSIONSTATE
-DESCRIPTOR.message_types_by_name['DeploymentStatus'] = _DEPLOYMENTSTATUS
 DESCRIPTOR.message_types_by_name['Status'] = _STATUS
 DESCRIPTOR.message_types_by_name['LevCap'] = _LEVCAP
 DESCRIPTOR.message_types_by_name['CapitalAssignmentStatus'] = _CAPITALASSIGNMENTSTATUS
-DESCRIPTOR.message_types_by_name['Environment'] = _ENVIRONMENT
-DESCRIPTOR.message_types_by_name['Strategy'] = _STRATEGY
-DESCRIPTOR.message_types_by_name['Filter'] = _FILTER
 DESCRIPTOR.message_types_by_name['RunParams'] = _RUNPARAMS
 DESCRIPTOR.message_types_by_name['StopParams'] = _STOPPARAMS
 DESCRIPTOR.message_types_by_name['StopStatus'] = _STOPSTATUS
-DESCRIPTOR.message_types_by_name['ID'] = _ID
 DESCRIPTOR.message_types_by_name['PerformancePacket'] = _PERFORMANCEPACKET
 DESCRIPTOR.message_types_by_name['PeriodPerformance'] = _PERIODPERFORMANCE
 DESCRIPTOR.message_types_by_name['ParametersUpdateMessage'] = _PARAMETERSUPDATEMESSAGE
-DESCRIPTOR.enum_types_by_name['StatusEnum'] = _STATUSENUM
 DESCRIPTOR.enum_types_by_name['ControllerEvent'] = _CONTROLLEREVENT
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
-
-InitializationParameters = _reflection.GeneratedProtocolMessageType('InitializationParameters', (_message.Message,), dict(
-  DESCRIPTOR = _INITIALIZATIONPARAMETERS,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:InitializationParameters)
-  ))
-_sym_db.RegisterMessage(InitializationParameters)
-
-SessionState = _reflection.GeneratedProtocolMessageType('SessionState', (_message.Message,), dict(
-  DESCRIPTOR = _SESSIONSTATE,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:SessionState)
-  ))
-_sym_db.RegisterMessage(SessionState)
-
-DeploymentStatus = _reflection.GeneratedProtocolMessageType('DeploymentStatus', (_message.Message,), dict(
-  DESCRIPTOR = _DEPLOYMENTSTATUS,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:DeploymentStatus)
-  ))
-_sym_db.RegisterMessage(DeploymentStatus)
 
 Status = _reflection.GeneratedProtocolMessageType('Status', (_message.Message,), dict(
   DESCRIPTOR = _STATUS,
@@ -752,27 +472,6 @@ CapitalAssignmentStatus = _reflection.GeneratedProtocolMessageType('CapitalAssig
   ))
 _sym_db.RegisterMessage(CapitalAssignmentStatus)
 
-Environment = _reflection.GeneratedProtocolMessageType('Environment', (_message.Message,), dict(
-  DESCRIPTOR = _ENVIRONMENT,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:Environment)
-  ))
-_sym_db.RegisterMessage(Environment)
-
-Strategy = _reflection.GeneratedProtocolMessageType('Strategy', (_message.Message,), dict(
-  DESCRIPTOR = _STRATEGY,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:Strategy)
-  ))
-_sym_db.RegisterMessage(Strategy)
-
-Filter = _reflection.GeneratedProtocolMessageType('Filter', (_message.Message,), dict(
-  DESCRIPTOR = _FILTER,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:Filter)
-  ))
-_sym_db.RegisterMessage(Filter)
-
 RunParams = _reflection.GeneratedProtocolMessageType('RunParams', (_message.Message,), dict(
   DESCRIPTOR = _RUNPARAMS,
   __module__ = 'contrib.control.controller_pb2'
@@ -793,13 +492,6 @@ StopStatus = _reflection.GeneratedProtocolMessageType('StopStatus', (_message.Me
   # @@protoc_insertion_point(class_scope:StopStatus)
   ))
 _sym_db.RegisterMessage(StopStatus)
-
-ID = _reflection.GeneratedProtocolMessageType('ID', (_message.Message,), dict(
-  DESCRIPTOR = _ID,
-  __module__ = 'contrib.control.controller_pb2'
-  # @@protoc_insertion_point(class_scope:ID)
-  ))
-_sym_db.RegisterMessage(ID)
 
 PerformancePacket = _reflection.GeneratedProtocolMessageType('PerformancePacket', (_message.Message,), dict(
   DESCRIPTOR = _PERFORMANCEPACKET,
@@ -830,31 +522,22 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1341,
-  serialized_end=1734,
+  serialized_start=1034,
+  serialized_end=1273,
   methods=[
-  _descriptor.MethodDescriptor(
-    name='Deploy',
-    full_name='Controller.Deploy',
-    index=0,
-    containing_service=None,
-    input_type=_STRATEGY,
-    output_type=_DEPLOYMENTSTATUS,
-    serialized_options=None,
-  ),
   _descriptor.MethodDescriptor(
     name='PerformancePacketUpdate',
     full_name='Controller.PerformancePacketUpdate',
-    index=1,
+    index=0,
     containing_service=None,
-    input_type=_PERFORMANCEPACKET,
+    input_type=contrib_dot_control_dot_data__pb2._DATA,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
     name='Stop',
     full_name='Controller.Stop',
-    index=2,
+    index=1,
     containing_service=None,
     input_type=_STOPPARAMS,
     output_type=_STOPSTATUS,
@@ -863,55 +546,28 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Run',
     full_name='Controller.Run',
-    index=3,
+    index=2,
     containing_service=None,
     input_type=_RUNPARAMS,
     output_type=_STATUS,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='Watch',
-    full_name='Controller.Watch',
-    index=4,
-    containing_service=None,
-    input_type=_ID,
-    output_type=_PERFORMANCEPACKET,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='GetStrategy',
-    full_name='Controller.GetStrategy',
-    index=5,
-    containing_service=None,
-    input_type=_ID,
-    output_type=_STRATEGY,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='GetEnvironment',
-    full_name='Controller.GetEnvironment',
-    index=6,
-    containing_service=None,
-    input_type=contrib_dot_coms_dot_protos_dot_data__bundle__pb2._DOMAIN,
-    output_type=_ENVIRONMENT,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='GetStrategyList',
-    full_name='Controller.GetStrategyList',
-    index=7,
-    containing_service=None,
-    input_type=_FILTER,
-    output_type=_STRATEGY,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
     name='UpdateLevCap',
     full_name='Controller.UpdateLevCap',
-    index=8,
+    index=3,
     containing_service=None,
     input_type=_LEVCAP,
     output_type=_CAPITALASSIGNMENTSTATUS,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='ClockUpdate',
+    full_name='Controller.ClockUpdate',
+    index=4,
+    containing_service=None,
+    input_type=contrib_dot_control_dot_clock__pb2._CLOCKEVENT,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
 ])

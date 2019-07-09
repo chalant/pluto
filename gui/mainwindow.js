@@ -15,6 +15,7 @@ class MainWindow {
             tracker.update("stop");
         };
         this.frames = 0;
+        // this.client = new hub.HubClient(editor)
     }
     _resize() {
         window.requestAnimationFrame((now) => {

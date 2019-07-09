@@ -1,7 +1,8 @@
 import datetime as dt
 
-from contrib.coms.protos import clock_pb2 as cl
-from contrib.coms.protos import clock_pb2_grpc as cl_rpc
+from protos import clock_pb2 as cl
+from protos import clock_pb2_grpc as cl_rpc
+
 
 class Clock(object):
 	def __init__(self,channel):

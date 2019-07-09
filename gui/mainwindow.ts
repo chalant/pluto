@@ -1,9 +1,11 @@
 import {WindowStateTracker} from './windowstate'
 import {ActivityStateTracker} from './activitystate'
+import hub = require('./hubclient');
 
 export class MainWindow {
     private windowStateTracker : WindowStateTracker
     private activityStateTracker : ActivityStateTracker
+    private client : hub.HubClient
 
     runButton : HTMLButtonElement
     stopButton : HTMLButtonElement
@@ -29,6 +31,7 @@ export class MainWindow {
         }
 
         this.frames = 0
+        // this.client = new hub.HubClient(editor)
     }
 
     private _resize(){

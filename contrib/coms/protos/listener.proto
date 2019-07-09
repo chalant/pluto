@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-import "google/protobuf/empty.proto";
-import "contrib/coms/protos/controller_service.proto";
-
-service Listener{
-    /*A service that listens to performance updates*/
-    rpc UpdatePerformance(PerformancePacket) returns (google.protobuf.Empty)
-}

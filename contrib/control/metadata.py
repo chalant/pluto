@@ -29,3 +29,6 @@ def check_token(func):
 def send_session_id(session_id, context):
     context.send_initial_metadata((('session_id',session_id),))
 
+def data_size_info(total_size, chunk_size):
+    return (('total_size', total_size), ('chunk_size', chunk_size))
+
