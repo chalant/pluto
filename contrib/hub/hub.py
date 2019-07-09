@@ -199,6 +199,9 @@ class Hub(rpc.HubServicer):
         creates a new strategy, and sends back its id
         
         '''
+        metadata = dict(context.invocation_metadata())
+        dom_id = metadata['domain_id']
+
         builder = self._builder
 
         #we will add the new strategy in the current branch.
@@ -339,6 +342,10 @@ class Hub(rpc.HubServicer):
         for chunk in stream(self._envs.load(1024 * 16)):
             yield chunk
 
+    def SelectDomain(self, request, context):
+        '''returns the domain of the selected domain'''
+        return
+
     def AddEnvironment(self, request_iterator, context):
         builder = self._builder
 
@@ -360,22 +367,3 @@ class Hub(rpc.HubServicer):
             envs.add_element(environ)
 
         context.send_initial_metadata((('domain_id', dom_id),))
-
-
-    def GetEnvironment(self, request, context):
-        metadata = dict(context.invocation_metadata())
-        str_id = metadata['strategy_id']
-        dom_id = metadata['domain_id']
-
-        strategy = graph.find_by_name(graph.find_by_id(self._strategies, str_id), 'strategy')[0]
-        environ = graph.find_by_name(graph.find_by_name(self._envs, dom_id)[0], 'environ')[0]
-
-        #todo: if the session
-        sz = 1024 * 16  # 16KB
-        #send the strategy
-        for chunk in stream(strategy.load(sz)):
-            yield chunk
-
-        #send the environment
-        for chunk in stream(environ.load(sz)):
-            yield chunk
