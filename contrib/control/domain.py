@@ -179,7 +179,7 @@ def load_domain_struct(unit_domain_def):
     '''
     return
 
-def compute_domain(domains):
+def compute_domain(dom_def):
     '''
 
     Parameters
@@ -191,7 +191,7 @@ def compute_domain(domains):
     DomainStruct
     '''
     stack = []
-    for domain in domains:
+    for domain in dom_def:
         op = domain.op
         if not op:
             stack.append(load_domain_struct(domain.domain))
