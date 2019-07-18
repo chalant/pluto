@@ -20,7 +20,7 @@ service Hub {
     //the client also sends a name as metadata...
     rpc New (StrategyRequest) returns (stream Data);
     //adds a new version to the list of strategies
-    rpc Modify (ModificationRequest) returns (stream Data);
+    rpc Modify (stream CompoundDomainDef) returns (stream Data);
     //pushes one or more strategies to the the hub...
     rpc Push (stream Data) returns (DeploymentReply);
     rpc DeploymentStatus (DeploymentStatusRequest) returns (stream DeploymentStatusReply);
@@ -32,9 +32,15 @@ service Hub {
 
     //returns a list of compound domain def.
     rpc Domains(google.protobuf.Empty) returns (stream Data)
+    rpc GetController(ControllerRequest) returns (ControllerReply)
+}
 
-    //requests an environment to develop the strategy in...(sends the strategy_id)
-    rpc GetEnvironment(stream CompoundDomainDef) returns (stream Data)
+message ControllerRequest{
+    string type = 1; //simulation, paper, live.
+}
+
+message ControllerReply {
+    string url = 1;
 }
 
 message ID {

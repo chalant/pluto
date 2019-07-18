@@ -97,6 +97,11 @@ class GraphBreadthIterator(object):
 class Builder(object):
     def __init__(self, store):
         self._store = store
+        self._elements_by_id = {}
+        self._elements_by_name = {}
+
+    def get_element(self, id_):
+        return self._elements_by_id[id_]
 
     def group(self, name, id_=None):
         return self.element('group', name, id_)
@@ -116,15 +121,22 @@ class Builder(object):
         if id_ is None:
             id_ = uuid.uuid4().hex
         if type_ == 'value':
-            return Value(name, id_, self._store)
+            el =  Value(name, id_, self._store)
         elif type_ == 'group':
-            return Group(name, id_, self._store)
+            el = Group(name, id_, self._store)
         elif type_ == 'file':
-            return File(name, id_, self._store)
+            el =  File(name, id_, self._store)
         elif type_ == 'single':
-            return Single(name, id_, self._store)
+            el =  Single(name, id_, self._store)
         else:
-            raise AttributeError()
+            raise AttributeError
+
+        self._elements_by_id[id_] = el
+        els = self._elements_by_name.get(name,None)
+        if els:
+            els.append(el)
+        else:
+            self._elements_by_name[name] = [el]
 
 # these elements are used for indexing, not storing and loading
 # they don't know what they are storing. This is known by the client.
@@ -173,13 +185,17 @@ class Element(abc.ABC):
     def parents(self):
         return self._parents
 
-    def load(self, chunk_size=None):
-        yield 'HEADER'
-        yield to_bytes(graph_pb2.Node(name=self.value, type=self.name, id=self.id))
-        yield b'BEGIN'
-        for chunk in self._load(self._str, chunk_size):
-            yield chunk
-        yield b'END'
+    def load(self, chunk_size=None, headless=False):
+        if not headless:
+            yield 'HEADER'
+            yield to_bytes(graph_pb2.Node(name=self.value, type=self.name, id=self.id, origin=self.origin))
+            yield b'BEGIN'
+            for chunk in self._load(self._str, chunk_size):
+                yield chunk
+            yield b'END'
+        else:
+            for chunk in self._load(self._str, chunk_size):
+                yield chunk
 
     def delete(self):
         self._delete(self._store)
@@ -289,7 +305,7 @@ class Group(Element):
     '''Stores a group of elements by name'''
     def __init__(self, value, id_, store):
         super(Group, self).__init__(value, id_, store)
-        self._elements = []
+        self._elements = {}
 
     def type(self):
         return 'group'
@@ -298,7 +314,7 @@ class Group(Element):
         #sets itself as the parent PROBLEM!: can have multiple parents!
         #so the parent must be set by search not creation.
         value._add_parent(self)
-        self._elements.append(value)
+        self._elements[value.value] = value
 
     def _delete(self, store):
         for element in self._elements:
@@ -306,17 +322,8 @@ class Group(Element):
 
         self._elements = []
 
-    def get_element(self, value):
-        if value == self._name:
-            return [self]
-        else:
-            elements = []
-            for element in self._elements:
-                el = element.get_element(value)
-                if el:
-                    #return extend the list of elements
-                    elements.extend(el)
-            return elements
+    def get_element(self, name):
+        return self._elements.get(name, None)
 
     def _get_group(self, value, parent=None):
         if value == self._name:
@@ -337,12 +344,12 @@ class Group(Element):
             return elements
 
     def _load(self, store, chunk_size):
-        for element in self._elements:
+        for element in self._elements.values():
             for data in element.load(chunk_size):
                 yield data
 
     def __iter__(self):
-        return iter(self._elements)
+        return iter(self._elements.values())
 
 def to_bytes(proto_def):
     return proto_def.SerializeToString()
@@ -352,15 +359,16 @@ def from_bytes(proto_def):
 
 def serialize_graph(graph):
     '''stores the graph structure as a sequence '''
-    return graph_pb2.Graph([
-        graph_pb2.Node(name=node.value, type=node.type, id=node.id, origin=node.origin)
-        for node in GraphDepthIterator(graph)])
+    def create_node(node):
+        org = node.origin
+        return graph_pb2.Node(name=node.value, type=node.type, id=node.id, origin=create_node(org) if org else None)
+    return graph_pb2.Graph([create_node(node) for node in GraphDepthIterator(graph)])
 
 def load_graph(path):
     with open(path, 'rb') as f:
         return create_graph(f.read(path))
 
-def create_graph(graph_def, factory):
+def create_graph(graph_def, factory, copy_=False):
     '''
     Creates a graph from a serialized graph...
     Parameters
@@ -372,30 +380,38 @@ def create_graph(graph_def, factory):
     -------
 
     '''
+
+
     instance_dict = {}
     sequence = []
-    for node_def in graph_def:
+
+    def create_node(node_def, type_, copy_=False):
         id_ = node_def.id
-        #if the type is a value, load it in memory
-        t = node_def.type
+        # if the type is a value, load it in memory
         if id_ not in instance_dict:
-            instance_dict[id_] = el = factory.element(t, node_def.name, id_)
+            instance_dict[id_] = el = factory.element(type_, node_def.name, id_ if not copy_ else None)
             ori = node_def.origin
             if ori:
-                el.origin = ori
+                el.origin = create_node(ori, ori.type, copy_) #create the origin element
         else:
             el = instance_dict[id_]
-        #append the instance to the sequence
-        if t == 'group':
-            #add all the previous elements
+        return el
+
+    for node_def in graph_def:
+        t = node_def.type
+        el = create_node(node_def, t, copy_)
+        # append the instance to the sequence
+        if node_def.type == 'group':
+            # add all the previous elements
             while sequence:
                 el.add_element(sequence.pop())
-        elif t == 'single':
-            #add the previous element
+        elif node_def.type == 'single':
+            # add the previous element
             el.add_element(sequence.pop())
         sequence.append(el)
-    #the root of the tree/graph
-    return sequence.pop()
+        # the root of the tree/graph
+
+        return sequence.pop()
 
 def copy(graph, factory):
     '''
@@ -409,58 +425,22 @@ def copy(graph, factory):
     -------
     Element
     '''
-    instance_dict = {}
-    sequence = []
-    for node in graph:
-        id_ = node.id
-        t = node.type
-        if id_ not in instance_dict:
-            instance_dict[id_] = element = factory.element(t, node.name)
-            #load and store the element file in the copy...
-            element.store(node._load()) #load element without headers since we are loading leaves
-            element.origin = node.id #set the node id as the origin of this element.
-        else:
-            element = instance_dict[id_]
-        # append the instance to the sequence
-        if t == 'group':
-            while sequence:
-                element.add_element(sequence.pop())
-        sequence.append(element)
-        # the root of the tree/graph
-        return sequence.pop()
-
+    return create_graph(serialize_graph(graph), factory, copy_=True)
 
 
 def freeze(graph, path):
     with open(path, "wb") as f:
         f.write(to_bytes(serialize_graph(graph)))
 
-def find_by_id(graph, id_):
-    #find by depth first search... since we have a unique id.
-    for node in GraphDepthIterator(graph):
-        if node.id == id_:
-            return node
-    return
 
-def find_by_name(graph, name):
-    itr = iter(GraphDepthIterator(graph))
-    sub = None
-    while not sub:
-        try:
-            nxt = next(itr)
-            if nxt.value == name:
-                try:
-                    sub = itr.previous() #backtracks to the parent element
-                except StopIteration:
-                    #its the first and last occurrence, since we can only have a single node as root.
-                    return [nxt]
-        except StopIteration:
-            #no results
-            return []
+def is_derived_from(source_id, subject):
+    org = subject.origin
 
-    results = []
-    #iterates of the first layer of the sub_tree.
-    for node in sub:
-        if node.value == name:
-            results.append(name)
-        return results
+    if org:
+        if source_id == org.id:
+            return True
+        else:
+            return is_derived_from(source_id, org)
+    else:
+        #if we reach None, then the subject isn't derived from the source.
+        return False

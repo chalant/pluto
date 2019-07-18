@@ -1,7 +1,4 @@
-import uuid
 import grpc
-
-from datetime import datetime
 
 import difflib
 
@@ -70,58 +67,19 @@ class Hub(rpc.HubServicer):
             self._envs = graph.find_by_name(root, 'envs')[0]
             self._strategies = graph.find_by_name(root, 'strategies')[0]
 
-        #classify performance file by session_id => used for tracking performance.
-        self._performance = d = {}
-        for session in sessions:
-            d[session.id] = graph.find_by_name(session, 'performance')[0]
+    def GetController(self, request, context):
+        '''
+        Returns the proper a controller (simulation, paper or live)
+        for live, we might need some extra credentials, username, password etc.
+
+        #TODO: sends the graph(state) to the requested controller and returns the url of the controller...
+        '''
+        return
 
     def Deploy(self, request, context):
         '''
-        Deploy a strategy on a certain domain...
-
-        If a strategy is in development state, it is deployed to a testing environment.
-        If it is in testing environment, it gets deployed in staging environment.
-
-        A test is ran on the strategy to see if it works fine (no code error etc.)
-        If it fails, the strategy won't be deployed and an error is sent to the client...
-        The strategy state must be reverted to development...
-
-        The client must then make a modify request
-
-        After that, the strategy remains pending and awaits some external party (admin)
-        to confirm its deployment to live.
-
-        and a controller_url is sent back to the client (test, live...) if the deployment was
-        successful.
-
-        How do we control the deployment? A branch must be tested etc. Before being deployed
-        to an "upper" level (paper trading, then live)
-        simulation -> paper -> live.
-        This must be enforced.
-        A branch deployment is accepted by external parties with sufficient access level
-        (admin, etc.)
-        Once a branch is accepted it is "froze/saved" and any subsequent request for
-        development will return a copy of this branch...
-
-        What if the user wants to do some experimentation? Always start from the
-        latest deployed branch, at which point the user can branch-off of..(copy that branch
-        and develop) The user can also branch-off a non-deployed branch...
-        => must specify the branch.
-
-        Deploys a set of strategies on a "higher" environment... (paper or live)
-        returns the controller url... (can only deploy a pushed strategy)
-        1) can only deploy a (working => must not contain code errors, etc.) pushed strategy
-        2) re-deploying a strategy will over-write the previously deployed strategy
-        3) re-deploying an already running strategy will cause it to shut-down and the
-           modified strategy will start from the previous strategy state...
-        4) re-deployment might cause capital to be rebalanced
-
-        Copies the develop branch into the master branch and sends the master branch
-        to a controller (paper, live). This must be validated by some peers.
-
-        If a strategy is a copy of another, we must compare it to the origin to make sure
-        it is not exactly the same (use difflib)... also compare benchmarks, the best of the two might be selected,
-        or they might be complementary etc.
+        Requests a deployment of a session to be used for real trading... Some credentials
+        will be asked : username, password...
 
         #todo: 1)we should also store the tree in cloud
                2)we should set the deployed files to read-only
@@ -131,49 +89,41 @@ class Hub(rpc.HubServicer):
         builder = self._builder
         strategies = self._strategies
 
-        id_ = dict(context.invocation_metadata())['strategy_id']
+        metadata = dict(context.invocation_metadata())
+        id_ = metadata['strategy_id']
+        session_id = metadata['session_id']
+
+
         sessions = self._sessions
         # get the strategy that corresponds to a session.
         strategy = graph.find_by_id(sessions, id_)
-
-
-        #todo: maybe put the state as a property of an element (faster) => no need for searches
-        # problem: not all elements uses this...
-        if not strategy:
-            strategy = graph.find_by_id(strategies, id_)
-            session = builder.group('session')
-            session.add_element(strategy)
-            session.add_element(graph.find_by_id(self._domains, id_))
-
-        else:
-            session = [sess for sess in strategy.parents if sess.value == 'session'].pop()
-
 
         #if the strategy is a copy, compare it to its original
         if strategy.copy:
             stg_file = graph.find_by_name(strategy, 'stg_file')[0]
             ogn_stg = graph.find_by_name(graph.find_by_id(strategies, stg_file.origin), 'stg_file')[0]
-            org_file = ogn_stg.load()
-            cpy = stg_file.load()
+            org_file = next(ogn_stg.load(headless=True))
+            cpy = next(stg_file.load(headless=True))
             #compare the two strategy files...
             result = difflib.unified_diff(org_file.decode(), cpy.decode())
             if not result:
                 # no modifications were made to the file! wont deploy or test it.
                 raise grpc.RpcError('Duplicated strategy!')
 
-        state_element = graph.find_by_name(strategy, 'state')[0]
-        state = next(state_element.load())
+        stage_element = strategy.get_element('stage')[0]
+        stage = next(stage_element).decode()
         #todo: create a session_id if non-existent (unique) add it to the strategy, and send the session + the strategy
         # file to the controller depending on the state of the session.
 
-        if state == 'dev':
+        #todo: send it to the test-controller, send back the controller-url to the client.
+        if stage == 'dev':
             #the strategy has never been deployed in a session => create a new session.
             #update
 
             session = builder.group('session')
             dom = graph.find_by_name(strategies, 'domain')[0]
             dom.add_element(session)
-            state_element.set_element(builder.value('test'))
+            stage.set_element(builder.value('test'))
             #returns a controller-url for testing... to the client
 
             #if a test fail to execute, the state must stay in dev
@@ -183,9 +133,8 @@ class Hub(rpc.HubServicer):
             #much we can do except from putting some "barriers" like limits to leverage
             #limits the beta etc.
 
-        elif state == 'test':
-            #todo: performs a test, if it passes, deploys it to "paper" or "live", else,
-            # change the state to dev
+        elif stage == 'test':
+            #todo: performs a test, if it passes, deploys it to "paper" or "live", depending on the hub.
             grpc.RpcError('Not implemented') #temporary...
 
 
@@ -196,141 +145,161 @@ class Hub(rpc.HubServicer):
 
     def New(self, request_iterator, context):
         '''
-        creates a new strategy, and sends back its id
+        creates or loads a domain and adds a new strategy to the domain.
+
+        an existing strategy could be provided if we want to transfer the strategy to
+        another domain.
         
         '''
-        metadata = dict(context.invocation_metadata())
-        dom_id = metadata['domain_id']
+
+        #todo: what if the strategy is already in the domain?
+        #todo : send the domain to the controllers.
 
         builder = self._builder
 
         #we will add the new strategy in the current branch.
         root = self._root
 
+        metadata = dict(context.invocation_metadata())
+
+        try:
+            stg = graph.find_by_id(root, metadata['strategy_id'])
+        except KeyError:
+            stg = None
+
         #will fit into memory
         dom_def = list(request_iterator)
         dom_id = domain.domain_id(dom_def)
         # create a new session id_ for the strategy
 
-        doms = graph.find_by_name(root, 'domains')[0]
-        envs = graph.find_by_name(root, 'envs')[0]
+        dms = self._domains
 
-        #get the group with the dom_id
-        result = graph.find_by_name(dom_id)
-        strategy = builder.group('strategy_meta')
-        stg_file = builder.file('strategy')
-        strategy.add_element(stg_file)
-        #store the strategy
-        self._strategies.add_element(strategy)
         try:
-            [i for i in result if i.name == 'domain'].pop()
-            environ = graph.find_by_name(envs, dom_id)[0]
-            # add the strategy to the environment
-            # environ.add_element(strategy)
+            dom = dms.get_element(dom_id)[0]
+            dom.get_element('environ')[0]
+            #if an existing strategy_id is provided, check if it is not a duplicate
+            #if it is, this will raise an error.
+            if stg:
+                self._check_copy(stg, dom)
         except IndexError:
-            dom = builder.group('domain')
-            doms.add_element(dom)
-            d = builder.file('dom_def')
-            d.store(dom_def)
-            dom.add_element(d)
+            #if the domain doesn't exist, it is safe to add the strategy.
+            dom = builder.group(dom_id)
+            f = builder.file('domain_def')
+            dom.add_element(f.store(dom_def))
+            environ = builder.file('environ')
+            dom.add_element(environ)
 
-            # add the domain to the strategy
-            strategy.add_element(dom)
-
-            # new environment (since the dom doesn't exist yet)
-            environ = builder.group('environ')
-            # we can get the element by dom_id
-            envs.add_element(environ)
-            # store the environment created from dom_def
             environ.store(self._create_environment(dom_def))
-        #store the dom_def if it deosn't exist...
 
-        stg_file.store(b'') #todo: store a template or empty file...
         sessions = self._sessions
+        strategies = self._strategies
+        #a session keeps track of the strategy performance, and state...
+        session = builder.group('session')
+        strategy = builder.file('strategy')
+        dom.add_element(session)
+        session.add_element(strategy)
 
-        #a session stores the performance of a strategy... so is bound to a single strategy
-        sess = builder.group('session')
-        # id_element = builder.group('session_id')
-        #
-        # session_id = uuid.uuid4().hex
-        #
-        # id_element.add_element(builder.value(session_id))
-        #
-        # sess.add_element(id_element)
-        sess.add_element(strategy)
-        sess.add_element(builder.file('performance')) #performance file.
-        sess.add_element(environ) #add the environment to the session.
+        strategies.add_element(strategy)
+        sessions.add_element(session)
 
-        #create a state single element and set it value to dev
-        strategy.add_element(builder.single('state', builder.value('dev')))
+        #store the state of the session as dev
+        session.add_element(builder.single('stage', builder.value('dev')))
 
-        sessions.add_element(sess)
-        #freeze the data and tree structure
-        graph.freeze(root, self._path)
+        if stg:
+            strategy.store(stg.load()) #todo: store a template with the proper function definitions
+        else:
+            strategy.store(b'')
 
-        #sends the all the strategies and there corresponding environment...
+        #store freeze the graph
+        graph.freeze(root, self._path) #todo: non-blocking
 
+        #send the domain_id and the strategy_id => will be used when pushing back to the hub.
+        context.send_initial_metadata((
+            ('session_id', session.id),
+            ('domain_id', dom_id),
+            ('strategy_id', strategy.id)))
 
+        # send the all the strategies and there corresponding environment...
+        size = 1024 * 16
+        for chunk in stream(strategy.load(size)):
+            yield chunk
 
-        #send the strategy_id to the client...
-        context.send_initial_metadata((('strategy_id', strategy.id)))
+        for chunk in stream(environ.load(size)):
+            yield chunk
 
     def Modify(self, request, context):
         '''
+        Request a strategy for modification from an existing domain.
         a modification request can be made on a session that is either in test or dev
-        state. if a session is in a deployed state, a copy of the session is created and sent.
+        stage. if a session is in a deployed stage, a copy of the session is created and sent.
         todo: what if the copy is not modified? how do we prevent it from being deployed?
-
-        =>
-
-        => APPEND ONLY
-
-        During development cycle, we might need to store the state of the strategy we're
-        developing (pushed (non-deployed) strategies can still be modified...)
-
-        requests modification of a strategy on the current branch.
-
-        creates a new branch which is a copy of the current branch...
-        the client must give back the previous strategy he's working on...
-        if there is no previous strategy
+         => diff
         '''
         root = self._root
+        builder = self._builder
 
         metadata = dict(context.invocation_metadata())
-        stg_id = metadata['strategy_id']
-        session = graph.find_by_id(root, stg_id) #get the session that corresponds to the id.
+        try:
+            session_id = metadata['session_id']
+            domain_id = metadata['domain_id']
+            str_id = metadata['strategy_id']
+        except KeyError:
+            raise grpc.RpcError('')
 
-        state = next(session.get_element('state')[0].load())
+        session = graph.find_by_id(root, session_id) #get the session that corresponds to the id.
 
-        if state != 'deployed':
-            strategy = graph.find_by_name(session,'strategy')[0]
-            environ = graph.find_by_name(session,'environ')[0]
-        else:
-            #return a copy of the strategy... a copy keeps an origin
-            session = graph.copy(session)
-            graph.find_by_name('sessions')[0].add_element(session)
+        stage = next(session.get_element('stage')[0].load()).decode()
+        dom = self._domains.get_element(domain_id)[0]
+        strategy = builder.get_element(str_id)
 
-        #send back a new session id
-        context.send_initial_metadata((('session_id', session.id)))
+        #get the cached environment...
+        environ = dom.get_element('environ')[0]
+
+        if stage == 'deployed':
+            #can't modify a deployed session => create and return a copy.
+            #copy the strategy into a new session...
+            session = builder.group('session')
+            session.add_element(builder.single('stage', builder.value('dev')))
+            #create a copy of the strategy.
+            strategy = graph.copy(strategy)
+            session.add_element(strategy)
+            dom.add_element(session)
+            self._sessions.add_element(session)
+
+        #freeze the data
+        graph.freeze(root, self._path)
+
+        #send back metadata
+        context.send_initial_metadata((
+            ('session_id', session.id),
+            ('strategy_id', strategy.id),
+            ('domain_id', domain_id))
+        )
 
         sz = 1024 * 16  # 16KB
 
-        # send the environment
-        for chunk in stream(environ.load(sz)):
-            yield chunk
         # send the strategy
         for chunk in stream(strategy.load(sz)):
             yield chunk
 
+        # send the environment
+        for chunk in stream(environ.load(sz)):
+            yield chunk
 
     def Push(self, request_iterator, context):
-        '''Used to save a session in the hub...'''
+        '''Pushes the strategy in the correct slot...'''
 
         metadata = dict(context.invocation_metadata())
-        session = self._root.get_group(metadata['session_id'])[0]
+        str_id = metadata['strategy_id']
 
-        state = next(session.get_element('state')[0].load())
+        strategy = self._builder.get_element(str_id)
 
+        #reads the bytes
+        def read():
+            for data in request_iterator:
+                yield data.data
+        #store the strategy
+        strategy.store(read())
 
         return hub_pb2.DeploymentReply('') #todo: send back the controller url.
 
@@ -338,32 +307,37 @@ class Hub(rpc.HubServicer):
         pass
 
     def List(self, request, context):
-        '''returns all strategies and their environments of the current branch.'''
-        for chunk in stream(self._envs.load(1024 * 16)):
+        '''returns a list of elements'''
+        metadata = dict(context.invocation_metadata())
+
+        #todo: we could either get strategies from a certain domain, or strategies
+        # of all domains (based on the metadata)
+        #sends the strategy metadata as-well (id, etc.)
+        for chunk in stream(self._strategies.load(1024 * 16)):
             yield chunk
 
-    def SelectDomain(self, request, context):
-        '''returns the domain of the selected domain'''
+    def ViewDomains(self, request, context):
+        #sends the metadata as-well...
+        '''returns a list of stored domains'''
         return
 
-    def AddEnvironment(self, request_iterator, context):
-        builder = self._builder
+    def _check_copy(self, strategy, domain_):
+        '''Checks if the copy is valid. If it is an un-modified copy, it will raise an error.'''
+        #get all the strategies in the domain.
+        strategies = domain_.get_element('strategy')[0]
+        for stg in strategies:
+            src_id = stg.id
+            #first check if the strategy is the same...
+            if src_id == strategy.id:
+                raise grpc.RpcError("Can't add a strategy twice to the same domain.")
+            #check if str is derived from strategy
+            if graph.is_derived_from(stg, strategy):
+                #compare the strategy and the copy (str)
+                org_file = next(stg.load(headless=True))
+                cpy = next(strategy.load(headless=True))
+                r = difflib.unified_diff(org_file.decode(), cpy.decode())
+                if not r:
+                    # there can be atmost 1 strategy duplicate...
+                    # todo: send back a html file to compare side by side
+                    raise grpc.RpcError("This strategy is an exact replica")
 
-        dom_def = list(request_iterator)
-        dom_id = domain.domain_id()
-
-        domains = self._domains
-        envs = self._envs
-
-        dom = graph.find_by_name(domains, dom_id)[0]
-        if not dom:
-            dom = builder.group(dom_id)
-            f = builder.file('domain_def')
-            dom.add_element(f.store(dom_def))
-            environ = builder.group(dom_id)
-            env_f = builder.file('environ')
-            environ.add_element(env_f)
-            env_f.store(self._create_environment(dom_def))
-            envs.add_element(environ)
-
-        context.send_initial_metadata((('domain_id', dom_id),))
