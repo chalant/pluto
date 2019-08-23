@@ -9,14 +9,10 @@ from protos import data_bundle_pb2
 from contrib.utils import graph
 from contrib.control import clock_utils
 
-from . import metadata
-from . import domain
-
-import socket
+from contrib.control import domain
 
 import uuid
 import abc
-
 
 class Session(object):
     def __init__(self, sess_node, dom_struct, cbl_stub, perf_file):
@@ -55,13 +51,49 @@ class Session(object):
     def watch(self):
         pass
 
+class ControlMode(abc.ABC):
+    def __init__(self):
+        pass
+
+    @abc.abstractmethod
+    @abc.abstractproperty
+    def name(self):
+        raise NotImplementedError
+
+    def run(self, sessions):
+        self._run(sessions)
+
+    @abc.abstractproperty
+    def _run(self, sessions):
+        raise NotImplementedError
+
+    def create_controllable(self):
+        address = self._create_address()
+        # todo: create and return controllable stub object
+        #  using a the address
+
+    @abc.abstractproperty
+    def _create_address(self):
+        raise NotImplementedError
+
+
+
 class Controller(ctrl_rpc.ControllerServicer):
-    def __init__(self, address, hub_stub, builder):
+    def __init__(self, hub_stub, builder, control_mode):
+        '''
+
+        Parameters
+        ----------
+        address
+        hub_stub
+        builder : contrib.utils.graph.Builder
+        control_mode : ControlMode
+        '''
         self._sessions = {}
-        self._address = address
         self._hub = hub_stub
         self._builder = builder #todo: this builder must have a different loader (remote)
         self._gph = None
+        self._control_mode = control_mode
 
     def _load_graph(self, bytes_, builder):
         return graph.load_graph_from_bytes(bytes_, builder)
@@ -76,6 +108,7 @@ class Controller(ctrl_rpc.ControllerServicer):
             1)load create and store domain
             2)load create and store sessions (and strategies)
         '''
+        mode = self._control_mode
         gph = self._gph
         hub = self._hub
         builder = self._builder
@@ -86,7 +119,7 @@ class Controller(ctrl_rpc.ControllerServicer):
         envs = {}
         sessions = self._sessions
 
-        pfn = self.name + '_perf'
+        pfn = mode.name + '_perf'
         for request in request_iterator:
             node = builder.get_element(request.session_id)
 
@@ -106,13 +139,13 @@ class Controller(ctrl_rpc.ControllerServicer):
                 file = builder.file(pfn)
                 node.add_element(file)
 
-            stub = self._create_controllable()
+            stub = mode.create_controllable()
 
             sess = Session(node, dom, stub, file)
 
             sessions[node.id] = sess
         #run the session.
-        self._run(sessions)
+        mode.run(sessions)
 
         #todo: makes a request to the hub for a strategy, then runs that strategy.
         #we run a session (not a strategy). as session is a strategy on a given domain.
@@ -169,126 +202,3 @@ class Controller(ctrl_rpc.ControllerServicer):
 
     def _create_address(self):
         return
-
-
-#TODO: the controller should always send a "session-id" as metadata
-# the client and the controller will exchange this session-id
-#TODO: raise a grpc error if a request doesn't have a session-id...
-#TODO: We should encapsulate the controller, since the behavior changes with the environment..
-class TestController(Controller):
-    '''server that controls'''
-
-    class ControllerThread(object):
-        def __init__(self):
-            self._sessions = []
-            self._pool = futures.ThreadPoolExecutor()
-
-        def ClockUpdate(self, clock_evt):
-            pass
-
-        def add_session(self, session):
-            self._sessions.append(session)
-
-        def start(self):
-            pool = self._pool
-            #todo: a clock must be callable
-            for clock in self._clocks:
-                pool.submit(clock)
-
-    #TODO: HOW TO CREATE A CLOCK? => scan through the list of country codes and assets
-    # a clock takes a calendar as argument => how do we instanciate the "right" calendar?
-    # maybe we should specify the exchange instead of the country?
-    def __init__(self, address, local_hub, session_factory):
-        super(TestController, self).__init__(address, local_hub, session_factory)
-        self._clocks = {}
-        self._exchanges = exchanges = {}
-        self._hub = local_hub
-
-        for exc in local_hub.get_exchanges():
-            country_code = exc.country_code
-            self._append_to_dict(country_code, exc.name, exchanges)
-            for at in exc.asset_types:
-                self._append_to_dict(at, exc.name, exchanges)
-
-    def _append_to_dict(self, key, value, dict_):
-        v = dict_.get(key, None)
-        if not v:
-            dict_[key] = [value]
-        else:
-            dict_[key].append(value)
-
-    def name(self):
-        return 'simulation'
-
-    def Deploy(self, request_iterator, context):
-        session_id = dict(context.invocation_metadata())['session_id']
-        file = self._extract_strategy_file(request_iterator)
-        s = socket()
-        s.bind(('', 0))
-        address = 'localhost:{}'.format(s.getsockname()[1])
-        s.close()
-        self._sessions[session_id].deploy(file, self._address, address)
-
-    def _run(self, sessions):
-        '''
-
-        Parameters
-        ----------
-        sessions
-
-        Returns
-        -------
-
-        1)create clocks using the domain_struct of the session.
-        2)
-
-        '''
-
-        clocks = self._clocks
-        sess_per_exc = {}
-        exc_set = set()
-        for session in sessions:
-            results = self._resolve_exchanges(session.domain_struct, self._exchanges)
-            exc_set = exc_set & results
-            for exc in results:
-                self._append_to_dict(exc, session, sess_per_exc)
-        #todo: create clocks
-        #each clock
-
-
-    def _resolve_exchanges(self, domain_struct, exchanges):
-        cc = domain_struct.country_code
-        at = domain_struct.asset_types
-
-        # dictionray mapping keys like asset types and country codes, to sets of exchanges
-
-        at_set = set()
-        cc_set = set()
-
-        # union of all exchanges trading the given asset types
-        for c in at:
-            at_set = at_set | exchanges[c]
-
-        # union of all exchanges operating in the given countries
-        cc_set = cc_set | exchanges[cc]
-
-        # intersection of exchanges trading in the given countries and asset types
-        return cc_set & at_set
-
-
-    def _clock_update(self, clock_evt):
-
-        pass
-
-
-class LiveController(Controller):
-    '''controls the downloader controllables. handles live and paper trading.'''
-
-    def _clock_update(self, clock_evt):
-        '''
-        1)download data
-        2)ingest data (stored in disk)
-        3)send data to the controllables
-        4)send clock event to controllables
-        '''
-        pass

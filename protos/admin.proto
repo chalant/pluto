@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "protos/data.proto";
+import "google/protobuf/empty.proto";
+
+service Admin {
+    //client must first login
+    rpc Login(LoginRequest) returns (LoginReply);
+
+    //client must specify the type of the data in the metadata.
+    rpc Add(stream Data) returns (stream Data);
+    rpc Update(stream Data) returns (stream Data);
+    rpc Delete(stream Data) returns (google.protobuf.Empty);
+    rpc Get(stream Data) returns (stream Data);
+}
+
+message LoginRequest {
+    string username = 1;
+    string password = 2;
+}
+
+message LoginReply {
+    string token = 1;
+}

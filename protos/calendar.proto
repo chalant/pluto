@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
-
+import "protos/data.proto";
 
 message Offset {
     enum Types {
@@ -49,6 +49,7 @@ message Time {
     int32 hour = 1;
     int32 minute = 2;
     int32 second = 3;
+    string tz = 4;
 }
 
 message TimeHolidays {
@@ -90,4 +91,9 @@ message Calendar {
     int32 open_offset = 10;
     TimeDelta execution_time_from_open = 11;
     TimeDelta execution_time_from_close = 12;
+    repeated string aliases = 13;
+}
+
+message CalendarList {
+    repeated Calendar calendars = 1;
 }

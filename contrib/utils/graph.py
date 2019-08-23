@@ -4,29 +4,38 @@ import os
 
 from collections import deque
 
-from contrib.hub.data_layer import graph_pb2
+from protos import graph_pb2
+
+from google.protobuf import empty_pb2
+from protos import data_pb2
 
 
 class Store(abc.ABC):
-    def __init__(self, path):
-        self._path = path
-
+    @abc.abstractmethod
     def load(self, id_, chunk_size=None):
-        for data in self._load(id_, self._path, chunk_size):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def store(self, id_, path, chunk_size):
+        raise NotImplementedError
+
+class Storage(abc.ABC):
+    def load(self, id_, path, chunk_size=None):
+        for data in self._load(id_, path, chunk_size):
             yield data
+
+    def store(self, id_, path, iterable):
+        self._store
 
     @abc.abstractmethod
     def _load(self, id_, path, chunk_size):
         raise NotImplementedError
 
-    def store(self, id_, iterable):
-        self._store(id_, iterable)
-
     @abc.abstractmethod
     def _store(self, id_, path, iterable):
         raise NotImplementedError
 
-class MultiFileStore(Store):
+class MultiFileStorage(Storage):
     def _load(self, id_, path, chunk_size):
         pth = os.path.join(path, id_)
         with open(pth, 'rb') as f:
@@ -40,11 +49,38 @@ class MultiFileStore(Store):
             else:
                 yield f.read()
 
+class LocalStore(Store):
+    def __init__(self, path, storage):
+        self._path = path
+        self._storage = storage
+
+    def load(self, id_, chunk_size=None):
+        for data in self._storage.load(id_, self._path, chunk_size):
+            yield data
+
+    def store(self, id_, iterable):
+        self._storage.store(id_, self._path, iterable)
+
     def _store(self, id_, path, iterable):
         pth = os.path.join(path, id_)
         with open(pth, 'wb') as f:
             for data in iterable:
                 f.write(data)
+
+class RemoteStore(Store):
+    def __init__(self, store_stub):
+        self._stub = store_stub
+
+    def store(self, id_, iterable, chunk_size):
+        def stream(iterable):
+            for b in iterable:
+                yield data_pb2.Data(data=b)
+
+        self._stub.StoreData(stream(), metadata=(('id', id_),('chunk_size', chunk_size)))
+
+    def load(self, id_, path, chunk_size):
+        for chunk in self._stub.GetData(empty_pb2.Empty(), metadata=(('id', id_), ('chunk_size', chunk_size))):
+            yield chunk.data
 
 
 class GraphDepthIterator(object):
@@ -100,6 +136,9 @@ class Builder(object):
         self._elements_by_id = {}
         self._elements_by_name = {}
 
+        #for shortcuts
+        self._maps = {}
+
     def get_element(self, id_):
         return self._elements_by_id[id_]
 
@@ -132,6 +171,8 @@ class Builder(object):
             raise AttributeError
 
         self._elements_by_id[id_] = el
+
+        #todo: do we need to classify elements by name?
         els = self._elements_by_name.get(name,None)
         if els:
             els.append(el)
@@ -154,6 +195,13 @@ class Element(abc.ABC):
         #as origin...
         self._origin = None
         self._copy = False
+        self._relations = {}
+
+    def join(self, key, value):
+        self._relations[key] = value
+
+    def relation(self, key):
+        return self._relations[key]
 
     @property
     def copy(self):
@@ -188,8 +236,9 @@ class Element(abc.ABC):
     def load(self, chunk_size=None, headless=False):
         if not headless:
             yield 'HEADER'
+            #todo: use bytes io to cut this in chunks of fixed size...
             yield to_bytes(graph_pb2.Node(name=self.value, type=self.name, id=self.id, origin=self.origin))
-            yield b'BEGIN'
+            yield b'BODY'
             for chunk in self._load(self._str, chunk_size):
                 yield chunk
             yield b'END'
@@ -368,6 +417,26 @@ def load_graph(path):
     with open(path, 'rb') as f:
         return create_graph(f.read(path))
 
+
+class NodeCreator(object):
+    def __init__(self, builder):
+        self._builder = builder
+        self._instance_dict = {}
+
+    def create_node(self, node_def, type_, copy_=False):
+        instance_dict = self._instance_dict
+        id_ = node_def.id
+        # if the type is a value, load it in memory
+        if id_ not in instance_dict:
+            instance_dict[id_] = el = self._builder.element(type_, node_def.name, id_ if not copy_ else None)
+            ori = node_def.origin
+            if ori:
+                el.origin = self.create_node(ori, ori.type, copy_)  # create the origin element
+        else:
+            el = instance_dict[id_]
+        return el
+
+
 def create_graph(graph_def, factory, copy_=False):
     '''
     Creates a graph from a serialized graph...
@@ -380,26 +449,13 @@ def create_graph(graph_def, factory, copy_=False):
     -------
 
     '''
-
-
-    instance_dict = {}
     sequence = []
 
-    def create_node(node_def, type_, copy_=False):
-        id_ = node_def.id
-        # if the type is a value, load it in memory
-        if id_ not in instance_dict:
-            instance_dict[id_] = el = factory.element(type_, node_def.name, id_ if not copy_ else None)
-            ori = node_def.origin
-            if ori:
-                el.origin = create_node(ori, ori.type, copy_) #create the origin element
-        else:
-            el = instance_dict[id_]
-        return el
+    node_creator = NodeCreator(factory)
 
     for node_def in graph_def:
         t = node_def.type
-        el = create_node(node_def, t, copy_)
+        el = node_creator.create_node(node_def, t, copy_)
         # append the instance to the sequence
         if node_def.type == 'group':
             # add all the previous elements
@@ -444,3 +500,47 @@ def is_derived_from(source_id, subject):
     else:
         #if we reach None, then the subject isn't derived from the source.
         return False
+
+def parse_header(stream):
+    '''builds a node'''
+    while data != b'BODY':
+        data = next(stream).data
+    #todo: return the graph node.
+    return
+
+def ingest_graph(stream, builder):
+
+    node_creator = NodeCreator(builder)
+
+    def body_yield(stream):
+        while data != b'END':
+            data = next(stream).data
+            yield data
+
+    while True:
+        try:
+            data = next(stream).data
+        except StopIteration:
+            #todo: store the built graph.
+            break
+
+        if data == b'HEADER':
+            while data != b'BODY':
+                data = next(stream).data
+                node_bytes = node_bytes + data  # todo: can this work?
+            node_def = graph_pb2.Node()
+            node_def.ParseFromString(node_bytes)
+            node = node_creator.create_node(node_def, node_def.type)
+
+        if data == b'BODY':
+            node.store(body_yield(stream))
+
+def load_graph_from_bytes(iterable, builder):
+    gph = graph_pb2.Graph()
+    gph_bytes = b''
+    for chunk in iterable:
+        gph_bytes = gph_bytes + chunk.data
+    gph.ParseFromString(gph_bytes)
+
+    return create_graph(gph, builder)
+

@@ -8,7 +8,7 @@ from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 from zipline.utils.pandas_utils import normalize_date
 
-from contrib.control import clock
+from contrib.control import clock_utils
 from contrib.coms.services import broker_service as brs
 
 
@@ -57,7 +57,7 @@ class SimulationBrokerControl(object):
         if end_dt is None:
             end_dt = normalize_date(pd.Timestamp.utcnow())
 
-        self._clock = clock.MinuteSimulationClock(cal, start_dt, end_dt)
+        self._clock = clock_utils.MinuteSimulationClock(cal, start_dt, end_dt)
 
     def _create_bar_data(self, universe_func, data_portal, get_dt, data_frequency, calendar, restrictions):
         return BarData(
@@ -75,9 +75,9 @@ class SimulationBrokerControl(object):
     def run(self, bundler):
         cl = self._clock
         for dt, evt in cl:
-            if evt == clock.INITIALIZE:
+            if evt == clock_utils.INITIALIZE:
                 self._load_attributes(bundler.load(), cl.calendar, bundler.data_frequency)
-            elif evt == clock.SESSION_END:
+            elif evt == clock_utils.SESSION_END:
                 pass
 
 

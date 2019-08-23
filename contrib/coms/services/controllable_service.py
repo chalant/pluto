@@ -1,6 +1,6 @@
 from protos import controller_service_pb2 as ctl_msg, controllable_service_pb2_grpc as cbl_grpc, \
     controller_service_pb2_grpc as ctl_srv
-from contrib.control.clock import clock_pb2 as cl_msg
+from contrib.control.clock_utils import clock_pb2 as cl_msg
 
 from contrib.coms.client import account
 

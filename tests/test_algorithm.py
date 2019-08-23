@@ -972,7 +972,7 @@ class TestPositions(zf.WithMakeAlgo, zf.ZiplineTestCase):
         daily_stats = self.run_algorithm(handle_data=handle_data)
 
         # Verify that positions are empty for all dates.
-        empty_positions = daily_stats.positions.map(lambda x: len(x) == 0)
+        empty_positions = daily_stats.positions.join(lambda x: len(x) == 0)
         self.assertTrue(empty_positions.all())
 
     def test_position_weights(self):
