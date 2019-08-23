@@ -2,7 +2,7 @@
 var grpc = require('grpc');
 var protoLoader = require('@grpc/proto-loader');
 // Suggested options for similarity to existing grpc.load behavior
-var packageDefinition = protoLoader.loadSync('./protos/hub.proto', {
+var packageDefinition = protoLoader.loadSync('./protos/dev.proto', {
     keepCase: true,
     longs: String,
     enums: String,
@@ -13,13 +13,13 @@ var packageDefinition = protoLoader.loadSync('./protos/hub.proto', {
 
 var protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 
-const hub = protoDescriptor.hub
+const dev = protoDescriptor.dev
 
-class HubClient {
+export class DevClient {
     //todo: this class should have a reference to the editor => dynamically
     //displays the strategy in the editor.
-    constructor(editor){
-        this.stub = new hub.Hub('localhost:50051', grpc.credentials.createInsecure())
+    constructor(editor, url, credentials){
+        this.stub = new dev.Dev(url, credentials)
         this.currentStr = null //holds the current strategy
         this.editor = editor
     }

@@ -8,7 +8,8 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 service Broker {
-    /*This should encapsulate the set of services available per account...*/
+    /*This is an interface that provides brokerage access to clients. It encapsulates
+    methods for accessing performing trades. Each caller passes its credentials as metadata*/
     rpc SingleOrder (OrderParams) returns (Order);
     rpc PortfolioState (google.protobuf.Empty) returns (Portfolio);
     rpc PositionsState (google.protobuf.Empty) returns (stream AssetPositionPair);

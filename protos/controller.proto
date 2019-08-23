@@ -9,7 +9,7 @@ import "protos/data.proto";
 
 service Controller {
     //This method is a callback for controllables: each controllable sends back a performance
-    //packet to the controller
+    //packet to the controller by specifying the session_id in the metadata
     rpc PerformancePacketUpdate (stream Data) returns (google.protobuf.Empty);
     rpc Stop (StopParams) returns (StopStatus);
     //runs a strategy with initial parameters
@@ -19,10 +19,21 @@ service Controller {
     //we can watch the performance of the strategy in real-time...
     /*rpc Watch (StrategyID) returns (stream Data);*/
     //dynamically updates capital and/or leverage of a running strategy
-    rpc UpdateLevCap (LevCap) returns (CapitalAssignmentStatus);
+    //NOTE: this information can be obtained from the broker. ex: interactive brokers...
+    //The controller holds the master account which contains the initial capital of the account...
+    rpc UpdateLevCap (stream LevCap) returns (CapitalAssignmentStatus);
     rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
     //TODO: should be able to check for available domains.
-    rpc UploadStrategy(stream Data) returns (google.protobuf.Empty)
+    rpc Deploy(stream Data) returns (google.protobuf.Empty);
+    rpc UpdateGraph(stream Data) returns (google.protobuf.Empty);
+}
+
+message ControllerRequest {
+    string type = 1; //simulation, paper, live.
+}
+
+message ControllerReply {
+    string url = 1;
 }
 
 message Status {
@@ -30,9 +41,9 @@ message Status {
 }
 
 message LevCap {
-    float capital = 1;
+    float capital_ratio = 1;
     float max_leverage = 2;
-    string id = 3; //strategy id
+    string session_id = 3; //strategy id
 }
 
 message CapitalAssignmentStatus {
@@ -41,8 +52,8 @@ message CapitalAssignmentStatus {
 
 
 message RunParams {
-    string strategy_id = 1;
-    int64 capital = 2;
+    string session_id = 1;
+    float capital_ratio = 2;
     float max_leverage = 3;
     //TODO: the benchmark asset should be set depending on the domain (not manually)
     // the emission_rate and the data frequency should be inferred from the domain
@@ -60,6 +71,10 @@ message StopParams {
 
 message StopStatus {
 
+}
+
+message Performance {
+    repeated PerformancePacket packets = 1;
 }
 
 message PerformancePacket {

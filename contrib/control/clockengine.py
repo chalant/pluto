@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-import  uuid
+
 from concurrent import futures
+from google.protobuf import empty_pb2
 
 import itertools
 
@@ -18,7 +19,6 @@ import time
 
 from contrib.coms.utils import conversions as crv
 from contrib.coms.utils import server_utils as srv
-from contrib.control.clock import clock_pb2_grpc as cl_servicer
 from contrib.control.clock_pb2 import (
     BAR,
     BEFORE_TRADING_START,
@@ -31,7 +31,8 @@ from contrib.control.clock_pb2 import (
     CALENDAR
 )
 
-from contrib.control.clock import clock_pb2 as cl
+from protos import clock_pb2_grpc as cl_servicer
+from protos import clock_pb2 as cl
 
 from trading_calendars.utils.pandas_utils import days_at_time
 from contrib.trading_calendars import calendar_utils as cu
@@ -408,6 +409,7 @@ class SimulationClock(cl_servicer.SimulationClockServicer):
             #todo: we should call these in parallel
             for listener in listeners:
                 listener.Update(clock_event)
+        return empty_pb2.Empty()
 
     def GetState(self, request, context):
         pass

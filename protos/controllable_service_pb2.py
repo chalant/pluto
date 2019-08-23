@@ -14,7 +14,7 @@ from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from protos import data_bundle_pb2 as contrib_dot_coms_dot_protos_dot_data__bundle__pb2
 from protos import controller_service_pb2 as contrib_dot_coms_dot_protos_dot_controller__service__pb2
 from protos import broker_pb2 as contrib_dot_coms_dot_protos_dot_broker__pb2
-from contrib.control.clock import clock_pb2 as contrib_dot_control_dot_clock_dot_clock__pb2
+from contrib.control.clock_utils import clock_pb2 as contrib_dot_control_dot_clock_dot_clock__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(

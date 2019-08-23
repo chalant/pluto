@@ -5,7 +5,7 @@ from contrib.trading_calendars.calendar_utils import TradingCalendarFatory
 
 
 from contrib.coms.utils import conversions as crv
-from contrib.trading_calendars.protos import calendar_pb2 as cal
+from protos import calendar_pb2 as cal
 from contrib.trading_calendars import us_holidays as hol
 
 

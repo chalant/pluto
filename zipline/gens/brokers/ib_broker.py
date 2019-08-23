@@ -559,7 +559,7 @@ class IBBroker(Broker):
         ib_account = self._tws.accounts[self.account_id][self.currency]
 
         z_portfolio = zp.Portfolio()
-        #todo: the starting cash should be the total cash value the first very first time we call
+        #todo: the starting cash should be the total cash value the very first time we call
         # the broker and should be stored permanently.
         z_portfolio.starting_cash = None  # TODO(tibor): Fill from state
         z_portfolio.portfolio_value = float(ib_account['EquityWithLoanValue'])

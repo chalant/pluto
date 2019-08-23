@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from protos import UnitDomainDef
-from protos import CompoundDomainDef
+from protos.data_bundle_pb2 import UnitDomainDef
+from protos.data_bundle_pb2 import CompoundDomainDef
+
+#TODO: add exchange to the domain struct.
 
 class DomainBuilder(object):
     def asset(self, type, country_code, data_type):
@@ -114,7 +116,7 @@ class CompoundDomain(Domain):
         return a
 
 class DomainStruct(object):
-    '''will be used to filter data packets sent by the controller'''
+    '''will be used to filter data packets and clock events sent by the controller'''
     __slots__ = ['_sessions', '_country_codes', '_data_types', '_asset_types']
 
     def __init__(self, sessions, country_codes, data_types, asset_types):
@@ -140,6 +142,7 @@ class DomainStruct(object):
         return self._asset_types
 
 def apply_operator(left, right, operator):
+    #TODO: finish this!
     '''
 
     Parameters
