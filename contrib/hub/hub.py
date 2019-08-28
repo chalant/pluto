@@ -3,6 +3,16 @@ from protos import hub_pb2_grpc
 
 from contrib.utils import graph
 
+class HubClient(object):
+    def __init__(self):
+        pass
+
+    def get_graph(self):
+        pass
+
+#TODO: we need a base path to store things... database or file system? => abstract this
+#TODO: check for credentials... (One hub per client?) => credentials are added on app launch
+# or added from environment...
 class Hub(hub_pb2_grpc.HubServicer):
     def __init__(self, graph_builder, graph_path):
 
@@ -26,13 +36,6 @@ class Hub(hub_pb2_grpc.HubServicer):
 
             # store the graph...
             graph.freeze(root, graph_path)
-
-        else:
-            self._root = root = graph.create_graph(graph_def, graph_builder)
-            self._domains = graph.find_by_name(root, 'domains')[0]
-            self._sessions = graph.find_by_name(root, 'sessions')[0]
-            self._envs = graph.find_by_name(root, 'envs')[0]
-            self._strategies = graph.find_by_name(root, 'strategies')[0]
 
     def Deploy(self, request, context):
         pass

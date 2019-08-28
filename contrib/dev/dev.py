@@ -3,11 +3,15 @@ import grpc
 import difflib
 
 from protos import dev_pb2_grpc as rpc
-from protos import environment_pb2 as env
+from protos import controller_pb2_grpc
+from protos import controller_pb2 as ctrl
+
+from contrib.controller import simulation_mode, controller
 
 from contrib.utils import graph
 
 from contrib.control import domain
+from contrib.control.clock import clock
 
 from protos import data_pb2
 from protos import dev_pb2
@@ -31,84 +35,50 @@ def stream(iterable):
     for chunk in iterable:
         yield data_pb2.Data(data=chunk)
 
-#TODO: we need a base path to store things... database or file system? => encapsulate this
-#TODO: check for credentials... (One hub per client?) => credentials are added on app launch
-# or added from environment...
 class Dev(rpc.DevServicer):
     #todo: the client must push back the strategy it has (if it has one) before requesting
     # a new or existing strategy...
-    def __init__(self, env_builder, graph_path, hub_client):
-        self._test_controller = None #todo
+    def __init__(self, env_builder, hub_client, sim_clock_factory, server):
+        self._builder = env_builder
+        #the hub returns the root of the graph
+        self._root = root = hub_client.get_graph()
 
-        self._builder = builder = env_builder
-        self._path = graph_path
-        #todo: root is loaded from disk. If it is none, we create it.
-        graph_def = graph.load_graph(graph_path)
-
-        if not graph_def:
-            self._root = root = builder.group('hub')
-
-            self._strategies = builder.group('strategies')
-            self._domains = domains = builder.group('domains')
-            self._sessions = sessions = builder.group('sessions')
-            self._envs = envs = builder.group('envs')
-
-            root.add_element(domains)
-            root.add_element(sessions)
-            root.add_element(envs)
-
-            #store the graph...
-            graph.freeze(root, graph_path)
-
-        else:
-            self._root = root = graph.create_graph(graph_def, env_builder)
-            self._domains = root.get_element('domains')[0]
-            self._sessions = root.get_element('sessions')[0]
-            self._envs = root.get_element('envs')[0]
-            self._strategies = root.get_element('strategies')[0]
+        self._domains = root.get_element('domains')[0]
+        self._sessions_node = root.get_element('sessions')[0]
+        self._envs = root.get_element('envs')[0]
+        self._strategies = root.get_element('strategies')[0]
 
         self._hub = hub_client
-        self._controller = None #todo
+        self._scf = sim_clock_factory
+        self._controller = ctl = controller.Controller(self._hub, self._builder)
+        controller_pb2_grpc.add_ControllerServicer_to_server(ctl, self._server)
 
-    def GetSession(self, request_iterator, context):
-        '''returns one or more strategies '''
-        # builder = self._builder
-        # sessions = []
-        #
-        # by_dom = {}
-        #
-        # size = 1024 * 16
-        #
-        # for request in request_iterator:
-        #     sess_id = request.id
-        #     did = builder.relation(sess_id)
-        #
-        #     sessions = by_dom.get(did, None)
-        #
-        #     if not sessions:
-        #         sessions = []
-        #         by_dom[did] = sessions
-        #
-        #     sessions.append(builder.get_element(sess_id))
-        #
-        # for did, sessions in by_dom.items():
-        #     #load the dom_def file and send it to the controller.
-        #     for chunk in stream(builder.get_element(did).load()):
-        #         yield chunk
-        #
-        #     for session in sessions:
-        #         for chunk in stream(session.load(size)):
-        #             yield chunk
+        self._server = server
 
-
-
-
-    def GetController(self, request, context):
+    def Run(self, request, context):
         '''
-        Returns a test-controller.
-
+        runs a session
+            1)load/create and store domain
+            2)load/create and store sessions (and strategies)
         '''
-        return
+        #todo: what if this method gets called multiple times?
+        #todo: warning: this method can be called multiple times...
+        #todo: should queue run requests to avoid repeated costly calls
+        # this function is computationally expensive (queue simulation control modes)
+
+        #todo: requests must be queued to avoid race conditions
+        if self._controller.running:
+            raise grpc.RpcError('')
+        else:
+            # this call doesn't block... how do we know when it is done? call back?
+            self._controller.run(request.run_params,
+                    simulation_mode.SimulationControlMode(
+                        self._scf,
+                        request.start_date.ToDatetime(),
+                        request.end_date.ToDatetime()))
+            return ctrl.Status()
+
+
 
     def Deploy(self, request, context):
         '''
@@ -127,19 +97,19 @@ class Dev(rpc.DevServicer):
         root = self._root
         builder = self._builder
         strategies = self._strategies
+        hub_client = self._hub
 
         metadata = dict(context.invocation_metadata())
         id_ = metadata['strategy_id']
         session_id = metadata['session_id']
 
 
-        sessions = self._sessions
+        sessions = self._sessions_node
 
-        # freeze the graph.
-        graph.freeze(root, self._path)  # todo: non-blocking.
+        hub_client.freeze_graph()
 
         #upload the graph to the hub. (iterable)
-        self._hub.upload(stream(root.load(1024 * 16)))
+        hub_client.upload_graph(stream(root.load(1024 * 16)))
 
         return data_pb2.Data() #todo: why are we returning data?
 
@@ -159,6 +129,7 @@ class Dev(rpc.DevServicer):
 
         #we will add the new strategy in the current branch.
         root = self._root
+        hub_client = self._hub
 
         metadata = dict(context.invocation_metadata())
 
@@ -192,7 +163,7 @@ class Dev(rpc.DevServicer):
 
             environ.store(self._create_environment(dom_def))
 
-        sessions = self._sessions
+        sessions = self._sessions_node
         strategies = self._strategies
         #a session keeps track of the strategy performance, and state...
         session = builder.group('session')
@@ -215,7 +186,7 @@ class Dev(rpc.DevServicer):
         session.add_element(builder.value('dom_def_id', f.id))
 
         #store freeze the graph
-        graph.freeze(root, self._path) #todo: non-blocking
+        hub_client.freeze_graph()
 
         #send the domain_id and the strategy_id => will be used when pushing back to the hub.
         context.send_initial_metadata((
@@ -239,6 +210,7 @@ class Dev(rpc.DevServicer):
         todo: what if the copy is not modified? how do we prevent it from being deployed?
          => diff
         '''
+        hub = self._hub
         root = self._root
         builder = self._builder
 
@@ -269,10 +241,10 @@ class Dev(rpc.DevServicer):
             strategy = graph.copy(strategy)
             session.add_element(strategy)
             dom.add_element(session)
-            self._sessions.add_element(session)
+            self._sessions_node.add_element(session)
 
         #freeze the data
-        graph.freeze(root, self._path)
+        hub.freeze_graph()
 
         #send back metadata
         context.send_initial_metadata((

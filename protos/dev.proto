@@ -1,10 +1,11 @@
 syntax = 'proto3';
 
+import "google/protobuf/timestamp.proto";
+
 import "protos/data_bundle.proto";
 import "google/protobuf/empty.proto";
 import "protos/data.proto";
 import "protos/controller.proto";
-import "protos/graph.proto";
 
 service Dev {
     /*
@@ -16,11 +17,13 @@ service Dev {
     to a previous version of an implementation.
     */
     //stores data from clients (clients specifies the object id in the metadata)
-    rpc StoreData(stream Data) returns (google.protobuf.Empty)
+    rpc StoreData(stream Data) returns (google.protobuf.Empty);
     rpc GetData(DataRequest) returns (stream Data);
     //returns a graph as a stream of bytes, since a node can be arbitrarily big
     rpc GetGraph(google.protobuf.Empty) returns (stream Data);
     rpc GetSession(stream StrategyRequest) returns (stream Data);
+
+    //DEVELOPMENT API
     //request a strategy deployment in a new environment (depending on the environment,
     //some external actor might need to confirm (admin, user with the right credentials...))
     //deploys a specific session.
@@ -40,7 +43,14 @@ service Dev {
 
     //returns a list of compound domain def.
     rpc Domains(google.protobuf.Empty) returns (stream Data);
-    rpc GetController(ControllerRequest) returns (ControllerReply);
+
+    //CONTROL API.
+    //runs a strategies with initial parameters
+    //this will pull the strategy from the store and run it.
+    //can run multiple strategies at the same time...
+    rpc Run(DelimitedRunParams) returns (google.protobuf.Empty);
+    rpc Stop(stream StopParams) returns (StopStatus);
+
 }
 
 message StorageRequest {
@@ -61,15 +71,6 @@ message ID {
 
 message FetchRequest {
 
-}
-
-//we could request strategies of all sessions (sessions.get_element('strategy')
-//NOTE: only returns the latest strategy version of each session...
-message NavigationRequest {
-    string start_point = 1; //the point from which we start the navigation, if none, start from
-    //root.
-    string command = 2; //previous, next, end
-    string selection = 3;
 }
 
 message DeploymentStatusRequest{

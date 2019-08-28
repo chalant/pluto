@@ -12,10 +12,7 @@ service Controller {
     //packet to the controller by specifying the session_id in the metadata
     rpc PerformancePacketUpdate (stream Data) returns (google.protobuf.Empty);
     rpc Stop (StopParams) returns (StopStatus);
-    //runs a strategy with initial parameters
-    //this will pull the strategy from the store and run it.
-    //can run multiple strategies at the same time...
-    rpc Run (stream RunParams) returns (Status);
+
     //we can watch the performance of the strategy in real-time...
     /*rpc Watch (StrategyID) returns (stream Data);*/
     //dynamically updates capital and/or leverage of a running strategy
@@ -28,16 +25,18 @@ service Controller {
     rpc UpdateGraph(stream Data) returns (google.protobuf.Empty);
 }
 
-message ControllerRequest {
-    string type = 1; //simulation, paper, live.
-}
-
-message ControllerReply {
-    string url = 1;
-}
-
 message Status {
     string state = 1;
+}
+
+message CapitalUpdate {
+    float capital_ratio = 1;
+    string session_id = 2;
+}
+
+message MaxLeverageUpdate{
+    float max_leverage = 1;
+    string session_id = 2;
 }
 
 message LevCap {
@@ -50,6 +49,11 @@ message CapitalAssignmentStatus {
 
 }
 
+message DelimitedRunParams {
+    repeated RunParams run_params = 1;
+    google.protobuf.Timestamp start_date = 2;
+    google.protobuf.Timestamp end_date = 3;
+}
 
 message RunParams {
     string session_id = 1;
@@ -64,7 +68,7 @@ message RunParams {
 }
 
 message StopParams {
-    string id = 1;
+    string session_id = 1;
     bool liquidate = 2;
 }
 
@@ -96,7 +100,7 @@ enum ControllerEvent {
     BROKER_UPDATE = 2;
 }
 
-message ParametersUpdateMessage {
+message ParametersUpdateRequest {
     ControllerEvent controller_event = 1;
     float capital = 2;
     float maximum_leverage = 3;

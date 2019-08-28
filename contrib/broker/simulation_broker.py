@@ -29,7 +29,8 @@ from zipline.finance.commission import (
 
 class SimulationBroker(object):
     def __init__(self,  metrics_tracker, equity_slippage=None,
-                 future_slippage=None, equity_commission=None, future_commission=None,cancel_policy=None):
+                 future_slippage=None, equity_commission=None,
+                 future_commission=None,cancel_policy=None):
 
         self._metrics_tracker = metrics_tracker
 

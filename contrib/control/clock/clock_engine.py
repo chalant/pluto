@@ -19,7 +19,7 @@ import time
 
 from contrib.coms.utils import conversions as crv
 from contrib.coms.utils import server_utils as srv
-from contrib.control.clock_pb2 import (
+from protos.clock_pb2 import (
     BAR,
     BEFORE_TRADING_START,
     SESSION_START,

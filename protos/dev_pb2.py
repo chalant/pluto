@@ -23,11 +23,59 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x10protos/dev.proto\x1a\x18protos/data_bundle.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11protos/data.proto\x1a\x17protos/controller.proto\"\x07\n\x05Reply\"\x10\n\x02ID\x12\n\n\x02id\x18\x01 \x01(\t\"\x0e\n\x0c\x46\x65tchRequest\"L\n\x11NavigationRequest\x12\x13\n\x0bstart_point\x18\x01 \x01(\t\x12\x0f\n\x07\x63ommand\x18\x02 \x01(\t\x12\x11\n\tselection\x18\x03 \x01(\t\"\x19\n\x17\x44\x65ploymentStatusRequest\" \n\x0bListRequest\x12\x11\n\tbranch_id\x18\x01 \x01(\t\")\n\x0f\x44\x65ploymentReply\x12\x16\n\x0e\x63ontroller_url\x18\x01 \x01(\t\"8\n\x11\x44\x65ploymentRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64om_id\x18\x02 \x01(\t\"<\n\x15\x44\x65ploymentStatusReply\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\"%\n\x08\x42rokerID\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03url\x18\x02 \x01(\t\"\r\n\x0bMountStatus\"\x0f\n\rAdditionReply\"*\n\x13ModificationRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\x18\n\nStrategyID\x12\n\n\x02id\x18\x01 \x01(\t\"\x1d\n\x0fStrategyRequest\x12\n\n\x02id\x18\x01 \x01(\t\")\n\x06\x46ilter\x12\x10\n\x08\x65nv_type\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\"(\n\x08Strategy\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\x12\n\n\x02id\x18\x02 \x01(\t\",\n\x0bStrategySet\x12\x1d\n\nstrategies\x18\x01 \x03(\x0b\x32\t.Strategy2\xc4\x03\n\x03\x44\x65v\x12)\n\nGetSession\x12\x10.StrategyRequest\x1a\x05.Data(\x01\x30\x01\x12.\n\x06\x44\x65ploy\x12\x12.DeploymentRequest\x1a\x10.DeploymentReply\x12$\n\x03New\x12\x12.CompoundDomainDef\x1a\x05.Data(\x01\x30\x01\x12\'\n\x06Modify\x12\x12.CompoundDomainDef\x1a\x05.Data(\x01\x30\x01\x12!\n\x04Push\x12\x05.Data\x1a\x10.DeploymentReply(\x01\x12\x46\n\x10\x44\x65ploymentStatus\x12\x18.DeploymentStatusRequest\x1a\x16.DeploymentStatusReply0\x01\x12&\n\x0bMountBroker\x12\t.BrokerID\x1a\x0c.MountStatus\x12\x1d\n\x04List\x12\x0c.ListRequest\x1a\x05.Data0\x01\x12*\n\x07\x44omains\x12\x16.google.protobuf.Empty\x1a\x05.Data0\x01\x12\x35\n\rGetController\x12\x12.ControllerRequest\x1a\x10.ControllerReplyb\x06proto3')
+  serialized_pb=_b('\n\x10protos/dev.proto\x1a\x18protos/data_bundle.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11protos/data.proto\x1a\x17protos/controller.proto\"\x10\n\x0eStorageRequest\"\r\n\x0b\x44\x61taRequest\"\x07\n\x05Reply\"\x10\n\x02ID\x12\n\n\x02id\x18\x01 \x01(\t\"\x0e\n\x0c\x46\x65tchRequest\"\x19\n\x17\x44\x65ploymentStatusRequest\" \n\x0bListRequest\x12\x11\n\tbranch_id\x18\x01 \x01(\t\")\n\x0f\x44\x65ploymentReply\x12\x16\n\x0e\x63ontroller_url\x18\x01 \x01(\t\"8\n\x11\x44\x65ploymentRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0e\n\x06\x64om_id\x18\x02 \x01(\t\"<\n\x15\x44\x65ploymentStatusReply\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0e\n\x06status\x18\x02 \x01(\t\"%\n\x08\x42rokerID\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0b\n\x03url\x18\x02 \x01(\t\"\r\n\x0bMountStatus\"\x0f\n\rAdditionReply\"*\n\x13ModificationRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\x18\n\nStrategyID\x12\n\n\x02id\x18\x01 \x01(\t\"\x1d\n\x0fStrategyRequest\x12\n\n\x02id\x18\x01 \x01(\t\")\n\x06\x46ilter\x12\x10\n\x08\x65nv_type\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\"(\n\x08Strategy\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\x12\n\n\x02id\x18\x02 \x01(\t\",\n\x0bStrategySet\x12\x1d\n\nstrategies\x18\x01 \x03(\x0b\x32\t.Strategy2\xd3\x04\n\x03\x44\x65v\x12,\n\tStoreData\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12 \n\x07GetData\x12\x0c.DataRequest\x1a\x05.Data0\x01\x12+\n\x08GetGraph\x12\x16.google.protobuf.Empty\x1a\x05.Data0\x01\x12)\n\nGetSession\x12\x10.StrategyRequest\x1a\x05.Data(\x01\x30\x01\x12.\n\x06\x44\x65ploy\x12\x12.DeploymentRequest\x1a\x10.DeploymentReply\x12\x1c\n\x03New\x12\n.DomainDef\x1a\x05.Data(\x01\x30\x01\x12\'\n\x06Modify\x12\x12.CompoundDomainDef\x1a\x05.Data(\x01\x30\x01\x12!\n\x04Push\x12\x05.Data\x1a\x10.DeploymentReply(\x01\x12\x46\n\x10\x44\x65ploymentStatus\x12\x18.DeploymentStatusRequest\x1a\x16.DeploymentStatusReply0\x01\x12&\n\x0bMountBroker\x12\t.BrokerID\x1a\x0c.MountStatus\x12\x1d\n\x04List\x12\x0c.ListRequest\x1a\x05.Data0\x01\x12*\n\x07\x44omains\x12\x16.google.protobuf.Empty\x1a\x05.Data0\x01\x12+\n\x03Run\x12\n.RunParams\x1a\x16.google.protobuf.Empty(\x01\x12\"\n\x04Stop\x12\x0b.StopParams\x1a\x0b.StopStatus(\x01\x62\x06proto3')
   ,
   dependencies=[protos_dot_data__bundle__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,protos_dot_controller__pb2.DESCRIPTOR,])
 
 
+
+
+_STORAGEREQUEST = _descriptor.Descriptor(
+  name='StorageRequest',
+  full_name='StorageRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=119,
+  serialized_end=135,
+)
+
+
+_DATAREQUEST = _descriptor.Descriptor(
+  name='DataRequest',
+  full_name='DataRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=137,
+  serialized_end=150,
+)
 
 
 _REPLY = _descriptor.Descriptor(
@@ -49,8 +97,8 @@ _REPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=119,
-  serialized_end=126,
+  serialized_start=152,
+  serialized_end=159,
 )
 
 
@@ -80,8 +128,8 @@ _ID = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=128,
-  serialized_end=144,
+  serialized_start=161,
+  serialized_end=177,
 )
 
 
@@ -104,53 +152,8 @@ _FETCHREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=146,
-  serialized_end=160,
-)
-
-
-_NAVIGATIONREQUEST = _descriptor.Descriptor(
-  name='NavigationRequest',
-  full_name='NavigationRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='start_point', full_name='NavigationRequest.start_point', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='command', full_name='NavigationRequest.command', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='selection', full_name='NavigationRequest.selection', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=162,
-  serialized_end=238,
+  serialized_start=179,
+  serialized_end=193,
 )
 
 
@@ -173,8 +176,8 @@ _DEPLOYMENTSTATUSREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=240,
-  serialized_end=265,
+  serialized_start=195,
+  serialized_end=220,
 )
 
 
@@ -204,8 +207,8 @@ _LISTREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=267,
-  serialized_end=299,
+  serialized_start=222,
+  serialized_end=254,
 )
 
 
@@ -235,8 +238,8 @@ _DEPLOYMENTREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=301,
-  serialized_end=342,
+  serialized_start=256,
+  serialized_end=297,
 )
 
 
@@ -273,8 +276,8 @@ _DEPLOYMENTREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=344,
-  serialized_end=400,
+  serialized_start=299,
+  serialized_end=355,
 )
 
 
@@ -311,8 +314,8 @@ _DEPLOYMENTSTATUSREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=402,
-  serialized_end=462,
+  serialized_start=357,
+  serialized_end=417,
 )
 
 
@@ -349,8 +352,8 @@ _BROKERID = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=464,
-  serialized_end=501,
+  serialized_start=419,
+  serialized_end=456,
 )
 
 
@@ -373,8 +376,8 @@ _MOUNTSTATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=503,
-  serialized_end=516,
+  serialized_start=458,
+  serialized_end=471,
 )
 
 
@@ -397,8 +400,8 @@ _ADDITIONREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=518,
-  serialized_end=533,
+  serialized_start=473,
+  serialized_end=488,
 )
 
 
@@ -428,8 +431,8 @@ _MODIFICATIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=535,
-  serialized_end=577,
+  serialized_start=490,
+  serialized_end=532,
 )
 
 
@@ -459,8 +462,8 @@ _STRATEGYID = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=579,
-  serialized_end=603,
+  serialized_start=534,
+  serialized_end=558,
 )
 
 
@@ -490,8 +493,8 @@ _STRATEGYREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=605,
-  serialized_end=634,
+  serialized_start=560,
+  serialized_end=589,
 )
 
 
@@ -528,8 +531,8 @@ _FILTER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=636,
-  serialized_end=677,
+  serialized_start=591,
+  serialized_end=632,
 )
 
 
@@ -566,8 +569,8 @@ _STRATEGY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=679,
-  serialized_end=719,
+  serialized_start=634,
+  serialized_end=674,
 )
 
 
@@ -597,15 +600,16 @@ _STRATEGYSET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=721,
-  serialized_end=765,
+  serialized_start=676,
+  serialized_end=720,
 )
 
 _STRATEGYSET.fields_by_name['strategies'].message_type = _STRATEGY
+DESCRIPTOR.message_types_by_name['StorageRequest'] = _STORAGEREQUEST
+DESCRIPTOR.message_types_by_name['DataRequest'] = _DATAREQUEST
 DESCRIPTOR.message_types_by_name['Reply'] = _REPLY
 DESCRIPTOR.message_types_by_name['ID'] = _ID
 DESCRIPTOR.message_types_by_name['FetchRequest'] = _FETCHREQUEST
-DESCRIPTOR.message_types_by_name['NavigationRequest'] = _NAVIGATIONREQUEST
 DESCRIPTOR.message_types_by_name['DeploymentStatusRequest'] = _DEPLOYMENTSTATUSREQUEST
 DESCRIPTOR.message_types_by_name['ListRequest'] = _LISTREQUEST
 DESCRIPTOR.message_types_by_name['DeploymentReply'] = _DEPLOYMENTREPLY
@@ -621,6 +625,20 @@ DESCRIPTOR.message_types_by_name['Filter'] = _FILTER
 DESCRIPTOR.message_types_by_name['Strategy'] = _STRATEGY
 DESCRIPTOR.message_types_by_name['StrategySet'] = _STRATEGYSET
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
+StorageRequest = _reflection.GeneratedProtocolMessageType('StorageRequest', (_message.Message,), dict(
+  DESCRIPTOR = _STORAGEREQUEST,
+  __module__ = 'protos.dev_pb2'
+  # @@protoc_insertion_point(class_scope:StorageRequest)
+  ))
+_sym_db.RegisterMessage(StorageRequest)
+
+DataRequest = _reflection.GeneratedProtocolMessageType('DataRequest', (_message.Message,), dict(
+  DESCRIPTOR = _DATAREQUEST,
+  __module__ = 'protos.dev_pb2'
+  # @@protoc_insertion_point(class_scope:DataRequest)
+  ))
+_sym_db.RegisterMessage(DataRequest)
 
 Reply = _reflection.GeneratedProtocolMessageType('Reply', (_message.Message,), dict(
   DESCRIPTOR = _REPLY,
@@ -642,13 +660,6 @@ FetchRequest = _reflection.GeneratedProtocolMessageType('FetchRequest', (_messag
   # @@protoc_insertion_point(class_scope:FetchRequest)
   ))
 _sym_db.RegisterMessage(FetchRequest)
-
-NavigationRequest = _reflection.GeneratedProtocolMessageType('NavigationRequest', (_message.Message,), dict(
-  DESCRIPTOR = _NAVIGATIONREQUEST,
-  __module__ = 'protos.dev_pb2'
-  # @@protoc_insertion_point(class_scope:NavigationRequest)
-  ))
-_sym_db.RegisterMessage(NavigationRequest)
 
 DeploymentStatusRequest = _reflection.GeneratedProtocolMessageType('DeploymentStatusRequest', (_message.Message,), dict(
   DESCRIPTOR = _DEPLOYMENTSTATUSREQUEST,
@@ -756,13 +767,40 @@ _DEV = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=768,
-  serialized_end=1220,
+  serialized_start=723,
+  serialized_end=1318,
   methods=[
+  _descriptor.MethodDescriptor(
+    name='StoreData',
+    full_name='Dev.StoreData',
+    index=0,
+    containing_service=None,
+    input_type=protos_dot_data__pb2._DATA,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='GetData',
+    full_name='Dev.GetData',
+    index=1,
+    containing_service=None,
+    input_type=_DATAREQUEST,
+    output_type=protos_dot_data__pb2._DATA,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='GetGraph',
+    full_name='Dev.GetGraph',
+    index=2,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=protos_dot_data__pb2._DATA,
+    serialized_options=None,
+  ),
   _descriptor.MethodDescriptor(
     name='GetSession',
     full_name='Dev.GetSession',
-    index=0,
+    index=3,
     containing_service=None,
     input_type=_STRATEGYREQUEST,
     output_type=protos_dot_data__pb2._DATA,
@@ -771,7 +809,7 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Deploy',
     full_name='Dev.Deploy',
-    index=1,
+    index=4,
     containing_service=None,
     input_type=_DEPLOYMENTREQUEST,
     output_type=_DEPLOYMENTREPLY,
@@ -780,16 +818,16 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='New',
     full_name='Dev.New',
-    index=2,
+    index=5,
     containing_service=None,
-    input_type=protos_dot_data__bundle__pb2._COMPOUNDDOMAINDEF,
+    input_type=protos_dot_data__bundle__pb2._DOMAINDEF,
     output_type=protos_dot_data__pb2._DATA,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
     name='Modify',
     full_name='Dev.Modify',
-    index=3,
+    index=6,
     containing_service=None,
     input_type=protos_dot_data__bundle__pb2._COMPOUNDDOMAINDEF,
     output_type=protos_dot_data__pb2._DATA,
@@ -798,7 +836,7 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Push',
     full_name='Dev.Push',
-    index=4,
+    index=7,
     containing_service=None,
     input_type=protos_dot_data__pb2._DATA,
     output_type=_DEPLOYMENTREPLY,
@@ -807,7 +845,7 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='DeploymentStatus',
     full_name='Dev.DeploymentStatus',
-    index=5,
+    index=8,
     containing_service=None,
     input_type=_DEPLOYMENTSTATUSREQUEST,
     output_type=_DEPLOYMENTSTATUSREPLY,
@@ -816,7 +854,7 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='MountBroker',
     full_name='Dev.MountBroker',
-    index=6,
+    index=9,
     containing_service=None,
     input_type=_BROKERID,
     output_type=_MOUNTSTATUS,
@@ -825,7 +863,7 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='List',
     full_name='Dev.List',
-    index=7,
+    index=10,
     containing_service=None,
     input_type=_LISTREQUEST,
     output_type=protos_dot_data__pb2._DATA,
@@ -834,19 +872,28 @@ _DEV = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Domains',
     full_name='Dev.Domains',
-    index=8,
+    index=11,
     containing_service=None,
     input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     output_type=protos_dot_data__pb2._DATA,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='GetController',
-    full_name='Dev.GetController',
-    index=9,
+    name='Run',
+    full_name='Dev.Run',
+    index=12,
     containing_service=None,
-    input_type=protos_dot_controller__pb2._CONTROLLERREQUEST,
-    output_type=protos_dot_controller__pb2._CONTROLLERREPLY,
+    input_type=protos_dot_controller__pb2._RUNPARAMS,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Stop',
+    full_name='Dev.Stop',
+    index=13,
+    containing_service=None,
+    input_type=protos_dot_controller__pb2._STOPPARAMS,
+    output_type=protos_dot_controller__pb2._STOPSTATUS,
     serialized_options=None,
   ),
 ])
