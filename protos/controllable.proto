@@ -17,10 +17,12 @@ service Controllable {
     /*A service to be controller by a controller service*/
     //the controller calls this method to send a data bundle to the controllable
     rpc UpdateDataBundle (stream Data) returns (google.protobuf.Empty);
-    rpc UpdateParameters (ParametersUpdateMessage) returns (google.protobuf.Empty);
-    //called to initialize the controllable
+    rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
+    //called to initialize the controllable (sends initparams)
     rpc Initialize (stream Data) returns (google.protobuf.Empty);
     //TODO: should return the state of the strategy run session at each update...
+    //update sends an UpdateRequest. since this could get arbitrarily big, we send it
+    //in chunks of bytes.
     rpc Update (stream Data) returns (stream Data);
     //receives periodic calendar updates
     rpc UpdateCalendar (stream Data) returns (google.protobuf.Empty);
@@ -31,11 +33,15 @@ service Controllable {
 message InitParams {
     CompoundDomainDef domain = 1;
     bytes strategy = 2;
-    float capital = 3;
+    float capital_ratio = 3;
 }
 
-message UpdateMessage {
+message UpdateRequest {
     google.protobuf.Timestamp timestamp = 1;
     Event event = 2;
     BrokerState broker_state = 3;
+}
+
+message UpdateReply {
+
 }

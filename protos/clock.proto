@@ -5,6 +5,9 @@ import "google/protobuf/empty.proto";
 
 import "protos/calendar.proto";
 
+service ClockListener {
+    rpc OnClockEvent(ClockEvent) returns (google.protobuf.Empty);
+}
 
 service SimulationClockRouter {
     rpc Register (SimulationClockParameters) returns (Attributes);
@@ -52,6 +55,7 @@ enum Event {
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
     Event event = 2;
+    string exchange_name = 3;
 }
 
 enum Frequency {

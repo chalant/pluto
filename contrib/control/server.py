@@ -6,7 +6,7 @@ import grpc
 from concurrent import futures
 
 
-from contrib.control import controller
+from contrib.controller import controller
 from contrib.control import controller_pb2_grpc as ctrl_rpc
 
 # def create_csr(key, url):
@@ -29,8 +29,8 @@ from contrib.control import controller_pb2_grpc as ctrl_rpc
 def start_server(address, mode):
     server = grpc.server(futures.ThreadPoolExecutor())
     server.add_insecure_port(address)
-    if mode == 'TEST':
-        ctrl_rpc.add_ControllerServicer_to_server(controller.TestController(), server)
+    if mode == 'SIMULATION':
+        ctrl_rpc.add_ControllerServicer_to_server(controller.Controller(), server)
     elif mode == 'PAPER':
         ctrl_rpc.add_ControllerServicer_to_server(controller.PaperController(), server)
     server.start()

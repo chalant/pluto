@@ -9,8 +9,14 @@ from protos import dev_pb2 as protos_dot_dev__pb2
 
 
 class DevStub(object):
-  # missing associated documentation comment in .proto file
-  pass
+  """
+  The environment is stored for the lifetime of the application.
+  A strategy returned by GetStrategy cannot be modified. (It can only be ran or stopped)
+  A strategy returned by ModifyStrategy returns a simulation environment. It can optionally
+  be stopped if it is running in a paper env or live env.)
+  This service stores timestamped version of each strategy, so that we could roll-back,
+  to a previous version of an implementation.
+  """
 
   def __init__(self, channel):
     """Constructor.
@@ -18,6 +24,21 @@ class DevStub(object):
     Args:
       channel: A grpc.Channel.
     """
+    self.StoreData = channel.stream_unary(
+        '/Dev/StoreData',
+        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+    self.GetData = channel.unary_stream(
+        '/Dev/GetData',
+        request_serializer=protos_dot_dev__pb2.DataRequest.SerializeToString,
+        response_deserializer=protos_dot_data__pb2.Data.FromString,
+        )
+    self.GetGraph = channel.unary_stream(
+        '/Dev/GetGraph',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=protos_dot_data__pb2.Data.FromString,
+        )
     self.GetSession = channel.stream_stream(
         '/Dev/GetSession',
         request_serializer=protos_dot_dev__pb2.StrategyRequest.SerializeToString,
@@ -30,7 +51,7 @@ class DevStub(object):
         )
     self.New = channel.stream_stream(
         '/Dev/New',
-        request_serializer=protos_dot_data__bundle__pb2.CompoundDomainDef.SerializeToString,
+        request_serializer=protos_dot_data__bundle__pb2.DomainDef.SerializeToString,
         response_deserializer=protos_dot_data__pb2.Data.FromString,
         )
     self.Modify = channel.stream_stream(
@@ -63,32 +84,59 @@ class DevStub(object):
         request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
         response_deserializer=protos_dot_data__pb2.Data.FromString,
         )
-    self.GetController = channel.unary_unary(
-        '/Dev/GetController',
-        request_serializer=protos_dot_controller__pb2.ControllerRequest.SerializeToString,
-        response_deserializer=protos_dot_controller__pb2.ControllerReply.FromString,
+    self.Run = channel.stream_unary(
+        '/Dev/Run',
+        request_serializer=protos_dot_controller__pb2.RunParams.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+    self.Stop = channel.stream_unary(
+        '/Dev/Stop',
+        request_serializer=protos_dot_controller__pb2.StopParams.SerializeToString,
+        response_deserializer=protos_dot_controller__pb2.StopStatus.FromString,
         )
 
 
 class DevServicer(object):
-  # missing associated documentation comment in .proto file
-  pass
+  """
+  The environment is stored for the lifetime of the application.
+  A strategy returned by GetStrategy cannot be modified. (It can only be ran or stopped)
+  A strategy returned by ModifyStrategy returns a simulation environment. It can optionally
+  be stopped if it is running in a paper env or live env.)
+  This service stores timestamped version of each strategy, so that we could roll-back,
+  to a previous version of an implementation.
+  """
 
-  def GetSession(self, request_iterator, context):
-    """
-    The environment is stored for the lifetime of the application.
-    A strategy returned by GetStrategy cannot be modified. (It can only be ran or stopped)
-    A strategy returned by ModifyStrategy returns a simulation environment. It can optionally
-    be stopped if it is running in a paper env or live env.)
-    This service stores timestamped version of each strategy, so that we could roll-back,
-    to a previous version of an implementation.
+  def StoreData(self, request_iterator, context):
+    """stores data from clients (clients specifies the object id in the metadata)
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def GetData(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def GetGraph(self, request, context):
+    """returns a graph as a stream of bytes, since a node can be arbitrarily big
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def GetSession(self, request_iterator, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
   def Deploy(self, request, context):
-    """request a strategy deployment in a new environment (depending on the environment,
+    """DEVELOPMENT API
+    request a strategy deployment in a new environment (depending on the environment,
     some external actor might need to confirm (admin, user with the right credentials...))
     deploys a specific session.
     """
@@ -146,7 +194,14 @@ class DevServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def GetController(self, request, context):
+  def Run(self, request_iterator, context):
+    """CONTROL API.
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def Stop(self, request_iterator, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -156,6 +211,21 @@ class DevServicer(object):
 
 def add_DevServicer_to_server(servicer, server):
   rpc_method_handlers = {
+      'StoreData': grpc.stream_unary_rpc_method_handler(
+          servicer.StoreData,
+          request_deserializer=protos_dot_data__pb2.Data.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'GetData': grpc.unary_stream_rpc_method_handler(
+          servicer.GetData,
+          request_deserializer=protos_dot_dev__pb2.DataRequest.FromString,
+          response_serializer=protos_dot_data__pb2.Data.SerializeToString,
+      ),
+      'GetGraph': grpc.unary_stream_rpc_method_handler(
+          servicer.GetGraph,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=protos_dot_data__pb2.Data.SerializeToString,
+      ),
       'GetSession': grpc.stream_stream_rpc_method_handler(
           servicer.GetSession,
           request_deserializer=protos_dot_dev__pb2.StrategyRequest.FromString,
@@ -168,7 +238,7 @@ def add_DevServicer_to_server(servicer, server):
       ),
       'New': grpc.stream_stream_rpc_method_handler(
           servicer.New,
-          request_deserializer=protos_dot_data__bundle__pb2.CompoundDomainDef.FromString,
+          request_deserializer=protos_dot_data__bundle__pb2.DomainDef.FromString,
           response_serializer=protos_dot_data__pb2.Data.SerializeToString,
       ),
       'Modify': grpc.stream_stream_rpc_method_handler(
@@ -201,10 +271,15 @@ def add_DevServicer_to_server(servicer, server):
           request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
           response_serializer=protos_dot_data__pb2.Data.SerializeToString,
       ),
-      'GetController': grpc.unary_unary_rpc_method_handler(
-          servicer.GetController,
-          request_deserializer=protos_dot_controller__pb2.ControllerRequest.FromString,
-          response_serializer=protos_dot_controller__pb2.ControllerReply.SerializeToString,
+      'Run': grpc.stream_unary_rpc_method_handler(
+          servicer.Run,
+          request_deserializer=protos_dot_controller__pb2.RunParams.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'Stop': grpc.stream_unary_rpc_method_handler(
+          servicer.Stop,
+          request_deserializer=protos_dot_controller__pb2.StopParams.FromString,
+          response_serializer=protos_dot_controller__pb2.StopStatus.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

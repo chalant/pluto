@@ -1,5 +1,8 @@
+import abc
+
 from . import controller
-from concurrent import futures
+
+from contrib.control.clock import clock
 
 import socket
 
@@ -8,106 +11,51 @@ import socket
 #TODO: raise a grpc error if a request doesn't have a session-id...
 #TODO: We should encapsulate the controller, since the behavior changes with the environment..
 class SimulationControlMode(controller.ControlMode):
-    '''server that controls'''
-
-    class ControllerThread(object):
-        def __init__(self):
-            self._sessions = []
-            self._pool = futures.ThreadPoolExecutor()
-
-        def ClockUpdate(self, clock_evt):
-            pass
-
-        def add_session(self, session):
-            self._sessions.append(session)
-
-        def start(self):
-            pool = self._pool
-            #todo: a clock must be callable
-            for clock in self._clocks:
-                pool.submit(clock)
-
-    #TODO: HOW TO CREATE A CLOCK? => scan through the list of country codes and assets
-    # a clock takes a calendar as argument => how do we instanciate the "right" calendar?
-    # maybe we should specify the exchange instead of the country?
-    def __init__(self, address, local_hub, session_factory):
-        super(SimulationControlMode, self).__init__(address, local_hub, session_factory)
-        self._clocks = {}
-        self._exchanges = exchanges = {}
-        self._hub = local_hub
-
-        for exc in local_hub.get_exchanges():
-            country_code = exc.country_code
-            self._append_to_dict(country_code, exc.name, exchanges)
-            for at in exc.asset_types:
-                self._append_to_dict(at, exc.name, exchanges)
-
-    def _append_to_dict(self, key, value, dict_):
-        v = dict_.get(key, None)
-        if not v:
-            dict_[key] = [value]
-        else:
-            dict_[key].append(value)
+    #todo: the control mode should take-in a broker
+    def __init__(self, sim_clock_factory, start_dt, end_dt):
+        self._router = SimulationClockSignalRouter(sim_clock_factory, start_dt, end_dt)
 
     def name(self):
         return 'simulation'
 
-    def _create_address(self):
+    def signal_router(self):
+        return self._router
+
+    def _get_controllable(self):
         #creates an address for the controllable
         #in simulation, creates a local controllable
         s = socket()
         s.bind(('', 0))
         address = 'localhost:{}'.format(s.getsockname()[1])
         s.close()
-        return address
 
-    def _run(self, sessions):
-        '''
+        #todo: run the controllable.py script as a subprocess (using popen) and pass it the
+        # generated address
+        # then create a channel on the generated address, pass it to a controllable stub
+        # and return the controllable stub also, we need to propagate kill signals
+        # we will be using the subprocess module to propagate the kill signal etc.
+        return
 
-        Parameters
-        ----------
-        sessions
-
-        Returns
-        -------
-
-        1)create clocks using the domain_struct of the session.
-        2)
-
-        '''
-
-        clocks = self._clocks
-        sess_per_exc = {}
-        exc_set = set()
+class SimulationClockListener(clock.ClockListener):
+    def _clock_update(self, request, sessions):
         for session in sessions:
-            results = self._resolve_exchanges(session.domain_struct, self._exchanges)
-            exc_set = exc_set & results
-            for exc in results:
-                self._append_to_dict(exc, session, sess_per_exc)
-        #todo: create clocks
-        #each clock
+            session.clock_update(request)
 
+class SimulationClockSignalRouter(clock.ClockSignalRouter):
+    def __init__(self, sim_clock_factory, start_dt, end_dt):
+        super(SimulationClockSignalRouter, self).__init__(start_dt, end_dt)
+        self._sim_clock_fct = sim_clock_factory
 
-    def _resolve_exchanges(self, domain_struct, exchanges):
-        cc = domain_struct.country_code
-        at = domain_struct.asset_types
+    def _get_listener(self):
+        return clock.DelimitedClockListener(SimulationClockListener())
 
-        # dictionary mapping keys like asset types and country codes, to sets of exchanges
+    def _get_clock(self, exchange):
+        return self._sim_clock_fct.get_clock(exchange, self._start_date, self._end_date)
 
-        at_set = set()
-        cc_set = set()
+class SimulationClockFactory(abc.ABC):
+    def get_clock(self, exchange):
+        return self._get_clock(exchange)
 
-        # union of all exchanges trading the given asset types
-        for c in at:
-            at_set = at_set | exchanges[c]
-
-        # union of all exchanges operating in the given countries
-        cc_set = cc_set | exchanges[cc]
-
-        # intersection of exchanges trading in the given countries and asset types
-        return cc_set & at_set
-
-
-    def _clock_update(self, clock_evt):
-
-        pass
+    @abc.abstractmethod
+    def _get_clock(self, exchange):
+        raise NotImplementedError
