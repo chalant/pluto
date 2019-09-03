@@ -8,7 +8,7 @@ class PaperClockSignalRouter(clock.ClockSignalRouter):
     def _get_clock(self, exchange):
         return self._cl_fct.get_clock(exchange)
 
-    def _get_listener(self):
+    def _get_listener(self, broker):
         return clock.DelimitedClockListener()
 
 class PaperClockListener(clock.BaseClockListener):

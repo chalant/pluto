@@ -1,23 +1,26 @@
-from protos import data_bundle_pb2
-from protos import clock_pb2
-from protos import controller_pb2_grpc
+import threading
+import grpc
+import abc
+
+from datetime import datetime
+
+from protos import controller_pb2_grpc, controller_pb2, clock_pb2, data_bundle_pb2
 
 from contrib.control import domain
 from contrib.control.clock import clock
 
-import grpc
-
-import abc
 
 class Session(object):
     def __init__(self, sess_node, dom_struct, cbl_stub, perf_file, param):
         '''controls '''
         self._sess_node = sess_node
         self._perf_file = perf_file
+
         self._dom_struct = dom_struct
         self._stub = cbl_stub
 
-        #todo: put this in the algorithm class?
+        #todo: put this in the algorithm class? no, this is doen server side (controllable)
+        #todo:
         self._strategy = next(self._sess_node.get_element('strategy')[0].load()).decode()
         self._param = param
 
@@ -28,11 +31,14 @@ class Session(object):
     #this is called at some frequency
     def clock_update(self, clock_evt):
         #todo: send signals to the controllable service.
-        self._stub.Clock
+        # the controllable sends back a data packet through the update performance method
+        pass
 
     def update_performance(self, stream):
+        #
         '''receives a stream of bytes (that represents a performance packet) and appends it to a
         binary file.'''
+
         bytes_ = b''
         for d in stream:
            bytes_ = bytes_ + d.data
@@ -41,13 +47,18 @@ class Session(object):
         bytes_ = bytes_ + b'\n'
 
         #appends the data to the perf file...
-        self._perf_file.store(bytes_)
+        self._perf_file.store(bytes_) #todo: how do we specify the append mode?
 
     def stop(self, params):
         pass
 
     def watch(self):
         pass
+
+    def liquidate(self):
+        pass
+
+
 
 class ControlMode(abc.ABC):
     @property
@@ -57,12 +68,20 @@ class ControlMode(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def signal_router(self):
+    def signal_filter(self):
         raise NotImplementedError
 
     def get_controllable(self):
         cbl = self._get_controllable()
         return cbl
+
+    @abc.abstractmethod
+    def get_loop(self):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _get_broker(self):
+        raise NotImplementedError
 
     @abc.abstractmethod
     def _get_controllable(self):
@@ -75,6 +94,11 @@ class Controller(controller_pb2_grpc.ControllerServicer):
 
         self._sessions = {}
         self._exchanges = exchanges = {}
+        self._clocks = []
+
+        self._stop_event = threading.Event()
+        self._run_lock = threading.Lock()
+        self._stop_lock = threading.Lock()
 
         #classify exchanges by country_codes and asset_types
         for exc in hub_client.get_exchanges():
@@ -84,15 +108,22 @@ class Controller(controller_pb2_grpc.ControllerServicer):
             for at in exc.asset_types:
                 self._append_to_dict(at, name, exchanges)
 
-        self._running = False
-        self._num_listeners = 0
+        self._running_flag = False
+        self._interrupt = False
+        self._num_clocks = 0
+        self._status = controller_pb2.Status()
 
     @property
     def running(self):
-        return self._running
+        return self._running_flag
 
-    def stop(self):
-        self._running = False
+    def stop(self, liquidate=False):
+        #todo: liquidate is passed to the control mode
+        with self._stop_lock:
+            if self._running_flag: #only stop when the sessions are running
+                for clock in self._clocks:
+                    clock.stop()
+                self._stop_event.wait() #block until the stop event occurs
 
     def Watch(self, session_id):
         for packet in self._sessions[session_id].watch():
@@ -104,25 +135,31 @@ class Controller(controller_pb2_grpc.ControllerServicer):
             1)load/create and store domain
             2)load/create and store sessions (and strategies)
         '''
-        if not self._running:
-            self._running = True
+        event = self._stop_event
+        lock = self._run_lock
 
+        with lock:
+            #todo: perform other parameters checks (total leverage, etc.)
             if sum([param.capital_ratio for param in params]) > 1:
-                self._running = False
                 raise grpc.RpcError('The sum of capital ratios must not exceed 1')
 
+            self._running_flag = True
+
             mode = control_mode
+            # todo: the broker must be somewhere here as a variable...
+
+            broker = mode.get_broker() #the mode holds the broker
             builder = self._builder
 
             envs = {}
 
             sess_per_exg = {}
-            sessions = self._sessions
 
             # todo: each performance is stored in a group (simulation group, live group etc.)
             pfn = mode.name
             for param in params:
-                node = builder.get_element(param.session_id)
+                session_id = param.session_id
+                node = builder.get_element(session_id)
 
                 el = next(node.get_element('dom_def_id')[0].load()).decode()
                 dom_def = envs.get(el, None)
@@ -134,54 +171,78 @@ class Controller(controller_pb2_grpc.ControllerServicer):
                     dom = envs[el]
 
                 gr = node.get_element(pfn)[0]
+
+                #a session has 3 folders for storing perfomance metrics: simulation, paper, live.
+                #each folder contains folders with 2 files: benchmark and parameters
+                #parameters file contains the start_date and end_date (end_date is written after execution
+                #either after interruption or completion), capital, max_leverage, benchmark asset etc.)
+                #each folder is named by timestamp (the timestamp is the start date in the param)
                 if not gr:
                     gr = builder.group(pfn)
-                    node.add_element(gr)
 
-                stub = mode.get_controllable(node.id)
+                #create a group for storing a set of files
+                #we use a group
+                fld = builder.group(str(datetime.utcnow()))
+                pf = builder.file('performance')
+                fld.add_element(pf)
+                gr.add_element(fld)
+                node.add_element(gr)
 
-                # todo: create and name a file to store the performance data
-                sess = Session(node, dom, stub, file, param)
-                self._sessions[sess.id] = sessions
+                #todo: we need to pass the broker_address ?
+                stub = mode.get_controllable(broker.address)
+
+                sess = Session(node, dom, stub, pf, param)
+                self._sessions[session_id] = sess
 
 
                 results = self._resolve_exchanges(sess.domain_struct, self._exchanges)
                 for exg in results:
                     self._append_to_dict(exg, sess, sess_per_exg)
 
-            clocks = []
-
+            self._clocks = clocks = []
 
             def callback_fn(request):
                 evt = request.event
-                if evt == clock_pb2.STOP or evt == clock_pb2.LIQUIDATE:
-                    self._num_listeners -= 1
-                    if self._num_listeners == 0:
-                        self._running = False
+                if evt == clock_pb2.STOP:
+                    if self._num_clocks > 0:
+                        self._num_clocks -= 1
+                    if self._num_clocks == 0:
+                        #once the number of listeners is reached, notify the waiting threads
+                        self._running_flag = False
+                        event.set()
+
+            loop = mode.get_loop()
+
+            signal_filter = clock.CallBackSignalFilter(mode.signal_filter, callback_fn)
 
             for exg in sess_per_exg.keys():
-                signal_router = mode.signal_router #returns a clock listener service
                 # register sessions to clock note: a session could be registered to multiple clocks
                 # we need thread safety, since clock might be processes
-                cl = signal_router.get_clock(exg)
-                listener = clock.CallBackClockListener(
-                    signal_router.register_listener(exg),
-                    callback_fn)
+                cl = loop.get_clock(exg) #
+                # listener = clock.CallBackClockListener(
+                #     signal_router.register_listener(exg),
+                #     callback_fn)
+                # todo: how do we make sure that the signal filters will run at the same
+                #  time? the clock might receive a signal while we're adding the
+                #  signal filter => we need to "activate" the filter
+                #  the filter ignores updates until it is activated.
+                cl.add_signal_filter(signal_filter)
                 for session in sess_per_exg[exg]:
-                    listener.add_session(session)
-                self._num_listeners += 1
-                clocks.append(cl)
+                    signal_filter.add_session(session)
 
-            # todo: start the clocks at the same time => adjust the starting time with the lag induced from
-            #  the loop
+                self._num_clocks += 1
 
-            #note: this doesn't block
-            #todo: ensure that this doesn't block
-            for clk in clocks:
-                clk.start() #todo: the start method can take a "lag offset" parameter
-        else:
-            #doesn't do anything when it is already running
-            pass
+            # activate the signal filter (starts listening)
+            signal_filter.activate()
+
+            event.wait() #wait for the execution to end.
+
+            status = self._status
+            if not self._interrupt:
+                status.session_status = controller_pb2.COMPLETED
+            else:
+                status.session_status = controller_pb2.INTERRUPTED
+            return status
 
     def _resolve_exchanges(self, domain_struct, exchanges):
         cc = domain_struct.country_code

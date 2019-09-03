@@ -3,6 +3,7 @@ import abc
 from . import controller
 
 from contrib.control.clock import clock
+from contrib.utils import stream
 
 import socket
 
@@ -12,14 +13,14 @@ import socket
 #TODO: We should encapsulate the controller, since the behavior changes with the environment..
 class SimulationControlMode(controller.ControlMode):
     #todo: the control mode should take-in a broker
-    def __init__(self, sim_clock_factory, start_dt, end_dt):
-        self._router = SimulationClockSignalRouter(sim_clock_factory, start_dt, end_dt)
+    def __init__(self, sim_clock_factory):
+        self._filter = clock.BaseSignalFilter()
 
     def name(self):
         return 'simulation'
 
-    def signal_router(self):
-        return self._router
+    def signal_filter(self):
+        return self._filter
 
     def _get_controllable(self):
         #creates an address for the controllable
@@ -36,15 +37,34 @@ class SimulationControlMode(controller.ControlMode):
         # we will be using the subprocess module to propagate the kill signal etc.
         return
 
+    def _get_broker(self):
+        #todo: create and return a simulation broker
+        return
+
 class SimulationClockListener(clock.ClockListener):
+    def __init__(self, simulation_broker):
+        #the simulation broker intance can be used with other listeners
+        self._simulation_broker = simulation_broker
+
     def _clock_update(self, request, sessions):
+        #the broker is updated before the sessions
+
+        #todo: broker will only update the values of the elements that are traded on
+        # the exchange specified by the signal.
+        broker = self._simulation_broker
+        state = broker.clock_update(request) #update the broker: simulates all the received
+                                             #from all the sessions
+        #update the accounts of the sessions with the broker state
+        for session in sessions:
+            session.broker_update(stream.chunk_bytes(state.SerializeToString()))
+
+        #perform the next action
         for session in sessions:
             session.clock_update(request)
 
 class SimulationClockSignalRouter(clock.ClockSignalRouter):
-    def __init__(self, sim_clock_factory, start_dt, end_dt):
+    def __init__(self, start_dt, end_dt):
         super(SimulationClockSignalRouter, self).__init__(start_dt, end_dt)
-        self._sim_clock_fct = sim_clock_factory
 
     def _get_listener(self):
         return clock.DelimitedClockListener(SimulationClockListener())
@@ -59,3 +79,4 @@ class SimulationClockFactory(abc.ABC):
     @abc.abstractmethod
     def _get_clock(self, exchange):
         raise NotImplementedError
+

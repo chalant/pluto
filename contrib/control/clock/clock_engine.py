@@ -26,8 +26,6 @@ from protos.clock_pb2 import (
     SESSION_END,
     MINUTE_END,
     INITIALIZE,
-    LIQUIDATE,
-    STOP,
     CALENDAR
 )
 
@@ -79,30 +77,18 @@ class ClockEngine(ABC):
 
 
 class MinuteEventGenerator(object):
-    def __init__(self, minute_emission=False):
-        self._stop = False
-        self._liquidate = False
-        self._minute_emission = minute_emission
-        self._first_call_flag = False
-
-    def stop(self, liquidate=False):
-        self._stop = True
-        self._liquidate = liquidate
-
-    def get_event_generator(self, calendar, start_dt, end_dt, before_trading_starts_time):
+    def get_event_generator(self, calendar, start_dt, end_dt, before_trading_starts_time, minute_emission=False):
         # loops every x frequency
 
         sessions = calendar.sessions_in_range(start_dt, end_dt)
-        trading_o_and_c = calendar.schedule.ix[sessions]
+        trading_o_and_c = calendar.schedule.loc[sessions]
         market_closes = trading_o_and_c['market_close']
 
-        before_trading_start_minutes = days_at_time(
+        bts_minutes = days_at_time(
             sessions,
             before_trading_starts_time,
             calendar.tz
         )
-
-        minute_emission = self._minute_emission
 
         if minute_emission:
             market_opens = trading_o_and_c['market_open']
@@ -116,54 +102,46 @@ class MinuteEventGenerator(object):
         market_closes_nanos = execution_closes.values.astype(np.int64)
 
         session_nanos = sessions.values.astype(np.int64)
-        bts_nanos = before_trading_start_minutes.values.astype(np.int64)
+        bts_nanos = bts_minutes.values.astype(np.int64)
 
         minutes_by_session = self._calc_minutes_by_session(market_opens_nanos, market_closes_nanos, session_nanos)
 
-        for idx, session_nano in session_nanos:
+        for idx, session_nano in enumerate(session_nanos):
             bts_minute = pd.Timestamp(bts_nanos[idx], tz='UTC')
             regular_minutes = minutes_by_session[session_nano]
-            if not self._stop:
-                if not self._first_call_flag:
-                    self._first_call_flag = True
-                    yield start_dt, INITIALIZE
-                yield start_dt, SESSION_START
 
-                if bts_minute > regular_minutes[-1]:
-                    # before_trading_start is after the last close,
-                    # so don't emit it
-                    for minute, evt in self._get_minutes_for_list(
-                            regular_minutes,
-                            minute_emission
-                    ):
-                        yield minute, evt
-                else:
-                    # we have to search anew every session, because there is no
-                    # guarantee that any two session start on the same minute
-                    bts_idx = regular_minutes.searchsorted(bts_minute)
+            yield start_dt, SESSION_START
 
-                    # emit all the minutes before bts_minute
-                    for minute, evt in self._get_minutes_for_list(
-                            regular_minutes[0:bts_idx],
-                            minute_emission
-                    ):
-                        yield minute, evt
-
-                    yield bts_minute, BEFORE_TRADING_START
-
-                    # emit all the minutes after bts_minute
-                    for minute, evt in self._get_minutes_for_list(
-                            regular_minutes[bts_idx:],
-                            minute_emission):
-                        yield minute, evt
-                minute_dt = regular_minutes[-1]
-                yield minute_dt, SESSION_END
+            if bts_minute > regular_minutes[-1]:
+                # before_trading_start is after the last close,
+                # so don't emit it
+                for minute, evt in self._get_minutes_for_list(
+                        regular_minutes,
+                        minute_emission
+                ):
+                    yield minute, evt
             else:
-                minute_dt = regular_minutes[0]
-                if self._liquidate:
-                    yield minute_dt, LIQUIDATE
-                else:
-                    yield minute_dt, STOP
+                # we have to search anew every session, because there is no
+                # guarantee that any two session start on the same minute
+                bts_idx = regular_minutes.searchsorted(bts_minute)
+
+                # emit all the minutes before bts_minute
+                for minute, evt in self._get_minutes_for_list(
+                        regular_minutes[0:bts_idx],
+                        minute_emission
+                ):
+                    yield minute, evt
+
+                yield bts_minute, BEFORE_TRADING_START
+
+                # emit all the minutes after bts_minute
+                for minute, evt in self._get_minutes_for_list(
+                        regular_minutes[bts_idx:],
+                        minute_emission):
+                    yield minute, evt
+            minute_dt = regular_minutes[-1]
+            yield minute_dt, SESSION_END
+
 
     def _get_minutes_for_list(self, minutes, minute_emission):
         events_to_include = [BAR, MINUTE_END] if minute_emission else [BAR]
@@ -286,7 +264,6 @@ class MinuteRealtimeClockEngine(ClockEngine):
         return time_delta.total_seconds()
 
     def __iter__(self):
-        # todo: should yield an initialize, signal if haven't been done yet.
         ntp_stats = self._ntp_client.request(self._ntp_server_address)
         offset = ntp_stats.offset
         self._offset = offset

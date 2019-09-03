@@ -49,7 +49,7 @@ class Controllable(ctbl_rpc.ControllableServicer):
         we must queue the update message... => the step must be a thread that pulls data
         from the queue...
         '''
-        #TODO: this shouldn't block an empty message must be sent right-away...
+        #todo: this shouldn't block an empty message must be sent right-away!
         self._update(
             pd.Timestamp(conversions.to_datetime(request.timestamp)).tz_localize('UTC'),
             request.event,
