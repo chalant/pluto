@@ -50,7 +50,12 @@ service Dev {
     //can run multiple strategies at the same time...
     rpc Run(DelimitedRunParams) returns (google.protobuf.Empty);
     rpc Stop(stream StopParams) returns (StopStatus);
+    rpc Watch(WatchRequest) returns (stream Data);
 
+}
+
+message WatchRequest {
+    string session_id = 1;
 }
 
 message StorageRequest {

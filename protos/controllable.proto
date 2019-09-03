@@ -23,7 +23,8 @@ service Controllable {
     //TODO: should return the state of the strategy run session at each update...
     //update sends an UpdateRequest. since this could get arbitrarily big, we send it
     //in chunks of bytes.
-    rpc Update (stream Data) returns (stream Data);
+    rpc ClockUpdate (stream Data) returns (google.protobuf.Empty);
+    rpc BrokerUpdate(stream Data) returns (google.protobuf.Empty);
     //receives periodic calendar updates
     rpc UpdateCalendar (stream Data) returns (google.protobuf.Empty);
     //TODO: should return the state of the controllable after it stopped...

@@ -27,11 +27,6 @@ class ControllerStub(object):
         request_serializer=protos_dot_controller__pb2.StopParams.SerializeToString,
         response_deserializer=protos_dot_controller__pb2.StopStatus.FromString,
         )
-    self.Run = channel.stream_unary(
-        '/Controller/Run',
-        request_serializer=protos_dot_controller__pb2.RunParams.SerializeToString,
-        response_deserializer=protos_dot_controller__pb2.Status.FromString,
-        )
     self.UpdateLevCap = channel.stream_unary(
         '/Controller/UpdateLevCap',
         request_serializer=protos_dot_controller__pb2.LevCap.SerializeToString,
@@ -60,7 +55,7 @@ class ControllerServicer(object):
 
   def PerformancePacketUpdate(self, request_iterator, context):
     """This method is a callback for controllables: each controllable sends back a performance
-    packet to the controller
+    packet to the controller by specifying the session_id in the metadata
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -73,18 +68,10 @@ class ControllerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Run(self, request_iterator, context):
-    """runs a strategy with initial parameters
-    this will pull the strategy from the store and run it.
-    can run multiple strategies at the same time...
-    we can watch the performance of the strategy in real-time...
-    """
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
   def UpdateLevCap(self, request_iterator, context):
-    """rpc Watch (StrategyID) returns (stream Data);
+    """we can watch the performance of the strategy in real-time...
+
+    rpc Watch (StrategyID) returns (stream Data);
 
     dynamically updates capital and/or leverage of a running strategy
     NOTE: this information can be obtained from the broker. ex: interactive brokers...
@@ -127,11 +114,6 @@ def add_ControllerServicer_to_server(servicer, server):
           servicer.Stop,
           request_deserializer=protos_dot_controller__pb2.StopParams.FromString,
           response_serializer=protos_dot_controller__pb2.StopStatus.SerializeToString,
-      ),
-      'Run': grpc.stream_unary_rpc_method_handler(
-          servicer.Run,
-          request_deserializer=protos_dot_controller__pb2.RunParams.FromString,
-          response_serializer=protos_dot_controller__pb2.Status.SerializeToString,
       ),
       'UpdateLevCap': grpc.stream_unary_rpc_method_handler(
           servicer.UpdateLevCap,
