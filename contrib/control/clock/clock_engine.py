@@ -77,6 +77,7 @@ class ClockEngine(ABC):
 
 
 class MinuteEventGenerator(object):
+    @classmethod
     def get_event_generator(self, calendar, start_dt, end_dt, before_trading_starts_time, minute_emission=False):
         # loops every x frequency
 
@@ -147,6 +148,7 @@ class MinuteEventGenerator(object):
         events_to_include = [BAR, MINUTE_END] if minute_emission else [BAR]
         for status in itertools.product(minutes, events_to_include):
             yield status
+
 
     def _calc_minutes_by_session(self, market_opens_nanos, market_closes_nanos, sessions_nanos):
         minutes_by_session = {}

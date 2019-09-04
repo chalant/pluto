@@ -199,8 +199,6 @@ class Controller(controller_pb2_grpc.ControllerServicer):
                 for exg in results:
                     self._append_to_dict(exg, sess, sess_per_exg)
 
-            self._clocks = clocks = []
-
             def callback_fn(request):
                 evt = request.event
                 if evt == clock_pb2.STOP:
@@ -215,10 +213,13 @@ class Controller(controller_pb2_grpc.ControllerServicer):
 
             signal_filter = clock.CallBackSignalFilter(mode.signal_filter, callback_fn)
 
-            for exg in sess_per_exg.keys():
+            clocks = loop.get_clocks(sess_per_exg.keys())
+            self._num_clocks = len(clocks)
+
+
+            for cl in clocks:
                 # register sessions to clock note: a session could be registered to multiple clocks
                 # we need thread safety, since clock might be processes
-                cl = loop.get_clock(exg) #
                 # listener = clock.CallBackClockListener(
                 #     signal_router.register_listener(exg),
                 #     callback_fn)
@@ -227,10 +228,8 @@ class Controller(controller_pb2_grpc.ControllerServicer):
                 #  signal filter => we need to "activate" the filter
                 #  the filter ignores updates until it is activated.
                 cl.add_signal_filter(signal_filter)
-                for session in sess_per_exg[exg]:
+                for session in sess_per_exg[cl.exchange]:
                     signal_filter.add_session(session)
-
-                self._num_clocks += 1
 
             # activate the signal filter (starts listening)
             signal_filter.activate()
