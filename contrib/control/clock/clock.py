@@ -6,7 +6,7 @@ import pandas as pd
 
 from google.protobuf import timestamp_pb2
 
-from contrib.control.clock import clock_engine
+from contrib.control.clock import minute_event_gen as meg
 from contrib.trading_calendars import calendar_utils as cu
 
 class ClockEvent(object):
@@ -31,12 +31,12 @@ class Clock(abc.ABC):
         self._handlers = []
 
     def update(self, real_dt, dt):
-
         #todo: should we adjust the real datetime with the delay?
         evt = self._get_dt_evt(dt)
         if evt:
             for handler in self._handlers:
                 handler.update(ClockEvent(real_dt, evt, self._exchange))
+
 
     @abc.abstractmethod
     def _get_dt_evt(self, dt):
@@ -46,7 +46,7 @@ class Clock(abc.ABC):
         self._handlers.append(filter)
 
 class MinuteClock(Clock):
-    def __init__(self, calendar, start_dt, end_dt, minute_emission=False):
+    def __init__(self, calendar, start_dt, end_dt, bfs_offset=None, minute_emission=False):
         '''
 
         Parameters
@@ -56,8 +56,6 @@ class MinuteClock(Clock):
         end_dt
         minute_emission
         '''
-        self._egf = clock_engine.MinuteEventGenerator()
-
         self._start_dt = start_dt
         self._end_dt = end_dt
 
@@ -69,45 +67,112 @@ class MinuteClock(Clock):
         self._load_attributes(start_dt, calendar, minute_emission)
         self._minute_emission = minute_emission
 
+        dt = datetime.combine(datetime.min, self.open_time)
+        if not bfs_offset:
+            self._offset = offset = timedelta(minutes=15)
+        else:
+            self._offset = offset = bfs_offset
+        dt = dt - offset
+        self._bfs = dt.time()
+
     def _load_proto_calendar(self):
         return
+
+    @property
+    def bfs_offset(self):
+        self._calendar.next_session_label()
+        return self._offset
+
+
+    @property
+    def open_time(self):
+        self._calendar.open_times[0]
+
+    def session_open(self, session_label):
+        return self._calendar.session_open(session_label)
 
     @property
     def all_sessions(self):
         self._calendar.all_sessions
 
     @property
+    def first_session(self):
+        return self.all_sessions[0]
+
+    @property
+    def last_session(self):
+        return self.all_sessions[-1]
+
+    @property
     def all_minutes(self):
         cal = self._calendar
-        start_dt = cal.all_sessions[0]
-        end_dt = cal.all_sessions[-1]
-        return cal.minutes_for_sessions_in_range(start_dt, end_dt)
+        for dt, evt in meg.get_event_generator(
+            cal,
+            cal.all_sessions[0],
+            cal.all_sessions[-1],
+            self._bfs,
+            minute_emission=self._minute_emission):
+            yield dt
 
-    def _get_dt_evt(self, dt):
-        try:
-            ts, evt = next(self._generator)
-            if dt == ts:
-                if not self._first_call_flag:
-                    self._first_call_flag = True
-                    return clock_pb2.INITIALIZE
-                else:
-                    if evt == clock_pb2.SESSION_END:
-                        # sleep until next session start
-                        end_dt = self._end_dt
-                        #todo: reload calendar once the end date is reached
-                        if dt.date() == end_dt.date():
-                            # re-load all attributes
-                            self._load_attributes(
-                                end_dt + pd.Timedelta('1 day'),
-                                self._load_proto_calendar(),
-                                self._minute_emission)
-                            # yield a calendar event so that the clients may load a new calendar
-                            return clock_pb2.CALENDAR
-                    return evt
-            else:
-                return None
-        except StopIteration:
-            return clock_pb2.STOP
+    def minutes_in_range(self, start_session, end_session):
+        for dt, evt in meg.get_event_generator(
+            self._calendar,
+            start_session,
+            end_session,
+            self._bfs,
+            minute_emission=self._minute_emission):
+            yield dt
+
+    def reset(self, start_dt, end_dt):
+        self._start_dt = start_dt
+        self._end_dt = end_dt
+
+    def _update(self, dt, event):
+        for handler in self._handlers:
+            handler.update(ClockEvent(dt, event, self._exchange))
+
+    def _get_dt_evt(self, real_dt, dt):
+        #todo: check for a stop event
+        #todo: in minute emission, we need to send the bar event, the minute end event
+        #todo: should we send the current dt? should we send both the current dt and the expected dt?
+        if not self._stop:
+            try:
+                ts, evt = next(self._generator)
+                if dt == ts:
+                    if not self._first_call_flag:
+                        self._first_call_flag = True
+                        self._update(real_dt, clock_pb2.INITIALIZE)
+                    else:
+                        #an event is triggered right after a "BAR" event (either a MINUTE_END or a SESSION_END)
+                        #so we call next one more time.
+                        if evt == clock_pb2.BAR:
+                            try:
+                                ts, evt = next(self._generator)
+                                #the session end event comes after the bar event
+                                if evt == clock_pb2.SESSION_END:
+                                    #todo: we probably don't need to reload the clocks here...
+                                    # sleep until next session start
+                                    end_dt = self._end_dt
+                                    #todo: reload calendar once the end date is reached
+                                    #todo: do we need the calendar event? => yes: elements
+                                    # server side, like DataPortal needs.
+                                    if dt.date() == end_dt.date():
+                                        # re-load all attributes
+                                        self._load_attributes(
+                                            end_dt + pd.Timedelta('1 day'),
+                                            self._load_proto_calendar(),
+                                            self._minute_emission)
+                                        # yield a calendar event so that the clients may load a new calendar
+                                        self._update(real_dt, clock_pb2.CALENDAR)
+                                    self._update(real_dt, evt)
+                                else:
+                                    self._update(real_dt, evt)
+                            except StopIteration:
+                                self._update(real_dt, clock_pb2.STOP)
+            except StopIteration:
+                self._update(real_dt, clock_pb2.STOP)
+        else:
+            self._update(real_dt, clock_pb2.STOP)
 
     def _load_attributes(self, start_dt, proto_calendar, minute_emission=False):
         self._start_dt = start_dt
