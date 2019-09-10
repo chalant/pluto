@@ -9,11 +9,8 @@ import datetime as dt
 
 from dateutil import relativedelta as rd
 
-from zipline.utils.memoize import lazyval
-
-from contrib.trading_calendars.exchange_calendar_nyse import NYSETradingCalendar
 from contrib.coms.utils import conversions as cvr
-from contrib.trading_calendars.protos import calendar_pb2 as cpb
+from protos import calendar_pb2 as cpb
 
 import pandas as pd
 from pandas.tseries import holiday, offsets
@@ -24,9 +21,6 @@ class ZiplineCalendarError(Exception):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
-    @lazyval
-    def message(self):
-        return str(self)
 
     def __str__(self):
         msg = self.msg.format(**self.kwargs)
@@ -104,12 +98,9 @@ def get_calendar_in_range(name, start_dt, end_dt=None):
         # We don't have a factory registered for this name.  Barf.
         raise cu.InvalidCalendarName(calendar_name=name)
     if end_dt is None:
-        end_dt = start_dt + pd.Timedelta(days=365)
-    return factory(start=start_dt, end_dt=end_dt)
+        end_dt = start_dt + pd.Timedelta(days=10)
+    return factory(start=start_dt, end=end_dt)
 
-_default_calendar_factories = {
-    'NYSE': get_nyse_calendar,
-}
 
 class TradingCalendarFatory(ABC):
     def get_calendar(self, start_dt, end_dt=None):
@@ -402,6 +393,12 @@ class TradingCalendar(tc.TradingCalendar):
             return holiday.sunday_to_monday
         else:
             return
+
+    def close_times(self):
+        pass
+
+    def open_times(self):
+        pass
 
     def name(self):
         return self._proto_calendar.name

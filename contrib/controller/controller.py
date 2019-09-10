@@ -218,15 +218,6 @@ class Controller(controller_pb2_grpc.ControllerServicer):
 
 
             for cl in clocks:
-                # register sessions to clock note: a session could be registered to multiple clocks
-                # we need thread safety, since clock might be processes
-                # listener = clock.CallBackClockListener(
-                #     signal_router.register_listener(exg),
-                #     callback_fn)
-                # todo: how do we make sure that the signal filters will run at the same
-                #  time? the clock might receive a signal while we're adding the
-                #  signal filter => we need to "activate" the filter
-                #  the filter ignores updates until it is activated.
                 cl.add_signal_filter(signal_filter)
                 for session in sess_per_exg[cl.exchange]:
                     signal_filter.add_session(session)
@@ -249,15 +240,10 @@ class Controller(controller_pb2_grpc.ControllerServicer):
 
         # dictionary mapping keys like asset types and country codes, to sets of exchanges
 
-        at_set = set()
-        cc_set = set()
-
         # union of all exchanges trading the given asset types
-        for c in at:
-            at_set = at_set | exchanges[c]
-
+        at_set = set([exchanges[at] for c in at])
         # union of all exchanges operating in the given countries
-        cc_set = cc_set | exchanges[cc]
+        cc_set = set(exchanges[cc])
 
         # intersection of exchanges trading in the given countries and asset types
         return cc_set & at_set

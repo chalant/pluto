@@ -25,7 +25,7 @@ class ControllableStub(object):
         )
     self.UpdateParameters = channel.unary_unary(
         '/Controllable/UpdateParameters',
-        request_serializer=protos_dot_controller__pb2.ParametersUpdateMessage.SerializeToString,
+        request_serializer=protos_dot_controller__pb2.ParametersUpdateRequest.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
     self.Initialize = channel.stream_unary(
@@ -33,10 +33,15 @@ class ControllableStub(object):
         request_serializer=protos_dot_data__pb2.Data.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
-    self.Update = channel.stream_stream(
-        '/Controllable/Update',
+    self.ClockUpdate = channel.stream_unary(
+        '/Controllable/ClockUpdate',
         request_serializer=protos_dot_data__pb2.Data.SerializeToString,
-        response_deserializer=protos_dot_data__pb2.Data.FromString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+    self.BrokerUpdate = channel.stream_unary(
+        '/Controllable/BrokerUpdate',
+        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
     self.UpdateCalendar = channel.stream_unary(
         '/Controllable/UpdateCalendar',
@@ -71,15 +76,24 @@ class ControllableServicer(object):
     raise NotImplementedError('Method not implemented!')
 
   def Initialize(self, request_iterator, context):
-    """called to initialize the controllable
+    """called to initialize the controllable (sends initparams)
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Update(self, request_iterator, context):
+  def ClockUpdate(self, request_iterator, context):
     """TODO: should return the state of the strategy run session at each update...
+    update sends an UpdateRequest. since this could get arbitrarily big, we send it
+    in chunks of bytes.
     """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def BrokerUpdate(self, request_iterator, context):
+    # missing associated documentation comment in .proto file
+    pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
@@ -108,7 +122,7 @@ def add_ControllableServicer_to_server(servicer, server):
       ),
       'UpdateParameters': grpc.unary_unary_rpc_method_handler(
           servicer.UpdateParameters,
-          request_deserializer=protos_dot_controller__pb2.ParametersUpdateMessage.FromString,
+          request_deserializer=protos_dot_controller__pb2.ParametersUpdateRequest.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
       'Initialize': grpc.stream_unary_rpc_method_handler(
@@ -116,10 +130,15 @@ def add_ControllableServicer_to_server(servicer, server):
           request_deserializer=protos_dot_data__pb2.Data.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
-      'Update': grpc.stream_stream_rpc_method_handler(
-          servicer.Update,
+      'ClockUpdate': grpc.stream_unary_rpc_method_handler(
+          servicer.ClockUpdate,
           request_deserializer=protos_dot_data__pb2.Data.FromString,
-          response_serializer=protos_dot_data__pb2.Data.SerializeToString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'BrokerUpdate': grpc.stream_unary_rpc_method_handler(
+          servicer.BrokerUpdate,
+          request_deserializer=protos_dot_data__pb2.Data.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
       'UpdateCalendar': grpc.stream_unary_rpc_method_handler(
           servicer.UpdateCalendar,

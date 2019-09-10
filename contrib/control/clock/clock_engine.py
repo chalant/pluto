@@ -41,8 +41,8 @@ _nanos_in_minute = np.int64(60000000000)
 
 
 class ClockEngine(ABC):
-    @abstractmethod
     @property
+    @abstractmethod
     def alive(self):
         """
 
@@ -51,8 +51,8 @@ class ClockEngine(ABC):
         bool
         """
 
-    @abstractmethod
     @property
+    @abstractmethod
     def emission_rate(self):
         """
 

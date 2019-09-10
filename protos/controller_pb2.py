@@ -25,7 +25,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x17protos/controller.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/metrics.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"0\n\x06Status\x12&\n\x0esession_status\x18\x01 \x01(\x0e\x32\x0e.SessionStatus\":\n\rCapitalUpdate\x12\x15\n\rcapital_ratio\x18\x01 \x01(\x02\x12\x12\n\nsession_id\x18\x02 \x01(\t\"=\n\x11MaxLeverageUpdate\x12\x14\n\x0cmax_leverage\x18\x01 \x01(\x02\x12\x12\n\nsession_id\x18\x02 \x01(\t\"I\n\x06LevCap\x12\x15\n\rcapital_ratio\x18\x01 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x02 \x01(\x02\x12\x12\n\nsession_id\x18\x03 \x01(\t\"\x19\n\x17\x43\x61pitalAssignmentStatus\"\x92\x01\n\x12\x44\x65limitedRunParams\x12\x1e\n\nrun_params\x18\x01 \x03(\x0b\x32\n.RunParams\x12.\n\nstart_date\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xac\x01\n\tRunParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rcapital_ratio\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12!\n\remission_rate\x18\x04 \x01(\x0e\x32\n.Frequency\x12\x17\n\x0f\x62\x65nchmark_asset\x18\x05 \x01(\t\x12\"\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\n.Frequency\"3\n\nStopParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0c\n\nStopStatus\"2\n\x0bPerformance\x12#\n\x07packets\x18\x01 \x03(\x0b\x32\x12.PerformancePacket\"\xd8\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\n\n\x02id\x18\x05 \x01(\t\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics\"p\n\x17ParametersUpdateRequest\x12*\n\x10\x63ontroller_event\x18\x01 \x01(\x0e\x32\x10.ControllerEvent\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x03 \x01(\x02*/\n\rSessionStatus\x12\r\n\tCOMPLETED\x10\x00\x12\x0f\n\x0bINTERRUPTED\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32\xae\x02\n\nController\x12:\n\x17PerformancePacketUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12 \n\x04Stop\x12\x0b.StopParams\x1a\x0b.StopStatus\x12\x33\n\x0cUpdateLevCap\x12\x07.LevCap\x1a\x18.CapitalAssignmentStatus(\x01\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12)\n\x06\x44\x65ploy\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12.\n\x0bUpdateGraph\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x17protos/controller.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/metrics.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"0\n\x06Status\x12&\n\x0esession_status\x18\x01 \x01(\x0e\x32\x0e.SessionStatus\":\n\rCapitalUpdate\x12\x15\n\rcapital_ratio\x18\x01 \x01(\x02\x12\x12\n\nsession_id\x18\x02 \x01(\t\"=\n\x11MaxLeverageUpdate\x12\x14\n\x0cmax_leverage\x18\x01 \x01(\x02\x12\x12\n\nsession_id\x18\x02 \x01(\t\"I\n\x06LevCap\x12\x15\n\rcapital_ratio\x18\x01 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x02 \x01(\x02\x12\x12\n\nsession_id\x18\x03 \x01(\t\"\x19\n\x17\x43\x61pitalAssignmentStatus\"\x92\x01\n\x12\x44\x65limitedRunParams\x12\x1e\n\nrun_params\x18\x01 \x03(\x0b\x32\n.RunParams\x12.\n\nstart_date\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xac\x01\n\tRunParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rcapital_ratio\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12!\n\remission_rate\x18\x04 \x01(\x0e\x32\n.Frequency\x12\x17\n\x0f\x62\x65nchmark_asset\x18\x05 \x01(\t\x12\"\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\x0e\x32\n.Frequency\"\x1f\n\nStopParams\x12\x11\n\tliquidate\x18\x01 \x01(\x08\"\x0c\n\nStopStatus\"2\n\x0bPerformance\x12#\n\x07packets\x18\x01 \x03(\x0b\x32\x12.PerformancePacket\"\xd8\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\n\n\x02id\x18\x05 \x01(\t\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics\"p\n\x17ParametersUpdateRequest\x12*\n\x10\x63ontroller_event\x18\x01 \x01(\x0e\x32\x10.ControllerEvent\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x03 \x01(\x02*/\n\rSessionStatus\x12\r\n\tCOMPLETED\x10\x00\x12\x0f\n\x0bINTERRUPTED\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32\xeb\x02\n\nController\x12:\n\x17PerformancePacketUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12 \n\x04Stop\x12\x0b.StopParams\x1a\x0b.StopStatus\x12;\n\tLiquidate\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12\x33\n\x0cUpdateLevCap\x12\x07.LevCap\x1a\x18.CapitalAssignmentStatus(\x01\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12)\n\x06\x44\x65ploy\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12.\n\x0bUpdateGraph\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_metrics__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -46,8 +46,8 @@ _SESSIONSTATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1323,
-  serialized_end=1370,
+  serialized_start=1303,
+  serialized_end=1350,
 )
 _sym_db.RegisterEnumDescriptor(_SESSIONSTATUS)
 
@@ -73,8 +73,8 @@ _CONTROLLEREVENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1372,
-  serialized_end=1449,
+  serialized_start=1352,
+  serialized_end=1429,
 )
 _sym_db.RegisterEnumDescriptor(_CONTROLLEREVENT)
 
@@ -382,15 +382,8 @@ _STOPPARAMS = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='session_id', full_name='StopParams.session_id', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='liquidate', full_name='StopParams.liquidate', index=1,
-      number=2, type=8, cpp_type=7, label=1,
+      name='liquidate', full_name='StopParams.liquidate', index=0,
+      number=1, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -408,7 +401,7 @@ _STOPPARAMS = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=749,
-  serialized_end=800,
+  serialized_end=780,
 )
 
 
@@ -431,8 +424,8 @@ _STOPSTATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=802,
-  serialized_end=814,
+  serialized_start=782,
+  serialized_end=794,
 )
 
 
@@ -462,8 +455,8 @@ _PERFORMANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=816,
-  serialized_end=866,
+  serialized_start=796,
+  serialized_end=846,
 )
 
 
@@ -521,8 +514,8 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=869,
-  serialized_end=1085,
+  serialized_start=849,
+  serialized_end=1065,
 )
 
 
@@ -559,8 +552,8 @@ _PERIODPERFORMANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1087,
-  serialized_end=1207,
+  serialized_start=1067,
+  serialized_end=1187,
 )
 
 
@@ -604,8 +597,8 @@ _PARAMETERSUPDATEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1209,
-  serialized_end=1321,
+  serialized_start=1189,
+  serialized_end=1301,
 )
 
 _STATUS.fields_by_name['session_status'].enum_type = _SESSIONSTATUS
@@ -738,8 +731,8 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1452,
-  serialized_end=1754,
+  serialized_start=1432,
+  serialized_end=1795,
   methods=[
   _descriptor.MethodDescriptor(
     name='PerformancePacketUpdate',
@@ -760,9 +753,18 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
+    name='Liquidate',
+    full_name='Controller.Liquidate',
+    index=2,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
     name='UpdateLevCap',
     full_name='Controller.UpdateLevCap',
-    index=2,
+    index=3,
     containing_service=None,
     input_type=_LEVCAP,
     output_type=_CAPITALASSIGNMENTSTATUS,
@@ -771,7 +773,7 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='ClockUpdate',
     full_name='Controller.ClockUpdate',
-    index=3,
+    index=4,
     containing_service=None,
     input_type=protos_dot_clock__pb2._CLOCKEVENT,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
@@ -780,7 +782,7 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Deploy',
     full_name='Controller.Deploy',
-    index=4,
+    index=5,
     containing_service=None,
     input_type=protos_dot_data__pb2._DATA,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
@@ -789,7 +791,7 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='UpdateGraph',
     full_name='Controller.UpdateGraph',
-    index=5,
+    index=6,
     containing_service=None,
     input_type=protos_dot_data__pb2._DATA,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
