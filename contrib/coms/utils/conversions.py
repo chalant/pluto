@@ -1,6 +1,6 @@
 from pandas import Timestamp
 
-from protos import assets_pb2 as pr_asset, controllable_service_pb2 as cbl, finance_pb2 as fin, metrics_pb2 as metrics, \
+from protos import assets_pb2 as pr_asset, controllable_pb2 as cbl, finance_pb2 as fin, metrics_pb2 as metrics, \
     protocol_pb2 as pr
 
 from zipline.assets import Asset, ExchangeInfo

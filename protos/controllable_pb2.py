@@ -26,7 +26,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x18protos/data_bundle.proto\x1a\x13protos/broker.proto\x1a\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"S\n\nInitParams\x12\"\n\x06\x64omain\x18\x01 \x01(\x0b\x32\x12.CompoundDomainDef\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\"y\n\rUpdateMessage\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState2\xa5\x02\n\x0c\x43ontrollable\x12\x33\n\x10UpdateDataBundle\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateMessage\x1a\x16.google.protobuf.Empty\x12-\n\nInitialize\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x1a\n\x06Update\x12\x05.Data\x1a\x05.Data(\x01\x30\x01\x12\x31\n\x0eUpdateCalendar\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x1c\n\x04Stop\x12\x0b.StopParams\x1a\x05.Data0\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x18protos/data_bundle.proto\x1a\x13protos/broker.proto\x1a\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"Y\n\nInitParams\x12\"\n\x06\x64omain\x18\x01 \x01(\x0b\x32\x12.CompoundDomainDef\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\x12\x15\n\rcapital_ratio\x18\x03 \x01(\x02\"y\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply2\xea\x02\n\x0c\x43ontrollable\x12\x33\n\x10UpdateDataBundle\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12-\n\nInitialize\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12.\n\x0b\x43lockUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12/\n\x0c\x42rokerUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x31\n\x0eUpdateCalendar\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x1c\n\x04Stop\x12\x0b.StopParams\x1a\x05.Data0\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,protos_dot_data__bundle__pb2.DESCRIPTOR,protos_dot_broker__pb2.DESCRIPTOR,protos_dot_controller__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -55,7 +55,7 @@ _INITPARAMS = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='capital', full_name='InitParams.capital', index=2,
+      name='capital_ratio', full_name='InitParams.capital_ratio', index=2,
       number=3, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
@@ -74,33 +74,33 @@ _INITPARAMS = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=202,
-  serialized_end=285,
+  serialized_end=291,
 )
 
 
-_UPDATEMESSAGE = _descriptor.Descriptor(
-  name='UpdateMessage',
-  full_name='UpdateMessage',
+_UPDATEREQUEST = _descriptor.Descriptor(
+  name='UpdateRequest',
+  full_name='UpdateRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='timestamp', full_name='UpdateMessage.timestamp', index=0,
+      name='timestamp', full_name='UpdateRequest.timestamp', index=0,
       number=1, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='event', full_name='UpdateMessage.event', index=1,
+      name='event', full_name='UpdateRequest.event', index=1,
       number=2, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='broker_state', full_name='UpdateMessage.broker_state', index=2,
+      name='broker_state', full_name='UpdateRequest.broker_state', index=2,
       number=3, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
@@ -118,16 +118,41 @@ _UPDATEMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=287,
-  serialized_end=408,
+  serialized_start=293,
+  serialized_end=414,
+)
+
+
+_UPDATEREPLY = _descriptor.Descriptor(
+  name='UpdateReply',
+  full_name='UpdateReply',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=416,
+  serialized_end=429,
 )
 
 _INITPARAMS.fields_by_name['domain'].message_type = protos_dot_data__bundle__pb2._COMPOUNDDOMAINDEF
-_UPDATEMESSAGE.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_UPDATEMESSAGE.fields_by_name['event'].enum_type = protos_dot_clock__pb2._EVENT
-_UPDATEMESSAGE.fields_by_name['broker_state'].message_type = protos_dot_broker__pb2._BROKERSTATE
+_UPDATEREQUEST.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_UPDATEREQUEST.fields_by_name['event'].enum_type = protos_dot_clock__pb2._EVENT
+_UPDATEREQUEST.fields_by_name['broker_state'].message_type = protos_dot_broker__pb2._BROKERSTATE
 DESCRIPTOR.message_types_by_name['InitParams'] = _INITPARAMS
-DESCRIPTOR.message_types_by_name['UpdateMessage'] = _UPDATEMESSAGE
+DESCRIPTOR.message_types_by_name['UpdateRequest'] = _UPDATEREQUEST
+DESCRIPTOR.message_types_by_name['UpdateReply'] = _UPDATEREPLY
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 InitParams = _reflection.GeneratedProtocolMessageType('InitParams', (_message.Message,), dict(
@@ -137,12 +162,19 @@ InitParams = _reflection.GeneratedProtocolMessageType('InitParams', (_message.Me
   ))
 _sym_db.RegisterMessage(InitParams)
 
-UpdateMessage = _reflection.GeneratedProtocolMessageType('UpdateMessage', (_message.Message,), dict(
-  DESCRIPTOR = _UPDATEMESSAGE,
+UpdateRequest = _reflection.GeneratedProtocolMessageType('UpdateRequest', (_message.Message,), dict(
+  DESCRIPTOR = _UPDATEREQUEST,
   __module__ = 'protos.controllable_pb2'
-  # @@protoc_insertion_point(class_scope:UpdateMessage)
+  # @@protoc_insertion_point(class_scope:UpdateRequest)
   ))
-_sym_db.RegisterMessage(UpdateMessage)
+_sym_db.RegisterMessage(UpdateRequest)
+
+UpdateReply = _reflection.GeneratedProtocolMessageType('UpdateReply', (_message.Message,), dict(
+  DESCRIPTOR = _UPDATEREPLY,
+  __module__ = 'protos.controllable_pb2'
+  # @@protoc_insertion_point(class_scope:UpdateReply)
+  ))
+_sym_db.RegisterMessage(UpdateReply)
 
 
 
@@ -152,8 +184,8 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=411,
-  serialized_end=704,
+  serialized_start=432,
+  serialized_end=794,
   methods=[
   _descriptor.MethodDescriptor(
     name='UpdateDataBundle',
@@ -169,7 +201,7 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
     full_name='Controllable.UpdateParameters',
     index=1,
     containing_service=None,
-    input_type=protos_dot_controller__pb2._PARAMETERSUPDATEMESSAGE,
+    input_type=protos_dot_controller__pb2._PARAMETERSUPDATEREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
@@ -183,18 +215,27 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='Update',
-    full_name='Controllable.Update',
+    name='ClockUpdate',
+    full_name='Controllable.ClockUpdate',
     index=3,
     containing_service=None,
     input_type=protos_dot_data__pb2._DATA,
-    output_type=protos_dot_data__pb2._DATA,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='BrokerUpdate',
+    full_name='Controllable.BrokerUpdate',
+    index=4,
+    containing_service=None,
+    input_type=protos_dot_data__pb2._DATA,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
     name='UpdateCalendar',
     full_name='Controllable.UpdateCalendar',
-    index=4,
+    index=5,
     containing_service=None,
     input_type=protos_dot_data__pb2._DATA,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
@@ -203,7 +244,7 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
   _descriptor.MethodDescriptor(
     name='Stop',
     full_name='Controllable.Stop',
-    index=5,
+    index=6,
     containing_service=None,
     input_type=protos_dot_controller__pb2._STOPPARAMS,
     output_type=protos_dot_data__pb2._DATA,

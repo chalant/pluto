@@ -27,6 +27,11 @@ class ControllerStub(object):
         request_serializer=protos_dot_controller__pb2.StopParams.SerializeToString,
         response_deserializer=protos_dot_controller__pb2.StopStatus.FromString,
         )
+    self.Liquidate = channel.unary_unary(
+        '/Controller/Liquidate',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
     self.UpdateLevCap = channel.stream_unary(
         '/Controller/UpdateLevCap',
         request_serializer=protos_dot_controller__pb2.LevCap.SerializeToString,
@@ -68,10 +73,16 @@ class ControllerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def UpdateLevCap(self, request_iterator, context):
-    """we can watch the performance of the strategy in real-time...
+  def Liquidate(self, request, context):
+    """orders liquidation of all assets in all the controllables
+    we can watch the performance of the strategy in real-time...
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
 
-    rpc Watch (StrategyID) returns (stream Data);
+  def UpdateLevCap(self, request_iterator, context):
+    """rpc Watch (StrategyID) returns (stream Data);
 
     dynamically updates capital and/or leverage of a running strategy
     NOTE: this information can be obtained from the broker. ex: interactive brokers...
@@ -114,6 +125,11 @@ def add_ControllerServicer_to_server(servicer, server):
           servicer.Stop,
           request_deserializer=protos_dot_controller__pb2.StopParams.FromString,
           response_serializer=protos_dot_controller__pb2.StopStatus.SerializeToString,
+      ),
+      'Liquidate': grpc.unary_unary_rpc_method_handler(
+          servicer.Liquidate,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
       'UpdateLevCap': grpc.stream_unary_rpc_method_handler(
           servicer.UpdateLevCap,

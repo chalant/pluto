@@ -14,7 +14,7 @@ service Controller {
     rpc PerformancePacketUpdate (stream Data) returns (google.protobuf.Empty);
     rpc Stop (StopParams) returns (StopStatus);
     //orders liquidation of all assets in all the controllables
-    rpc Liquidate(google.protobuf.Empty) returns (google.protobuf.Empty)
+    rpc Liquidate(google.protobuf.Empty) returns (google.protobuf.Empty);
     //we can watch the performance of the strategy in real-time...
     /*rpc Watch (StrategyID) returns (stream Data);*/
     //dynamically updates capital and/or leverage of a running strategy
