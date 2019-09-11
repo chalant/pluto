@@ -1,5 +1,3 @@
-from abc import ABC, abstractmethod
-
 from trading_calendars import calendar_utils as cu
 
 import itertools as it
@@ -15,12 +13,12 @@ from protos import calendar_pb2 as cpb
 import pandas as pd
 from pandas.tseries import holiday, offsets
 
+
 class ZiplineCalendarError(Exception):
     msg = None
 
     def __init__(self, **kwargs):
         self.kwargs = kwargs
-
 
     def __str__(self):
         msg = self.msg.format(**self.kwargs)
@@ -77,6 +75,7 @@ class ScheduleFunctionInvalidCalendar(ZiplineCalendarError):
         "Allowed options are {allowed_calendars}."
     )
 
+
 def get_calendar_in_range(name, start_dt, end_dt=None):
     """
 
@@ -101,39 +100,6 @@ def get_calendar_in_range(name, start_dt, end_dt=None):
         end_dt = start_dt + pd.Timedelta(days=10)
     return factory(start=start_dt, end=end_dt)
 
-
-class TradingCalendarFatory(ABC):
-    def get_calendar(self, start_dt, end_dt=None):
-        """
-
-        Parameters
-        ----------
-        start_dt : pandas.Timestamp
-        end_dt : pandas.Timestamp
-
-        Returns
-        -------
-
-        """
-        if end_dt is None:
-            end_dt = start_dt + pd.Timedelta(days=365)
-
-        return self._create_calendar(start_dt, end_dt)
-
-    @abstractmethod
-    def _create_calendar(self, start_dt, end_dt):
-        """
-
-        Parameters
-        ----------
-        start_dt
-        end_dt
-
-        Returns
-        -------
-        trading_calendars.TradingCalendar
-
-        """
 
 
 class TradingCalendarDispatcher(object):

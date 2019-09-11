@@ -31,8 +31,6 @@ class Loop(abc.ABC):
     def run(self):
         pass
 
-        return minutes
-
     def get_clock(self, exchange):
         cl = self._clocks.get(exchange, None)
         if not cl:
@@ -46,21 +44,40 @@ class Loop(abc.ABC):
 
 class MinuteSimulationLoop(Loop):
     def __init__(self, start_dt, end_dt):
+        #todo: start_dt and end_dt must be midnight utc
         self._start_dt = start_dt
         self._end_dt = end_dt
         self._clocks = []
 
     def run(self):
         clocks = self._clocks
+
+        # gets minutes within a range
+        minutes = _get_minutes(clocks, 10)
+
+        minute_idx = 0
+
+        cur_exp_dt = minutes[minute_idx]
+
+
         for dt in _get_minutes(clocks):
             for clock in clocks:
                 clock.update(dt, dt)
 
-    def _get_clock(self, exchange):
-        self._clock
+    def get_clock(self, exchange):
+        self._clocks.append(self._create_clock(exchange))
+
+    def _create_clock(self, exchange):
+        return clock.Clock(
+            exchange,
+            # todo: if the current date time is above the open time, we need to move to the next session.
+            self._start_dt,
+            self._end_dt,
+            minute_emission=True)
 
 
-class MockMinuteLiveLoop(object):
+class TestMinuteLiveLoop(object):
+    #todo: Create tests for the simulation loop...
     def __init__(self):
         # todo: we need a proto_calendar database or directory => hub?
         self._pending_clocks = queue.Queue()
@@ -82,9 +99,9 @@ class MockMinuteLiveLoop(object):
         return results
 
     def _create_clock(self, exchange):
-        return clock.Clock(cu.get_calendar_in_range(
+        return clock.Clock(
             exchange,
-            pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC')),
+            pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC'),
             minute_emission=True)
 
     def run(self, clocks):
@@ -340,10 +357,10 @@ class MinuteLiveLoop(object):
         return results
 
     def _create_clock(self, exchange):
-        return clock.Clock(cu.get_calendar_in_range(
+        return clock.Clock(
             exchange,
             #todo: if the current date time is above the open time, we need to move to the next session.
-            pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC')),
+            pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC'),
             minute_emission=True)
 
     def _get_seconds(self, time_delta):
