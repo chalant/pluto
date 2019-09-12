@@ -12,6 +12,8 @@ import queue
 from datetime import datetime, timedelta
 import datetime
 
+from contrib.control.clock.clock import StopExecution
+
 from contrib.trading_calendars import calendar_utils as cu
 from contrib.control.clock import clock
 
@@ -82,6 +84,8 @@ class TestMinuteLiveLoop(object):
         # todo: we need a proto_calendar database or directory => hub?
         self._pending_clocks = queue.Queue()
         self._clocks = {}
+        self._start = st = pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC')
+        self._end_dt = st + pd.Timedelta(days=30)
 
     def get_clocks(self, exchanges):
         clocks = self._clocks
@@ -101,7 +105,8 @@ class TestMinuteLiveLoop(object):
     def _create_clock(self, exchange):
         return clock.Clock(
             exchange,
-            pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC'),
+            self._start,
+            self._end_dt,
             minute_emission=True)
 
     def run(self, clocks):
@@ -116,6 +121,7 @@ class TestMinuteLiveLoop(object):
         minute_idx = 0
 
         cur_exp_dt = minutes[minute_idx]
+        yield cur_exp_dt
 
         t0 = time.time()
 
@@ -168,8 +174,11 @@ class TestMinuteLiveLoop(object):
             t1 = time.time()
             # todo: periodically check for calendar updates
             # for each clock send the current time and the "expected" time
-            for cl in clocks:
-                cl.update(now(t0), cur_exp_dt)
+            try:
+                for cl in clocks:
+                    cl.update(now(t0), cur_exp_dt)
+            except StopExecution:
+                break
 
             # todo: update calendar if there is a calendar update.
 
@@ -193,6 +202,7 @@ class TestMinuteLiveLoop(object):
                     minute_idx = 0
                     cur_exp_dt = minutes[minute_idx]
                     print('current datetime: {}'.format(cur_exp_dt))
+            yield cur_exp_dt
 
             # todo: what if we "overshoot" the expected datetime ?
             # wait until the next expected datetime
@@ -201,7 +211,7 @@ class TestMinuteLiveLoop(object):
             t0 = t1
             i += 1
 
-            prev_t = prev_t + (time.time() - t0)
+            # prev_t = prev_t + (time.time() - t0)
             # print('Loop time average: {}'.format(prev_t / i))
             # print('Current datetime: {}'.format(cur_exp_dt))
 
