@@ -8,7 +8,6 @@ from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 from zipline.utils.pandas_utils import normalize_date
 
-from contrib.control import clock_utils
 from contrib.coms.services import broker_service as brs
 
 

@@ -29,6 +29,8 @@ def _get_minutes(clocks, session_length):
           for clock in clocks])))).sort_values()
 
 
+# todo: the run method of the loop must be threadsafe
+
 class Loop(abc.ABC):
     def run(self):
         pass
@@ -46,7 +48,7 @@ class Loop(abc.ABC):
 
 class MinuteSimulationLoop(Loop):
     def __init__(self, start_dt, end_dt):
-        #todo: start_dt and end_dt must be midnight utc
+        # todo: start_dt and end_dt must be midnight utc
         self._start_dt = start_dt
         self._end_dt = end_dt
         self._clocks = []
@@ -60,7 +62,6 @@ class MinuteSimulationLoop(Loop):
         minute_idx = 0
 
         cur_exp_dt = minutes[minute_idx]
-
 
         for dt in _get_minutes(clocks):
             for clock in clocks:
@@ -79,7 +80,7 @@ class MinuteSimulationLoop(Loop):
 
 
 class TestMinuteLiveLoop(object):
-    #todo: Create tests for the simulation loop...
+    # todo: Create tests for the simulation loop...
     def __init__(self):
         # todo: we need a proto_calendar database or directory => hub?
         self._pending_clocks = queue.Queue()
@@ -126,6 +127,7 @@ class TestMinuteLiveLoop(object):
         t0 = time.time()
 
         start = pd.Timestamp.utcnow()
+
         # synchronize with the next expected minute
 
         def now(t0):
@@ -228,15 +230,22 @@ class TestMinuteLiveLoop(object):
 
 
 class MinuteLiveLoop(object):
-    def __init__(self):
+    # todo: should this be a singleton?
+    def __init__(self, ntp_server_address=None):
         self._clocks = {}
         # todo: we need a proto_calendar database or directory => hub?
-        self._pending_clocks = queue.Queue()
+        self._pending_clocks = []
         self._start_dt = pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min)
 
         self._ntp_client = ntplib.NTPClient()
         self._offset = 0
-        self._ntp_server_address = 'pool.ntp.org'
+        self._ntp_server_address = 'pool.ntp.org' if not ntp_server_address else ntp_server_address
+
+        self._thread = threading.Thread(self._run)
+        self._lock = threading.Lock()
+
+        self._event = threading.Event()
+        self._stop = False
 
     def _get_seconds(self, time_delta):
         return time_delta.total_seconds()
@@ -245,10 +254,14 @@ class MinuteLiveLoop(object):
         ntp_stats = self._ntp_client.request(self._ntp_server_address)
         return ntp_stats.offset
 
-    def run(self):
-        # todo: we need to test this. How? simulate time?
+    def _run(self):
+        # todo: should we use an "always open calendar"?
+        # todo: handle interrupt signals => interrupt sleep etc.
+        #  => change time.sleep to thread.Event wait with a time out. That way, we can instanly interrupt
+        #  the program.
         # the loop is responsible of synchronizing the real time real time with the expected time
         clocks = self._clocks.values()
+        event = self._event
 
         if not clocks:
             # blocks until clocks are available
@@ -272,10 +285,10 @@ class MinuteLiveLoop(object):
         def utc_now():
             return pd.Timestamp(pd.Timestamp.utcfromtimestamp(time.time() + offset), tz='UTC')
 
-        while True:
+        while not self._stop:
             if self._get_seconds(cur_exp_dt - utc_now()) > 0:
                 # sleep until the next expected minute
-                time.sleep(self._get_seconds(cur_exp_dt - utc_now()))
+                event.wait(self._get_seconds(cur_exp_dt - utc_now()))
                 break
 
             elif self._get_seconds(cur_exp_dt - utc_now()) < 0:
@@ -305,7 +318,7 @@ class MinuteLiveLoop(object):
                 break
 
         # start the loop
-        while True:
+        while not self._stop:
             # todo: periodically check for calendar updates
             # for each clock send the current time and the "expected" time
             for cl in clocks:
@@ -341,35 +354,51 @@ class MinuteLiveLoop(object):
 
             # todo: what if we "overshoot" the expected datetime ?
             # wait until the next expected datetime
-            time.sleep(self._get_seconds(cur_exp_dt - pd.Timestamp.utcfromtimestamp(time.time() + offset)))
+            event.wait(self._get_seconds(cur_exp_dt - pd.Timestamp.utcfromtimestamp(time.time() + offset)))
 
     def _update_clocks(self):
+        #protect against race conditions, since the loop is running in a different thread
+        with self._lock:
+            try:
+                for clock in self._pending_clocks.pop():
+                    self._clocks[clock.exchange] = clock
+                return True
+            except IndexError:
+                return False
+
+    def run(self):
+        #todo: should we protect against race conditions?
+        #ingore further calls it the thread is already running
         try:
-            for clock in self._pending_clocks.get_nowait():
-                self._clocks[clock.exchange] = clock
-            return True
-        except queue.Empty:
-            return False
+            self._thread.start()
+        except RuntimeError:
+            pass
+
+    def stop(self, liquidate=False):
+        self._stop = True
+        self._event.set()
 
     def get_clocks(self, exchanges):
-        clocks = self._clocks
-        pending = []
-        results = []
-        for exchange in exchanges:
-            cl = clocks.get(exchange, None)
-            if not cl:
-                # create clock, put it in the queue and return it.
-                # the clock will be activated on the next loop iteration
-                cl = self._create_clock(exchange)
-                pending.append(cl)
-            results.append(cl)
-        self._pending_clocks.put(pending)
-        return results
+        #protect against race conditions since we're creating one clock per exchange
+        with self._lock:
+            clocks = self._clocks
+            pending = []
+            results = []
+            for exchange in exchanges:
+                cl = clocks.get(exchange, None)
+                if not cl:
+                    # create clock, put it in the queue and return it.
+                    # the clock will be activated on the next loop iteration
+                    cl = self._create_clock(exchange)
+                    pending.append(cl)
+                results.append(cl)
+            self._pending_clocks.append(pending)
+            return results
 
     def _create_clock(self, exchange):
         return clock.Clock(
             exchange,
-            #todo: if the current date time is above the open time, we need to move to the next session.
+            # todo: if the current date time is above the open time, we need to move to the next session.
             pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC'),
             minute_emission=True)
 

@@ -13,8 +13,8 @@ import grpc
 import click
 from . import domain
 
-from . import controllable_pb2_grpc as ctbl_rpc
-from contrib.control.clock_pb2 import (
+from protos import controllable_pb2_grpc as ctbl_rpc
+from protos.clock_pb2 import (
     BAR,
     BEFORE_TRADING_START,
     SESSION_START,

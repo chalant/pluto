@@ -2,10 +2,12 @@ from abc import ABC, abstractmethod
 from protos.data_bundle_pb2 import UnitDomainDef
 from protos.data_bundle_pb2 import CompoundDomainDef
 
+import pandas as pd
+
 #TODO: add exchange to the domain struct.
 
 class DomainBuilder(object):
-    def asset(self, type, country_code, data_type):
+    def domain(self, type, country_code, data_type):
         return BaseDomain(country_code, data_type, type)
 
     def union(self, dom1, dom2):
@@ -73,12 +75,12 @@ class Domain(ABC):
         raise NotImplementedError
 
 class BaseDomain(Domain):
-    def __init__(self, name, data_type, asset_type):
+    def __init__(self, country_code, data_type, asset_type):
         '''
 
         Parameters
         ----------
-        name : str
+        country_code : str
         data_types : list
         set of data types we want for this domain
 
@@ -87,7 +89,7 @@ class BaseDomain(Domain):
         We can choose a particular domain by specifying its name, or
         '''
 
-        self._name = name
+        self._name = country_code
         self._data_type = data_type
         self._asset_type = asset_type
 
@@ -117,20 +119,15 @@ class CompoundDomain(Domain):
 
 class DomainStruct(object):
     '''will be used to filter data packets and clock events sent by the controller'''
-    __slots__ = ['_sessions', '_country_codes', '_data_types', '_asset_types']
+    __slots__ = ['_exchanges', '_data_types', 'sessions']
 
-    def __init__(self, sessions, country_codes, data_types, asset_types):
-        self._sessions = sessions
-        self._country_codes = country_codes
+    def __init__(self, data_types, exchanges=None, sessions=None):
+        self._exchanges = exchanges
         self._data_types = data_types
-        self._asset_types = asset_types
+        self._sessions = sessions
 
     @property
-    def sessions(self):
-        return self._sessions
-
-    @property
-    def country_codes(self):
+    def exchanges(self):
         return self._country_codes
 
     @property
@@ -138,35 +135,11 @@ class DomainStruct(object):
         return self._data_types
 
     @property
-    def asset_types(self):
-        return self._asset_types
+    def sessions(self):
+        return self._sessions
 
-def apply_operator(left, right, operator):
-    #TODO: finish this!
-    '''
 
-    Parameters
-    ----------
-    left : DomainStruct
-    right : DomainStruct
-    operator : str
-
-    Returns
-    -------
-    DomainStruct
-    '''
-    if operator == '|':
-        return
-    elif operator == '&':
-        return
-    elif operator == '/':
-        return
-    elif operator == '^':
-        return
-    else:
-        raise ValueError('')
-
-def load_domain_struct(unit_domain_def):
+def load_domain_struct(unit_domain_def, exchange_mappings):
     '''
     Parameters
     ----------
@@ -180,9 +153,11 @@ def load_domain_struct(unit_domain_def):
     -----
     Loads a DomainStruct object from the unit domain def
     '''
-    return
+    country_code = unit_domain_def.name
+    asset_type = unit_domain_def.asset_type
+    return DomainStruct(set(unit_domain_def.data_type), exchange_mappings[country_code] & exchange_mappings[asset_type])
 
-def compute_domain(dom_def):
+def compute_domain(dom_def, exchange_mappings, sessions_per_exchange):
     '''
 
     Parameters
@@ -192,21 +167,62 @@ def compute_domain(dom_def):
     Returns
     -------
     DomainStruct
+
     '''
+    def union(sessions_per_exchange, exchanges):
+        itr = iter(exchanges)
+        n0 = sessions_per_exchange[next(itr)]
+        while True:
+            try:
+                n0 = n0.union(sessions_per_exchange[next(itr)])
+            except StopIteration:
+                return n0
+
+    def apply_op(left_sessions, right_sessions):
+        if op == '&':
+            sessions = left_sessions.intersection(right_sessions)
+        elif op == '|':
+            sessions = left_sessions.union(right_sessions)
+        elif op == '/':
+            sessions = left_sessions.difference(right_sessions)
+        elif op == '^':
+            sessions = left_sessions.symmetric_difference(right_sessions)
+        return sessions
+
     stack = []
+    fc = False #first call flag
     for domain in dom_def:
         op = domain.op
         if not op:
-            stack.append(load_domain_struct(domain.domain))
+            stack.append(load_domain_struct(domain.domain, exchange_mappings))
         else:
-            stack.append(apply_operator(stack.pop(),stack.pop(),op))
+            left = stack.pop()
+            right = stack.pop()
+            if fc:
+                left_sessions = union(clock_per_exchange, left.exchanges)
+                fc = True
+            else:
+                left_sessions = left.sessions
+            right_sessions = union(sessions_per_exchange, right.exchanges)
+            stack.append(DomainStruct(left.data_types | right_sessions.data_types,
+                                      sessions=apply_op(left_sessions, right_sessions)))
 
     #return the resulting domain...
     return stack.pop()
 
-def domain_id(domains):
+def get_exchanges(dom_def, exchange_mappings):
+    exchanges = []
+    for d in dom_def:
+        dom = d.domain
+        if not dom.op:
+            exchanges.append(exchange_mappings[dom.country_code] & exchange_mappings[dom.asset_type])
+    return set(exchanges)
+
+
+
+def domain_id(dom_def):
     a = []
-    for domain in domains:
+    for domain in dom_def:
         op = domain.op
         if not op:
             a.append((domain.name, domain.asset_type, domain.data_type))
