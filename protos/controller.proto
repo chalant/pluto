@@ -60,6 +60,8 @@ message DelimitedRunParams {
     repeated RunParams run_params = 1;
     google.protobuf.Timestamp start_date = 2;
     google.protobuf.Timestamp end_date = 3;
+    string benchmark_asset = 4;
+
 }
 
 message RunParams {
@@ -69,9 +71,9 @@ message RunParams {
     //TODO: the benchmark asset should be set depending on the domain (not manually)
     // the emission_rate and the data frequency should be inferred from the domain
     //start date and end date should be inferred from the environment
-    Frequency emission_rate = 4;
-    string benchmark_asset = 5;
-    Frequency data_frequency = 6;
+    //Frequency emission_rate = 4;
+    //string benchmark_asset = 5;
+    //Frequency data_frequency = 6;
 }
 
 message StopParams {
@@ -107,7 +109,6 @@ enum ControllerEvent {
 }
 
 message ParametersUpdateRequest {
-    ControllerEvent controller_event = 1;
-    float capital = 2;
-    float maximum_leverage = 3;
+    float capital = 1;
+    float maximum_leverage = 2;
 }

@@ -1,22 +1,28 @@
 import threading
 import grpc
 import abc
+import math
 
 from datetime import datetime
 
 from protos import controller_pb2_grpc, controller_pb2, clock_pb2, data_bundle_pb2
 
 from contrib.control import domain
-from contrib.control.clock import clock
 
+class SessionParams(object):
+    __slots__ = ['capital', 'max_leverage']
+
+    def __init__(self, capital, max_leverage):
+        self.capital = capital
+        self.max_leverage = max_leverage
 
 class Session(object):
-    def __init__(self, sess_node, dom_struct, cbl_stub, perf_file, param):
-        '''controls '''
+    def __init__(self, sess_node, dom_id, cbl_stub, perf_file, param):
+        self._clocks = {}
         self._sess_node = sess_node
         self._perf_file = perf_file
 
-        self._dom_struct = dom_struct
+        self._dom_id = dom_id
         self._stub = cbl_stub
 
         #todo: put this in the algorithm class? no, this is doen server side (controllable)
@@ -25,14 +31,22 @@ class Session(object):
         self._param = param
 
     @property
-    def domain_struct(self):
-        return self._dom_struct
+    def dom_id(self):
+        return self._dom_id
 
     #this is called at some frequency
-    def clock_update(self, clock_evt):
+    def clock_update(self, clock, clock_evt):
         #todo: send signals to the controllable service.
         # the controllable sends back a data packet through the update performance method
+        if clock_evt.event == clock_pb2.CALENDAR:
+            self._update_sessions()
+
+    def parameters_update(self, params):
+        #todo: update stub parameters
         pass
+
+    def _update_sessions(self):
+        clocks = self._clocks
 
     def update_performance(self, stream):
         #
@@ -58,6 +72,8 @@ class Session(object):
     def liquidate(self):
         pass
 
+    def add_clock(self, clock):
+        self._clocks[clock.exchange] = clock
 
 
 class ControlMode(abc.ABC):
@@ -71,8 +87,8 @@ class ControlMode(abc.ABC):
     def signal_filter(self):
         raise NotImplementedError
 
-    def get_controllable(self):
-        cbl = self._get_controllable()
+    def get_trader(self, capital, max_leverage, broker_url):
+        cbl = self._get_trader(capital, max_leverage, broker_url)
         return cbl
 
     @abc.abstractmethod
@@ -84,7 +100,7 @@ class ControlMode(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _get_controllable(self):
+    def _get_trader(self, capital, max_leverage, broker_url):
         raise NotImplementedError
 
 class Controller(controller_pb2_grpc.ControllerServicer):
@@ -93,7 +109,7 @@ class Controller(controller_pb2_grpc.ControllerServicer):
         self._builder = builder
 
         self._sessions = {}
-        self._exchanges = exchanges = {}
+        self._exchange_mappings = exchanges = {}
         self._clocks = []
 
         self._stop_event = threading.Event()
@@ -135,42 +151,52 @@ class Controller(controller_pb2_grpc.ControllerServicer):
             1)load/create and store domain
             2)load/create and store sessions (and strategies)
         '''
-        event = self._stop_event
-        lock = self._run_lock
+        # event = self._stop_event
+        # lock = self._run_lock
 
-        with lock:
-            #todo: perform other parameters checks (total leverage, etc.)
-            if sum([param.capital_ratio for param in params]) > 1:
-                raise grpc.RpcError('The sum of capital ratios must not exceed 1')
 
-            self._running_flag = True
+        #todo: perform other parameters checks (total leverage, etc.)
+        if sum([param.capital_ratio for param in params]) > 1:
+            #todo: should we avoid raising an exception here? => might interrupt the execution
+            raise grpc.RpcError('The sum of capital ratios must not exceed 1')
 
-            mode = control_mode
-            # todo: the broker must be somewhere here as a variable...
+        self._running_flag = True
 
-            broker = mode.get_broker() #the mode holds the broker
-            builder = self._builder
+        mode = control_mode
+        # todo: the broker must be somewhere here as a variable...
 
-            envs = {}
+        broker = mode.get_broker() #the mode holds the broker
+        builder = self._builder
+        loop = mode.get_loop()
 
-            sess_per_exg = {}
+        envs = {}
+        clocks = set()
 
-            # todo: each performance is stored in a group (simulation group, live group etc.)
-            pfn = mode.name
-            for param in params:
-                session_id = param.session_id
+        sessions = self._sessions
+
+        session_ids = set(p.session_id for p in params)
+        cur_sess_ids = set(sessions.keys())
+        if cur_sess_ids:
+            to_remove = cur_sess_ids.difference(session_ids)
+            for sess_id in to_remove:
+                sess = sessions.pop(sess_id)
+                sess.stop(liquidate=True) #stop and liquidate the traders positions
+
+        signal_handler = mode.get_signal_handler()
+        # todo: each performance is stored in a group (simulation group, live group etc.)
+        pfn = mode.name
+        for param in params:
+            session_id = param.session_id
+            sess = sessions.get(sess_id, None)
+            #create a new session instance.
+            capital = math.floor(broker.capital * param.capital_ratio)
+            max_leverage = param.max_leverage
+            if not sess:
                 node = builder.get_element(session_id)
 
                 el = next(node.get_element('dom_def_id')[0].load()).decode()
-                dom_def = envs.get(el, None)
-                if not dom_def:
-                    dom_def = data_bundle_pb2.CompoundDomainDef()
-                    dom_def.ParseFromString(next(builder.get_element(el).load()))
-                    envs[el] = dom = domain.compute_domain(dom_def)
-                else:
-                    dom = envs[el]
 
-                gr = node.get_element(pfn)[0]
+                gr = node.get_element('performance')[0]
 
                 #a session has 3 folders for storing perfomance metrics: simulation, paper, live.
                 #each folder contains folders with 2 files: benchmark and parameters
@@ -178,75 +204,64 @@ class Controller(controller_pb2_grpc.ControllerServicer):
                 #either after interruption or completion), capital, max_leverage, benchmark asset etc.)
                 #each folder is named by timestamp (the timestamp is the start date in the param)
                 if not gr:
-                    gr = builder.group(pfn)
+                    gr = builder.group('performance')
 
                 #create a group for storing a set of files
                 #we use a group
-                fld = builder.group(str(datetime.utcnow()))
-                pf = builder.file('performance')
-                fld.add_element(pf)
-                gr.add_element(fld)
+                pf = builder.file(pfn)
+                gr.add_element(pf)
                 node.add_element(gr)
 
-                #todo: we need to pass the broker_address ?
-                stub = mode.get_controllable(broker.address)
+                #todo: should we initialize the controllable here?
+                stub = mode.get_trader(capital, max_leverage, broker.address)
+                sess = Session(node, stub, pf, param)
+                sessions[session_id] = sess
 
-                sess = Session(node, dom, stub, pf, param)
-                self._sessions[session_id] = sess
+                mappings = self._exchange_mappings
 
+                dom_def = envs.get(el, None)
+                if not dom_def:
+                    dom_def = data_bundle_pb2.CompoundDomainDef()
+                    dom_def.ParseFromString(next(builder.get_element(el).load()))
+                    envs[el] = dom_def
+                else:
+                    dom_def = envs[el]
 
-                results = self._resolve_exchanges(sess.domain_struct, self._exchanges)
-                for exg in results:
-                    self._append_to_dict(exg, sess, sess_per_exg)
+                exchanges = domain.get_exchanges(dom_def, mappings)
+                time_filter = signal_handler.get_time_filter(dom_def, mappings)
+                clk = loop.get_clocks(exchanges)
 
-            def callback_fn(request):
-                evt = request.event
-                if evt == clock_pb2.STOP:
-                    if self._num_clocks > 0:
-                        self._num_clocks -= 1
-                    if self._num_clocks == 0:
-                        #once the number of listeners is reached, notify the waiting threads
-                        self._running_flag = False
-                        event.set()
-
-            loop = mode.get_loop()
-
-            signal_filter = clock.CallBackSignalFilter(mode.signal_filter, callback_fn)
-
-            clocks = loop.get_clocks(sess_per_exg.keys())
-            self._num_clocks = len(clocks)
+                clocks.union(set(clk))
 
 
-            for cl in clocks:
-                cl.add_signal_filter(signal_filter)
-                for session in sess_per_exg[cl.exchange]:
-                    signal_filter.add_session(session)
+                time_filter.add_session(sess)
+                for clock in clk:
+                    time_filter.add_clock(clock)
 
-            # activate the signal filter (starts listening)
-            signal_filter.activate()
-
-            event.wait() #wait for the execution to end.
-
-            status = self._status
-            if not self._interrupt:
-                status.session_status = controller_pb2.COMPLETED
             else:
-                status.session_status = controller_pb2.INTERRUPTED
-            return status
+                #todo: update the existing sessions capital and max_leverage
+                sess.parameters_update(SessionParams(capital, max_leverage))
 
-    def _resolve_exchanges(self, domain_struct, exchanges):
-        cc = domain_struct.country_code
-        at = domain_struct.asset_types
+        #add the signal handler to the clocks
+        #there might be some new clocks, so add the signal_handler again.
+        #todo: must make sure that the signal_handler isn't added more than once.
+        for clk in clocks:
+            clk.add_signal_handler(signal_handler)
 
-        # dictionary mapping keys like asset types and country codes, to sets of exchanges
+        # activate the signal filter (starts listening)
+        signal_handler.activate()
 
-        # union of all exchanges trading the given asset types
-        at_set = set([exchanges[at] for c in at])
-        # union of all exchanges operating in the given countries
-        cc_set = set(exchanges[cc])
+        # event.wait() #wait for the execution to end.
 
-        # intersection of exchanges trading in the given countries and asset types
-        return cc_set & at_set
+        #this call will be ignored if the loop is already running
+        loop.run()
+
+        # status = self._status
+        # if not self._interrupt:
+        #     status.session_status = controller_pb2.COMPLETED
+        # else:
+        #     status.session_status = controller_pb2.INTERRUPTED
+        # return status
 
     def _append_to_dict(self, key, value, dict_):
         v = dict_.get(key, None)

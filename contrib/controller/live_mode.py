@@ -7,7 +7,7 @@ class LiveControlMode(controller.ControlMode):
     def name(self):
         return 'live'
 
-    def _get_controllable(self):
+    def _get_trader(self, capital, max_leverage, broker_address):
         pass
 
     def _get_clock(self, exchange):

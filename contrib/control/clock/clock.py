@@ -38,7 +38,7 @@ class Clock(object):
     def __init__(self, exchange, start_dt, end_dt=None, minute_emission=False):
 
         self._exchange = exchange
-        self._handlers = []
+        self._handlers = {}
 
         self._start_dt = start_dt
         self._end_dt = end_dt
@@ -62,13 +62,6 @@ class Clock(object):
         return self._exchange
 
     @property
-    def open_time(self):
-        self._calendar.open_times[0][1]
-
-    def session_open(self, session_label):
-        return self._calendar.session_open(session_label)
-
-    @property
     def all_sessions(self):
         return self._calendar.all_sessions
 
@@ -80,17 +73,13 @@ class Clock(object):
     def last_session(self):
         return self.all_sessions[-1]
 
-    def add_signal_filter(self, filter):
-        self._handlers.append(filter)
+    def add_signal_handler(self, handler):
+        self._handlers[handler] = handler
 
     def get_sessions(self, length):
         sess_idx = self._sess_idx
         #returns a slice of sessions of some length
         return self._calendar.all_sessions[sess_idx: sess_idx + length]
-
-    def reset(self):
-        #todo: we need to move back to first start dt and first end dt as-well...
-        self._sess_idx = 0
 
     def get_generator(self, sessions):
         # loops every x frequency
@@ -125,6 +114,7 @@ class Clock(object):
         # todo: consider using a finite state machine for clocks
         # todo: should we send the current dt or pass the datetime at the moment of transfer?
         #  should we send both the current dt and the expected dt?
+        # todo: we should consider reloading when there is a calendar update...
         if not self._stop:
             # todo: should we catch a stop iteration?
             ts, evt = self._nxt_dt, self._nxt_evt
@@ -141,7 +131,7 @@ class Clock(object):
                     # output_.append(ts)
                     if evt == clock_pb2.SESSION_START:
                         self._sess_idx += 1
-                print('{} Synchronized to {} {}'.format(self.exchange, ts, evt))
+                # print('{} Synchronized to {} {}'.format(self.exchange, ts, evt))
                 self._nxt_dt, self._nxt_evt = ts, evt
 
             if dt == ts:
@@ -159,11 +149,13 @@ class Clock(object):
                 if not self._first_call_flag:
                     # only consider session start events
                     # todo: problem with the before trading starts event...
+                    # todo: this will never happen... we will always have time between sess start
+                    #  and bfs
                     if evt == clock_pb2.SESSION_START and nxt_evt == clock_pb2.BEFORE_TRADING_START:
                         # we can still initialize if we're between the session start ts and
                         # bfs ts
                         if dt < nxt_ts:
-                            self._notify(real_dt, evt)
+                            self._notify(real_dt, dt, evt)
                             self._first_call_flag = True
                         self._sess_idx += 1
                         # print('{} Session start {}'.format(self.exchange, ts))
@@ -176,46 +168,41 @@ class Clock(object):
                             if nxt_evt == clock_pb2.SESSION_END:
                                 # skip the session_end event
                                 # print('{} Session end {}'.format(self.exchange, nxt_ts))
-                                self.reload(real_dt, dt)
                                 self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
                         else:
                             # skip the session_end event
-                            self.reload(real_dt, dt)
                             self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
 
                 else:
                     minute_emission = self._minute_emission
                     if evt == clock_pb2.BAR:
-                        self._notify(real_dt, evt)
+                        self._notify(real_dt, dt, evt)
                         # the session end event comes after the bar event
                         if minute_emission:
                             # call next once again for the minute end event
                             # minute_event
-                            self._notify(real_dt, nxt_evt)
+                            self._notify(real_dt, dt, nxt_evt)
                             # session_end
                             self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(real_dt, dt)
                             # call next once again for the minute end event
                             if nxt_evt == clock_pb2.SESSION_END:
                                 # print('{} Session end {}'.format(self.exchange, nxt_ts))
-                                self.reload(real_dt, nxt_ts)
-                                self._notify(real_dt, nxt_evt)
+                                self._notify(real_dt, dt, nxt_evt)
                                 self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
                         else:
-                            self.reload(real_dt, nxt_ts)
-                            self._notify(real_dt, nxt_evt)
+                            self._notify(real_dt, dt, nxt_evt)
                             # session_start event
                             self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
                     elif evt == clock_pb2.SESSION_START:
                         # update the session idx
                         # print('{} Session start {}'.format(self.exchange, ts))
                         self._sess_idx += 1
-                        self._notify(real_dt, evt)
+                        self._notify(real_dt, dt, evt)
                     elif evt == clock_pb2.SESSION_END:
                         # print('{} Session end {}'.format(self.exchange, nxt_ts))
-                        self.reload(real_dt, dt)
                         self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
         else:
-            self._notify(real_dt, clock_pb2.STOP)
+            self._notify(real_dt, dt, clock_pb2.STOP)
 
     def _next_(self, real_dt, dt):
         try:
@@ -223,56 +210,29 @@ class Clock(object):
         except StopIteration:
             if dt < self._end_dt:
                 self._load_attributes(pd.Timestamp(pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min), tz='UTC'))
-                self._notify(real_dt, clock_pb2.CALENDAR)
+                self._notify(real_dt, dt, clock_pb2.CALENDAR)
                 self._sess_idx = 0
                 # print('Current timestamp {} Last timestamp {}'.format(dt, self._end_dt))
                 return  next(self._generator)
             else:
+                #we've reached the end date, reload only if the clock runs forever
                 if self._reload_flag:
                     self._load_attributes(
                         pd.Timestamp(pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min), tz='UTC'))
-                    self._notify(real_dt, clock_pb2.CALENDAR)
+                    self._notify(real_dt, dt, clock_pb2.CALENDAR)
                     self._sess_idx = 0
                     # print('Current timestamp {} Last timestamp {}'.format(dt, self._end_dt))
                     return next(self._generator)
                 else:
                     raise StopExecution
 
+    def stop(self, real_dt, dt):
+        self._notify(real_dt, clock_pb2.STOP)
 
-    def _notify(self, dt, event):
+    def _notify(self, real_dt, dt, event):
         exchange = self._exchange
         for handler in self._handlers:
-            handler.update(ClockEvent(dt, event, exchange))
-
-    def reload(self, real_dt, ts):
-        # # it's a session_end event
-        # end_dt = self._end_dt
-        # # todo: reload calendar once the end date is reached
-        # # todo: do we need the calendar event? => yes: elements
-        # # server side, like DataPortal needs the calendar.
-        # # on session end, it the date is the same as the end,
-        # # reload the calendar, with a new window
-        # if ts.date() < end_dt.date():
-        #     # re-load all attributes
-        #     start = pd.Timestamp(end_dt + pd.Timedelta('1 day'), time.min, tz='UTC')
-        #     self._load_attributes(start)
-        #     # send a calendar event so that the clients may load a new calendar
-        #     self._notify(real_dt, clock_pb2.CALENDAR)
-        #     self._sess_idx = 0
-        #     print('Reloaded attributes at {} start {}'.format(ts, start))
-        # else:
-        #     if self._reload_flag:
-        #         # re-load all attributes
-        #         start = pd.Timestamp(end_dt + pd.Timedelta('1 day'), time.min, tz='UTC')
-        #         self._load_attributes(start)
-        #         # send a calendar event so that the clients may load a new calendar
-        #         self._notify(real_dt, clock_pb2.CALENDAR)
-        #         self._sess_idx = 0
-        #         print('Reloaded attributes at {} start {}'.format(ts, start))
-        #     else:
-        #         raise StopExecution
-        pass
-
+            handler.update(self, ClockEvent(dt, event, exchange))
 
 
     def _load_attributes(self, start_dt, end_dt=None):
@@ -293,7 +253,7 @@ class ClockSignalRouter(abc.ABC):
     def on_clock_event(self, request, context):
         request = self._on_clock_event(request)
         for listener in self._exg_listeners[request.exchange_name]:
-            listener.clock_update(request)
+            listener.update(request)
 
     def get_clock(self, exchange):
         # returns a clock stub
@@ -356,7 +316,7 @@ class SignalFilter(object):
         self._update_fn = self._pass
 
     def clock_update(self, clock_evt):
-        self._update_fn(clock_evt)
+        self._clock_update(clock_evt)
 
     def _pass(self):
         pass
@@ -382,10 +342,17 @@ class BaseSignalFilter(SignalFilter):
 
     def _clock_update(self, clock_evt):
         for session in self._sessions:
-            session.clock_update(clock_evt)
+            session.update(clock_evt)
 
     def add_session(self, session):
         self._sessions.append(session)
+
+class LiveSignalFilter(SignalFilter):
+    def __init__(self, downloader):
+        self._sessions = []
+
+    def _clock_update(self, clock_evt):
+        pass
 
 
 class HeadSignalFilterDecorator(SignalFilter):
@@ -417,7 +384,7 @@ class TailSignalFilterDecorator(SignalFilter):
         self._signal_filter = signal_filter
 
     def _clock_update(self, clock_evt):
-        self._signal_filter.clock_update(clock_evt)
+        self._signal_filter.update(clock_evt)
         self._dec_clock_update(clock_evt)
 
     @abc.abstractmethod
@@ -456,7 +423,7 @@ class CallBackSignalFilter(TailSignalFilterDecorator):
         self._callback = callback
 
     def _dec_clock_update(self, clock_evt):
-        self._clock_listener.clock_update(clock_evt)
+        self._clock_listener.update(clock_evt)
         self._callback(clock_evt)
 
     def register_session(self, session):

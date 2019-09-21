@@ -59,6 +59,12 @@ class Dev(rpc.DevServicer):
     def Run(self, request, context):
         #todo: run a loop around this 
         # method blocks until completion or interruption
+        #todo: client might 'misbehave' and call this method multiple times...
+        # todo: this shouldn't block, since the client might need to call stop etc.
+        # todo: if this method is called while it is running, it will add the sessions to the loop
+        #  (in live mode), won't do anything in dev? => each type of service has a different way
+        #  of handling multiple calls...
+        #todo: problem we can have multiple clients... => limit to one client?
         ctl = self._controller
         if ctl.running:
             raise grpc.RpcError('A session is already running!')
