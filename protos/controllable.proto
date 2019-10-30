@@ -19,12 +19,13 @@ service Controllable {
     rpc UpdateDataBundle (stream Data) returns (google.protobuf.Empty);
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
     //called to initialize the controllable (sends initparams)
+    //(strategy etc.)
     rpc Initialize (stream Data) returns (google.protobuf.Empty);
     //TODO: should return the state of the strategy run session at each update...
     //update sends an UpdateRequest. since this could get arbitrarily big, we send it
     //in chunks of bytes.
-    rpc ClockUpdate (stream Data) returns (google.protobuf.Empty);
-    rpc BrokerUpdate(stream Data) returns (google.protobuf.Empty);
+    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
+    rpc UpdateAccount(stream Data) returns (google.protobuf.Empty);
     //receives periodic calendar updates
     rpc UpdateCalendar (stream Data) returns (google.protobuf.Empty);
     //TODO: should return the state of the controllable after it stopped...

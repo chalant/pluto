@@ -10,18 +10,17 @@ import pandas as pd
 def get_event_generator(calendar, start_dt, end_dt, before_trading_starts_time=None, minute_emission=False):
     # loops every x frequency
 
-    if not before_trading_starts_time:
-        opn = calendar.open_times[0][1]
-        dt = datetime.combine(datetime.min, opn) - timedelta(minutes=15)
-        before_trading_starts_time = dt.time()
-
     sessions = calendar.sessions_in_range(start_dt, end_dt)
     trading_o_and_c = calendar.schedule.loc[sessions]
     market_closes = trading_o_and_c['market_close']
 
+    dt = datetime.combine(datetime.min, calendar.open_times[0][1])
+    dt = dt - pd.Timedelta(minutes=5)
+    bfs = dt.time()
+
     bts_minutes = days_at_time(
         sessions,
-        before_trading_starts_time,
+        bfs,
         calendar.tz
     )
 

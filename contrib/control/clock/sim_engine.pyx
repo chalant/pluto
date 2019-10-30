@@ -76,8 +76,7 @@ cdef class MinuteSimulationClock:
         for idx, session_nano in enumerate(self.sessions_nanos):
             bts_minute = pd.Timestamp(self.bts_nanos[idx], tz='UTC')
             regular_minutes = self.minutes_by_session[session_nano]
-
-            yield min(bts_minute, regular_minutes[0]) - pd.Timedelta(minutes=5), SESSION_START
+            yield regular_minutes[0] - pd.Timedelta(minutes=5), SESSION_START
 
             if bts_minute > regular_minutes[-1]:
                 # before_trading_start is after the last close,

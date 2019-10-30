@@ -1,7 +1,7 @@
 import abc
 import grpc
 
-from . import controllable_pb2_grpc as cbl_rpc
+from protos import controllable_pb2_grpc as cbl_rpc
 import subprocess as sub
 
 #TODO: should be savable: will be used to retrieve a session

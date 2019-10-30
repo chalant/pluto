@@ -1,7 +1,7 @@
 from itertools import chain
 
 from datetime import datetime
-from contrib.trading_calendars.calendar_utils import TradingCalendarFatory
+from contrib.trading_calendars.calendar_utils import TradingCalendarFactory
 
 
 from contrib.coms.utils import conversions as crv
@@ -9,7 +9,7 @@ from protos import calendar_pb2 as cal
 from contrib.trading_calendars import us_holidays as hol
 
 
-class NYSETradingCalendar(TradingCalendarFatory):
+class NYSETradingCalendar(TradingCalendarFactory):
     def _create_calendar(self, start_dt, end_dt):
         """
 

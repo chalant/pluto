@@ -26,7 +26,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x18protos/data_bundle.proto\x1a\x13protos/broker.proto\x1a\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"Y\n\nInitParams\x12\"\n\x06\x64omain\x18\x01 \x01(\x0b\x32\x12.CompoundDomainDef\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\x12\x15\n\rcapital_ratio\x18\x03 \x01(\x02\"y\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply2\xea\x02\n\x0c\x43ontrollable\x12\x33\n\x10UpdateDataBundle\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12-\n\nInitialize\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12.\n\x0b\x43lockUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12/\n\x0c\x42rokerUpdate\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x31\n\x0eUpdateCalendar\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x1c\n\x04Stop\x12\x0b.StopParams\x1a\x05.Data0\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x18protos/data_bundle.proto\x1a\x13protos/broker.proto\x1a\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"Y\n\nInitParams\x12\"\n\x06\x64omain\x18\x01 \x01(\x0b\x32\x12.CompoundDomainDef\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\x12\x15\n\rcapital_ratio\x18\x03 \x01(\x02\"y\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply2\xef\x02\n\x0c\x43ontrollable\x12\x33\n\x10UpdateDataBundle\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12-\n\nInitialize\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x30\n\rUpdateAccount\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x31\n\x0eUpdateCalendar\x12\x05.Data\x1a\x16.google.protobuf.Empty(\x01\x12\x1c\n\x04Stop\x12\x0b.StopParams\x1a\x05.Data0\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,protos_dot_data__bundle__pb2.DESCRIPTOR,protos_dot_broker__pb2.DESCRIPTOR,protos_dot_controller__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -185,7 +185,7 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   serialized_start=432,
-  serialized_end=794,
+  serialized_end=799,
   methods=[
   _descriptor.MethodDescriptor(
     name='UpdateDataBundle',
@@ -219,13 +219,13 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
     full_name='Controllable.ClockUpdate',
     index=3,
     containing_service=None,
-    input_type=protos_dot_data__pb2._DATA,
+    input_type=protos_dot_clock__pb2._CLOCKEVENT,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
-    name='BrokerUpdate',
-    full_name='Controllable.BrokerUpdate',
+    name='UpdateAccount',
+    full_name='Controllable.UpdateAccount',
     index=4,
     containing_service=None,
     input_type=protos_dot_data__pb2._DATA,

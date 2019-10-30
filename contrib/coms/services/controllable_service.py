@@ -4,7 +4,7 @@ from contrib.control.clock_utils import clock_pb2 as cl_msg
 
 from contrib.coms.client import account
 
-from contrib.gens import control
+from contrib.control.controllable import control
 
 from contrib.coms.utils import server_utils as srv
 
@@ -83,7 +83,7 @@ class ControllableServicer(cbl_grpc.ControllableServicer):
         """Called regularly before the clock update."""
         self._broker.update(request)
 
-    def ReceiveDataBundle(self, request, context):
+    def UpdateDataBundle(self, request, context):
         #todo: the data bundle should be an "environment" for the strategy developer.
         # this means that if we had an IDE for this, the developer should describe the environment and
         # will receive a data bundle before running the strategy. This way he can get a clear view of the

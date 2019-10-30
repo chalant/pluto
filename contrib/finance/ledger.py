@@ -1,17 +1,12 @@
-from zipline.finance import position
-from zipline.protocol import (MutableView,Portfolio)
-from zipline.assets import Future
 from zipline.finance._finance_ext import (
     calculate_position_tracker_stats,
     PositionStats
 )
 
-from collections import defaultdict
-
 class Ledger(object):
     '''we need this so that we can make sure that the trades were actually executed server
     side before updating any values...'''
-    def __init__(self, account, start_dt, capital, broker):
+    def __init__(self, account):
         '''account: an account from the server...'''
         self._account = account
         #todo: this must loaded from some file and saved at each end of session. (is concatenated)

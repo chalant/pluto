@@ -6,7 +6,7 @@ import grpc
 from concurrent import futures
 
 
-from contrib.controller import controller
+from contrib.control.controller import controller
 from contrib.control import controller_pb2_grpc as ctrl_rpc
 
 # def create_csr(key, url):

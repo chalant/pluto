@@ -7,7 +7,7 @@ import threading
 import itertools
 import numpy as np
 
-import queue
+from collections import deque
 
 from datetime import datetime, timedelta
 import datetime
@@ -232,9 +232,9 @@ class TestMinuteLiveLoop(object):
 class MinuteLiveLoop(object):
     # todo: should this be a singleton?
     def __init__(self, ntp_server_address=None):
+        self._master_clock = self._create_clock('24/7')
         self._clocks = {}
         # todo: we need a proto_calendar database or directory => hub?
-        self._pending_clocks = []
         self._start_dt = pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min)
 
         self._ntp_client = ntplib.NTPClient()
@@ -244,8 +244,13 @@ class MinuteLiveLoop(object):
         self._thread = threading.Thread(self._run)
         self._lock = threading.Lock()
 
-        self._event = threading.Event()
+        self._stop_event = threading.Event()
         self._stop = False
+
+        self._to_execute = deque()
+
+        self._control_modes = []
+
 
     def _get_seconds(self, time_delta):
         return time_delta.total_seconds()
@@ -254,25 +259,35 @@ class MinuteLiveLoop(object):
         ntp_stats = self._ntp_client.request(self._ntp_server_address)
         return ntp_stats.offset
 
+    def execute(self, fn):
+        self._to_execute.append(fn)
+
+    def _get_minutes(self, clock, session_length):
+        return pd.DatetimeIndex(
+            set(dt for dt, evt in clock.get_generator(
+                clock.get_sessions(session_length)))).sort_values()
+
+
     def _run(self):
         # todo: should we use an "always open calendar"?
         # todo: handle interrupt signals => interrupt sleep etc.
         #  => change time.sleep to thread.Event wait with a time out. That way, we can instanly interrupt
         #  the program.
         # the loop is responsible of synchronizing the real time real time with the expected time
-        clocks = self._clocks.values()
-        event = self._event
+        master_clock = self._master_clock
 
-        if not clocks:
-            # blocks until clocks are available
-            for clock in self._pending_clocks.get():
-                self._clocks[clock.exchange] = clock
+        minutes = _get_minutes(master_clock, 10)
+        clocks = self._clocks.values()
+        event = self._stop_event
+
+        #todo: what if there are no clocks?
+
 
         offset = self._get_offset()
         # todo: check for zero index induced errors, especially for slices.
 
-        # gets minutes within a range
-        minutes = _get_minutes(clocks, 10)
+        # # gets minutes within a range
+        # minutes = _get_minutes(clocks, 10)
 
         tick_counter = 0
 
@@ -280,11 +295,10 @@ class MinuteLiveLoop(object):
 
         cur_exp_dt = minutes[minute_idx]
 
-        # synchronize with the next expected minute
-
         def utc_now():
             return pd.Timestamp(pd.Timestamp.utcfromtimestamp(time.time() + offset), tz='UTC')
 
+        # synchronize with the next expected minute
         while not self._stop:
             if self._get_seconds(cur_exp_dt - utc_now()) > 0:
                 # sleep until the next expected minute
@@ -296,31 +310,64 @@ class MinuteLiveLoop(object):
                 # process pending clocks
                 # add new clocks each new session.
 
-                # todo: what if sessions changed here? We lose track of the minute index...
-                if self._update_clocks():
-                    minute_idx = 0
-                    # reload minutes
-                    minutes = _get_minutes(clocks, 10)
-                    # search for the correct minute index since we probably haven't changed sessions
-                    while minutes[minute_idx] < cur_exp_dt:
-                        minute_idx += 1
+                # # todo: what if sessions changed here? We lose track of the minute index...
+                # if self._update_minutes():
+                #     minute_idx = 0
+                #     # reload minutes
+                #     minutes = _get_minutes(master_clock, 10)
+                #     # search for the correct minute index since we probably haven't changed sessions
+                #     while minutes[minute_idx] < cur_exp_dt:
+                #         minute_idx += 1
+                #     cur_exp_dt = minutes[minute_idx]
+                # else:
+                try:
                     cur_exp_dt = minutes[minute_idx]
-                else:
-                    try:
-                        cur_exp_dt = minutes[minute_idx]
-                    except IndexError:
-                        # we've reached the last minute of the current last session.
-                        # reset minute_idx
-                        minutes = _get_minutes(clocks, 10)
-                        minute_idx = 0
-                        cur_exp_dt = minutes[minute_idx]
+                except IndexError:
+                    # we've reached the last minute of the current last session.
+                    # reset minute_idx
+                    minutes = _get_minute(master_clock, 10)
+                    minute_idx = 0
+                    cur_exp_dt = minutes[minute_idx]
             else:
                 break
 
         # start the loop
         while not self._stop:
-            # todo: periodically check for calendar updates
-            # for each clock send the current time and the "expected" time
+            to_execute = self._to_execute
+
+            #execute all pending requests
+            while True:
+                try:
+                    to_execute.popleft()(self._get_clocks)
+                except IndexError:
+                    break
+
+            # # check if new clocks have been added from the execution
+            # if self._update_minutes:
+            #     minute_idx = 0
+            #     # reload minutes
+            #     minutes = _get_minutes(clocks, 10)
+            #     # search for the correct minute index since we probably have changed sessions
+            #     while minutes[minute_idx] < cur_exp_dt:
+            #         minute_idx += 1
+            #     cur_exp_dt = minutes[minute_idx]
+            #     self._update_minutes = False
+            # else:
+            try:
+                cur_exp_dt = minutes[minute_idx]
+            except IndexError:
+                minutes = _get_minutes(clocks, 10)
+                minute_idx = 0
+                cur_exp_dt = minutes[minute_idx]
+
+            #update the modes
+
+            modes = self._control_modes
+            for mode in modes:
+                mode.update(cur_exp_dt)
+
+            # update the clocks
+            #todo: each clock should check for calendar each end of session...
             for cl in clocks:
                 cl.update(utc_now(), cur_exp_dt)
 
@@ -335,39 +382,18 @@ class MinuteLiveLoop(object):
 
             minute_idx += 1
 
-            # process pending clocks each iteration
-            if self._update_clocks():
-                minute_idx = 0
-                # reload minutes
-                minutes = _get_minutes(clocks, 10)
-                # search for the correct minute index since we probably have changed sessions
-                while minutes[minute_idx] < cur_exp_dt:
-                    minute_idx += 1
-                cur_exp_dt = minutes[minute_idx]
-            else:
-                try:
-                    cur_exp_dt = minutes[minute_idx]
-                except IndexError:
-                    minutes = _get_minutes(clocks, 10)
-                    minute_idx = 0
-                    cur_exp_dt = minutes[minute_idx]
-
-            # todo: what if we "overshoot" the expected datetime ?
+            # todo: what if we "overshoot" the expected datetime ? we will get a negative number
             # wait until the next expected datetime
-            event.wait(self._get_seconds(cur_exp_dt - pd.Timestamp.utcfromtimestamp(time.time() + offset)))
+            event.wait(self._get_seconds(cur_exp_dt - utc_now()))
 
-    def _update_clocks(self):
-        #protect against race conditions, since the loop is running in a different thread
-        with self._lock:
-            try:
-                for clock in self._pending_clocks.pop():
-                    self._clocks[clock.exchange] = clock
-                return True
-            except IndexError:
-                return False
+            #if a stop signal was emitted, stop all the modes, so that everything is shutdown properly
+            if self._stop:
+                for mode in modes:
+                    mode.stop()
 
     def run(self):
-        #todo: should we protect against race conditions?
+        #todo: should we protect against race conditions? two threads might call this function
+        # at the same time.
         #ingore further calls it the thread is already running
         try:
             self._thread.start()
@@ -376,24 +402,20 @@ class MinuteLiveLoop(object):
 
     def stop(self, liquidate=False):
         self._stop = True
-        self._event.set()
+        self._stop_event.set()
 
-    def get_clocks(self, exchanges):
-        #protect against race conditions since we're creating one clock per exchange
-        with self._lock:
-            clocks = self._clocks
-            pending = []
-            results = []
-            for exchange in exchanges:
-                cl = clocks.get(exchange, None)
-                if not cl:
-                    # create clock, put it in the queue and return it.
-                    # the clock will be activated on the next loop iteration
-                    cl = self._create_clock(exchange)
-                    pending.append(cl)
-                results.append(cl)
-            self._pending_clocks.append(pending)
-            return results
+    def _get_clocks(self, exchanges):
+        clocks = self._clocks
+        results = []
+        for exchange in exchanges:
+            cl = clocks.get(exchange, None)
+            if not cl:
+                # create clock, put it in the queue and return it.
+                # the clock will be activated on the next loop iteration
+                cl = self._create_clock(exchange)
+                clocks[exchange] = cl
+            results.append(cl)
+        return results
 
     def _create_clock(self, exchange):
         return clock.Clock(
@@ -404,3 +426,9 @@ class MinuteLiveLoop(object):
 
     def _get_seconds(self, time_delta):
         return time_delta.total_seconds()
+
+    def _pass(self, broker, clock_factory):
+        pass
+
+    def add_control_mode(self, mode):
+        self._modes.append(mode)

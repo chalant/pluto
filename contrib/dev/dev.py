@@ -9,9 +9,11 @@ from protos import controller_pb2_grpc
 from protos import data_pb2
 from protos import dev_pb2
 
-from contrib.controller import simulation_mode, controller
+from contrib.control.controller import controller
+from contrib.control.modes import simulation_mode
 from contrib.utils import graph
 from contrib.control import domain
+from contrib.control.loop import loop
 
 
 def chunk_bytes(bytes_, chunk_size):
@@ -36,7 +38,7 @@ def stream(iterable):
 
 class Dev(rpc.DevServicer):
 
-    def __init__(self, env_builder, hub_client, sim_clock_factory, server):
+    def __init__(self, env_builder, hub_client, server):
         self._builder = env_builder
         # the hub returns the root of the graph
         self._root = root = hub_client.get_graph()
@@ -47,14 +49,14 @@ class Dev(rpc.DevServicer):
         self._strategies = root.get_element('strategies')[0]
 
         self._hub = hub_client
-        self._scf = sim_clock_factory
         self._controller = ctl = controller.Controller(hub_client, env_builder)
 
         # add the controller to the server.
         controller_pb2_grpc.add_ControllerServicer_to_server(ctl, server)
 
-        # todo: what about the broker? => todo: the clock_factory must be bound to the
-        #  broker. the clock factory should be a module instead of a class?
+        self._running = False
+
+        self._loop = None
 
     def Run(self, request, context):
         #todo: run a loop around this 
@@ -65,19 +67,29 @@ class Dev(rpc.DevServicer):
         #  (in live mode), won't do anything in dev? => each type of service has a different way
         #  of handling multiple calls...
         #todo: problem we can have multiple clients... => limit to one client?
+
+        #todo: the control mode takes a loop as argument...
         ctl = self._controller
-        if ctl.running:
+        self._loop = lp = loop.MinuteSimulationLoop(
+            request.start_date.ToDatetime(),
+            request.end_date.ToDatetime())
+        mode = simulation_mode.SimulationControlMode()
+        lp.add_control_mode(mode) #todo: the simulation clock only takes in simulationcontrolmode
+
+        if self._running:
             raise grpc.RpcError('A session is already running!')
         # this call blocks until the controller is either interrupted or has completed the run.
-        return ctl.run(
-            request.run_params,
-            simulation_mode.SimulationControlMode(
-                self._scf,
-                request.start_date.ToDatetime(),
-                request.end_date.ToDatetime()))
+        else:
+            ctl.run(request.run_params, mode, loop)
+            self._running = True
+
+        return #todo
 
     def Stop(self, request, context):
-        self._controller.stop(request.liquidate)
+        #stops and removes all sessions.
+        if self._running:
+            self._controller.stop(self._loop, liquidate=True)
+            self._running = False
 
     def Watch(self, request, context):
         ''''''
@@ -225,7 +237,7 @@ class Dev(rpc.DevServicer):
         except KeyError:
             raise grpc.RpcError('')
 
-        session = graph.find_by_id(root, session_id)  # get the session that corresponds to the id.
+        session = builder.get_element(session_id)  # get the session that corresponds to the id.
 
         stage = next(session.get_element('stage')[0].load()).decode()
         dom = self._domains.get_element(domain_id)[0]

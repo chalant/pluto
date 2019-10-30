@@ -70,6 +70,7 @@ class AlgorithmController(object):
         self._capital_target = None
 
         self._pool = futures.ProcessPoolExecutor()
+        self._run_dt = None
 
     def _get_run_dt(self):
         return self._run_dt

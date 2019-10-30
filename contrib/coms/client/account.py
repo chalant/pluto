@@ -29,10 +29,9 @@ from contrib.coms.client.protos import account_state_pb2 as acc
 
 log = Logger("ZiplineLog")
 
-#todo: this should also be a broker listener...(receives updates from the broker server)
-# should be called before calling the algo-controller (by the controller process)
+#todo: is called externally by the controllable... keeps track of broker data, and used by the account
 class BrokerClient(object):
-    '''Zipline-Server client. Converts zipline objects into proto messages and vice-versa...'''
+    '''A client to a broker service. Converts zipline objects into proto messages and vice-versa...'''
 
     def __init__(self, channel):
         self._stub = broker_rpc.BrokerStub(channel)
@@ -102,6 +101,7 @@ class BrokerClient(object):
         else:
             raise NotImplementedError
 
+    #todo: this is called to update the broker client state
     def update(self, broker_data):
         """updates the state of the broker, this is a remote method and must be called before
         everything else."""
@@ -383,6 +383,10 @@ class Account(saving.Savable):
     def update(self, dt, data_portal, trading_calendar, data_frequency, broker,
                target_capital=None, portfolio_value_adjustment=0.0, handle_non_market_minutes=False):
         '''Updates this account'''
+        #todo: this function gets called by the controllable (trader) to update the account data...
+        # receives broker state... the broker is a structure that is a copy of the server-side
+        # data...
+
         # todo: maybe store the last update datetime?
         # this function is called externally at some emission rate
         portfolio = self._portfolio
@@ -390,7 +394,12 @@ class Account(saving.Savable):
         # syncs with last_sale_price
         # todo: if the data frequency is bigger than the emission_rate, don't sync until we've reached
         # the next session with an offset of period "data_frequency"
+
+        #todo: why do we need to handle non market minutes?
         if handle_non_market_minutes:
+
+            #todo : problem: trading calendar... it shouldn't be a trading_calendar, since it doesn't
+            # have all the sessions of a "full" trading calendar...
             previous_minute = trading_calendar.previous_minute(dt)
             get_price = partial(
                 data_portal.get_adjusted_value,
@@ -422,13 +431,18 @@ class Account(saving.Savable):
             log.info('Processing capital change to target %s at %s. Capital '
                      'change delta is %s' % (target_capital, dt,
                                              capital_change_amount))
-            yield {
+
+            #todo: we return the capital change summary after updating the cash, this should be
+            # added in the performance packet
+            return {
                 'capital_change':
                     {'date': dt,
                      'type': 'cash',
                      'target': target_capital,
                      'delta': capital_change_amount}
             }
+
+        #todo: we also need to handle max leverage updates...
 
     def _update_account(self, portfolio, broker):
         """Updates portfolio, account and positions"""
