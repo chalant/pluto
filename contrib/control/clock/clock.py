@@ -11,18 +11,21 @@ from contrib.trading_calendars import calendar_utils as cu
 import contrib.control.clock.sim_engine as sim
 
 from trading_calendars.utils.pandas_utils import days_at_time
+from datetime import timedelta
+
 
 class StopExecution(Exception):
     pass
 
 
 class ClockEvent(object):
-    __slots__ = ['dt', 'event', 'exchange_name']
+    __slots__ = ['dt', 'label', 'event', 'exchange']
 
-    def __init__(self, dt, event, exchange_name):
+    def __init__(self, dt, label, event, exchange):
         self.dt = dt
         self.event = event
-        self.exchange_name = exchange_name
+        self.exchange = exchange
+        self.label = label
 
     def to_proto(self):
         ts = timestamp_pb2.Timestamp()
@@ -81,6 +84,12 @@ class Clock(object):
         #returns a slice of sessions of some length
         return self._calendar.all_sessions[sess_idx: sess_idx + length]
 
+    def minutes_for_session(self, session_label):
+        return self._calendar.minutes_for_session(session_label)
+
+    def execution_minutes_for_session(self, session_label):
+        return self._calendar.execution_minutes_for_session(session_label)
+
     def get_generator(self, sessions):
         # loops every x frequency
         calendar = self._calendar
@@ -88,15 +97,7 @@ class Clock(object):
         trading_o_and_c = calendar.schedule.loc[sessions]
         market_closes = trading_o_and_c['market_close']
 
-        dt = datetime.combine(datetime.min, calendar.open_times[0][1])
-        dt = dt - pd.Timedelta(minutes=5)
-        bfs = dt.time()
 
-        bts_minutes = days_at_time(
-            sessions,
-            bfs,
-            calendar.tz
-        )
 
         minute_emission = self._minute_emission
 
@@ -108,7 +109,12 @@ class Clock(object):
             execution_closes = calendar.execution_time_from_close(market_closes)
             execution_opens = execution_closes
 
-        return sim.MinuteSimulationClock(sessions, execution_opens, execution_closes, bts_minutes, minute_emission)
+        return sim.MinuteSimulationClock(
+            sessions,
+            execution_opens,
+            execution_closes,
+            pd.DatetimeIndex([ts - pd.Timedelta(minutes=2) for ts in execution_opens]),
+            minute_emission)
 
     def update(self, real_dt, dt):
         # todo: consider using a finite state machine for clocks

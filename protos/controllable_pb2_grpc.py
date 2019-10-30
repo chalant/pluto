@@ -2,6 +2,7 @@
 import grpc
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from protos import clock_pb2 as protos_dot_clock__pb2
 from protos import controller_pb2 as protos_dot_controller__pb2
 from protos import data_pb2 as protos_dot_data__pb2
 
@@ -33,13 +34,13 @@ class ControllableStub(object):
         request_serializer=protos_dot_data__pb2.Data.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
-    self.ClockUpdate = channel.stream_unary(
+    self.ClockUpdate = channel.unary_unary(
         '/Controllable/ClockUpdate',
-        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
+        request_serializer=protos_dot_clock__pb2.ClockEvent.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
-    self.BrokerUpdate = channel.stream_unary(
-        '/Controllable/BrokerUpdate',
+    self.UpdateAccount = channel.stream_unary(
+        '/Controllable/UpdateAccount',
         request_serializer=protos_dot_data__pb2.Data.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
@@ -82,7 +83,7 @@ class ControllableServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def ClockUpdate(self, request_iterator, context):
+  def ClockUpdate(self, request, context):
     """TODO: should return the state of the strategy run session at each update...
     update sends an UpdateRequest. since this could get arbitrarily big, we send it
     in chunks of bytes.
@@ -91,7 +92,7 @@ class ControllableServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def BrokerUpdate(self, request_iterator, context):
+  def UpdateAccount(self, request_iterator, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -130,13 +131,13 @@ def add_ControllableServicer_to_server(servicer, server):
           request_deserializer=protos_dot_data__pb2.Data.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
-      'ClockUpdate': grpc.stream_unary_rpc_method_handler(
+      'ClockUpdate': grpc.unary_unary_rpc_method_handler(
           servicer.ClockUpdate,
-          request_deserializer=protos_dot_data__pb2.Data.FromString,
+          request_deserializer=protos_dot_clock__pb2.ClockEvent.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
-      'BrokerUpdate': grpc.stream_unary_rpc_method_handler(
-          servicer.BrokerUpdate,
+      'UpdateAccount': grpc.stream_unary_rpc_method_handler(
+          servicer.UpdateAccount,
           request_deserializer=protos_dot_data__pb2.Data.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),

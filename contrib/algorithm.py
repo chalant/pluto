@@ -1,8 +1,6 @@
-from zipline import TradingAlgorithm
-
 from zipline.finance.metrics import tracker
 
-from contrib.gens.control import AlgorithmController
+from contrib.control.controllable.control import AlgorithmController
 
 class ContribTradingAlgorithm(object):
     def __init__(self,*args, **kwargs):
