@@ -3,8 +3,8 @@ from protos import clock_pb2
 
 
 class Downloader(object):
-    def __init__(self, metadata_database, sources):
-        self._metadata_db = metadata_database
+    def __init__(self, resources_db, sources):
+        self._metadata_db = resources_db
 
         self._consumers = []
         self._signal_handlers = []
