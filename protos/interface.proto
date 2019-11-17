@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "protos/controller.proto";
+
+service Gateway {
+    rpc Login (LoginRequest) returns (LoginResponse);
+    rpc Logout (LogoutRequest) returns (LogoutResponse);
+}
+
+service Edit {
+    //for developing and editing strategies. one per strategy
+    rpc BackTest (BackTestRequest) returns (stream PerformancePacket);
+    rpc New (NewStrategyRequest) returns (NewStrategyResponse);
+    rpc Save(SaveRequest) returns (SaveResponse);
+    rpc Deploy (DeployRequest) returns (DeploymentResponse);
+    rpc StrategyList (StrategyRequest) returns (stream Strategy);
+}
+
+service Monitor {
+    //for controlling and monitoring strategies.
+    rpc StrategyList (StrategyRequest) returns (stream StrategyResponse);
+    rpc InspectCode (CodeInspectionRequest) returns (CodeInspectionResponse);
+    rpc Stop (StopRequest) returns (StopResponse);
+    rpc Run (RunLiveRequest) returns (RunResponse);
+    //watch a particular strategy performance stream.
+    rpc Watch (WatchRequest) returns (stream PerformancePacket);
+}
+
+message LogoutRequest {
+
+}
+
+message LogoutResponse {
+
+}
+
+message SaveRequest {
+
+}
+
+message SaveResponse {
+
+}
+
+message TradingAccountRequest {
+    enum AccountType {
+        DEV = 0;
+        PAPER = 1;
+        LIVE = 2;
+    }
+    string user_name = 1;
+    bytes password = 2;
+    AccountType account_type = 3;
+    string broker_name = 4;
+}
+
+message TradingAccountResponse {
+
+}
+
+message CodeInspectionRequest {
+    string strategy_id = 1;
+}
+
+message CodeInspectionResponse {
+    bytes strategy = 1;
+}
+
+message NewStrategyRequest {
+    string name = 1;
+    string strategy_id = 2; //we can create a new strategy using another strategy as a template...
+}
+
+message NewStrategyResponse {
+    bytes template = 1;
+}
+
+message BackTestRequest {
+    string strategy_id = 1;
+    google.protobuf.Timestamp start = 2;
+    google.protobuf.Timestamp end = 3;
+    float capital = 4;
+    float max_leverage = 5;
+}
+
+message BackTestResponse {
+
+}
+
+enum RunMode {
+    PAPER = 0;
+    LIVE = 1;
+}
+
+enum RunEnvironment {
+    PAPER_ENV = 0;
+    LIVE_ENV = 1;
+    SIMULATION_ENV = 2;
+}
+
+message StrategyRequest {
+
+}
+
+message StrategyResponse {
+    string strategy_id = 1;
+    string name = 2;
+}
+
+message StrategyStatus {
+    bool running = 1;
+    RunEnvironment env = 2;
+}
+
+message Strategy {
+    bytes strategy = 1;
+    repeated StrategyStatus status = 2;
+}
+
+message DeployRequest {
+    bytes strategy = 1;
+}
+
+message LoginRequest {
+    string user_name = 1;
+    bytes password = 2;
+}
+
+message LoginResponse {
+    bytes token = 1;
+}
+
+message RunLiveRequest {
+    string strategy_id = 1;
+    RunMode mode = 2;
+    google.protobuf.Timestamp start_timestamp = 3;
+}
+
+
+message RunResponse {
+}
+
+message StopRequest {
+    string strategy_id = 1;
+    bool liquidate = 2;
+}
+
+message StopResponse {
+}
+
+message DeploymentResponse {
+
+}
+
+message WatchRequest {
+    string strategy_id = 1;
+}
