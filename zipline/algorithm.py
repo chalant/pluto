@@ -15,7 +15,7 @@
 from collections import Iterable, namedtuple
 from copy import copy
 import warnings
-from datetime import tzinfo, time,timedelta,datetime,date
+from datetime import tzinfo, time, timedelta, datetime, date
 import logbook
 import pytz
 import pandas as pd
@@ -262,7 +262,7 @@ class TradingAlgorithm(object):
             # Raise an error if we were passed two different asset finders.
             # There's no world where that's a good idea.
             if asset_finder is not None \
-               and asset_finder is not data_portal.asset_finder:
+                    and asset_finder is not data_portal.asset_finder:
                 raise ValueError(
                     "Inconsistent asset_finders in TradingAlgorithm()"
                 )
@@ -519,7 +519,7 @@ class TradingAlgorithm(object):
             execution_closes = cal.execution_time_from_close(market_closes)
             execution_opens = execution_closes
 
-        #FIXME: attempt for generalization;
+        # FIXME: attempt for generalization;
         t = datetime.combine(sim_params.start_session.date(), cal.open_time) - timedelta(minutes=15)
         before_trading_start_minutes = days_at_time(
             sim_params.sessions,
@@ -703,11 +703,11 @@ class TradingAlgorithm(object):
         if capital_change['type'] == 'target':
             target = capital_change['value']
             capital_change_amount = (
-                target -
-                (
-                    self.portfolio.portfolio_value -
-                    portfolio_value_adjustment
-                )
+                    target -
+                    (
+                            self.portfolio.portfolio_value -
+                            portfolio_value_adjustment
+                    )
             )
 
             log.info('Processing capital change to target %s at %s. Capital '

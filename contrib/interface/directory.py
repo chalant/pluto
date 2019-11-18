@@ -2,8 +2,8 @@ import uuid
 
 from os import path
 
-from contrib.control.interface import directory_db_schema as sch
-from contrib.control.interface import paths
+from contrib.interface import interface as sch
+from contrib.interface.utils import paths
 
 
 class Strategy(object):
@@ -105,10 +105,9 @@ class Directory(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
+        if not exc_val:
             self._session.commit()
-        except:
+        else:
             self._session.rollback()
-        finally:
             self._session.close()
             self._session = None

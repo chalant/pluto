@@ -1,8 +1,6 @@
 from protos import interface_pb2 as itf_msg
 from protos import interface_pb2_grpc as itf_rpc
 
-from contrib.control.interface import directory as dct
-
 class Editor(itf_rpc.EditServicer):
     def __init__(self, directory):
         '''
