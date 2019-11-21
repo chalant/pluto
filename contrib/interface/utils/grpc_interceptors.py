@@ -17,7 +17,6 @@ def unavailable(request, context):
 def unauthenticated(request, context):
     context.abort(grpc.StatusCode.UNAUTHENTICATED)
 
-
 class Authenticity(grpc.ServerInterceptor):
     def __init__(self, method_handler):
         self._token = None
