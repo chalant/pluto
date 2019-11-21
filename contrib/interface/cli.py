@@ -8,6 +8,7 @@ import threading
 
 import click
 
+from contrib.interface import directory
 from contrib.interface import interface, credentials
 from contrib.interface.utils import security
 
@@ -93,14 +94,15 @@ def start(port, reset_credentials):
     click.echo('Launching server...')
     #todo: we need additional setup for the brokers etc. must be done on initial setup
     # since these are critical. => note: the brokers lifecycle must be controlled by this server.
-    # maybe expose some "interface" for communicating with broker.
+    # maybe expose some "interface" for communicating with the broker.
     # also provide credentials for each broker (paper, live, name)
     # note: by default, we have a simulation broker.
-    account = interface.Account(creds)
-    account.start(port)
-    click.echo('Server listening on: {}'.format('localhost:{}'.format(port)))
-    stop_event.wait()
-    account.stop()
+    with directory.Directory() as d:
+        account = interface.Account(creds, d)
+        account.start(port)
+        click.echo('Server listening on: {}'.format('localhost:{}'.format(port)))
+        stop_event.wait()
+        account.stop()
 
 if __name__ == '__main__':
     cli()

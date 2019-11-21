@@ -15,11 +15,6 @@ class GatewayStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.Setup = channel.stream_stream(
-        '/Gateway/Setup',
-        request_serializer=protos_dot_interface__pb2.Request.SerializeToString,
-        response_deserializer=protos_dot_interface__pb2.Response.FromString,
-        )
     self.Login = channel.unary_unary(
         '/Gateway/Login',
         request_serializer=protos_dot_interface__pb2.LoginRequest.SerializeToString,
@@ -35,13 +30,6 @@ class GatewayStub(object):
 class GatewayServicer(object):
   # missing associated documentation comment in .proto file
   pass
-
-  def Setup(self, request_iterator, context):
-    # missing associated documentation comment in .proto file
-    pass
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
 
   def Login(self, request, context):
     # missing associated documentation comment in .proto file
@@ -60,11 +48,6 @@ class GatewayServicer(object):
 
 def add_GatewayServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'Setup': grpc.stream_stream_rpc_method_handler(
-          servicer.Setup,
-          request_deserializer=protos_dot_interface__pb2.Request.FromString,
-          response_serializer=protos_dot_interface__pb2.Response.SerializeToString,
-      ),
       'Login': grpc.unary_unary_rpc_method_handler(
           servicer.Login,
           request_deserializer=protos_dot_interface__pb2.LoginRequest.FromString,
@@ -81,7 +64,7 @@ def add_GatewayServicer_to_server(servicer, server):
   server.add_generic_rpc_handlers((generic_handler,))
 
 
-class EditStub(object):
+class EditorStub(object):
   # missing associated documentation comment in .proto file
   pass
 
@@ -92,38 +75,43 @@ class EditStub(object):
       channel: A grpc.Channel.
     """
     self.BackTest = channel.unary_stream(
-        '/Edit/BackTest',
+        '/Editor/BackTest',
         request_serializer=protos_dot_interface__pb2.BackTestRequest.SerializeToString,
         response_deserializer=protos_dot_controller__pb2.PerformancePacket.FromString,
         )
-    self.New = channel.unary_unary(
-        '/Edit/New',
+    self.New = channel.unary_stream(
+        '/Editor/New',
         request_serializer=protos_dot_interface__pb2.NewStrategyRequest.SerializeToString,
-        response_deserializer=protos_dot_interface__pb2.NewStrategyResponse.FromString,
+        response_deserializer=protos_dot_interface__pb2.Strategy.FromString,
         )
     self.Save = channel.unary_unary(
-        '/Edit/Save',
+        '/Editor/Save',
         request_serializer=protos_dot_interface__pb2.SaveRequest.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.SaveResponse.FromString,
         )
     self.Deploy = channel.unary_unary(
-        '/Edit/Deploy',
+        '/Editor/Deploy',
         request_serializer=protos_dot_interface__pb2.DeployRequest.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.DeploymentResponse.FromString,
         )
     self.StrategyList = channel.unary_stream(
-        '/Edit/StrategyList',
+        '/Editor/StrategyList',
+        request_serializer=protos_dot_interface__pb2.StrategyFilter.SerializeToString,
+        response_deserializer=protos_dot_interface__pb2.StrategyResponse.FromString,
+        )
+    self.GetStrategy = channel.unary_stream(
+        '/Editor/GetStrategy',
         request_serializer=protos_dot_interface__pb2.StrategyRequest.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.Strategy.FromString,
         )
 
 
-class EditServicer(object):
+class EditorServicer(object):
   # missing associated documentation comment in .proto file
   pass
 
   def BackTest(self, request, context):
-    """for developing and editing strategies. one per strategy
+    """for developing and editing strategies
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -157,18 +145,25 @@ class EditServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def GetStrategy(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
 
-def add_EditServicer_to_server(servicer, server):
+
+def add_EditorServicer_to_server(servicer, server):
   rpc_method_handlers = {
       'BackTest': grpc.unary_stream_rpc_method_handler(
           servicer.BackTest,
           request_deserializer=protos_dot_interface__pb2.BackTestRequest.FromString,
           response_serializer=protos_dot_controller__pb2.PerformancePacket.SerializeToString,
       ),
-      'New': grpc.unary_unary_rpc_method_handler(
+      'New': grpc.unary_stream_rpc_method_handler(
           servicer.New,
           request_deserializer=protos_dot_interface__pb2.NewStrategyRequest.FromString,
-          response_serializer=protos_dot_interface__pb2.NewStrategyResponse.SerializeToString,
+          response_serializer=protos_dot_interface__pb2.Strategy.SerializeToString,
       ),
       'Save': grpc.unary_unary_rpc_method_handler(
           servicer.Save,
@@ -182,12 +177,17 @@ def add_EditServicer_to_server(servicer, server):
       ),
       'StrategyList': grpc.unary_stream_rpc_method_handler(
           servicer.StrategyList,
+          request_deserializer=protos_dot_interface__pb2.StrategyFilter.FromString,
+          response_serializer=protos_dot_interface__pb2.StrategyResponse.SerializeToString,
+      ),
+      'GetStrategy': grpc.unary_stream_rpc_method_handler(
+          servicer.GetStrategy,
           request_deserializer=protos_dot_interface__pb2.StrategyRequest.FromString,
           response_serializer=protos_dot_interface__pb2.Strategy.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
-      'Edit', rpc_method_handlers)
+      'Editor', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))
 
 

@@ -6,7 +6,7 @@ class Monitor(itf_rpc.MonitorServicer):
         '''
         Parameters
         ----------
-        directory : contrib.control.interface.directory.Directory
+        directory : contrib.interface.directory.Directory
         '''
         self._directory = directory
 

@@ -12,38 +12,23 @@ from protos import interface_pb2_grpc as itf_rpc
 
 from contrib.interface import editor
 from contrib.interface.utils import grpc_interceptors as interceptors
-from contrib.interface import monitor, directory, credentials
+from contrib.interface import monitor, credentials
 from contrib.interface.utils import db_utils as utils, security
 
-_METADATA_FILE = 'metadata'
-_DIRECTORY = 'Strategies'
-
-metadata = sa.MetaData()
-Base = declarative_base(metadata=metadata)
-engine = utils.create_engine(_METADATA_FILE, metadata, _DIRECTORY)
-Session = utils.get_session_maker(engine)
-
-
-class StrategyMetadata(Base):
-    __tablename__ = 'directory_metadata'
-
-    id = sa.Column(sa.String, primary_key=True, nullable=False)
-    name = sa.Column(sa.String)
-    directory_path = sa.Column(sa.String, nullable=False)
-    locked = sa.Column(sa.Boolean, nullable=False)
 
 class Account(itf_rpc.GatewayServicer):
-    def __init__(self, credentials):
+    def __init__(self, credentials, directory):
         '''
 
         Parameters
         ----------
         credentials: contrib.control.interface.credentials.Credentials
                     the initial credentials
+        directory: contrib.interface.directory.Directory
         '''
 
         self._credentials = credentials
-        self._directory = drt = directory.Directory(_DIRECTORY, Session)
+        self._directory = drt = directory
 
         self._editor = edt = editor.Editor(drt)
         self._monitor = mtr = monitor.Monitor(drt)
@@ -58,43 +43,35 @@ class Account(itf_rpc.GatewayServicer):
             futures.ThreadPoolExecutor(),
             interceptors=(ath + avl))
 
-        itf_rpc.add_EditServicer_to_server(edt, server)
+        itf_rpc.add_EditorServicer_to_server(edt, server)
         itf_rpc.add_MonitorServicer_to_server(mtr, server)
 
     def Login(self, request, context):
         #todo: logout after some inactivity
         # create a thread that logs out the client after a timeout is reached
         # we need to reset the timeout each time the authenticated client performs an action
+        #for now, the service only accepts one client at a time.
+        #for multiple clients we would need another structure (sessions)
         if not self._logged_in:
             try:
                 self._check_credentials(request.username, request.password)
                 token = self._create_token()  # a new token is created each successful login.
-                self._directory = drt = directory.Directory(_DIRECTORY, Session)
-                self._editor = editor.Editor(drt)
-                self._monitor = monitor.Monitor(drt)
 
                 for validator in self._authenticity:
                     validator.token = token
                 self._logged_in = True
                 return itf_msg.LoginResponse(token=token)
             except ValueError:
-                context.abort(grpc.StatusCode.PERMISSION_DENIED)
+                context.abort(grpc.StatusCode.UNAUTHENTICATED)
         else:
             return itf_msg.LoginResponse()
 
 
     def Logout(self, request, context):
-        self.logout()
+        self._logout()
 
-    def logout(self):
-        #closes everything
-        self._editor.close()
-        self._monitor.close()
-
-        self._editor = None
-        self._monitor = None
-
-        #remove tokens from validators
+    def _logout(self):
+        #remove tokens
         for interceptor in self._authenticity:
             interceptor.token = None
 
@@ -108,7 +85,7 @@ class Account(itf_rpc.GatewayServicer):
         self._server.start(address+port)
 
     def stop(self, grace=0):
-        self.logout()
+        self._logout()
         self._server.stop(grace)
 
     def _check_credentials(self, username, password):
@@ -118,10 +95,10 @@ class Account(itf_rpc.GatewayServicer):
             if crd:
                 salt = crd.salt
                 hash_ = crd.hash_
-                if hash_ != security.get_hash(salt, crd.password):
-                    raise ValueError
+                if hash_ != security.get_hash(salt, password):
+                    raise ValueError('Not signed in')
             else:
-                raise ValueError
+                raise ValueError('Not signed in')
 
     def _create_token(self):
         return secrets.token_hex()
