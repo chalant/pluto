@@ -44,6 +44,8 @@ class StrategyMetadata(Base):
 
 
 class _Strategy(object):
+    _STREAM_CHUNK_SIZE = 64 * 1024
+
     def __init__(self, metadata, context):
         '''
 
@@ -58,6 +60,10 @@ class _Strategy(object):
         self._id = metadata.id
         self._metadata = metadata
         self._context = context
+
+    @property
+    def locked(self):
+        return self._locked
 
     @property
     def closed(self):
@@ -79,7 +85,7 @@ class _Strategy(object):
     def path(self):
         return path.join(self._path, 'strategy.py')
 
-    def get_implementation(self, chunk_size=1024):
+    def get_implementation(self, chunk_size=_STREAM_CHUNK_SIZE):
         with open(path.join(self._path, 'strategy.py'), 'rb') as f:
             while True:
                 data = f.read(chunk_size)
@@ -185,7 +191,7 @@ class _Mode(ABC):
             yield self._get_strategy(m)
 
     @_check_context
-    def add_strategy(self, name, strategy_id=None):
+    def add_strategy(self, name):
         '''
 
         Parameters
@@ -197,7 +203,7 @@ class _Mode(ABC):
         -------
         _Strategy
         '''
-        return self._add_strategy(self._session, name, strategy_id)
+        return self._add_strategy(self._session, name)
 
 
     @abstractmethod
@@ -205,7 +211,7 @@ class _Mode(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _add_strategy(self, session, name, strategy_id=None):
+    def _add_strategy(self, session, name):
         raise NotImplementedError
 
     @abstractmethod
@@ -238,7 +244,7 @@ class _Read(_Mode):
     def _get_strategy(self, metadata, context):
         return _Strategy(metadata, context)
 
-    def _add_strategy(self, session, name, strategy_id=None):
+    def _add_strategy(self, session, name):
         raise RuntimeError('Cannot add a strategy in read mode')
 
     def _enter(self):
@@ -255,7 +261,7 @@ class _Write(_Mode):
     def _get_strategy(self, metadata, context):
         return _WritableStrategy(metadata)
 
-    def _add_strategy(self, session, name, strategy_id=None):
+    def _add_strategy(self, session, name):
         session = self._session
 
         id_ = uuid.uuid4().hex
@@ -264,25 +270,15 @@ class _Write(_Mode):
         stg_meta = StrategyMetadata(id=id_, name=name, directory_path=pth, locked=False)
         session.add(stg_meta)
 
-        if strategy_id:
-            m = session.query(StrategyMetadata).get(strategy_id)
-            file = self._get_template(path.join(m.directory_path, 'strategy.py'))
-        else:
-            file = self._get_template()
-
         with open(path.join(pth, 'strategy.py'), mode='wb') as f:
-            f.write(file)
+            f.write(self._get_template())
 
         return _WritableStrategy(metadata, self)
 
     #todo
-    def _get_template(self, path=None):
-        if path:
-            with open(path, 'rb') as f:
-                return f.read()
-        else:
-            # todo: return a basic template with the necessary functions
-            return b''
+    def _get_template(self):
+        # todo: return a basic template with the necessary functions
+        return b''
 
     def _close(self, session, exc_type, exc_val, exc_tb):
         if not exc_val:
@@ -329,6 +325,6 @@ class Directory(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        #blocks until the reader is closed
+        #blocks until the reader is released by another thread.
         self._reader.close()
         self._session.close()

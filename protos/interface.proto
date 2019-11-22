@@ -11,11 +11,11 @@ service Gateway {
 service Editor {
     //for developing and editing strategies
     rpc BackTest (BackTestRequest) returns (stream PerformancePacket);
-    rpc New (NewStrategyRequest) returns (stream Strategy);
-    rpc Save(SaveRequest) returns (SaveResponse);
+    rpc New (NewStrategyRequest) returns (stream Chunk);
+    rpc Save(stream Chunk) returns (SaveResponse);
     rpc Deploy (DeployRequest) returns (DeploymentResponse);
     rpc StrategyList (StrategyFilter) returns (stream StrategyResponse);
-    rpc GetStrategy(StrategyRequest) returns (stream Strategy);
+    rpc GetStrategy(StrategyRequest) returns (stream Chunk);
 }
 
 service Monitor {
@@ -70,7 +70,6 @@ message CodeInspectionResponse {
 
 message NewStrategyRequest {
     string name = 1;
-    string strategy_id = 2; //we can create a new strategy using another strategy as a template...
 }
 
 message NewStrategyResponse {
@@ -119,8 +118,13 @@ message StrategyStatus {
     RunEnvironment env = 2;
 }
 
+message Chunk {
+    bytes chunk = 1;
+}
+
 message Strategy {
-    bytes chunck = 1;
+    string strategy_id = 1;
+    bytes strategy = 2;
 }
 
 message DeployRequest {
