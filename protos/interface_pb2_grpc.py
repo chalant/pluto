@@ -82,11 +82,11 @@ class EditorStub(object):
     self.New = channel.unary_stream(
         '/Editor/New',
         request_serializer=protos_dot_interface__pb2.NewStrategyRequest.SerializeToString,
-        response_deserializer=protos_dot_interface__pb2.Strategy.FromString,
+        response_deserializer=protos_dot_interface__pb2.Chunk.FromString,
         )
-    self.Save = channel.unary_unary(
+    self.Save = channel.stream_unary(
         '/Editor/Save',
-        request_serializer=protos_dot_interface__pb2.SaveRequest.SerializeToString,
+        request_serializer=protos_dot_interface__pb2.Chunk.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.SaveResponse.FromString,
         )
     self.Deploy = channel.unary_unary(
@@ -102,7 +102,7 @@ class EditorStub(object):
     self.GetStrategy = channel.unary_stream(
         '/Editor/GetStrategy',
         request_serializer=protos_dot_interface__pb2.StrategyRequest.SerializeToString,
-        response_deserializer=protos_dot_interface__pb2.Strategy.FromString,
+        response_deserializer=protos_dot_interface__pb2.Chunk.FromString,
         )
 
 
@@ -124,7 +124,7 @@ class EditorServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Save(self, request, context):
+  def Save(self, request_iterator, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -163,11 +163,11 @@ def add_EditorServicer_to_server(servicer, server):
       'New': grpc.unary_stream_rpc_method_handler(
           servicer.New,
           request_deserializer=protos_dot_interface__pb2.NewStrategyRequest.FromString,
-          response_serializer=protos_dot_interface__pb2.Strategy.SerializeToString,
+          response_serializer=protos_dot_interface__pb2.Chunk.SerializeToString,
       ),
-      'Save': grpc.unary_unary_rpc_method_handler(
+      'Save': grpc.stream_unary_rpc_method_handler(
           servicer.Save,
-          request_deserializer=protos_dot_interface__pb2.SaveRequest.FromString,
+          request_deserializer=protos_dot_interface__pb2.Chunk.FromString,
           response_serializer=protos_dot_interface__pb2.SaveResponse.SerializeToString,
       ),
       'Deploy': grpc.unary_unary_rpc_method_handler(
@@ -183,7 +183,7 @@ def add_EditorServicer_to_server(servicer, server):
       'GetStrategy': grpc.unary_stream_rpc_method_handler(
           servicer.GetStrategy,
           request_deserializer=protos_dot_interface__pb2.StrategyRequest.FromString,
-          response_serializer=protos_dot_interface__pb2.Strategy.SerializeToString,
+          response_serializer=protos_dot_interface__pb2.Chunk.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

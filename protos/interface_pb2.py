@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x16protos/interface.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17protos/controller.proto\"\x0f\n\rLogoutRequest\"\x10\n\x0eLogoutResponse\"\r\n\x0bSaveRequest\"\x0e\n\x0cSaveResponse\"\xb8\x01\n\x15TradingAccountRequest\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\x12\x38\n\x0c\x61\x63\x63ount_type\x18\x03 \x01(\x0e\x32\".TradingAccountRequest.AccountType\x12\x13\n\x0b\x62roker_name\x18\x04 \x01(\t\"+\n\x0b\x41\x63\x63ountType\x12\x07\n\x03\x44\x45V\x10\x00\x12\t\n\x05PAPER\x10\x01\x12\x08\n\x04LIVE\x10\x02\"\x18\n\x16TradingAccountResponse\",\n\x15\x43odeInspectionRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"*\n\x16\x43odeInspectionResponse\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\"7\n\x12NewStrategyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\"\'\n\x13NewStrategyResponse\x12\x10\n\x08template\x18\x01 \x01(\x0c\"\xa1\x01\n\x0f\x42\x61\x63kTestRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12)\n\x05start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0f\n\x07\x63\x61pital\x18\x04 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x05 \x01(\x02\"\x12\n\x10\x42\x61\x63kTestResponse\"\x10\n\x0eStrategyFilter\"&\n\x0fStrategyRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"V\n\x10StrategyResponse\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x1f\n\x06status\x18\x03 \x03(\x0b\x32\x0f.StrategyStatus\"?\n\x0eStrategyStatus\x12\x0f\n\x07running\x18\x01 \x01(\x08\x12\x1c\n\x03\x65nv\x18\x02 \x01(\x0e\x32\x0f.RunEnvironment\"\x1a\n\x08Strategy\x12\x0e\n\x06\x63hunck\x18\x01 \x01(\x0c\"6\n\rDeployRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"3\n\x0cLoginRequest\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\"\x1e\n\rLoginResponse\x12\r\n\x05token\x18\x01 \x01(\x0c\"r\n\x0eRunLiveRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x16\n\x04mode\x18\x02 \x01(\x0e\x32\x08.RunMode\x12\x33\n\x0fstart_timestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\r\n\x0bRunResponse\"5\n\x0bStopRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0e\n\x0cStopResponse\"r\n\x12\x44\x65ploymentResponse\x12*\n\x06status\x18\x01 \x01(\x0e\x32\x1a.DeploymentResponse.Status\x12\x0f\n\x07\x64\x65tails\x18\x02 \x01(\x0c\"\x1f\n\x06Status\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01\"#\n\x0cWatchRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t*\x1e\n\x07RunMode\x12\t\n\x05PAPER\x10\x00\x12\x08\n\x04LIVE\x10\x01*A\n\x0eRunEnvironment\x12\r\n\tPAPER_ENV\x10\x00\x12\x0c\n\x08LIVE_ENV\x10\x01\x12\x12\n\x0eSIMULATION_ENV\x10\x02\x32\\\n\x07Gateway\x12&\n\x05Login\x12\r.LoginRequest\x1a\x0e.LoginResponse\x12)\n\x06Logout\x12\x0e.LogoutRequest\x1a\x0f.LogoutResponse2\x9d\x02\n\x06\x45\x64itor\x12\x32\n\x08\x42\x61\x63kTest\x12\x10.BackTestRequest\x1a\x12.PerformancePacket0\x01\x12\'\n\x03New\x12\x13.NewStrategyRequest\x1a\t.Strategy0\x01\x12#\n\x04Save\x12\x0c.SaveRequest\x1a\r.SaveResponse\x12-\n\x06\x44\x65ploy\x12\x0e.DeployRequest\x1a\x13.DeploymentResponse\x12\x34\n\x0cStrategyList\x12\x0f.StrategyFilter\x1a\x11.StrategyResponse0\x01\x12,\n\x0bGetStrategy\x12\x10.StrategyRequest\x1a\t.Strategy0\x01\x32\xf9\x01\n\x07Monitor\x12\x35\n\x0cStrategyList\x12\x10.StrategyRequest\x1a\x11.StrategyResponse0\x01\x12>\n\x0bInspectCode\x12\x16.CodeInspectionRequest\x1a\x17.CodeInspectionResponse\x12#\n\x04Stop\x12\x0c.StopRequest\x1a\r.StopResponse\x12$\n\x03Run\x12\x0f.RunLiveRequest\x1a\x0c.RunResponse\x12,\n\x05Watch\x12\r.WatchRequest\x1a\x12.PerformancePacket0\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x16protos/interface.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17protos/controller.proto\"\x0f\n\rLogoutRequest\"\x10\n\x0eLogoutResponse\"\r\n\x0bSaveRequest\"\x0e\n\x0cSaveResponse\"\xb8\x01\n\x15TradingAccountRequest\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\x12\x38\n\x0c\x61\x63\x63ount_type\x18\x03 \x01(\x0e\x32\".TradingAccountRequest.AccountType\x12\x13\n\x0b\x62roker_name\x18\x04 \x01(\t\"+\n\x0b\x41\x63\x63ountType\x12\x07\n\x03\x44\x45V\x10\x00\x12\t\n\x05PAPER\x10\x01\x12\x08\n\x04LIVE\x10\x02\"\x18\n\x16TradingAccountResponse\",\n\x15\x43odeInspectionRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"*\n\x16\x43odeInspectionResponse\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\"7\n\x12NewStrategyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\"\'\n\x13NewStrategyResponse\x12\x10\n\x08template\x18\x01 \x01(\x0c\"\xa1\x01\n\x0f\x42\x61\x63kTestRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12)\n\x05start\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0f\n\x07\x63\x61pital\x18\x04 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x05 \x01(\x02\"\x12\n\x10\x42\x61\x63kTestResponse\"\x10\n\x0eStrategyFilter\"&\n\x0fStrategyRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"V\n\x10StrategyResponse\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x1f\n\x06status\x18\x03 \x03(\x0b\x32\x0f.StrategyStatus\"?\n\x0eStrategyStatus\x12\x0f\n\x07running\x18\x01 \x01(\x08\x12\x1c\n\x03\x65nv\x18\x02 \x01(\x0e\x32\x0f.RunEnvironment\"\x16\n\x05\x43hunk\x12\r\n\x05\x63hunk\x18\x01 \x01(\x0c\"1\n\x08Strategy\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"6\n\rDeployRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"3\n\x0cLoginRequest\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\"\x1e\n\rLoginResponse\x12\r\n\x05token\x18\x01 \x01(\x0c\"r\n\x0eRunLiveRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x16\n\x04mode\x18\x02 \x01(\x0e\x32\x08.RunMode\x12\x33\n\x0fstart_timestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\r\n\x0bRunResponse\"5\n\x0bStopRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0e\n\x0cStopResponse\"r\n\x12\x44\x65ploymentResponse\x12*\n\x06status\x18\x01 \x01(\x0e\x32\x1a.DeploymentResponse.Status\x12\x0f\n\x07\x64\x65tails\x18\x02 \x01(\x0c\"\x1f\n\x06Status\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01\"#\n\x0cWatchRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t*\x1e\n\x07RunMode\x12\t\n\x05PAPER\x10\x00\x12\x08\n\x04LIVE\x10\x01*A\n\x0eRunEnvironment\x12\r\n\tPAPER_ENV\x10\x00\x12\x0c\n\x08LIVE_ENV\x10\x01\x12\x12\n\x0eSIMULATION_ENV\x10\x02\x32\\\n\x07Gateway\x12&\n\x05Login\x12\r.LoginRequest\x1a\x0e.LoginResponse\x12)\n\x06Logout\x12\x0e.LogoutRequest\x1a\x0f.LogoutResponse2\x93\x02\n\x06\x45\x64itor\x12\x32\n\x08\x42\x61\x63kTest\x12\x10.BackTestRequest\x1a\x12.PerformancePacket0\x01\x12$\n\x03New\x12\x13.NewStrategyRequest\x1a\x06.Chunk0\x01\x12\x1f\n\x04Save\x12\x06.Chunk\x1a\r.SaveResponse(\x01\x12-\n\x06\x44\x65ploy\x12\x0e.DeployRequest\x1a\x13.DeploymentResponse\x12\x34\n\x0cStrategyList\x12\x0f.StrategyFilter\x1a\x11.StrategyResponse0\x01\x12)\n\x0bGetStrategy\x12\x10.StrategyRequest\x1a\x06.Chunk0\x01\x32\xf9\x01\n\x07Monitor\x12\x35\n\x0cStrategyList\x12\x10.StrategyRequest\x1a\x11.StrategyResponse0\x01\x12>\n\x0bInspectCode\x12\x16.CodeInspectionRequest\x1a\x17.CodeInspectionResponse\x12#\n\x04Stop\x12\x0c.StopRequest\x1a\r.StopResponse\x12$\n\x03Run\x12\x0f.RunLiveRequest\x1a\x0c.RunResponse\x12,\n\x05Watch\x12\r.WatchRequest\x1a\x12.PerformancePacket0\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_controller__pb2.DESCRIPTOR,])
 
@@ -43,8 +43,8 @@ _RUNMODE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1470,
-  serialized_end=1500,
+  serialized_start=1517,
+  serialized_end=1547,
 )
 _sym_db.RegisterEnumDescriptor(_RUNMODE)
 
@@ -70,8 +70,8 @@ _RUNENVIRONMENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1502,
-  serialized_end=1567,
+  serialized_start=1549,
+  serialized_end=1614,
 )
 _sym_db.RegisterEnumDescriptor(_RUNENVIRONMENT)
 
@@ -126,8 +126,8 @@ _DEPLOYMENTRESPONSE_STATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1400,
-  serialized_end=1431,
+  serialized_start=1447,
+  serialized_end=1478,
 )
 _sym_db.RegisterEnumDescriptor(_DEPLOYMENTRESPONSE_STATUS)
 
@@ -657,15 +657,15 @@ _STRATEGYSTATUS = _descriptor.Descriptor(
 )
 
 
-_STRATEGY = _descriptor.Descriptor(
-  name='Strategy',
-  full_name='Strategy',
+_CHUNK = _descriptor.Descriptor(
+  name='Chunk',
+  full_name='Chunk',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='chunck', full_name='Strategy.chunck', index=0,
+      name='chunk', full_name='Chunk.chunk', index=0,
       number=1, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
@@ -684,7 +684,45 @@ _STRATEGY = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=946,
-  serialized_end=972,
+  serialized_end=968,
+)
+
+
+_STRATEGY = _descriptor.Descriptor(
+  name='Strategy',
+  full_name='Strategy',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='strategy_id', full_name='Strategy.strategy_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='strategy', full_name='Strategy.strategy', index=1,
+      number=2, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b(""),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=970,
+  serialized_end=1019,
 )
 
 
@@ -721,8 +759,8 @@ _DEPLOYREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=974,
-  serialized_end=1028,
+  serialized_start=1021,
+  serialized_end=1075,
 )
 
 
@@ -759,8 +797,8 @@ _LOGINREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1030,
-  serialized_end=1081,
+  serialized_start=1077,
+  serialized_end=1128,
 )
 
 
@@ -790,8 +828,8 @@ _LOGINRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1083,
-  serialized_end=1113,
+  serialized_start=1130,
+  serialized_end=1160,
 )
 
 
@@ -835,8 +873,8 @@ _RUNLIVEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1115,
-  serialized_end=1229,
+  serialized_start=1162,
+  serialized_end=1276,
 )
 
 
@@ -859,8 +897,8 @@ _RUNRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1231,
-  serialized_end=1244,
+  serialized_start=1278,
+  serialized_end=1291,
 )
 
 
@@ -897,8 +935,8 @@ _STOPREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1246,
-  serialized_end=1299,
+  serialized_start=1293,
+  serialized_end=1346,
 )
 
 
@@ -921,8 +959,8 @@ _STOPRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1301,
-  serialized_end=1315,
+  serialized_start=1348,
+  serialized_end=1362,
 )
 
 
@@ -960,8 +998,8 @@ _DEPLOYMENTRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1317,
-  serialized_end=1431,
+  serialized_start=1364,
+  serialized_end=1478,
 )
 
 
@@ -991,8 +1029,8 @@ _WATCHREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1433,
-  serialized_end=1468,
+  serialized_start=1480,
+  serialized_end=1515,
 )
 
 _TRADINGACCOUNTREQUEST.fields_by_name['account_type'].enum_type = _TRADINGACCOUNTREQUEST_ACCOUNTTYPE
@@ -1021,6 +1059,7 @@ DESCRIPTOR.message_types_by_name['StrategyFilter'] = _STRATEGYFILTER
 DESCRIPTOR.message_types_by_name['StrategyRequest'] = _STRATEGYREQUEST
 DESCRIPTOR.message_types_by_name['StrategyResponse'] = _STRATEGYRESPONSE
 DESCRIPTOR.message_types_by_name['StrategyStatus'] = _STRATEGYSTATUS
+DESCRIPTOR.message_types_by_name['Chunk'] = _CHUNK
 DESCRIPTOR.message_types_by_name['Strategy'] = _STRATEGY
 DESCRIPTOR.message_types_by_name['DeployRequest'] = _DEPLOYREQUEST
 DESCRIPTOR.message_types_by_name['LoginRequest'] = _LOGINREQUEST
@@ -1147,6 +1186,13 @@ StrategyStatus = _reflection.GeneratedProtocolMessageType('StrategyStatus', (_me
   ))
 _sym_db.RegisterMessage(StrategyStatus)
 
+Chunk = _reflection.GeneratedProtocolMessageType('Chunk', (_message.Message,), dict(
+  DESCRIPTOR = _CHUNK,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:Chunk)
+  ))
+_sym_db.RegisterMessage(Chunk)
+
 Strategy = _reflection.GeneratedProtocolMessageType('Strategy', (_message.Message,), dict(
   DESCRIPTOR = _STRATEGY,
   __module__ = 'protos.interface_pb2'
@@ -1225,8 +1271,8 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1569,
-  serialized_end=1661,
+  serialized_start=1616,
+  serialized_end=1708,
   methods=[
   _descriptor.MethodDescriptor(
     name='Login',
@@ -1258,8 +1304,8 @@ _EDITOR = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=1,
   serialized_options=None,
-  serialized_start=1664,
-  serialized_end=1949,
+  serialized_start=1711,
+  serialized_end=1986,
   methods=[
   _descriptor.MethodDescriptor(
     name='BackTest',
@@ -1276,7 +1322,7 @@ _EDITOR = _descriptor.ServiceDescriptor(
     index=1,
     containing_service=None,
     input_type=_NEWSTRATEGYREQUEST,
-    output_type=_STRATEGY,
+    output_type=_CHUNK,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
@@ -1284,7 +1330,7 @@ _EDITOR = _descriptor.ServiceDescriptor(
     full_name='Editor.Save',
     index=2,
     containing_service=None,
-    input_type=_SAVEREQUEST,
+    input_type=_CHUNK,
     output_type=_SAVERESPONSE,
     serialized_options=None,
   ),
@@ -1312,7 +1358,7 @@ _EDITOR = _descriptor.ServiceDescriptor(
     index=5,
     containing_service=None,
     input_type=_STRATEGYREQUEST,
-    output_type=_STRATEGY,
+    output_type=_CHUNK,
     serialized_options=None,
   ),
 ])
@@ -1327,8 +1373,8 @@ _MONITOR = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=2,
   serialized_options=None,
-  serialized_start=1952,
-  serialized_end=2201,
+  serialized_start=1989,
+  serialized_end=2238,
   methods=[
   _descriptor.MethodDescriptor(
     name='StrategyList',

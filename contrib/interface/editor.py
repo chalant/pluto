@@ -1,5 +1,7 @@
 import grpc
 
+import io
+
 from protos import interface_pb2 as itf_msg
 from protos import interface_pb2_grpc as itf_rpc
 
@@ -15,7 +17,7 @@ class Editor(itf_rpc.EditorServicer):
 
     def New(self, request, context):
         with self._directory.write() as d:
-            stg = d.add_strategy(request.name, request.strategy_id)
+            stg = d.add_strategy(request.name)
             for b in stg.get_implementation():
                 yield itf_msg.Strategy(chunk=b)
 
@@ -47,10 +49,13 @@ class Editor(itf_rpc.EditorServicer):
                     # lock the strategy
                     stg.lock()
                 except RuntimeError:
-                    # this should not happen since the client cannot receive a locked
-                    # strategy but handle the exception just in case.
-                    d.add_strategy(stg.name, stg.id)
+                    d.add_strategy(stg.name)
             except RuntimeError:
+                #todo: we need to read errors and send them back to the client
+                # note: we can't make the interpreter crash, so we need to run
+                # the script as a subprocess. => Use the 'basic' api to run a
+                # note : since the user might run a backtest on this, we will share the
+                # same methods as the backtest method
                 context.set_details('The strategy script contains some errors')
                 context.set_code(grpc.StatusCode.ABORTED)
 
@@ -89,11 +94,29 @@ class Editor(itf_rpc.EditorServicer):
         '''
         with self._directory.read() as d:
             stg = d.get_strategy(request.strategy_id)
+
             for b in stg.get_implementation():
                 yield itf_msg.Strategy(chunk=b)
 
+    def Save(self, request_iterator, context):
+        with self._directory.write() as d:
+            buffer = ''
+            for chunk in request_iterator:
+                buffer += chunk.chunk
+            stg = itf_msg.Strategy()
+            stg.ParseFromString(buffer)
+            s = d.get_strategy(stg.id)
+            self._store_strategy(d, s)
+
+    def _store_strategy(self, directory, strategy):
+        try:
+            strategy.store_implementation(stg.strategy)
+        except RuntimeError:
+            ns = d.add_strategy(s.name)
+            ns.store_implementation(stg.strategy)
 
 
     def BackTest(self, request, context):
-        #todo
+        #todo:
+        #we should flag a strategy if its backtest was successful (without errors)
         pass
