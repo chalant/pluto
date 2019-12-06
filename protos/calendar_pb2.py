@@ -14,6 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from protos import data_pb2 as protos_dot_data__pb2
 
 
 DESCRIPTOR = _descriptor.FileDescriptor(
@@ -21,9 +22,9 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x15protos/calendar.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x01\n\x06Offset\x12\x1b\n\x04type\x18\x01 \x01(\x0e\x32\r.Offset.Types\x12\t\n\x01n\x18\x02 \x01(\x05\"x\n\x05Types\x12\n\n\x06MONDAY\x10\x00\x12\x0b\n\x07TUESDAY\x10\x01\x12\r\n\tWEDNESDAY\x10\x02\x12\x0c\n\x08THURSDAY\x10\x03\x12\n\n\x06\x46RIDAY\x10\x04\x12\x0c\n\x08SATURDAY\x10\x05\x12\n\n\x06SUNDAY\x10\x06\x12\x07\n\x03\x44\x41Y\x10\x07\x12\n\n\x06\x45\x41STER\x10\x08\"\xf0\x01\n\x07Holiday\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04year\x18\x02 \x01(\x05\x12\r\n\x05month\x18\x03 \x01(\x05\x12\x0b\n\x03\x64\x61y\x18\x04 \x01(\x05\x12\x18\n\x07offsets\x18\x05 \x03(\x0b\x32\x07.Offset\x12\x1f\n\nobservance\x18\x06 \x01(\x0e\x32\x0b.Observance\x12.\n\nstart_date\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x14\n\x0c\x64\x61ys_of_week\x18\t \x03(\x05\"4\n\x04Time\x12\x0c\n\x04hour\x18\x01 \x01(\x05\x12\x0e\n\x06minute\x18\x02 \x01(\x05\x12\x0e\n\x06second\x18\x03 \x01(\x05\"?\n\x0cTimeHolidays\x12\x13\n\x04time\x18\x01 \x01(\x0b\x32\x05.Time\x12\x1a\n\x08holidays\x18\x02 \x03(\x0b\x32\x08.Holiday\"K\n\tTimeDates\x12\x13\n\x04time\x18\x01 \x01(\x0b\x32\x05.Time\x12)\n\x05\x64\x61tes\x18\x02 \x03(\x0b\x32\x1a.google.protobuf.Timestamp\"f\n\tTimeDelta\x12\x1d\n\x04type\x18\x01 \x01(\x0e\x32\x0f.TimeDelta.Type\x12\r\n\x05value\x18\x02 \x01(\x05\"+\n\x04Type\x12\t\n\x05HOURS\x10\x00\x12\x0b\n\x07MINUTES\x10\x01\x12\x0b\n\x07SECONDS\x10\x02\"u\n\tDateRange\x12.\n\nstart_date\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\n\n\x02tz\x18\x03 \x01(\t\"\x8e\x03\n\x08\x43\x61lendar\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08timezone\x18\x02 \x01(\t\x12\x18\n\topen_time\x18\x03 \x01(\x0b\x32\x05.Time\x12\x19\n\nclose_time\x18\x04 \x01(\x0b\x32\x05.Time\x12\"\n\x10regular_holidays\x18\x05 \x03(\x0b\x32\x08.Holiday\x12\"\n\x0e\x61\x64hoc_holidays\x18\x06 \x03(\x0b\x32\n.DateRange\x12\"\n\x13regular_early_close\x18\x07 \x01(\x0b\x32\x05.Time\x12%\n\x0especial_closes\x18\x08 \x03(\x0b\x32\r.TimeHolidays\x12(\n\x14special_closes_adhoc\x18\t \x03(\x0b\x32\n.TimeDates\x12\x13\n\x0bopen_offset\x18\n \x01(\x05\x12,\n\x18\x65xecution_time_from_open\x18\x0b \x01(\x0b\x32\n.TimeDelta\x12-\n\x19\x65xecution_time_from_close\x18\x0c \x01(\x0b\x32\n.TimeDelta*\x90\x02\n\nObservance\x12\x13\n\x0fNEAREST_WORKDAY\x10\x00\x12\x10\n\x0cNEXT_WORKDAY\x10\x01\x12\x14\n\x10PREVIOUS_WORKDAY\x10\x02\x12\x1a\n\x16\x42\x45\x46ORE_NEAREST_WORKDAY\x10\x03\x12\x19\n\x15\x41\x46TER_NEAREST_WORKDAY\x10\x04\x12\x15\n\x11WEEKEND_TO_MONDAY\x10\x05\x12\x14\n\x10SUNDAY_TO_MONDAY\x10\x06\x12\x13\n\x0fPREVIOUS_FRIDAY\x10\x07\x12\x1a\n\x16NEXT_MONDAY_OR_TUESDAY\x10\x08\x12\x0f\n\x0bNEXT_MONDAY\x10\t\x12\x1f\n\x1bJULY_5TH_HOLIDAY_OBSERVANCE\x10\nb\x06proto3')
+  serialized_pb=_b('\n\x15protos/calendar.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11protos/data.proto\"\xaa\x01\n\x06Offset\x12\x1b\n\x04type\x18\x01 \x01(\x0e\x32\r.Offset.Types\x12\t\n\x01n\x18\x02 \x01(\x05\"x\n\x05Types\x12\n\n\x06MONDAY\x10\x00\x12\x0b\n\x07TUESDAY\x10\x01\x12\r\n\tWEDNESDAY\x10\x02\x12\x0c\n\x08THURSDAY\x10\x03\x12\n\n\x06\x46RIDAY\x10\x04\x12\x0c\n\x08SATURDAY\x10\x05\x12\n\n\x06SUNDAY\x10\x06\x12\x07\n\x03\x44\x41Y\x10\x07\x12\n\n\x06\x45\x41STER\x10\x08\"\xf0\x01\n\x07Holiday\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0c\n\x04year\x18\x02 \x01(\x05\x12\r\n\x05month\x18\x03 \x01(\x05\x12\x0b\n\x03\x64\x61y\x18\x04 \x01(\x05\x12\x18\n\x07offsets\x18\x05 \x03(\x0b\x32\x07.Offset\x12\x1f\n\nobservance\x18\x06 \x01(\x0e\x32\x0b.Observance\x12.\n\nstart_date\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x14\n\x0c\x64\x61ys_of_week\x18\t \x03(\x05\"@\n\x04Time\x12\x0c\n\x04hour\x18\x01 \x01(\x05\x12\x0e\n\x06minute\x18\x02 \x01(\x05\x12\x0e\n\x06second\x18\x03 \x01(\x05\x12\n\n\x02tz\x18\x04 \x01(\t\"?\n\x0cTimeHolidays\x12\x13\n\x04time\x18\x01 \x01(\x0b\x32\x05.Time\x12\x1a\n\x08holidays\x18\x02 \x03(\x0b\x32\x08.Holiday\"K\n\tTimeDates\x12\x13\n\x04time\x18\x01 \x01(\x0b\x32\x05.Time\x12)\n\x05\x64\x61tes\x18\x02 \x03(\x0b\x32\x1a.google.protobuf.Timestamp\"f\n\tTimeDelta\x12\x1d\n\x04type\x18\x01 \x01(\x0e\x32\x0f.TimeDelta.Type\x12\r\n\x05value\x18\x02 \x01(\x05\"+\n\x04Type\x12\t\n\x05HOURS\x10\x00\x12\x0b\n\x07MINUTES\x10\x01\x12\x0b\n\x07SECONDS\x10\x02\"u\n\tDateRange\x12.\n\nstart_date\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\n\n\x02tz\x18\x03 \x01(\t\"\x9f\x03\n\x08\x43\x61lendar\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08timezone\x18\x02 \x01(\t\x12\x18\n\topen_time\x18\x03 \x01(\x0b\x32\x05.Time\x12\x19\n\nclose_time\x18\x04 \x01(\x0b\x32\x05.Time\x12\"\n\x10regular_holidays\x18\x05 \x03(\x0b\x32\x08.Holiday\x12\"\n\x0e\x61\x64hoc_holidays\x18\x06 \x03(\x0b\x32\n.DateRange\x12\"\n\x13regular_early_close\x18\x07 \x01(\x0b\x32\x05.Time\x12%\n\x0especial_closes\x18\x08 \x03(\x0b\x32\r.TimeHolidays\x12(\n\x14special_closes_adhoc\x18\t \x03(\x0b\x32\n.TimeDates\x12\x13\n\x0bopen_offset\x18\n \x01(\x05\x12,\n\x18\x65xecution_time_from_open\x18\x0b \x01(\x0b\x32\n.TimeDelta\x12-\n\x19\x65xecution_time_from_close\x18\x0c \x01(\x0b\x32\n.TimeDelta\x12\x0f\n\x07\x61liases\x18\r \x03(\t\",\n\x0c\x43\x61lendarList\x12\x1c\n\tcalendars\x18\x01 \x03(\x0b\x32\t.Calendar*\x90\x02\n\nObservance\x12\x13\n\x0fNEAREST_WORKDAY\x10\x00\x12\x10\n\x0cNEXT_WORKDAY\x10\x01\x12\x14\n\x10PREVIOUS_WORKDAY\x10\x02\x12\x1a\n\x16\x42\x45\x46ORE_NEAREST_WORKDAY\x10\x03\x12\x19\n\x15\x41\x46TER_NEAREST_WORKDAY\x10\x04\x12\x15\n\x11WEEKEND_TO_MONDAY\x10\x05\x12\x14\n\x10SUNDAY_TO_MONDAY\x10\x06\x12\x13\n\x0fPREVIOUS_FRIDAY\x10\x07\x12\x1a\n\x16NEXT_MONDAY_OR_TUESDAY\x10\x08\x12\x0f\n\x0bNEXT_MONDAY\x10\t\x12\x1f\n\x1bJULY_5TH_HOLIDAY_OBSERVANCE\x10\nb\x06proto3')
   ,
-  dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
+  dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
 _OBSERVANCE = _descriptor.EnumDescriptor(
   name='Observance',
@@ -78,8 +79,8 @@ _OBSERVANCE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1295,
-  serialized_end=1567,
+  serialized_start=1389,
+  serialized_end=1661,
 )
 _sym_db.RegisterEnumDescriptor(_OBSERVANCE)
 
@@ -142,8 +143,8 @@ _OFFSET_TYPES = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=109,
-  serialized_end=229,
+  serialized_start=128,
+  serialized_end=248,
 )
 _sym_db.RegisterEnumDescriptor(_OFFSET_TYPES)
 
@@ -168,8 +169,8 @@ _TIMEDELTA_TYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=729,
-  serialized_end=772,
+  serialized_start=760,
+  serialized_end=803,
 )
 _sym_db.RegisterEnumDescriptor(_TIMEDELTA_TYPE)
 
@@ -208,8 +209,8 @@ _OFFSET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=59,
-  serialized_end=229,
+  serialized_start=78,
+  serialized_end=248,
 )
 
 
@@ -295,8 +296,8 @@ _HOLIDAY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=232,
-  serialized_end=472,
+  serialized_start=251,
+  serialized_end=491,
 )
 
 
@@ -328,6 +329,13 @@ _TIME = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='tz', full_name='Time.tz', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -340,8 +348,8 @@ _TIME = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=474,
-  serialized_end=526,
+  serialized_start=493,
+  serialized_end=557,
 )
 
 
@@ -378,8 +386,8 @@ _TIMEHOLIDAYS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=528,
-  serialized_end=591,
+  serialized_start=559,
+  serialized_end=622,
 )
 
 
@@ -416,8 +424,8 @@ _TIMEDATES = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=593,
-  serialized_end=668,
+  serialized_start=624,
+  serialized_end=699,
 )
 
 
@@ -455,8 +463,8 @@ _TIMEDELTA = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=670,
-  serialized_end=772,
+  serialized_start=701,
+  serialized_end=803,
 )
 
 
@@ -500,8 +508,8 @@ _DATERANGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=774,
-  serialized_end=891,
+  serialized_start=805,
+  serialized_end=922,
 )
 
 
@@ -596,6 +604,13 @@ _CALENDAR = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='aliases', full_name='Calendar.aliases', index=12,
+      number=13, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -608,8 +623,39 @@ _CALENDAR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=894,
-  serialized_end=1292,
+  serialized_start=925,
+  serialized_end=1340,
+)
+
+
+_CALENDARLIST = _descriptor.Descriptor(
+  name='CalendarList',
+  full_name='CalendarList',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='calendars', full_name='CalendarList.calendars', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1342,
+  serialized_end=1386,
 )
 
 _OFFSET.fields_by_name['type'].enum_type = _OFFSET_TYPES
@@ -635,6 +681,7 @@ _CALENDAR.fields_by_name['special_closes'].message_type = _TIMEHOLIDAYS
 _CALENDAR.fields_by_name['special_closes_adhoc'].message_type = _TIMEDATES
 _CALENDAR.fields_by_name['execution_time_from_open'].message_type = _TIMEDELTA
 _CALENDAR.fields_by_name['execution_time_from_close'].message_type = _TIMEDELTA
+_CALENDARLIST.fields_by_name['calendars'].message_type = _CALENDAR
 DESCRIPTOR.message_types_by_name['Offset'] = _OFFSET
 DESCRIPTOR.message_types_by_name['Holiday'] = _HOLIDAY
 DESCRIPTOR.message_types_by_name['Time'] = _TIME
@@ -643,6 +690,7 @@ DESCRIPTOR.message_types_by_name['TimeDates'] = _TIMEDATES
 DESCRIPTOR.message_types_by_name['TimeDelta'] = _TIMEDELTA
 DESCRIPTOR.message_types_by_name['DateRange'] = _DATERANGE
 DESCRIPTOR.message_types_by_name['Calendar'] = _CALENDAR
+DESCRIPTOR.message_types_by_name['CalendarList'] = _CALENDARLIST
 DESCRIPTOR.enum_types_by_name['Observance'] = _OBSERVANCE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -701,6 +749,13 @@ Calendar = _reflection.GeneratedProtocolMessageType('Calendar', (_message.Messag
   # @@protoc_insertion_point(class_scope:Calendar)
   ))
 _sym_db.RegisterMessage(Calendar)
+
+CalendarList = _reflection.GeneratedProtocolMessageType('CalendarList', (_message.Message,), dict(
+  DESCRIPTOR = _CALENDARLIST,
+  __module__ = 'protos.calendar_pb2'
+  # @@protoc_insertion_point(class_scope:CalendarList)
+  ))
+_sym_db.RegisterMessage(CalendarList)
 
 
 # @@protoc_insertion_point(module_scope)

@@ -13,7 +13,6 @@ from contrib.control.controller import controller
 from contrib.control.modes import simulation_mode
 from contrib.utils import graph
 from contrib.control import domain
-from contrib.control.loop import loop
 
 
 def chunk_bytes(bytes_, chunk_size):

@@ -11,15 +11,12 @@ import subprocess
 #TODO: We should encapsulate the controller, since the behavior changes with the environment..
 class SimulationControlMode(mode.ControlMode):
     #todo: the control mode should take-in a broker
-    def __init__(self):
+    def __init__(self, capital, max_leverage):
         super(SimulationControlMode, self).__init__()
-        self._broker = sb.SimulationBroker()#todo: we need a simulation blotter
+        self._broker = sb.SimulationBroker(capital, max_leverage)#todo: we need a simulation blotter
 
     def name(self):
         return 'simulation'
-
-    def _create_domain_filter(self, dom_def, clocks, exchange_mappings, domain_id, broker):
-        return domain_filter.SimulationDomainFilter(dom_def, clocks, exchange_mappings, broker)
 
     def _create_trader(self, broker_url):
         #creates an address for the controllable
@@ -35,6 +32,8 @@ class SimulationControlMode(mode.ControlMode):
         # and return the controllable stub also, we need to propagate kill signals
         # we will be using the subprocess module to propagate the kill signal etc.
         subprocess.Popen(['python', 'contrib/control/controllable/server.py', 'start'])
+
+        #todo: return stub
         return
 
     def _create_broker(self):

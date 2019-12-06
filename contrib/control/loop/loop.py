@@ -16,6 +16,7 @@ from contrib.control.clock.clock import StopExecution
 
 from contrib.trading_calendars import calendar_utils as cu
 from contrib.control.clock import clock
+from contrib.control.modes import simulation_mode
 
 
 def _get_minutes(clocks, session_length):
@@ -52,6 +53,7 @@ class MinuteSimulationLoop(Loop):
         self._start_dt = start_dt
         self._end_dt = end_dt
         self._clocks = []
+        self._control_mode = simulation_mode.SimulationControlMode()
 
     def run(self):
         clocks = self._clocks
@@ -79,9 +81,9 @@ class MinuteSimulationLoop(Loop):
             minute_emission=True)
 
 
-class TestMinuteLiveLoop(object):
+class SimulationMinuteLoop(object):
     # todo: Create tests for the simulation loop...
-    def __init__(self):
+    def __init__(self, start, end, capital):
         # todo: we need a proto_calendar database or directory => hub?
         self._pending_clocks = queue.Queue()
         self._clocks = {}
@@ -111,6 +113,8 @@ class TestMinuteLiveLoop(object):
             minute_emission=True)
 
     def run(self, clocks):
+        #todo this runs in its own thread
+
         # todo: we need to test this. How? simulate time?
         # the loop is responsible of synchronizing the real time real time with the expected time
 
@@ -165,8 +169,6 @@ class TestMinuteLiveLoop(object):
                 t0 = t1
             else:
                 break
-
-        print('Starting at: {}'.format(cur_exp_dt))
 
         i = 0
         prev_t = 0
@@ -242,7 +244,8 @@ class MinuteLiveLoop(object):
         self._ntp_server_address = 'pool.ntp.org' if not ntp_server_address else ntp_server_address
 
         self._thread = threading.Thread(self._run)
-        self._lock = threading.Lock()
+        self._run_lock = threading.Lock()
+        self._queue_lock = threading.Lock()
 
         self._stop_event = threading.Event()
         self._stop = False
@@ -260,7 +263,8 @@ class MinuteLiveLoop(object):
         return ntp_stats.offset
 
     def execute(self, fn):
-        self._to_execute.append(fn)
+        with self._queue_lock:
+            self._to_execute.append(fn)
 
     def _get_minutes(self, clock, session_length):
         return pd.DatetimeIndex(
@@ -336,11 +340,12 @@ class MinuteLiveLoop(object):
             to_execute = self._to_execute
 
             #execute all pending requests
-            while True:
-                try:
-                    to_execute.popleft()(self._get_clocks)
-                except IndexError:
-                    break
+            with self._queue_lock:
+                while True:
+                    try:
+                        to_execute.popleft()(self._get_clocks)
+                    except IndexError:
+                        break
 
             # # check if new clocks have been added from the execution
             # if self._update_minutes:
@@ -391,14 +396,15 @@ class MinuteLiveLoop(object):
                 for mode in modes:
                     mode.stop()
 
-    def run(self):
+    def start(self):
         #todo: should we protect against race conditions? two threads might call this function
         # at the same time.
         #ingore further calls it the thread is already running
-        try:
-            self._thread.start()
-        except RuntimeError:
-            pass
+        with self._run_lock:
+            try:
+                self._thread.start()
+            except RuntimeError:
+                pass
 
     def stop(self, liquidate=False):
         self._stop = True
@@ -431,4 +437,4 @@ class MinuteLiveLoop(object):
         pass
 
     def add_control_mode(self, mode):
-        self._modes.append(mode)
+        self._control_modes.append(mode)

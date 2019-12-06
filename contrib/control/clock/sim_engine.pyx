@@ -24,6 +24,7 @@ from protos.clock_pb2 import (
     SESSION_END,
     MINUTE_END,
     BEFORE_TRADING_START,
+    TRADE_END
 )
 
 cdef np.int64_t _nanos_in_minute = 60000000000
@@ -40,6 +41,7 @@ cdef class MinuteSimulationClock:
                  market_opens,
                  market_closes,
                  before_trading_start_minutes,
+                 trade_end_minutes,
                  minute_emission=False):
         self.minute_emission = minute_emission
 
@@ -47,6 +49,7 @@ cdef class MinuteSimulationClock:
         self.market_closes_nanos = market_closes.values.astype(np.int64)
         self.sessions_nanos = sessions.values.astype(np.int64)
         self.bts_nanos = before_trading_start_minutes.values.astype(np.int64)
+        self.trade_end_nanos = trade_end_minutes.values.astype(np.int64)
 
         self.minutes_by_session = self.calc_minutes_by_session()
 
@@ -75,37 +78,51 @@ cdef class MinuteSimulationClock:
 
         for idx, session_nano in enumerate(self.sessions_nanos):
             bts_minute = pd.Timestamp(self.bts_nanos[idx], tz='UTC')
+            trade_end_minute = pd.Timestamp(self.trade_end_nanos[idx], tz='UTC')
             regular_minutes = self.minutes_by_session[session_nano]
             yield regular_minutes[0] - pd.Timedelta(minutes=5), SESSION_START
+            trade_end_idx = regular_minutes.searchsorted(trade_end_minute)
 
             if bts_minute > regular_minutes[-1]:
                 # before_trading_start is after the last close,
                 # so don't emit it
                 for minute, evt in self._get_minutes_for_list(
-                    regular_minutes,
-                    minute_emission
-                ):
+                    regular_minutes[0:trade_end_idx],
+                    minute_emission):
                     yield minute, evt
+
+                yield trade_end_minute, TRADE_END
+
+                for minute, evt in self._get_minutes_for_list(
+                    regular_minutes[trade_end_idx:]):
+                    yield minute, evt
+
             else:
                 # we have to search anew every session, because there is no
                 # guarantee that any two session start on the same minute
                 bts_idx = regular_minutes.searchsorted(bts_minute)
 
+
                 # emit all the minutes before bts_minute
                 for minute, evt in self._get_minutes_for_list(
                     regular_minutes[0:bts_idx],
-                    minute_emission
-                ):
+                    minute_emission):
                     yield minute, evt
 
                 yield bts_minute, BEFORE_TRADING_START
 
                 # emit all the minutes after bts_minute
                 for minute, evt in self._get_minutes_for_list(
-                    regular_minutes[bts_idx:],
-                    minute_emission
-                ):
+                    regular_minutes[bts_idx:trade_end_idx],
+                    minute_emission):
                     yield minute, evt
+
+                yield trade_end_minute, TRADE_END
+
+                #todo: don't emit BAR/MINUTE_END events after trade end?
+                # for minute, evt in self._get_minutes_for_list(
+                #   regular_minutes[trade_end_idx:]):
+                #   yield minute, evt
 
             yield regular_minutes[-1], SESSION_END
 

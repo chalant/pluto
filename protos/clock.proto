@@ -43,19 +43,20 @@ message Attributes {
 enum Event {
     INITIALIZE = 0;
     SESSION_START = 1;
-    BAR = 2;
-    MINUTE_END = 3;
-    SESSION_END = 4;
-    BEFORE_TRADING_START = 5;
-    LIQUIDATE = 6;
-    STOP = 7;
-    CALENDAR = 8;
+    BEFORE_TRADING_START = 2;
+    BAR = 3;
+    MINUTE_END = 4;
+    TRADE_END = 5;
+    SESSION_END = 6;
+    LIQUIDATE = 7;
+    STOP = 8;
+    CALENDAR = 9;
 }
 
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
     Event event = 2;
-    string exchange_name = 3;
+    repeated string exchanges = 3;
 }
 
 enum Frequency {
