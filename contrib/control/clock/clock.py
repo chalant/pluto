@@ -35,6 +35,9 @@ class ClockEvent(object):
             event=clock_pb2.ClockEvent,
             exchange_name=self.exchange_name)
 
+class FakeClock(object):
+    def update(self, dt):
+        return ()
 
 # a clock is responsible of filtering time events from the loop.
 class Clock(object):
@@ -116,107 +119,103 @@ class Clock(object):
             pd.DatetimeIndex([ts - pd.Timedelta(minutes=2) for ts in execution_opens]),
             minute_emission)
 
-    def update(self, real_dt, dt):
+    def update(self, dt):
         # todo: consider using a finite state machine for clocks
         # todo: should we send the current dt or pass the datetime at the moment of transfer?
         #  should we send both the current dt and the expected dt?
         # todo: we should consider reloading when there is a calendar update...
-        if not self._stop:
-            # todo: should we catch a stop iteration?
-            ts, evt = self._nxt_dt, self._nxt_evt
-            # if the generator is lagging behind, synchronize it with the current dt
-            # the ts must be either bigger or equal to dt.
+        # todo: should we catch a stop iteration?
+        ts, evt = self._nxt_dt, self._nxt_evt
+        # if the generator is lagging behind, synchronize it with the current dt
+        # the ts must be either bigger or equal to dt.
 
-            # print('{} Expected {} {} got {}'.format(self.exchange, ts, evt, dt))
+        # print('{} Expected {} {} got {}'.format(self.exchange, ts, evt, dt))
 
-            if ts < dt:
-                while ts < dt:
-                    # will stop if it is equal or bigger than dt
-                    # todo: we also need to update the sess_idx, since the we might change sessions
-                    ts, evt = self._next_(real_dt, dt)
-                    # output_.append(ts)
-                    if evt == clock_pb2.SESSION_START:
-                        self._sess_idx += 1
-                # print('{} Synchronized to {} {}'.format(self.exchange, ts, evt))
-                self._nxt_dt, self._nxt_evt = ts, evt
+        if ts < dt:
+            while ts < dt:
+                # will stop if it is equal or bigger than dt
+                # todo: we also need to update the sess_idx, since the we might change sessions
+                ts, evt = self._next_(dt)
+                # output_.append(ts)
+                if evt == clock_pb2.SESSION_START:
+                    self._sess_idx += 1
+            # print('{} Synchronized to {} {}'.format(self.exchange, ts, evt))
+            self._nxt_dt, self._nxt_evt = ts, evt
 
-            if dt == ts:
-                # output_.append(dt)
-                # print(self._calendar.name, dt)
-                # advance if the timestamp matches.
-                self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(real_dt, dt)
+        if dt == ts:
+            # output_.append(dt)
+            # print(self._calendar.name, dt)
+            # advance if the timestamp matches.
+            self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(dt)
 
-                # todo: it the real_dt is between session start and bfs, send a session start
-                # (and initialize if it's a first call). actually, the initialize could be handled
-                # client side.
-                # if the dt is between the session
+            # todo: it the real_dt is between session start and bfs, send a session start
+            # (and initialize if it's a first call). actually, the initialize could be handled
+            # client side.
+            # if the dt is between the session
 
-                # if it has not been initialized yet.
-                if not self._first_call_flag:
-                    # only consider session start events
-                    # todo: problem with the before trading starts event...
-                    # todo: this will never happen... we will always have time between sess start
-                    #  and bfs
-                    if evt == clock_pb2.SESSION_START and nxt_evt == clock_pb2.BEFORE_TRADING_START:
-                        # we can still initialize if we're between the session start ts and
-                        # bfs ts
-                        if dt < nxt_ts:
-                            self._notify(real_dt, dt, evt)
-                            self._first_call_flag = True
-                        self._sess_idx += 1
-                        # print('{} Session start {}'.format(self.exchange, ts))
-                    # we just pass all the other events
-                    elif evt == clock_pb2.BAR:
-                        minute_emission = self._minute_emission
-                        if minute_emission:
-                            # skip the minute_end event
-                            self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(real_dt, dt)
-                            if nxt_evt == clock_pb2.SESSION_END:
-                                # skip the session_end event
-                                # print('{} Session end {}'.format(self.exchange, nxt_ts))
-                                self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
-                        else:
-                            # skip the session_end event
-                            self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
-
-                else:
+            # if it has not been initialized yet.
+            if not self._first_call_flag:
+                # only consider session start events
+                # todo: problem with the before trading starts event...
+                # todo: this will never happen... we will always have time between sess start
+                #  and bfs
+                if evt == clock_pb2.SESSION_START and nxt_evt == clock_pb2.BEFORE_TRADING_START:
+                    # we can still initialize if we're between the session start ts and
+                    # bfs ts
+                    if dt < nxt_ts:
+                        # self._notify(real_dt, dt, evt)
+                        self._first_call_flag = True
+                    self._sess_idx += 1
+                    # print('{} Session start {}'.format(self.exchange, ts))
+                # we just pass all the other events
+                elif evt == clock_pb2.BAR:
                     minute_emission = self._minute_emission
-                    if evt == clock_pb2.BAR:
-                        self._notify(real_dt, dt, evt)
-                        # the session end event comes after the bar event
-                        if minute_emission:
-                            # call next once again for the minute end event
-                            # minute_event
-                            self._notify(real_dt, dt, nxt_evt)
-                            # session_end
-                            self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(real_dt, dt)
-                            # call next once again for the minute end event
-                            if nxt_evt == clock_pb2.SESSION_END:
-                                # print('{} Session end {}'.format(self.exchange, nxt_ts))
-                                self._notify(real_dt, dt, nxt_evt)
-                                self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
-                        else:
-                            self._notify(real_dt, dt, nxt_evt)
-                            # session_start event
-                            self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
-                    elif evt == clock_pb2.SESSION_START:
-                        # update the session idx
-                        # print('{} Session start {}'.format(self.exchange, ts))
-                        self._sess_idx += 1
-                        self._notify(real_dt, dt, evt)
-                    elif evt == clock_pb2.SESSION_END:
-                        # print('{} Session end {}'.format(self.exchange, nxt_ts))
-                        self._nxt_dt, self._nxt_evt = self._next_(real_dt, dt)
+                    if minute_emission:
+                        # skip the minute_end event
+                        self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(dt)
+                        if nxt_evt == clock_pb2.SESSION_END:
+                            # skip the session_end event
+                            # print('{} Session end {}'.format(self.exchange, nxt_ts))
+                            self._nxt_dt, self._nxt_evt = self._next_(dt)
+                    else:
+                        # skip the session_end event
+                        self._nxt_dt, self._nxt_evt = self._next_(dt)
+            else:
+                minute_emission = self._minute_emission
+                if evt == clock_pb2.BAR:
+                    # the session end event comes after the bar event
+                    if minute_emission:
+                        # call next once again for the minute end event
+                        # minute_event
+                        # session_end
+                        self._nxt_dt, self._nxt_evt = nxt_ts, nxt_evt = self._next_(dt)
+                        # call next once again for the minute end event
+                        if nxt_evt == clock_pb2.SESSION_END:
+                            # print('{} Session end {}'.format(self.exchange, nxt_ts))
+                            self._nxt_dt, self._nxt_evt = self._next_(dt)
+                    else:
+                        # get the session_start event
+                        self._nxt_dt, self._nxt_evt = self._next_(dt)
+                elif evt == clock_pb2.SESSION_START:
+                    # update the session idx
+                    # print('{} Session start {}'.format(self.exchange, ts))
+                    self._sess_idx += 1
+                elif evt == clock_pb2.SESSION_END:
+                    # print('{} Session end {}'.format(self.exchange, nxt_ts))
+                    self._nxt_dt, self._nxt_evt = self._next_(dt)
+            return ts, evt, self._exchange
         else:
-            self._notify(real_dt, dt, clock_pb2.STOP)
+            #timestamp is greater, we sont consider the signal
+            return ()
 
-    def _next_(self, real_dt, dt):
+
+    def _next_(self, dt):
         try:
             return next(self._generator)
         except StopIteration:
             if dt < self._end_dt:
                 self._load_attributes(pd.Timestamp(pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min), tz='UTC'))
-                self._notify(real_dt, dt, clock_pb2.CALENDAR)
+                # self._notify(real_dt, dt, clock_pb2.CALENDAR)
                 self._sess_idx = 0
                 # print('Current timestamp {} Last timestamp {}'.format(dt, self._end_dt))
                 return  next(self._generator)
@@ -225,20 +224,12 @@ class Clock(object):
                 if self._reload_flag:
                     self._load_attributes(
                         pd.Timestamp(pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min), tz='UTC'))
-                    self._notify(real_dt, dt, clock_pb2.CALENDAR)
+                    # self._notify(real_dt, dt, clock_pb2.CALENDAR)
                     self._sess_idx = 0
                     # print('Current timestamp {} Last timestamp {}'.format(dt, self._end_dt))
                     return next(self._generator)
                 else:
                     raise StopExecution
-
-    def stop(self, real_dt, dt):
-        self._notify(real_dt, clock_pb2.STOP)
-
-    def _notify(self, real_dt, dt, event):
-        exchange = self._exchange
-        for handler in self._handlers:
-            handler.update(self, ClockEvent(dt, event, exchange))
 
 
     def _load_attributes(self, start_dt, end_dt=None):

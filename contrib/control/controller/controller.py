@@ -101,6 +101,15 @@ class _Stop(object):
 
 class _Run(object):
     def __init__(self, builder, control_mode, params, exchange_per_country_code):
+        '''
+
+        Parameters
+        ----------
+        builder
+        control_mode
+        strategy: contrib.interface.directory._Strategy
+        exchange_per_country_code
+        '''
         self._builder = builder
         self._ctl_mode = control_mode
         self._params = params
@@ -145,7 +154,8 @@ class _Run(object):
         # todo: each performance is stored in a group (simulation group, live group etc.)
         pfn = mode.name
         for param in params:
-            session_id = param.session_id
+            stg = param.strategy
+
             sess = sessions.get(sess_id, None)
             # create a new session instance.
             if not sess:
@@ -210,6 +220,7 @@ class _Run(object):
 
 class Controller(controller_pb2_grpc.ControllerServicer):
     def __init__(self, hub_client, builder):
+        #todo: we need exchange metadata?
         self._hub = hub_client
         self._builder = builder
 
@@ -219,6 +230,7 @@ class Controller(controller_pb2_grpc.ControllerServicer):
         self._stop_event = threading.Event()
 
         # classify exchanges by country_codes and asset_types
+        # todo: we need to make some sort of query
         for exc in hub_client.get_exchanges():
             country_code = exc.country_code
             name = exc.name

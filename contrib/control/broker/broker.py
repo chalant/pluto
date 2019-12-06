@@ -2,6 +2,7 @@ from abc import abstractmethod, ABC
 
 class Broker(ABC):
     def __init__(self):
+        #todo: we have changed the definition of a session.
         self._sessions = {}
 
         self._to_add = []

@@ -1,41 +1,45 @@
 syntax = 'proto3';
 
 import "google/protobuf/empty.proto";
-
-import "protos/data_bundle.proto";
-import "protos/broker.proto";
-import "protos/controller.proto";
-
 import "google/protobuf/timestamp.proto";
 
+import "protos/broker.proto";
+import "protos/controller.proto";
 import "protos/clock.proto";
 import "protos/data.proto";
+import "protos/calendar.proto";
+
+
 
 //TODO: State: bytes...
 
 service Controllable {
     /*A service to be controller by a controller service*/
     //the controller calls this method to send a data bundle to the controllable
-    rpc UpdateDataBundle (stream Data) returns (google.protobuf.Empty);
-    rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
+    rpc update_data_bundle (stream Data) returns (google.protobuf.Empty);
+    rpc update_parameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
     //called to initialize the controllable (sends initparams)
     //(strategy etc.)
-    rpc Initialize (stream Data) returns (google.protobuf.Empty);
+    rpc initialize (stream Data) returns (google.protobuf.Empty);
     //TODO: should return the state of the strategy run session at each update...
     //update sends an UpdateRequest. since this could get arbitrarily big, we send it
     //in chunks of bytes.
-    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
-    rpc UpdateAccount(stream Data) returns (google.protobuf.Empty);
+    rpc clock_update (ClockEvent) returns (google.protobuf.Empty);
+    rpc update_account(stream Data) returns (google.protobuf.Empty);
     //receives periodic calendar updates
-    rpc UpdateCalendar (stream Data) returns (google.protobuf.Empty);
+    rpc update_calendar (stream Data) returns (google.protobuf.Empty);
     //TODO: should return the state of the controllable after it stopped...
-    rpc Stop (StopParams) returns (stream Data);
+    rpc stop (StopParams) returns (stream Data);
 }
 
 message InitParams {
-    CompoundDomainDef domain = 1;
+    string id = 1;
     bytes strategy = 2;
-    float capital_ratio = 3;
+    float capital = 3;
+    repeated string exchanges = 4;
+    float max_leverage = 5;
+    string data_frequency = 6;
+    Calendar calendar = 7;
 }
 
 message UpdateRequest {

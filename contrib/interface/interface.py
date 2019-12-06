@@ -41,7 +41,7 @@ class Account(itf_rpc.GatewayServicer):
 
         self._server = server = grpc.server(
             futures.ThreadPoolExecutor(),
-            interceptors=(ath + avl))
+            interceptors=ath + avl)
 
         itf_rpc.add_EditorServicer_to_server(edt, server)
         itf_rpc.add_MonitorServicer_to_server(mtr, server)
