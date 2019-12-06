@@ -36,7 +36,10 @@ class BFS(State):
                         return ts, SESSION_END, []
                 elif c_evt == BAR or  c_evt == TRADE_END:
                     active.append((c_evt, exchange))
-        return ts, evt, active
+        if active:
+            return ts, evt, active
+        else:
+            return
 
 class InSession(State):
     def _aggregate(self, controllable, ts, evt, signals):
@@ -75,7 +78,6 @@ class Active(State):
 class OutSession(State):
     def _aggregate(self, controllable, ts, evt, signals):
         if evt == SESSION_START:
-            controllable.state = controllable.in_session
             exchanges = controllable.exchanges
             active = []
             flag = False
@@ -84,21 +86,18 @@ class OutSession(State):
                 # todo: map exchange to itself so that we can use get() => faster
                 if exchange in exchanges:
                     # search for a session start event if it have not be done yet.
-                    if not flag:
-                        if c_evt == SESSION_START:
-                            # flag if we hit one SESSION_START event
-                            flag = True
-                            active.append((c_evt, exchange))
-                    else:
+                    if c_evt == SESSION_START:
+                        # flag if we hit one SESSION_START event
                         active.append((c_evt, exchange))
-            if flag:
+            if active:
                 controllable.state = controllable.active
                 return (ts, SESSION_START, active)
             else:
                 #no session_start event in signals
                 controllable.state = controllable.in_session
                 return
-        return
+        else:
+            return
 
 class Idle(State):
     def _aggregate(self, controllable, ts, evt, signals):

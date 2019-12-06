@@ -12,7 +12,7 @@ from contrib.coms.utils import conversions
 from contrib.trading_calendars import calendar_utils as cu
 from contrib.coms.client import account
 from contrib.coms.utils import conversions as crv
-from contrib.control.controllable import state as st
+from contrib.control.controllable import states as st
 
 from protos import controllable_pb2
 from protos.clock_pb2 import (
