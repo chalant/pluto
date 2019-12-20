@@ -185,8 +185,8 @@ ext_modules = [
         ['zipline/pipeline/loaders/blaze/_core.pyx'],
         depends=['zipline/lib/adjustment.pxd'],
     ),
-    Extension('contrib.control.clock.sim_engine',
-              ['contrib/control/clock/sim_engine.pyx']),
+    Extension('pluto.control.clock.sim_engine',
+              ['pluto/control/clock/sim_engine.pyx']),
 ]
 
 

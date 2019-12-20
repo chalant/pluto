@@ -1,8 +1,0 @@
-syntax = "proto3";
-
-import "google/protobuf/timestamp.proto";
-
-message TrackerState {
-    google.protobuf.Timestamp first_open_session = 1;
-    bytes account_state = 2;
-}

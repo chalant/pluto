@@ -9,27 +9,27 @@ import "protos/clock.proto";
 import "protos/data.proto";
 import "protos/calendar.proto";
 
-
-
 //TODO: State: bytes...
 
 service Controllable {
-    /*A service to be controller by a controller service*/
+    /*A service to be controlled by a controller service*/
     //the controller calls this method to send a data bundle to the controllable
-    rpc update_data_bundle (stream Data) returns (google.protobuf.Empty);
-    rpc update_parameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
+    rpc UpdateDataBundle (stream Chunk) returns (google.protobuf.Empty);
+    rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
     //called to initialize the controllable (sends initparams)
     //(strategy etc.)
-    rpc initialize (stream Data) returns (google.protobuf.Empty);
+    rpc Initialize (stream Chunk) returns (google.protobuf.Empty);
     //TODO: should return the state of the strategy run session at each update...
     //update sends an UpdateRequest. since this could get arbitrarily big, we send it
     //in chunks of bytes.
-    rpc clock_update (ClockEvent) returns (google.protobuf.Empty);
-    rpc update_account(stream Data) returns (google.protobuf.Empty);
+    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
+    //for updating positions, transactions etc.
+    rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
     //receives periodic calendar updates
-    rpc update_calendar (stream Data) returns (google.protobuf.Empty);
+    rpc UpdateCalendar (stream Chunk) returns (google.protobuf.Empty);
     //TODO: should return the state of the controllable after it stopped...
-    rpc stop (StopParams) returns (stream Data);
+    rpc Stop (StopRequest) returns (stream Chunk);
+    rpc IngestData(stream Chunk) returns (google.protobuf.Empty);
 }
 
 message InitParams {
@@ -40,6 +40,8 @@ message InitParams {
     float max_leverage = 5;
     string data_frequency = 6;
     Calendar calendar = 7;
+    google.protobuf.Timestamp start = 8;
+    google.protobuf.Timestamp end = 9;
 }
 
 message UpdateRequest {

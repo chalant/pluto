@@ -1,0 +1,56 @@
+syntax = 'proto3';
+
+import "google/protobuf/timestamp.proto";
+
+import "protos/data.proto";
+
+service Editor {
+    //for developing and editing strategies
+    //rpc BackTest (BackTestRequest) returns (stream PerformancePacket);
+    rpc New (NewStrategyRequest) returns (stream Chunk);
+    rpc Save (stream Chunk) returns (SaveResponse);
+    //pushes the directory into the server.
+    rpc Push (stream Chunk) returns (PushResponse);
+    rpc GetStrategy (StrategyRequest) returns (stream Chunk);
+}
+
+service Environment {
+    rpc Setup(SetupRequest) returns (SetupResponse);
+}
+
+message NewStrategyRequest {
+    string name = 1;
+    string universe = 2;
+}
+
+message NewStrategyResponse {
+    bytes template = 1;
+}
+
+message PushResponse {
+
+}
+
+message SaveRequest {
+    bytes strategy = 2;
+}
+
+message SaveResponse {
+
+}
+
+message StrategyRequest {
+    string strategy_id = 1;
+}
+
+message SetupRequest {
+    //setup the run parameters of the dev environment
+    float capital = 1;
+    float max_leverage = 2;
+    google.protobuf.Timestamp start = 3;
+    google.protobuf.Timestamp end = 4;
+}
+
+message SetupResponse {
+
+}

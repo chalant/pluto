@@ -17,11 +17,11 @@ service Dev {
     to a previous version of an implementation.
     */
     //stores data from clients (clients specifies the object id in the metadata)
-    rpc StoreData(stream Data) returns (google.protobuf.Empty);
-    rpc GetData(DataRequest) returns (stream Data);
+    rpc StoreData (stream Chunk) returns (google.protobuf.Empty);
+    rpc GetData (DataRequest) returns (stream Chunk);
     //returns a graph as a stream of bytes, since a node can be arbitrarily big
-    rpc GetGraph(google.protobuf.Empty) returns (stream Data);
-    rpc GetSession(stream StrategyRequest) returns (stream Data);
+    rpc GetGraph (google.protobuf.Empty) returns (stream Chunk);
+    rpc GetSession (stream StrategyRequest) returns (stream Chunk);
 
     //DEVELOPMENT API
     //request a strategy deployment in a new environment (depending on the environment,
@@ -29,28 +29,28 @@ service Dev {
     //deploys a specific session.
     rpc Deploy (DeploymentRequest) returns (DeploymentReply);
     //the client also sends a name as metadata...
-    rpc New (stream DomainDef) returns (stream Data);
+    rpc New (stream DomainDef) returns (stream Chunk);
     //adds a new version to the list of strategies
-    rpc Modify (stream CompoundDomainDef) returns (stream Data);
+    rpc Modify (stream CompoundDomainDef) returns (stream Chunk);
     //pushes one or more strategies to the the hub...
-    rpc Push (stream Data) returns (DeploymentReply);
+    rpc Push (stream Chunk) returns (DeploymentReply);
     rpc DeploymentStatus (DeploymentStatusRequest) returns (stream DeploymentStatusReply);
     //mounts a broker to be used by the controllers. The broker is a service that must
     //implement a certain interface... Note this method cannot be called by any user.
     rpc MountBroker (BrokerID) returns (MountStatus);
     //get a list of the strategies on the current branch
-    rpc List (ListRequest) returns (stream Data);
+    rpc List (ListRequest) returns (stream Chunk);
 
     //returns a list of compound domain def.
-    rpc Domains(google.protobuf.Empty) returns (stream Data);
+    rpc Domains (google.protobuf.Empty) returns (stream Chunk);
 
     //CONTROL API.
     //runs a strategies with initial parameters
     //this will pull the strategy from the store and run it.
     //can run multiple strategies at the same time...
     rpc Run(DelimitedRunParams) returns (google.protobuf.Empty);
-    rpc Stop(stream StopParams) returns (StopStatus);
-    rpc Watch(WatchRequest) returns (stream Data);
+    rpc Stop (stream StopParams) returns (StopStatus);
+    rpc Watch (WatchRequest) returns (stream Chunk);
 
 }
 
