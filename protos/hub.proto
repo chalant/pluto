@@ -8,12 +8,12 @@ import "protos/exchange.proto";
 import "protos/controller.proto";
 
 service Hub {
-    rpc UploadGraph(stream Data) returns (google.protobuf.Empty);
-    rpc DownloadGraph(google.protobuf.Empty) returns (stream Data);
-    rpc GetDataBundle(CompoundDomainDef) returns (stream Data);
-    rpc Deploy(DeploymentRequest) returns (DeploymentResponse);
-    rpc GetCalendars(google.protobuf.Empty) returns (stream Data);
-    rpc GetExchanges(google.protobuf.Empty) returns (stream Exchange);
+    rpc UploadGraph (stream Chunk) returns (google.protobuf.Empty);
+    rpc DownloadGraph (google.protobuf.Empty) returns (stream Chunk);
+    rpc GetDataBundle (CompoundDomainDef) returns (stream Chunk);
+    rpc Deploy (DeploymentRequest) returns (DeploymentResponse);
+    rpc GetCalendars (google.protobuf.Empty) returns (stream Chunk);
+    rpc GetExchanges (google.protobuf.Empty) returns (stream Exchange);
     rpc RunPaperMode(RunParams) returns (google.protobuf.Empty);
     rpc RunLiveMode(RunParams) returns (google.protobuf.Empty);
 }

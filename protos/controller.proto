@@ -9,22 +9,10 @@ import "protos/clock.proto";
 import "protos/data.proto";
 
 service Controller {
-    //This method is a callback for controllables: each controllable sends back a performance
-    //packet to the controller by specifying the session_id in the metadata
-    rpc PerformancePacketUpdate (stream Data) returns (google.protobuf.Empty);
-    rpc Stop (StopParams) returns (StopStatus);
-    //orders liquidation of all assets in all the controllables
-    rpc Liquidate(google.protobuf.Empty) returns (google.protobuf.Empty);
-    //we can watch the performance of the strategy in real-time...
-    /*rpc Watch (StrategyID) returns (stream Data);*/
-    //dynamically updates capital and/or leverage of a running strategy
-    //NOTE: this information can be obtained from the broker. ex: interactive brokers...
-    //The controller holds the master account which contains the initial capital of the account...
-    rpc UpdateLevCap (stream LevCap) returns (CapitalAssignmentStatus);
-    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
-    //TODO: should be able to check for available domains.
-    rpc Deploy(stream Data) returns (google.protobuf.Empty);
-    rpc UpdateGraph(stream Data) returns (google.protobuf.Empty);
+    rpc Stop(StopRequest) returns (StopResponse);
+    rpc Run(RunRequest) returns (RunResponse);
+    //watch a particular strategy performance stream.
+    rpc Watch(WatchRequest) returns (stream PerformancePacket);
 }
 
 enum SessionStatus {
@@ -36,53 +24,38 @@ message Status {
     SessionStatus session_status = 1;
 }
 
-message CapitalUpdate {
-    float capital_ratio = 1;
-    string session_id = 2;
-}
 
-message MaxLeverageUpdate{
-    float max_leverage = 1;
-    string session_id = 2;
-}
-
-message LevCap {
-    float capital_ratio = 1;
-    float max_leverage = 2;
-    string session_id = 3; //strategy id
-}
-
-message CapitalAssignmentStatus {
-
-}
-
-message DelimitedRunParams {
-    repeated RunParams run_params = 1;
-    google.protobuf.Timestamp start_date = 2;
-    google.protobuf.Timestamp end_date = 3;
-    string benchmark_asset = 4;
-
+message RunRequest {
+    RunMode mode = 1; //necessary in realtime mode not in backtesting
+    repeated RunParams run_params = 2;
+    google.protobuf.Timestamp start_timestamp = 3; //this is optional
 }
 
 message RunParams {
-    string session_id = 1;
-    float capital_ratio = 2;
-    float max_leverage = 3;
-    //TODO: the benchmark asset should be set depending on the domain (not manually)
-    // the emission_rate and the data frequency should be inferred from the domain
-    //start date and end date should be inferred from the environment
-    //Frequency emission_rate = 4;
-    //string benchmark_asset = 5;
-    //Frequency data_frequency = 6;
+    string strategy_id = 1;
+    string capital_ratio = 2;
+    string universe = 3;
+    //Frequency data_frequency = 4;
 }
 
-message StopParams {
-    bool liquidate = 1;
+enum RunMode {
+    PAPER = 0;
+    LIVE = 1;
 }
 
+message RunResponse {
+}
 
-message StopStatus {
+message StopRequest {
+    string strategy_id = 1;
+    bool liquidate = 2;
+}
 
+message StopResponse {
+}
+
+message WatchRequest {
+    string strategy_id = 1;
 }
 
 message Performance {

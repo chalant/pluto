@@ -8,10 +8,10 @@ service Admin {
     rpc Login(LoginRequest) returns (LoginReply);
 
     //client must specify the type of the data in the metadata.
-    rpc Add(stream Data) returns (stream Data);
-    rpc Update(stream Data) returns (stream Data);
-    rpc Delete(stream Data) returns (google.protobuf.Empty);
-    rpc Get(stream Data) returns (stream Data);
+    rpc Add (stream Chunk) returns (stream Chunk);
+    rpc Update (stream Chunk) returns (stream Chunk);
+    rpc Delete (stream Chunk) returns (google.protobuf.Empty);
+    rpc Get (stream Chunk) returns (stream Chunk);
 }
 
 message LoginRequest {

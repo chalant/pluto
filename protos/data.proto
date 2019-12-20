@@ -1,5 +1,5 @@
 syntax='proto3';
 
-message Data {
+message Chunk {
     bytes data = 1;
 }

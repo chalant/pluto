@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+import "protos/protocol.proto";
+import "google/protobuf/timestamp.proto";
+
+
+message LedgerState {
+    Portfolio portfolio = 1;
+    Account account = 2;
+    google.protobuf.Timestamp last_checkpoint = 3;
+    repeated Order orders = 4;
+    google.protobuf.Timestamp first_session = 5;
+    repeated Return daily_returns = 6;
+}
+
+message Return {
+    google.protobuf.Timestamp timestamp = 1;
+    float value = 2;
+}
