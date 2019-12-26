@@ -9,8 +9,8 @@ class SimulationControllable(controllable.Controllable):
     def _get_algorithm_class(self):
         return algorithm.TradingAlgorithm
 
-    def _session_start(self, dt, calendar, params):
-        pass
+    def _get_sessions(self, dt, sim_params):
+        return self._sessions
 
     def _update_blotter(self, blotter, broker_data):
         pass

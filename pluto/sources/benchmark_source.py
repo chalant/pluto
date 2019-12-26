@@ -1,12 +1,15 @@
 import abc
 
 import pandas as pd
+import numpy as np
 
 from zipline.errors import (
     InvalidBenchmarkAsset,
     BenchmarkAssetNotAvailableTooEarly,
     BenchmarkAssetNotAvailableTooLate
 )
+
+from zipline.finance._finance_ext import minute_annual_volatility
 
 class BenchmarkSource(abc.ABC):
     def __init__(self,
@@ -35,7 +38,7 @@ class BenchmarkSource(abc.ABC):
 
         self._daily_returns = None
 
-        #todo: should also pre-compute volatility
+        #todo: should also pre-compute volatility and cumulative returns
         if len(sessions) == 0:
             self._precalculated_series = pd.Series()
         else:
@@ -50,6 +53,8 @@ class BenchmarkSource(abc.ABC):
                     emission_rate,
                     end + pd.Timedelta('1 Day'))
 
+    def on_session_start(self, sessions):
+        self._start_dt = sessions[0]
 
     def on_session_end(self, data_portal, trading_calendar, sessions):
         if self._recompute_hook():
@@ -64,6 +69,10 @@ class BenchmarkSource(abc.ABC):
                         'daily',
                         sessions[-1]
                     )
+                returns = self._daily_returns
+                self._cumulative_returns = np.cumprod(1 + returns.values)
+                self._annual_volatility = (returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
+
         start = sessions[0]
         end = sessions[-1]
         self._open_dt = trading_calendar.session_open(start)
@@ -82,6 +91,12 @@ class BenchmarkSource(abc.ABC):
                     'minute',
                     dt
                 )
+            returns = self._precalculated_series.values
+            self._cumulative_returns = np.cumprod(1 + returns)
+            self._annual_volatility = minute_annual_volatility(
+                returns.index.normalize().view('int64'),
+                returns.values,
+                self._daily_returns.values)
         self._minute_end_dt = dt
 
     @abc.abstractmethod
@@ -90,7 +105,16 @@ class BenchmarkSource(abc.ABC):
         raise NotImplementedError
 
     def daily_returns(self):
+        #todo: this array must be of the same length as ledger.daily_returns
         return self._daily_returns[self._start_dt:self._end_dt]
+
+    @property
+    def cumulative_returns(self):
+        return self._cumulative_returns
+
+    @property
+    def annual_volatility(self):
+        return self._annual_volatility
 
     def get_range(self):
         series = self._precalculated_series

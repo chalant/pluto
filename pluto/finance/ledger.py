@@ -22,7 +22,6 @@ class LiveLedger(saving.Savable):
 
         # metric only uses array
         self.daily_returns_array = collections.deque()
-        self._sessions = collections.deque()
 
         self._stats = PositionStats.new()
         self._positions = None

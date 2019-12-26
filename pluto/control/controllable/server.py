@@ -81,7 +81,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._idle = idle = st.Idle(self)
 
         self._state = idle
-        self._restrictions = None
 
         #used for queueing commands
         self._queue = queue.Queue()
@@ -151,6 +150,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._num_exchanges = len(exchanges)
 
         mode = params.mode
+
         controllable = get_controllable(params.mode)
         if controllable:
             self._controllable = controllable
@@ -158,7 +158,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 start_dt, end_dt,
                 calendar, strategy,
                 capital, max_leverage,
-                data_frequency)
+                data_frequency) #todo: arena?
             self._state = self._out_session
             #run the thread
             self._thread = thread = threading.Thread(self._run())
@@ -170,7 +170,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
         return emp.Empty()
 
     def Stop(self, request, context):
-        #todo
+        #todo needs to liquidate positions and wipe the state.
+        self._stop = True
         return emp.Empty()
 
     def UpdateParameters(self, request, context):
@@ -183,6 +184,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     def UpdateBroker(self, request_iterator, context):
         pass
+
 
     def UpdateDataBundle(self, request_iterator, context):
         self._controllable.ingest_data(request_iterator)
@@ -276,13 +278,36 @@ signal.signal(signal.SIGTERM, termination_handler)
 def cli():
     pass
 
+#todo: when launching, we need to check if a previous state exists...
+# if it does, we need to request all events that occurred starting from the latest checkpoint
+# if we haven't reached the last bar, we can continue execution (execute on the next bar).
+# If the session ended send performance packet etc. Any events between last checkpoint and now
+# that doesn't involve placing trades (session_end, minute_end, session_start) can be executed.
+# bar events will be executed on the next call after launch. When "replaying" the events, we
+# should not make any call-back to the controller or place any trades. We "replay" so that we can
+# synchronize variables (calendars, session_index etc.) => We need a "recovery" state or something
+# after that, we can resume to normal execution (in-session etc.)
+# all this logic must be done when launching the script.
 @cli.command()
-@click.argument('controller_url')
+@click.argument('framework_url')
 @cli.argument('controllable_url')
-def start(controller_url, controllable_url):
-    _SERVER.start(
-        controllable_url,
-        ControllableService(controller_url))
+def start(framework_url, controllable_url):
+    service = ControllableService(framework_url)
+    #todo: check if we have a state file.
+
+    #run forever or until an exception occurs, in which case, send back a report to the controller
+    #or write to a log file. If the strategy crashes internally, there might be some bug that
+    #need reviewing
+    try:
+        _SERVER.start(
+            controllable_url,
+            service)
+    except Exception:
+        #todo: store the state and send back a report to the controller.
+        state = service.get_state()
+
+    #if the script crashes for external reasons  it will restart and resume from its previous state.
+
 
 if __name__ == '__main__':
     cli()

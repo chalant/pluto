@@ -8,15 +8,19 @@ from pluto.finance.metrics import tracker_state_pb2 as trs
 
 
 class MetricsTracker(saving.Savable):
-    def __init__(self, capital, data_frequency, start_dt, metrics=None):
+    def __init__(self, benchmark_source, capital, data_frequency, start_dt, look_back, metrics=None):
         """
 
         Parameters
         ----------
-        account : contrib.coms.client.ledger.Account
-        metrics : set
+        benchmark_source: pluto.sources.benchmark_source.BenchmarkSource
+        metrics: set
+        data_frequency: str
+        start_dt: pandas.Timestamp
+        look_back: int
         """
-        self._ledger = ledger.LiveLedger(capital, data_frequency, start_dt)
+        self._benchmark_source = benchmark_source
+        self._ledger = ledger.LiveLedger(capital, data_frequency, start_dt, look_back)
 
         self._capital_base = capital
 
@@ -82,7 +86,7 @@ class MetricsTracker(saving.Savable):
         ledger.restore_state(tr_state.account_state)
 
 
-    def handle_minute_close(self, dt, data_portal, sessions):
+    def handle_minute_close(self, dt, data_portal, trading_calendar, sessions):
         """
 
         Handles the close of the given minute in minute emission.
@@ -119,10 +123,17 @@ class MetricsTracker(saving.Savable):
         }
 
         # updates returns at the end of the minute.
+        benchmark_source = self._benchmark_source
         ledger.end_of_bar(sessions)
+        benchmark_source.on_minute_end(dt, data_portal, trading_calendar, sessions)
 
         for metric in self._metrics:
-            metric.end_of_bar(packet=packet, ledger=ledger, dt=dt, data_portal=data_portal)
+            metric.end_of_bar(
+                packet=packet,
+                ledger=ledger,
+                benchmark_source=benchmark_source,
+                dt=dt,
+                data_portal=data_portal)
         return packet
 
     def handle_market_open(self, session_label, data_portal, trading_calendar):
@@ -152,7 +163,7 @@ class MetricsTracker(saving.Savable):
         for metric in self._metrics:
             metric.start_of_session(ledger=ledger, data_portal=data_portal)
 
-    def handle_market_close(self, dt, data_portal, sessions):
+    def handle_market_close(self, dt, data_portal, trading_calendar, sessions):
         first_session = self._ledger.first_session
 
         packet = {
@@ -172,10 +183,16 @@ class MetricsTracker(saving.Savable):
         }
 
         ledger = self._ledger
+        benchmark_source = self._benchmark_source
         ledger.end_of_session(sessions)
+        benchmark_source.on_session_end(data_portal, trading_calendar, sessions)
 
         for metric in self._metrics:
-            metric.end_of_session(packet=packet, ledger=ledger, data_portal=data_portal)
+            metric.end_of_session(
+                packet=packet,
+                ledger=ledger,
+                benchmark_source=benchmark_source,
+                data_portal=data_portal)
 
     @staticmethod
     def _execution_open_and_close(calendar, session):

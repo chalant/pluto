@@ -4,8 +4,6 @@ import operator as op
 
 import empyrical as ep
 import numpy as np
-import pandas as pd
-from zipline.finance._finance_ext import minute_annual_volatility
 
 
 class Metric(abc.ABC):
@@ -45,7 +43,6 @@ class Metric(abc.ABC):
         benchmark_source : BenchmarkSource
         """
         pass
-
 
     def start_of_session(self, **kwargs):
         """
@@ -136,28 +133,11 @@ class Returns(Metric):
 
 
 class BenchmarkReturnsAndVolatility(Metric):
-    # todo: should optimize this class since we are re-calculating without caching
     def initialization(self, **kwargs):
         self._first_session = kwargs.pop('first_session')
 
     def start_of_session(self, **kwargs):
         self._current_session = kwargs.pop('dt')
-
-    def _compute_daily_cumulative_returns(self, daily_returns_array):
-        return np.cumprod(1 + daily_returns_array) - 1
-
-    def _compute_daily_annual_volatility(self, daily_returns_series):
-        return (daily_returns_series.expanding(2).std(ddof=1) * np.sqrt(252)).values
-
-    def _compute_minute_annual_volatility(self, daily_returns_array, returns):
-        return pd.Series(
-            minute_annual_volatility(
-                returns.index.normalize().view('int64'),
-                returns.values,
-                daily_returns_array,
-            ),
-            index=returns.index,
-        )
 
     def _compute_minute_cumulative_returns(self, returns):
         return (1 + returns).cumprod() - 1
@@ -167,15 +147,12 @@ class BenchmarkReturnsAndVolatility(Metric):
             benchmark_source = kwargs.pop('benchmark_source')
             packet = kwargs.pop('packet')
 
-            daily_return_series = benchmark_source.daily_returns()
-
-            returns = benchmark_source.get_range()
-            r = self._compute_minute_cumulative_returns(returns)[-1]
+            r = benchmark_source.cumulative_returns[-1]
             if np.isnan(r):
                 r = None
             packet['cumulative_risk_metrics']['benchmark_period_return'] = r
 
-            v = self._compute_minute_annual_volatility(daily_return_series.values, returns)[-1]
+            v = benchmark_source.annual_volatility[-1]
             if np.isnan(v):
                 v = None
             packet['cumulative_risk_metrics']['benchmark_volatility'] = v
@@ -183,13 +160,13 @@ class BenchmarkReturnsAndVolatility(Metric):
     def end_of_session(self, **kwargs):
         packet = kwargs.pop('packet')
 
-        daily_return_series = kwargs.pop('benchmark_source').daily_returns()
-        r = self._compute_daily_cumulative_returns(daily_return_series)[-1]
+        benchmark_source = kwargs.pop('benchmark_source')
+        r = benchmark_source.cumulative_returns[-1]
         if np.isnan(r):
             r = None
         packet['cumulative_risk_metrics']['benchmark_period_return'] = r
 
-        v = self._compute_daily_annual_volatility(daily_return_series).iloc[-1]
+        v = benchmark_source.annual_volatility[-1]
         if np.isnan(v):
             v = None
         packet['cumulative_risk_metrics']['benchmark_volatility'] = v
