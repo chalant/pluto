@@ -1,27 +1,28 @@
 from abc import ABC, abstractmethod
-
 from copy import copy
+from collections import deque
 
+import pandas as pd
 import logbook
 
 from zipline.finance import trading
-from zipline.data import data_portal
+from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 from zipline.finance import asset_restrictions
 from zipline.finance.order import ORDER_STATUS
 
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
+from pluto.utils import saving
 
 log = logbook.Logger('Controllable')
 
-class Controllable(ABC):
-    def __init__(self, state_storage_path):
+class Controllable(ABC, saving.Savable):
+    def __init__(self):
         self._metrics_tracker = None
         self._bundler = None #todo: implement a data bundler => ingests data
         self._calendar = None
 
-        self._state_storage_path = state_storage_path
         self._blotter = None
         self._asset_finder = None
         self._algo = None
@@ -39,6 +40,8 @@ class Controllable(ABC):
         self._namespace = {}
 
         self._calendar = None
+
+        self._sessions = pd.Series()
 
     def initialize(self, start_dt, end_dt, calendar, strategy, capital, max_leverage, data_frequency, arena):
 
@@ -58,11 +61,13 @@ class Controllable(ABC):
             start_dt, end_dt, calendar, capital,
             data_frequency=data_frequency, arena=arena)
 
+        self._sessions = sessions = params.sessions
+
         bundle = self._bundler.load()
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
 
-        self._data_portal = data = data_portal.DataPortal(
+        self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
             first_trading_day=first_trading_day,
@@ -71,21 +76,29 @@ class Controllable(ABC):
             adjustment_reader=bundle.adjustment_reader
         )
 
-        self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(capital, data_frequency, dt)
+        # load s&p 500 index as benchmark_asset.
+        asset = asset_finder.lookup_symbol('^GSPC', end_dt)
+        self._benchmark_source = benchmark_source = bs.BenchmarkSource(
+            asset,
+            calendar,
+            sessions,
+            self._data_portal,
+            self._emission_rate)
+
+        look_back = (end_dt - start_dt) + pd.Timedelta('1 Day')
+        self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(benchmark_source, capital, data_frequency, start_dt, look_back)
         self._blotter = blotter = self._create_blotter()
 
         restrictions = asset_restrictions.NoRestrictions()
 
-        #todo: benchmark_returns: we need to download benchmark returns series from
-        # some online source... (yahoo for instance)
+        self._current_data = self._create_bar_data(
+            data_portal,
+            calendar,
+            restrictions,
+            data_frequency)
 
-        #todo: we need the sid of '^GSPC'
-        self._benchmark_source = bs.BenchmarkSource('^GSPC', calendar, self._emission_rate)
-
-        self._current_data = self._create_bar_data(data, calendar, restrictions, data_frequency)
-
-        def choose_loader(column): #todo
-            raise NotImplementedError('pipeline loader')
+        def choose_loader(column): #todo use readers from the bundler
+            raise NotImplementedError(choose_loader.__name__)
 
         def noop(*args, **kwargs):
             pass
@@ -101,7 +114,7 @@ class Controllable(ABC):
 
         self._algo = algo_class(
             sim_params=params,
-            data_portal=data,
+            data_portal=data_portal,
             blotter=blotter,
             metrics_tracker=metrics_tracker,
             get_pipeline_loader=choose_loader,
@@ -113,34 +126,29 @@ class Controllable(ABC):
     @abstractmethod
     def _get_algorithm_class(self):
         '''
-
         Returns
         -------
         typing.Union[pluto.algorithm.TradingAlgorithm]
         '''
-        raise NotImplementedError('{}'.format(self._get_algorithm_class.__name__))
+        raise NotImplementedError(self._get_algorithm_class.__name__)
 
     def minute_end(self, dt):
-        return self._get_minute_message(dt, self._algo, self._metrics_tracker, self._data_portal)  # todo
+        return self._get_minute_message(dt, self._algo, self._metrics_tracker, self._data_portal)
 
     def session_start(self, dt):
-        #todo: should update calendar in live mode
-
-        # call sub-class
-        self._session_start(dt, self._calendar, self._params)
 
         self._sync_last_sale_prices(dt)
         self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
 
         algo = self._algo
         metrics_tracker = self._metrics_tracker
-        portal = self._data_portal
+        data_portal = self._data_portal
         self._current_dt = dt
 
         algo.on_dt_changed(dt)
         metrics_tracker.handle_market_open(
             dt,
-            portal)
+            data_portal)
 
         # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
@@ -149,14 +157,10 @@ class Controllable(ABC):
         )
 
         if assets_we_care_about:
-            splits = portal.get_splits(assets_we_care_about, dt)
+            splits = data_portal.get_splits(assets_we_care_about, dt)
             if splits:
                 algo.blotter.process_splits(splits)
                 metrics_tracker.handle_splits(splits)
-
-    @abstractmethod
-    def _session_start(self, dt, calendar, params):
-        raise NotImplementedError
 
     def before_trading_starts(self, dt):
         algo = self._algo
@@ -172,6 +176,8 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         blotter = self._blotter
         metrics_tracker = self._metrics_tracker
+        calendar = self._calendar
+        sessions = self._sessions
 
         capital_changes = self._calculate_minute_capital_changes(dt, self._emission_rate)
 
@@ -203,7 +209,9 @@ class Controllable(ABC):
         for new_order in new_orders:
             metrics_tracker.process_order(new_order)
 
-        metrics_tracker.handle_minute_close(dt, self._data_portal)
+        portal = self._data_portal
+        self._benchmark_source.on_minute_end(dt, portal, calendar, sessions)
+        metrics_tracker.handle_minute_close(dt, portal, sessions)
 
         #todo: save state in some file (also add a controllable state?)
         # todo: this should be handled by a thread. Note: this must be done at the end of a bar
@@ -214,19 +222,33 @@ class Controllable(ABC):
         return capital_changes
 
     def session_end(self, dt):
-        #todo: in live, update the end_dt and start_dt
         metrics_tracker = self._metrics_tracker
 
         positions = metrics_tracker.positions
         position_assets = self._asset_finder.retrieve_all(positions)
         blotter = self._blotter
-        portal = self._data_portal
+        data_portal = self._data_portal
+        calendar = self._calendar
+        algo = self._algo
 
-        self._cleanup_expired_assets(dt, portal, blotter, metrics_tracker, position_assets)
+        self._cleanup_expired_assets(dt, data_portal, blotter, metrics_tracker, position_assets)
 
-        self._algo.validate_algo_controls()
+        algo.validate_algo_controls()
 
-        return self._get_daily_message(dt, self._algo, metrics_tracker, portal)
+        #updates the sessions (live)
+        self._sessions = sessions = self._get_sessions(dt, calendar, self._params)
+        return self._get_daily_message(
+            dt,
+            algo,
+            metrics_tracker,
+            data_portal,
+            calendar,
+            sessions
+        )
+
+    @abstractmethod
+    def _get_sessions(self, dt, params):
+        raise NotImplementedError(self._get_sessions.__name__)
 
     def stop(self, dt):
         pass
@@ -242,8 +264,7 @@ class Controllable(ABC):
         raise NotImplementedError
 
     def update_account(self, main_account):
-        # todo
-        pass
+        self._update_account(self._blotter, main_account)
 
     @abstractmethod
     def _update_account(self, blotter, main_account):
@@ -255,28 +276,58 @@ class Controllable(ABC):
     def ingest_data(self, data):
         self._bundler.ingest(data)
 
-    def calendar_update(self, dt, calendar):
-        pass
+    def update_calendar(self, dt, calendar):
+        raise NotImplementedError(self.update_calendar.__name__)
 
     def get_simulation_dt(self):
         return self._current_dt
 
     @abstractmethod
     def _create_blotter(self):
-        raise NotImplementedError
+        raise NotImplementedError(self._create_blotter.__name__)
 
-    def _get_daily_message(self, dt, algo, metrics_tracker, data_portal):
+    def _get_daily_message(self, dt, algo, metrics_tracker, data_portal, trading_calendar, sessions):
+        '''
+
+        Parameters
+        ----------
+        dt
+        algo: pluto.algorithm.TradingAlgorithm
+        metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
+        data_portal: zipline.data.data_portal.DataPortal
+        trading_calendar: trading_calendars.TradingCalendar
+
+        Returns
+        -------
+
+        '''
         """
         Get a perf message for the given datetime.
         """
         perf_message = metrics_tracker.handle_market_close(
             dt,
             data_portal,
+            trading_calendar,
+            sessions
         )
         perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
         return perf_message
 
-    def _get_minute_message(self, dt, algo, metrics_tracker, data_portal):
+    def _get_minute_message(self, dt, algo, metrics_tracker, data_portal, trading_calendar, sessions):
+        '''
+
+        Parameters
+        ----------
+        dt
+        algo
+        metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
+        data_portal
+        trading_calendar: trading_calendars.TradingCalendar
+
+        Returns
+        -------
+
+        '''
         """
         Get a perf message for the given datetime.
         """
@@ -285,6 +336,8 @@ class Controllable(ABC):
         minute_message = metrics_tracker.handle_minute_close(
             dt,
             data_portal,
+            trading_calendar,
+            sessions
         )
 
         minute_message['minute_perf']['recorded_vars'] = rvars
@@ -300,6 +353,20 @@ class Controllable(ABC):
         )
 
     def _cleanup_expired_assets(self, dt, data_portal, blotter, metrics_tracker, position_assets):
+        '''
+
+        Parameters
+        ----------
+        dt
+        data_portal
+        blotter
+        metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
+        position_assets
+
+        Returns
+        -------
+
+        '''
         """
         Clear out any assets that have expired before starting a new sim day.
 
