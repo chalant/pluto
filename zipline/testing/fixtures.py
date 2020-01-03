@@ -1,3 +1,4 @@
+import itertools
 import os
 import sqlite3
 from unittest import TestCase
@@ -23,6 +24,7 @@ from zipline.finance.asset_restrictions import NoRestrictions
 from zipline.utils.memoize import classlazyval
 from zipline.pipeline import SimplePipelineEngine
 from zipline.pipeline.data import USEquityPricing
+from zipline.pipeline.data.testing import TestingDataSet
 from zipline.pipeline.domain import GENERIC, US_EQUITIES
 from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.pipeline.loaders.testing import make_seeded_random_loader
@@ -50,6 +52,7 @@ from ..data.data_portal import (
     DEFAULT_MINUTE_HISTORY_PREFETCH,
     DEFAULT_DAILY_HISTORY_PREFETCH,
 )
+from ..data.fx import InMemoryFXRateReader
 from ..data.hdf5_daily_bars import (
     HDF5DailyBarReader,
     HDF5DailyBarWriter,
@@ -128,7 +131,7 @@ class ZiplineTestCase(with_metaclass(DebugMROMeta, TestCase)):
                 "This probably means that you overrode init_class_fixtures"
                 " without calling super()."
             )
-        except:
+        except BaseException:  # Clean up even on KeyboardInterrupt
             cls.tearDownClass()
             raise
 
@@ -207,7 +210,7 @@ class ZiplineTestCase(with_metaclass(DebugMROMeta, TestCase)):
                 "This probably means that you overrode"
                 " init_instance_fixtures without calling super()."
             )
-        except:
+        except BaseException:  # Clean up even on KeyboardInterrupt
             self.tearDown()
             raise
         finally:
@@ -769,18 +772,14 @@ class WithEquityDailyBarData(WithAssetFinder, WithTradingCalendars):
 
     Methods
     -------
-    make_equity_daily_bar_data() -> iterable[(int, pd.DataFrame)]
-        A class method that returns an iterator of (sid, dataframe) pairs
-        which will be written to the bcolz files that the class's
-        ``BcolzDailyBarReader`` will read from. By default this creates
-        some simple synthetic data with
-        :func:`~zipline.testing.create_daily_bar_data`
+    make_equity_daily_bar_data(country_code, sids)
+    make_equity_daily_bar_currency_codes(country_code, sids)
 
     See Also
     --------
     WithEquityMinuteBarData
     zipline.testing.create_daily_bar_data
-    """
+    """  # noqa
     EQUITY_DAILY_BAR_START_DATE = alias('START_DATE')
     EQUITY_DAILY_BAR_END_DATE = alias('END_DATE')
     EQUITY_DAILY_BAR_SOURCE_FROM_MINUTE = None
@@ -813,6 +812,8 @@ class WithEquityDailyBarData(WithAssetFinder, WithTradingCalendars):
     @classmethod
     def make_equity_daily_bar_data(cls, country_code, sids):
         """
+        Create daily pricing data.
+
         Parameters
         ----------
         country_code : str
@@ -835,6 +836,27 @@ class WithEquityDailyBarData(WithAssetFinder, WithTradingCalendars):
             return cls._make_equity_daily_bar_from_minute()
         else:
             return create_daily_bar_data(cls.equity_daily_bar_days, sids)
+
+    @classmethod
+    def make_equity_daily_bar_currency_codes(cls, country_code, sids):
+        """Create listing currencies.
+
+        Default is to list all assets in USD.
+
+        Parameters
+        ----------
+        country_code : str
+            An ISO 3166 alpha-2 country code. Data should be created for
+            this country.
+        sids : tuple[int]
+            The sids to include in the data.
+
+        Returns
+        -------
+        currency_codes : pd.Series[int, str]
+            Map from sids to currency for that sid's prices.
+        """
+        return pd.Series(index=list(sids), data='USD')
 
     @classmethod
     def init_class_fixtures(cls):
@@ -1216,6 +1238,7 @@ class WithWriteHDF5DailyBars(WithEquityDailyBarData,
             cls.asset_finder,
             country_codes,
             cls.make_equity_daily_bar_data,
+            cls.make_equity_daily_bar_currency_codes,
         )
 
         # Open the file and mark it for closure during teardown.
@@ -1689,7 +1712,7 @@ class WithUSEquityPricingPipelineEngine(WithAdjustmentReader,
         cls.findata_dir = cls.data_root_dir.makedir('findata')
         super(WithUSEquityPricingPipelineEngine, cls).init_class_fixtures()
 
-        loader = USEquityPricingLoader(
+        loader = USEquityPricingLoader.without_fx(
             cls.bcolz_equity_daily_bar_reader,
             SQLiteAdjustmentReader(cls.adjustments_db_path),
         )
@@ -1755,12 +1778,29 @@ class WithSeededRandomPipelineEngine(WithTradingSessions, WithAssetFinder):
             cls.SEEDED_RANDOM_PIPELINE_SEED,
             cls.trading_days,
             cls._sids,
+            columns=cls.make_seeded_random_loader_columns(),
         )
         cls.seeded_random_engine = SimplePipelineEngine(
             get_loader=lambda column: loader,
             asset_finder=cls.asset_finder,
             default_domain=cls.SEEDED_RANDOM_PIPELINE_DEFAULT_DOMAIN,
+            default_hooks=cls.make_seeded_random_pipeline_engine_hooks(),
+            populate_initial_workspace=(
+                cls.make_seeded_random_populate_initial_workspace()
+            ),
         )
+
+    @classmethod
+    def make_seeded_random_pipeline_engine_hooks(cls):
+        return []
+
+    @classmethod
+    def make_seeded_random_populate_initial_workspace(cls):
+        return None
+
+    @classmethod
+    def make_seeded_random_loader_columns(cls):
+        return TestingDataSet.columns
 
     def raw_expected_values(self, column, start_date, end_date):
         """
@@ -1775,18 +1815,32 @@ class WithSeededRandomPipelineEngine(WithTradingSessions, WithAssetFinder):
         row_slice = self.trading_days.slice_indexer(start_date, end_date)
         return all_values[row_slice]
 
-    def run_pipeline(self, pipeline, start_date, end_date):
+    def run_pipeline(self, pipeline, start_date, end_date, hooks=None):
         """
         Run a pipeline with self.seeded_random_engine.
         """
-        if start_date not in self.trading_days:
-            raise AssertionError("Start date not in calendar: %s" % start_date)
-        if end_date not in self.trading_days:
-            raise AssertionError("End date not in calendar: %s" % end_date)
         return self.seeded_random_engine.run_pipeline(
             pipeline,
             start_date,
             end_date,
+            hooks=hooks,
+        )
+
+    def run_chunked_pipeline(self,
+                             pipeline,
+                             start_date,
+                             end_date,
+                             chunksize,
+                             hooks=None):
+        """
+        Run a chunked pipeline with self.seeded_random_engine.
+        """
+        return self.seeded_random_engine.run_chunked_pipeline(
+            pipeline,
+            start_date,
+            end_date,
+            chunksize=chunksize,
+            hooks=hooks,
         )
 
 
@@ -2017,3 +2071,68 @@ class WithSeededRandomState(object):
     def init_instance_fixtures(self):
         super(WithSeededRandomState, self).init_instance_fixtures()
         self.rand = np.random.RandomState(self.RANDOM_SEED)
+
+
+class WithFXRates(object):
+    """Fixture providing a factory for in-memory exchange rate data.
+    """
+    # Start date for exchange rates data.
+    FX_RATES_START_DATE = alias('START_DATE')
+
+    # End date for exchange rates data.
+    FX_RATES_END_DATE = alias('END_DATE')
+
+    # Calendar to which exchange rates data is aligned.
+    FX_RATES_CALENDAR = '24/5'
+
+    # Currencies between which exchange rates can be calculated.
+    FX_RATES_CURRENCIES = ["USD", "CAD", "GBP", "EUR"]
+
+    # Fields for which exchange rate data is present.
+    FX_RATES_FIELDS = ["mid"]
+
+    @classmethod
+    def init_class_fixtures(cls):
+        super(WithFXRates, cls).init_class_fixtures()
+
+        cal = get_calendar(cls.FX_RATES_CALENDAR)
+        sessions = cal.sessions_in_range(
+            cls.FX_RATES_START_DATE,
+            cls.FX_RATES_END_DATE,
+        )
+
+        cls.fx_rates = cls.make_fx_rates(
+            cls.FX_RATES_FIELDS,
+            cls.FX_RATES_CURRENCIES,
+            sessions,
+        )
+
+        cls.in_memory_fx_rate_reader = InMemoryFXRateReader(cls.fx_rates)
+
+    @classmethod
+    def make_fx_rates(cls, fields, currencies, sessions):
+        rng = np.random.RandomState(42)
+
+        # Assign each currency a "true value" timeseries.
+        true_values = {}
+        for field, currency in sorted(itertools.product(fields, currencies)):
+            start, end = sorted(rng.uniform(0.5, 1.5, (2,)))
+            true_values[currency] = np.linspace(start, end, len(sessions))
+
+        true_values_df = pd.DataFrame(
+            true_values,
+            index=sessions,
+            columns=sorted(currencies),
+        )
+
+        # Define rates as the ratio between each asset's true values.
+        out = {}
+        for i, field in enumerate(fields):
+            out[field] = {}
+            for quote in currencies:
+                out[field][quote] = true_values_df.divide(
+                    true_values_df[quote],
+                    axis=0,
+                )
+
+        return out

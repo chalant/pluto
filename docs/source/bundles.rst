@@ -133,7 +133,7 @@ API key we may run:
 though we may still run ``ingest`` as an anonymous quandl user (with no API
 key). We may also set the ``QUANDL_DOWNLOAD_ATTEMPTS`` environment variable to
 an integer which is the number of attempts that should be made to download data
-from quandls servers. By default ``QUANDL_DOWNLOAD_ATTEMPTS`` will be 5, meaning
+from quandl's servers. By default ``QUANDL_DOWNLOAD_ATTEMPTS`` will be 5, meaning
 that we will retry each attempt 5 times.
 
 .. note::
@@ -180,7 +180,7 @@ The signature of the ingest function should be:
 
 ``environ`` is a mapping representing the environment variables to use. This is
 where any custom arguments needed for the ingestion should be passed, for
-example: the ``quandl`` bundle uses the enviornment to pass the API key and the
+example: the ``quandl`` bundle uses the environment to pass the API key and the
 download retry attempt count.
 
 ``asset_db_writer``
@@ -227,7 +227,7 @@ used to convert data into zipline's internal bcolz format to later be read by a
 provided, users should call
 :meth:`~zipline.data.minute_bars.BcolzDailyBarWriter.write` with an iterable of
 (sid dataframe) tuples. The ``show_progress`` argument should also be forwarded
-to this method. If the data shource does not provide daily data, then there is
+to this method. If the data source does not provide daily data, then there is
 no need to call the write method. It is also acceptable to pass an empty
 iterable to :meth:`~zipline.data.minute_bars.BcolzMinuteBarWriter.write` to
 signal that there is no daily data. If no daily data is provided but minute data
@@ -280,7 +280,7 @@ an ingestion crashes part way through. The idea is that the ingest function
 should check the cache for raw data, if it doesn't exist in the cache, it should
 acquire it and then store it in the cache. Then it can parse and write the
 data. The cache will be cleared only after a successful load, this prevents the
-ingest function from needing to redownload all the data if there is some bug in
+ingest function from needing to re-download all the data if there is some bug in
 the parsing. If it is very fast to get the data, for example if it is coming
 from another local file, then there is no need to use this cache.
 

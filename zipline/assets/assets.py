@@ -20,8 +20,6 @@ from functools import partial
 from numbers import Integral
 from operator import itemgetter, attrgetter
 import struct
-import time
-import datetime
 
 from logbook import Logger
 import numpy as np
@@ -272,6 +270,9 @@ def _encode_continuous_future_sid(root_symbol,
     return int(binascii.hexlify(a), 16)
 
 
+Lifetimes = namedtuple('Lifetimes', 'sid start end')
+
+
 class AssetFinder(object):
     """
     An AssetFinder is an interface to a database of Asset metadata written by
@@ -323,7 +324,6 @@ class AssetFinder(object):
 
         # Populated on first call to `lifetimes`.
         self._asset_lifetimes = {}
-        self.is_live = False
 
     @lazyval
     def exchange_info(self):
@@ -659,7 +659,7 @@ class AssetFinder(object):
                 for sid_group in partition_all(
                     SQLITE_MAX_VARIABLE_NUMBER,
                     sids
-                ),
+                )
             )
         }
 
@@ -1416,59 +1416,30 @@ class AssetFinder(object):
 
         return matches, missing
 
-    def _compute_asset_lifetimes(self, country_codes,calendar=None):
+    def _compute_asset_lifetimes(self, country_codes):
         """
         Compute and cache a recarray of asset lifetimes.
         """
+        sids = starts = ends = []
         equities_cols = self.equities.c
         if country_codes:
-            buf = np.array(
-                tuple(
-                    sa.select((
-                        equities_cols.sid,
-                        equities_cols.start_date,
-                        equities_cols.end_date,
-                    )).where(
-                        (self.exchanges.c.exchange == equities_cols.exchange) &
-                        (self.exchanges.c.country_code.in_(country_codes))
-                    ).execute(),
-                ),
-                dtype='f8',  # use doubles so we get NaNs
-            )
-        else:
-            buf = np.array([], dtype='f8')
+            results = sa.select((
+                equities_cols.sid,
+                equities_cols.start_date,
+                equities_cols.end_date,
+            )).where(
+                (self.exchanges.c.exchange == equities_cols.exchange) &
+                (self.exchanges.c.country_code.in_(country_codes))
+            ).execute().fetchall()
+            if results:
+                sids, starts, ends = zip(*results)
 
-        lifetimes = np.recarray(
-            buf=buf,
-            shape=(len(buf),),
-            dtype=[
-                ('sid', 'f8'),
-                ('start', 'f8'),
-                ('end', 'f8')
-            ],
-        )
-        start = lifetimes.start
-        end = lifetimes.end
+        sid = np.array(sids, dtype='i8')
+        start = np.array(starts, dtype='f8')
+        end = np.array(ends, dtype='f8')
         start[np.isnan(start)] = 0  # convert missing starts to 0
         end[np.isnan(end)] = np.iinfo(int).max  # convert missing end to INTMAX
-
-        # shifting end_date   original idea from Peyman and Behnood
-        if self.is_live:
-            cal = calendar
-            last_end_day_ns = max(lifetimes.end)
-            last_end_day = pd.to_datetime(last_end_day_ns, unit='ns')
-            shifted_last_end_day = cal.next_open(cal.next_open(last_end_day))
-            temp = datetime.datetime.strptime(str(shifted_last_end_day)[:-6],"%Y-%m-%d %H:%M:%S")
-            last_date = time.mktime(temp.timetuple())*(10**9)
-            lifetimes.end[lifetimes.end == last_end_day_ns] = last_date
-
-
-        # Cast the results back down to int.
-        return lifetimes.astype([
-            ('sid', 'i8'),
-            ('start', 'i8'),
-            ('end', 'i8'),
-        ])
+        return Lifetimes(sid, start.astype('i8'), end.astype('i8'))
 
     def lifetimes(self, dates, include_start_date, country_codes):
         """

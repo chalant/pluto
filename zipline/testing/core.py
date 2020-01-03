@@ -893,7 +893,7 @@ class SubTestFailures(AssertionError):
             '\n    '.join((
                 ', '.join('%s=%r' % item for item in scope.items()),
                 self._format_exc(exc_info),
-            )) for scope, exc_info in self.failures,
+            )) for scope, exc_info in self.failures
         )
 
 
@@ -1194,22 +1194,29 @@ def parameter_space(__fail_fast=_FAIL_FAST_DEFAULT, **params):
         if unspecified:
             raise AssertionError(
                 "Function arguments %s were not "
-                "supplied to parameter_space()." % extra
+                "supplied to parameter_space()." % unspecified
             )
 
         def make_param_sets():
             return product(*(params[name] for name in argnames))
 
+        def clean_f(self, *args, **kwargs):
+            try:
+                f(self, *args, **kwargs)
+            finally:
+                self.tearDown()
+                self.setUp()
+
         if __fail_fast:
             @wraps(f)
             def wrapped(self):
                 for args in make_param_sets():
-                    f(self, *args)
+                    clean_f(self, *args)
             return wrapped
         else:
             @wraps(f)
             def wrapped(*args, **kwargs):
-                subtest(make_param_sets(), *argnames)(f)(*args, **kwargs)
+                subtest(make_param_sets(), *argnames)(clean_f)(*args, **kwargs)
 
         return wrapped
 
@@ -1451,7 +1458,7 @@ class _TmpBarReader(with_metaclass(ABCMeta, tmp_dir)):
                 self._data,
             )
             return self._reader_cls(tmpdir.path)
-        except:
+        except BaseException:  # Clean up even on KeyboardInterrupt
             self.__exit__(None, None, None)
             raise
 
@@ -1778,14 +1785,44 @@ def create_simple_domain(start, end, country_code):
 def write_hdf5_daily_bars(writer,
                           asset_finder,
                           country_codes,
-                          generate_data):
+                          generate_data,
+                          generate_currency_codes):
     """Write an HDF5 file of pricing data using an HDF5DailyBarWriter.
     """
     asset_finder = asset_finder
     for country_code in country_codes:
         sids = asset_finder.equities_sids_for_country_code(country_code)
-        data_generator = generate_data(country_code=country_code, sids=sids)
-        writer.write_from_sid_df_pairs(country_code, data_generator)
+
+        # XXX: The contract for generate_data is that it should return an
+        # iterator of (sid, df) pairs with entry for each sid in `sids`, and
+        # the contract for `generate_currency_codes` is that it should return a
+        # series indexed by the sids it receives.
+        #
+        # Unfortunately, some of our tests that were written before the
+        # introduction of multiple markets (in particular, the ones that use
+        # EQUITY_DAILY_BAR_SOURCE_FROM_MINUTE), provide a function that always
+        # returns the same iterator, regardless of the provided `sids`, which
+        # means there are cases where the sids in `data` don't match the sids
+        # in `currency_codes`, which causes an assertion failure in
+        # `write_from_sid_df_pairs`.
+        #
+        # The correct fix for this is to update those old tests to respect
+        # `sids` (most likely by updating `make_equity_minute_bar_sids` to
+        # support multiple countries). But that requires updating a lot of
+        # tests, so for now, we call `generate_data` and use the sids it
+        # produces to determine what to pass to `generate_country_codes`.
+        data = list(generate_data(country_code=country_code, sids=sids))
+        data_sids = [p[0] for p in data]
+
+        currency_codes = generate_currency_codes(
+            country_code=country_code,
+            sids=data_sids,
+        )
+        writer.write_from_sid_df_pairs(
+            country_code,
+            iter(data),
+            currency_codes=currency_codes,
+        )
 
 
 def exchange_info_for_domains(domains):
