@@ -10,7 +10,7 @@ from zipline.assets import Asset
 from zipline.errors import IncompatibleTerms
 from zipline.pipeline.factors import CustomFactor
 from zipline.pipeline.filters import SingleAsset
-from zipline.pipeline.mixins import SingleInputMixin, StandardOutputs
+from zipline.pipeline.mixins import StandardOutputs
 from zipline.pipeline.sentinels import NotSpecified
 from zipline.pipeline.term import AssetExists
 from zipline.utils.input_validation import (
@@ -31,7 +31,7 @@ from .basic import Returns
 ALLOWED_DTYPES = (float64_dtype, int64_dtype)
 
 
-class _RollingCorrelation(CustomFactor, SingleInputMixin):
+class _RollingCorrelation(CustomFactor):
 
     @expect_dtypes(base_factor=ALLOWED_DTYPES, target=ALLOWED_DTYPES)
     @expect_bounded(correlation_length=(2, None))
@@ -59,7 +59,7 @@ class RollingPearson(_RollingCorrelation):
 
     Parameters
     ----------
-    base_factor : zipline.pipeline.factors.Factor
+    base_factor : zipline.pipeline.Factor
         The factor for which to compute correlations of each of its columns
         with `target`.
     target : zipline.pipeline.Term with a numeric dtype
@@ -105,7 +105,7 @@ class RollingSpearman(_RollingCorrelation):
 
     Parameters
     ----------
-    base_factor : zipline.pipeline.factors.Factor
+    base_factor : zipline.pipeline.Factor
         The factor for which to compute correlations of each of its columns
         with `target`.
     target : zipline.pipeline.Term with a numeric dtype
@@ -143,7 +143,7 @@ class RollingSpearman(_RollingCorrelation):
             out[i] = spearmanr(base_data[:, i], target_data[:, i])[0]
 
 
-class RollingLinearRegression(CustomFactor, SingleInputMixin):
+class RollingLinearRegression(CustomFactor):
     """
     A Factor that performs an ordinary least-squares regression predicting the
     columns of a given Factor from either the columns of another
@@ -151,7 +151,7 @@ class RollingLinearRegression(CustomFactor, SingleInputMixin):
 
     Parameters
     ----------
-    dependent : zipline.pipeline.factors.Factor
+    dependent : zipline.pipeline.Factor
         The factor whose columns are the predicted/dependent variable of each
         regression with `independent`.
     independent : zipline.pipeline.slice.Slice or zipline.pipeline.Factor
@@ -400,7 +400,7 @@ class RollingLinearRegressionOfReturns(RollingLinearRegression):
       regression.
 
     For more help on factors with multiple outputs, see
-    :class:`zipline.pipeline.factors.CustomFactor`.
+    :class:`zipline.pipeline.CustomFactor`.
 
     Examples
     --------

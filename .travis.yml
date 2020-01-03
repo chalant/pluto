@@ -1,5 +1,4 @@
 language: python
-sudo: false
 fast_finish: true
 python:
   - 2.7
@@ -15,7 +14,7 @@ env:
     #   If authenticating travis gem with github, a github token with the following scopes
     #   is sufficient: ["read:org", "user:email", "repo_deployment", "repo:status", "write:repo_hook"]
     #   See https://docs.travis-ci.com/api#external-apis.
-    - secure: "iiVzfsBuKqGf4zEc7Xjf+bWBGxj6atkx0mf31JfqnqqxBesJbQVGWBcmgK82g2XJpiHKfdhNr+KxkKCtHIN9ziOHY//0xNHzCIKsXnlKG4o4fuDkrb3WpK0dU/A0hdB7oDKlyD3/sYvYrOwpAPnag0rkFG7Ck96/jIUtcH0XW2w="
+    - secure: "MxLrJ0ry2NtZXp4zESb0KP+AUuVns96XfPyZgmxrMOjH4epqLiP5NxaY/5UF9oTEdNQDnPO3Rw7M8rH8vuX5dzOVzP2/miAc+ltFQmlaXuERY5fu2LYTST8MCxokiuD4fdaFPFiaCCSrk+zQZSX2uDn161vK+FqZyGAQ9EEJebQ="
     - CONDA_ROOT_PYTHON_VERSION: "2.7"
   matrix:
     - OLD_PANDAS=1
@@ -57,6 +56,7 @@ install:
   - conda list
 
   - TALIB_VERSION=$(cat ./etc/requirements_talib.txt | sed "s/TA-Lib==\(.*\)/\1/")
+  - CERTIFI_VERSION=$(cat ./etc/requirements.txt | grep "certifi" | sed "s/certifi==\(.*\)/\1/")
   - IFS='.' read -r -a NPY_VERSION_ARR <<< "$NUMPY_VERSION"
   - CONDA_NPY=${NPY_VERSION_ARR[0]}${NPY_VERSION_ARR[1]}
   - CONDA_PY=$TRAVIS_PYTHON_VERSION
@@ -73,35 +73,29 @@ install:
   # Make sure stdout is in blocking mode. If we don't, then conda create will barf during downloads.
   # See https://github.com/travis-ci/travis-ci/issues/4704#issuecomment-348435959 for details.
   - python -c 'import os,sys,fcntl; flags = fcntl.fcntl(sys.stdout, fcntl.F_GETFL); fcntl.fcntl(sys.stdout, fcntl.F_SETFL, flags&~os.O_NONBLOCK);'
-  - conda create -n testenv --use-local --yes -c quantopian -c quantopian/label/ci pip python=$TRAVIS_PYTHON_VERSION numpy=$NUMPY_VERSION pandas=$PANDAS_VERSION scipy=$SCIPY_VERSION ta-lib=$TALIB_VERSION libgfortran=3.0
+  # We conda install certifi at the pinned exact version because it is a transitive dependency of zipline via requests and uses distutils for packaging. 
+  # Since conda installs latest certifi by default, we would fail to uninstall that new version when trying to install the pinned version using pip later in the build:
+  # "Cannot uninstall 'certifi'. It is a distutils installed project and thus we cannot accurately determine which files belong to it which would lead to only a partial uninstall."
+  - conda create -n testenv --use-local --yes -c quantopian -c quantopian/label/ci pip python=$TRAVIS_PYTHON_VERSION numpy=$NUMPY_VERSION pandas=$PANDAS_VERSION scipy=$SCIPY_VERSION ta-lib=$TALIB_VERSION libgfortran=3.0 certifi=$CERTIFI_VERSION
   - source activate testenv
 
-  - CACHE_DIR="$HOME/.cache/.pip/pip_np""$CONDA_NPY"
-  - python -m pip install --upgrade pip coveralls --cache-dir=$CACHE_DIR
-  # With this env var and CI both set, pip installing bcolz tries to compile it with coverage on py2, which fails to link against gcov on OSX.
+  # XXX: With TRAVIS and CI both set, pip installing bcolz tries to compile it with coverage on py2, which fails to link against gcov on OSX.
   # https://github.com/Blosc/bcolz/blob/8234a7505da5188dbaf415b7e36d4609d2c8c2f1/setup.py#L134-L136
-  - unset TRAVIS
-  - python -m pip install -r etc/requirements.txt --cache-dir=$CACHE_DIR
-  - TRAVIS=true  # restore value
-  - python -m pip install -r etc/requirements_dev.txt --cache-dir=$CACHE_DIR
-  - python -m pip install -r etc/requirements_blaze.txt --cache-dir=$CACHE_DIR  # this uses git requirements right now
-  - python -m pip install -r etc/requirements_talib.txt --cache-dir=$CACHE_DIR
-  - python -m pip install -r etc/requirements_ib.txt --cache-dir=$CACHE_DIR
-  - pip install -e .[all] --cache-dir=$CACHE_DIR
+  - TRAVIS='' EXTERNAL_REQUIREMENTS='coveralls' etc/dev-install --cache-dir="$HOME/.cache/.pip/pip_np$CONDA_NPY"
+
 before_script:
   - pip freeze | sort
 script:
   - flake8 zipline tests
   - nosetests --with-coverage
-  # deactive env to get access to anaconda command
+  # deactivate env to get access to anaconda command
   - source deactivate
 
   # unshallow the clone so the conda build can clone it.
   - git fetch --unshallow --tags
   - exec 3>&1; ZP_OUT=$(conda build conda/zipline --python=$CONDA_PY --numpy=$CONDA_NPY -c quantopian -c quantopian/label/ci | tee >(cat - >&3))
   - ZP_OUTPUT=$(echo "$ZP_OUT" | grep "anaconda upload " | awk '{print $NF}')
-  # XXX: upload is disabled for zipline-live as there is no anaconda repo is set up
-  # - if [ -z "$ZP_OUTPUT" ]; then exit 1; fi
+  - if [ -z "$ZP_OUTPUT" ]; then exit 1; fi
   # test that we can conda install zipline in a new env
   - conda create -n installenv --yes -q --use-local python=$TRAVIS_PYTHON_VERSION numpy=$NUMPY_VERSION zipline -c quantopian -c https://conda.anaconda.org/quantopian/label/ci
   - if [[ "$DO_UPLOAD" = "true" ]]; then anaconda -t $ANACONDA_TOKEN upload $ZP_OUTPUT -u quantopian --label ci; fi
@@ -114,4 +108,3 @@ after_success:
 branches:
   only:
     - master
-    - live

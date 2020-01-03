@@ -382,7 +382,8 @@ class PercentileFilter(SingleInputMixin, Filter):
         return (lower_bounds <= data) & (data <= upper_bounds)
 
     def graph_repr(self):
-        return "{}:\l  min: {}, max: {}\l".format(
+        # Graphviz interprets `\l` as "divide label into lines, left-justified"
+        return "{}:\\l  min: {}, max: {}\\l".format(
             type(self).__name__,
             self._min_percentile,
             self._max_percentile,
@@ -397,9 +398,9 @@ class CustomFilter(PositiveWindowLengthMixin, CustomTermMixin, Filter):
     ----------
     inputs : iterable, optional
         An iterable of `BoundColumn` instances (e.g. USEquityPricing.close),
-        describing the data to load and pass to `self.compute`.  If this
+        describing the data to load and pass to ``self.compute``.  If this
         argument is passed to the CustomFilter constructor, we look for a
-        class-level attribute named `inputs`.
+        class-level attribute named ``inputs``.
     window_length : int, optional
         Number of rows to pass for each input.  If this argument is not passed
         to the CustomFilter constructor, we look for a class-level attribute
@@ -408,7 +409,7 @@ class CustomFilter(PositiveWindowLengthMixin, CustomTermMixin, Filter):
     Notes
     -----
     Users implementing their own Filters should subclass CustomFilter and
-    implement a method named `compute` with the following signature:
+    implement a method named ``compute`` with the following signature:
 
     .. code-block:: python
 
@@ -419,7 +420,7 @@ class CustomFilter(PositiveWindowLengthMixin, CustomTermMixin, Filter):
     an array of sids, an output array, and an input array for each expression
     passed as inputs to the CustomFilter constructor.
 
-    The specific types of the values passed to `compute` are as follows::
+    The specific types of the values passed to ``compute`` are as follows::
 
         today : np.datetime64[ns]
             Row label for the last row of all arrays passed as `inputs`.
@@ -432,12 +433,12 @@ class CustomFilter(PositiveWindowLengthMixin, CustomTermMixin, Filter):
             Raw data arrays corresponding to the values of `self.inputs`.
 
     See the documentation for
-    :class:`~zipline.pipeline.factors.factor.CustomFactor` for more details on
+    :class:`~zipline.pipeline.CustomFactor` for more details on
     implementing a custom ``compute`` method.
 
     See Also
     --------
-    zipline.pipeline.factors.factor.CustomFactor
+    zipline.pipeline.CustomFactor
     """
     def _validate(self):
         try:
@@ -491,7 +492,8 @@ class ArrayPredicate(SingleInputMixin, Filter):
         return params['op'](data, *params['opargs']) & mask
 
     def graph_repr(self):
-        return "{}:\l  op: {}.{}()".format(
+        # Graphviz interprets `\l` as "divide label into lines, left-justified"
+        return "{}:\\l  op: {}.{}()".format(
             type(self).__name__,
             self.params['op'].__module__,
             self.params['op'].__name__,
@@ -537,7 +539,8 @@ class SingleAsset(Filter):
         return out
 
     def graph_repr(self):
-        return "SingleAsset:\l  asset: {!r}\l".format(self._asset)
+        # Graphviz interprets `\l` as "divide label into lines, left-justified"
+        return "SingleAsset:\\l  asset: {!r}\\l".format(self._asset)
 
 
 class StaticSids(Filter):
@@ -644,12 +647,15 @@ class MaximumFilter(Filter, StandardOutputs):
         )
 
     def __repr__(self):
-        return "Maximum({!r}, groupby={!r}, mask={!r})".format(
-            self.inputs[0], self.inputs[1], self.mask,
+        return "Maximum({}, groupby={}, mask={})".format(
+            self.inputs[0].recursive_repr(),
+            self.inputs[1].recursive_repr(),
+            self.mask.recursive_repr(),
         )
 
     def graph_repr(self):
-        return "Maximum:\l  groupby: {}\l  mask: {}\l".format(
-            type(self.inputs[1]).__name__,
-            type(self.mask).__name__,
+        # Graphviz interprets `\l` as "divide label into lines, left-justified"
+        return "Maximum:\\l  groupby: {}\\l  mask: {}\\l".format(
+            self.inputs[1].recursive_repr(),
+            self.mask.recursive_repr(),
         )
