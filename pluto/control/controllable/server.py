@@ -133,6 +133,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         id_ = params.id #the id of the controllable => will be used in performance updates
         exchanges = params.exchanges
+        platform = params.platform
         capital = params.capital
         max_leverage = params.max_leverage
         calendar = params.calendar #todo: instanciate the calendar from the message
@@ -155,10 +156,15 @@ class ControllableService(cbl_rpc.ControllableServicer):
         if controllable:
             self._controllable = controllable
             controllable.initialize(
-                start_dt, end_dt,
-                calendar, strategy,
-                capital, max_leverage,
-                data_frequency) #todo: arena?
+                start_dt,
+                end_dt,
+                calendar,
+                strategy,
+                capital,
+                max_leverage,
+                data_frequency,
+                mode,
+                platform)
             self._state = self._out_session
             #run the thread
             self._thread = thread = threading.Thread(self._run())
@@ -258,6 +264,16 @@ class Server(object):
 _SERVER = Server()
 
 def get_controllable(mode):
+    '''
+
+    Parameters
+    ----------
+    mode: str
+
+    Returns
+    -------
+    pluto.control.controllable.controllable.Controllable
+    '''
     if mode == 'simulation':
         return sc.SimulationControllable()
     elif mode == 'live':

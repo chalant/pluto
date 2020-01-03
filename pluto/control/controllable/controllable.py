@@ -14,13 +14,14 @@ from zipline.finance.order import ORDER_STATUS
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
 from pluto.utils import saving
+from pluto.data import bundler
 
 log = logbook.Logger('Controllable')
 
 class Controllable(ABC, saving.Savable):
     def __init__(self):
         self._metrics_tracker = None
-        self._bundler = None #todo: implement a data bundler => ingests data
+        self._bundle = bundle
         self._calendar = None
 
         self._blotter = None
@@ -43,7 +44,17 @@ class Controllable(ABC, saving.Savable):
 
         self._sessions = pd.Series()
 
-    def initialize(self, start_dt, end_dt, calendar, strategy, capital, max_leverage, data_frequency, arena):
+    def initialize(self,
+                   start_dt,
+                   end_dt,
+                   calendar,
+                   strategy,
+                   bundle_name,
+                   capital,
+                   max_leverage,
+                   data_frequency,
+                   arena,
+                   platform):
 
         #end_dt is the previous day
         self._calendar = calendar
@@ -58,14 +69,22 @@ class Controllable(ABC, saving.Savable):
         self._calculate_minute_capital_changes = calculate_minute_capital_changes
 
         self._params = params = trading.SimulationParameters(
-            start_dt, end_dt, calendar, capital,
-            data_frequency=data_frequency, arena=arena)
+            start_dt,
+            end_dt,
+            calendar,
+            capital,
+            data_frequency=data_frequency,
+            arena=arena)
 
         self._sessions = sessions = params.sessions
 
-        bundle = self._bundler.load()
+        #we assume that the data has already been ingested => the controller must first
+        # send data. An error is raised if there is no data
+        loader = bundler.get_bundle_loader()
+        bundle = loader(bundle_name)
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
+
 
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
@@ -77,6 +96,8 @@ class Controllable(ABC, saving.Savable):
         )
 
         # load s&p 500 index as benchmark_asset.
+        #todo: we can't load the benchmark data like this for now...
+        #todo: we need a special file for benchmark data
         asset = asset_finder.lookup_symbol('^GSPC', end_dt)
         self._benchmark_source = benchmark_source = bs.BenchmarkSource(
             asset,
@@ -110,25 +131,25 @@ class Controllable(ABC, saving.Savable):
         #the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
 
-        algo_class = self._get_algorithm_class()
+        algo = self._get_algorithm_class()
 
-        self._algo = algo_class(
-            sim_params=params,
-            data_portal=data_portal,
-            blotter=blotter,
-            metrics_tracker=metrics_tracker,
-            get_pipeline_loader=choose_loader,
-            initialize=namespace.get('initialize', noop),
-            before_trading_start=namespace.get('before_trading_start', noop),
-            handle_data=namespace.get('handle_data', noop),
-            analyze=namespace.get('analyze'))
+        self._algo = algo
 
     @abstractmethod
-    def _get_algorithm_class(self):
+    def _get_algorithm_class(self,
+                             params,
+                             data_portal,
+                             blotter,
+                             metrics_tracker,
+                             get_pipeline_loader,
+                             initialize,
+                             before_trading_start,
+                             handle_data,
+                             analyze):
         '''
         Returns
         -------
-        typing.Union[pluto.algorithm.TradingAlgorithm]
+        pluto.algorithm.TradingAlgorithm
         '''
         raise NotImplementedError(self._get_algorithm_class.__name__)
 
@@ -273,9 +294,6 @@ class Controllable(ABC, saving.Savable):
     def update_capital(self, dt, capital):
         self._capital_changes = {dt : {'type' : 'target', 'value' : capital}}
 
-    def ingest_data(self, data):
-        self._bundler.ingest(data)
-
     def update_calendar(self, dt, calendar):
         raise NotImplementedError(self.update_calendar.__name__)
 
@@ -283,7 +301,7 @@ class Controllable(ABC, saving.Savable):
         return self._current_dt
 
     @abstractmethod
-    def _create_blotter(self):
+    def _create_blotter(self, cancel_policy=None):
         raise NotImplementedError(self._create_blotter.__name__)
 
     def _get_daily_message(self, dt, algo, metrics_tracker, data_portal, trading_calendar, sessions):

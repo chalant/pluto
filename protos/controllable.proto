@@ -35,13 +35,15 @@ service Controllable {
 message InitParams {
     string id = 1;
     bytes strategy = 2;
+    string bundle_name = 11;
     float capital = 3;
     repeated string exchanges = 4;
     float max_leverage = 5;
     string data_frequency = 6;
-    Calendar calendar = 7;
-    google.protobuf.Timestamp start = 8;
-    google.protobuf.Timestamp end = 9;
+    string platform = 7;
+    Calendar calendar = 8;
+    google.protobuf.Timestamp start = 9;
+    google.protobuf.Timestamp end = 10;
 }
 
 message UpdateRequest {

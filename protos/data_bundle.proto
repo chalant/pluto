@@ -25,6 +25,9 @@ message BundleMetadata {
     /* Contains information about the data contained in the bundle (column names etc.)*/
 }
 
-message Bundle {
-    bytes data = 1;
+message Format {
+        string daily_bars = 1;
+        string minute_bars = 2;
+        string assets_metadata = 3;
+        string adjustments = 4;
 }
