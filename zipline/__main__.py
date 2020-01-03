@@ -1,22 +1,18 @@
 import errno
 import os
 
-from importlib import import_module
-from functools import wraps
-
 import click
 import logbook
 import pandas as pd
 from six import text_type
-from trading_calendars.calendar_utils import get_calendar
 
-import pkgutil
-
+import zipline
 from zipline.data import bundles as bundles_module
+from trading_calendars import get_calendar
 from zipline.utils.compat import wraps
 from zipline.utils.cli import Date, Timestamp
 from zipline.utils.run_algo import _run, load_extensions
-from zipline.gens import brokers
+from zipline.extensions import create_args
 
 try:
     __IPYTHON__
@@ -45,11 +41,18 @@ except NameError:
     default=True,
     help="Don't load the default zipline extension.py file in $ZIPLINE_HOME.",
 )
-def main(extension, strict_extensions, default_extension):
+@click.option(
+    '-x',
+    multiple=True,
+    help='Any custom command line arguments to define, in key=value form.'
+)
+def main(extension, strict_extensions, default_extension, x):
     """Top level zipline entry point.
     """
+
     # install a logbook handler before performing any other operations
     logbook.StderrHandler().push_application()
+    create_args(x, zipline.extension_args)
     load_extensions(
         default_extension,
         extension,
@@ -182,8 +185,8 @@ def ipython_only(option):
 @click.option(
     '--trading-calendar',
     metavar='TRADING-CALENDAR',
-    default='NYSE',
-    help="The calendar you want to use e.g. LSE. NYSE is the default."
+    default='XNYS',
+    help="The calendar you want to use e.g. XLON. XNYS is the default."
 )
 @click.option(
     '--print-algo/--no-print-algo',
@@ -197,41 +200,18 @@ def ipython_only(option):
     help='The metrics set to use. New metrics sets may be registered in your'
     ' extension.py.',
 )
+@click.option(
+    '--blotter',
+    default='default',
+    help="The blotter to use.",
+    show_default=True,
+)
 @ipython_only(click.option(
     '--local-namespace/--no-local-namespace',
     is_flag=True,
     default=None,
     help='Should the algorithm methods be resolved in the local namespace.'
 ))
-@click.option(
-    '--broker',
-    default=None,
-    help='Broker'
-)
-@click.option(
-    '--broker-uri',
-    default=None,
-    metavar='BROKER-URI',
-    show_default=True,
-    help='Connection to broker',
-)
-@click.option(
-    '--state-file',
-    default=None,
-    metavar='FILENAME',
-    help='Filename where the state will be stored'
-)
-@click.option(
-    '--realtime-bar-target',
-    default=None,
-    metavar='DIRNAME',
-    help='Directory where the realtime collected minutely bars are saved'
-)
-@click.option(
-    '--list-brokers',
-    is_flag=True,
-    help='Get list of available brokers'
-)
 @click.pass_context
 def run(ctx,
         algofile,
@@ -247,61 +227,22 @@ def run(ctx,
         trading_calendar,
         print_algo,
         metrics_set,
-        local_namespace):
         local_namespace,
-        broker,
-        broker_uri,
-        state_file,
-        realtime_bar_target,
-        list_brokers):
+        blotter):
     """Run a backtest for the given algorithm.
     """
-
-    if list_brokers:
-        click.echo("Supported brokers:")
-        for _, name, _ in pkgutil.iter_modules(brokers.__path__):
-            if name != 'broker':
-                click.echo(name)
-        return
-
     # check that the start and end dates are passed correctly
-    if not broker and start is None and end is None:
+    if start is None and end is None:
         # check both at the same time to avoid the case where a user
         # does not pass either of these and then passes the first only
         # to be told they need to pass the second argument also
         ctx.fail(
             "must specify dates with '-s' / '--start' and '-e' / '--end'",
         )
-
-    if not broker and start is None:
+    if start is None:
         ctx.fail("must specify a start date with '-s' / '--start'")
-    if not broker and end is None:
+    if end is None:
         ctx.fail("must specify an end date with '-e' / '--end'")
-
-    if broker and broker_uri is None:
-        ctx.fail("must specify broker-uri if broker is specified")
-
-    if broker and state_file is None:
-        ctx.fail("must specify state-file with live trading")
-
-    if broker and realtime_bar_target is None:
-        ctx.fail("must specify realtime-bar-target with live trading")
-
-    brokerobj = None
-    if broker:
-        mod_name = 'zipline.gens.brokers.%s_broker' % broker.lower()
-        try:
-            bmod = import_module(mod_name)
-        except ImportError:
-            ctx.fail("unsupported broker: can't import module %s" % mod_name)
-
-        cl_name = '%sBroker' % broker.upper()
-        try:
-            bclass = getattr(bmod, cl_name)
-        except AttributeError:
-            ctx.fail("unsupported broker: can't import class %s from %s" %
-                     (cl_name, mod_name))
-        brokerobj = bclass(broker_uri)
 
     if (algotext is not None) == (algofile is not None):
         ctx.fail(
@@ -321,7 +262,6 @@ def run(ctx,
         defines=define,
         data_frequency=data_frequency,
         capital_base=capital_base,
-        data=None,
         bundle=bundle,
         bundle_timestamp=bundle_timestamp,
         start=start,
@@ -332,9 +272,8 @@ def run(ctx,
         metrics_set=metrics_set,
         local_namespace=local_namespace,
         environ=os.environ,
-        broker=brokerobj,
-        state_filename=state_file,
-        realtime_bar_target=realtime_bar_target
+        blotter=blotter,
+        benchmark_returns=None,
     )
 
     if output == '-':

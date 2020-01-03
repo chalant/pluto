@@ -14,7 +14,7 @@ from numpy import (
 )
 from numexpr import evaluate
 
-from zipline.pipeline.data import USEquityPricing
+from zipline.pipeline.data import EquityPricing
 from zipline.pipeline.factors import CustomFactor
 from zipline.pipeline.mixins import SingleInputMixin
 from zipline.utils.input_validation import expect_bounded
@@ -40,16 +40,16 @@ from .basic import (  # noqa reexport
 )
 
 
-class RSI(CustomFactor, SingleInputMixin):
+class RSI(SingleInputMixin, CustomFactor):
     """
     Relative Strength Index
 
-    **Default Inputs**: [USEquityPricing.close]
+    **Default Inputs**: :data:`zipline.pipeline.data.EquityPricing.close`
 
     **Default Window Length**: 15
     """
     window_length = 15
-    inputs = (USEquityPricing.close,)
+    inputs = (EquityPricing.close,)
     window_safe = True
 
     def compute(self, today, assets, out, closes):
@@ -69,7 +69,7 @@ class BollingerBands(CustomFactor):
     Bollinger Bands technical indicator.
     https://en.wikipedia.org/wiki/Bollinger_Bands
 
-    **Default Inputs:** :data:`zipline.pipeline.data.USEquityPricing.close`
+    **Default Inputs:** :data:`zipline.pipeline.data.EquityPricing.close`
 
     Parameters
     ----------
@@ -83,7 +83,7 @@ class BollingerBands(CustomFactor):
         upper and lower bands.
     """
     params = ('k',)
-    inputs = (USEquityPricing.close,)
+    inputs = (EquityPricing.close,)
     outputs = 'lower', 'middle', 'upper'
 
     def compute(self, today, assets, out, close, k):
@@ -96,18 +96,19 @@ class BollingerBands(CustomFactor):
 class Aroon(CustomFactor):
     """
     Aroon technical indicator.
-    https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/aroon-indicator  # noqa
+    https://www.fidelity.com/learning-center/trading-investing/technical-analysis/technical-indicator-guide/aroon-indicator
 
-    **Defaults Inputs:** USEquityPricing.low, USEquityPricing.high
+    **Defaults Inputs:** :data:`zipline.pipeline.data.EquityPricing.low`, \
+                         :data:`zipline.pipeline.data.EquityPricing.high`
 
     Parameters
     ----------
     window_length : int > 0
         Length of the lookback window over which to compute the Aroon
         indicator.
-    """
+    """ # noqa
 
-    inputs = (USEquityPricing.low, USEquityPricing.high)
+    inputs = (EquityPricing.low, EquityPricing.high)
     outputs = ('down', 'up')
 
     def compute(self, today, assets, out, lows, highs):
@@ -141,9 +142,9 @@ class FastStochasticOscillator(CustomFactor):
     market analysis. It is recommended to use the slow stochastic oscillator
     or a moving average of the %K [%D].
 
-    **Default Inputs:** :data: `zipline.pipeline.data.USEquityPricing.close`
-                        :data: `zipline.pipeline.data.USEquityPricing.low`
-                        :data: `zipline.pipeline.data.USEquityPricing.high`
+    **Default Inputs:** :data:`zipline.pipeline.data.EquityPricing.close`, \
+                        :data:`zipline.pipeline.data.EquityPricing.low`, \
+                        :data:`zipline.pipeline.data.EquityPricing.high`
 
     **Default Window Length:** 14
 
@@ -151,7 +152,7 @@ class FastStochasticOscillator(CustomFactor):
     -------
     out: %K oscillator
     """
-    inputs = (USEquityPricing.close, USEquityPricing.low, USEquityPricing.high)
+    inputs = (EquityPricing.close, EquityPricing.low, EquityPricing.high)
     window_safe = True
     window_length = 14
 
@@ -175,11 +176,12 @@ class FastStochasticOscillator(CustomFactor):
 
 class IchimokuKinkoHyo(CustomFactor):
     """Compute the various metrics for the Ichimoku Kinko Hyo (Ichimoku Cloud).
-    http://stockcharts.com/school/doku.php?id=chart_school:technical_indicators:ichimoku_cloud  # noqa
+    http://stockcharts.com/school/doku.php?id=chart_school:technical_indicators:ichimoku_cloud
 
-    **Default Inputs:** :data:`zipline.pipeline.data.USEquityPricing.high`
-                        :data:`zipline.pipeline.data.USEquityPricing.low`
-                        :data:`zipline.pipeline.data.USEquityPricing.close`
+    **Default Inputs:** :data:`zipline.pipeline.data.EquityPricing.high`, \
+                        :data:`zipline.pipeline.data.EquityPricing.low`, \
+                        :data:`zipline.pipeline.data.EquityPricing.close`
+
     **Default Window Length:** 52
 
     Parameters
@@ -192,14 +194,14 @@ class IchimokuKinkoHyo(CustomFactor):
         The length of the window for the kijou-sen.
     chikou_span_length : int >= 0, <= window_length
         The lag for the chikou span.
-    """
+    """ # noqa
 
     params = {
         'tenkan_sen_length': 9,
         'kijun_sen_length': 26,
         'chikou_span_length': 26,
     }
-    inputs = (USEquityPricing.high, USEquityPricing.low, USEquityPricing.close)
+    inputs = (EquityPricing.high, EquityPricing.low, EquityPricing.close)
     outputs = (
         'tenkan_sen',
         'kijun_sen',
@@ -273,15 +275,16 @@ class TrueRange(CustomFactor):
     A technical indicator originally developed by J. Welles Wilder, Jr.
     Indicates the true degree of daily price change in an underlying.
 
-    **Default Inputs:** :data:`zipline.pipeline.data.USEquityPricing.high`
-                        :data:`zipline.pipeline.data.USEquityPricing.low`
-                        :data:`zipline.pipeline.data.USEquityPricing.close`
+    **Default Inputs:** :data:`zipline.pipeline.data.EquityPricing.high`, \
+                        :data:`zipline.pipeline.data.EquityPricing.low`, \
+                        :data:`zipline.pipeline.data.EquityPricing.close`
+
     **Default Window Length:** 2
     """
     inputs = (
-        USEquityPricing.high,
-        USEquityPricing.low,
-        USEquityPricing.close,
+        EquityPricing.high,
+        EquityPricing.low,
+        EquityPricing.close,
     )
     window_length = 2
 
@@ -309,7 +312,7 @@ class MovingAverageConvergenceDivergenceSignal(CustomFactor):
     reveals changes in the strength, direction, momentum, and duration of a
     trend in a stock's price.
 
-    **Default Inputs:** :data:`zipline.pipeline.data.USEquityPricing.close`
+    **Default Inputs:** :data:`zipline.pipeline.data.EquityPricing.close`
 
     Parameters
     ----------
@@ -326,7 +329,7 @@ class MovingAverageConvergenceDivergenceSignal(CustomFactor):
     ``window_length`` parameter. ``window_length`` is inferred from
     ``slow_period`` and ``signal_period``.
     """
-    inputs = (USEquityPricing.close,)
+    inputs = (EquityPricing.close,)
     # We don't use the default form of `params` here because we want to
     # dynamically calculate `window_length` from the period lengths in our
     # __new__.

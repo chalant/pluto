@@ -398,6 +398,43 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
             )
         return group_labels, null_label
 
+    def peer_count(self):
+        """
+        Construct a factor that gives the number of occurrences of
+        each distinct category in a classifier.
+
+        Examples
+        --------
+        Let ``c`` be a Classifier which would produce the following output::
+
+                         AAPL   MSFT    MCD     BK   AMZN     FB
+            2015-05-05    'a'    'a'   None    'b'    'a'   None
+            2015-05-06    'b'    'a'    'c'    'b'    'b'    'b'
+            2015-05-07   None    'a'   'aa'   'aa'   'aa'   None
+            2015-05-08    'c'    'c'    'c'    'c'    'c'    'c'
+
+        Then ``c.peer_count()`` will count, for each row, the total number
+        of assets in each classifier category produced by ``c``.  Missing
+        data will be evaluated to NaN.
+
+        ::
+
+                         AAPL   MSFT    MCD     BK   AMZN     FB
+            2015-05-05    3.0    3.0    NaN    1.0    3.0    NaN
+            2015-05-06    4.0    1.0    1.0    4.0    4.0    4.0
+            2015-05-07    NaN    1.0    3.0    3.0    3.0    NaN
+            2015-05-08    6.0    6.0    6.0    6.0    6.0    6.0
+
+        Returns
+        -------
+        factor : CustomFactor
+            A CustomFactor that counts, for each asset, the total number
+            of assets with the same classifier category label.
+        """
+        # Lazy import due to cyclic dependencies in factor.py, classifier.py
+        from ..factors import PeerCount
+        return PeerCount(inputs=[self])
+
 
 class Everything(Classifier):
     """
@@ -435,7 +472,7 @@ class Quantiles(SingleInputMixin, Classifier):
         result[isnan(result)] = self.missing_value
         return result.astype(int64_dtype)
 
-    def short_repr(self):
+    def graph_repr(self):
         """Short repr to use when rendering Pipeline graphs."""
         return type(self).__name__ + '(%d)' % self.params['bins']
 
@@ -538,8 +575,6 @@ class Latest(LatestMixin, CustomClassifier):
     See Also
     --------
     zipline.pipeline.data.dataset.BoundColumn.latest
-    zipline.pipeline.factors.factor.Latest
-    zipline.pipeline.filters.filter.Latest
     """
     pass
 

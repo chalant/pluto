@@ -52,7 +52,7 @@ from zipline.data.history_loader import (
     DailyHistoryLoader,
     MinuteHistoryLoader,
 )
-from zipline.data.us_equity_pricing import NoDataOnDate
+from zipline.data.bar_reader import NoDataOnDate
 from zipline.utils.math_utils import (
     nansum,
     nanmean,
@@ -1016,7 +1016,7 @@ class DataPortal(object):
                     )
 
             # Set leading values for assets that were missing data, then ffill.
-            df.ix[0, assets_with_leading_nan] = np.array(
+            df.iloc[0, assets_with_leading_nan] = np.array(
                 initial_values,
                 dtype=np.float64
             )

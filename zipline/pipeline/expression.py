@@ -324,7 +324,7 @@ class NumericalExpression(ComputableTerm):
             bindings=self.bindings,
         )
 
-    def short_repr(self):
+    def graph_repr(self):
         """Short repr to use when rendering Pipeline graphs."""
 
         # Replace any floating point numbers in the expression
@@ -332,6 +332,7 @@ class NumericalExpression(ComputableTerm):
         final = re.sub(r"[-+]?\d*\.\d+",
                        lambda x: format(float(x.group(0)), '.2E'),
                        self._expr)
-        return "Expression:\l  {}\l".format(
+        # Graphviz interprets `\l` as "divide label into lines, left-justified"
+        return "Expression:\\l  {}\\l".format(
             final,
         )

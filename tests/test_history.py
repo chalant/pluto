@@ -234,7 +234,12 @@ class WithHistory(zf.WithCreateBarData, zf.WithDataPortal):
 
     @classmethod
     def make_adjustment_writer_equity_daily_bar_reader(cls):
-        return MockDailyBarReader()
+        return MockDailyBarReader(
+            dates=cls.trading_calendar.sessions_in_range(
+                cls.TRADING_START_DT,
+                cls.TRADING_END_DT,
+            ),
+        )
 
     def verify_regular_dt(self, idx, dt, mode, fields=None, assets=None):
         if mode == 'daily':
@@ -818,7 +823,7 @@ class MinuteEquityHistoryTestCase(WithHistory,
     def test_minute_regular(self, name, field, sid):
         # asset2 and asset3 both started on 1/5/2015, but asset3 trades every
         # 10 minutes
-        asset = self.env.asset_finder.retrieve_asset(sid)
+        asset = self.asset_finder.retrieve_asset(sid)
 
         # Check the first hour of equities trading.
         minutes = self.trading_calendars[Equity].minutes_for_session(
@@ -1671,7 +1676,7 @@ class DailyEquityHistoryTestCase(WithHistory, zf.ZiplineTestCase):
     CREATE_BARDATA_DATA_FREQUENCY = 'daily'
 
     @classmethod
-    def make_equity_daily_bar_data(cls):
+    def make_equity_daily_bar_data(cls, country_code, sids):
         yield 1, cls.create_df_for_asset(
             cls.START_DATE,
             pd.Timestamp('2016-01-30', tz='UTC')

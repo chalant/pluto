@@ -1,4 +1,5 @@
 import functools
+import inspect
 from operator import methodcaller
 import sys
 
@@ -8,6 +9,8 @@ from six import PY2
 if PY2:
     from abc import ABCMeta
     from types import DictProxyType
+    from cgi import escape as escape_html
+    import contextlib
     from ctypes import py_object, pythonapi
 
     _new_mappingproxy = pythonapi.PyDictProxy_New
@@ -38,6 +41,9 @@ if PY2:
 
     def exc_clear():
         sys.exc_clear()
+
+    def consistent_round(val):
+        return round(val)
 
     def update_wrapper(wrapper,
                        wrapped,
@@ -76,13 +82,34 @@ if PY2:
 
     values_as_list = methodcaller('values')
 
+    # This is deprecated in python 3.6+.
+    getargspec = inspect.getargspec
+
+    # Updated version of contextlib.contextmanager that uses our updated
+    # `wraps` to preserve function signatures.
+    @wraps(contextlib.contextmanager)
+    def contextmanager(f):
+        @wraps(f)
+        def helper(*args, **kwargs):
+            return contextlib.GeneratorContextManager(f(*args, **kwargs))
+        return helper
+
 else:
+    from contextlib import contextmanager
+    from html import escape as escape_html
     from types import MappingProxyType as mappingproxy
+    from math import ceil
 
     def exc_clear():
         # exc_clear was removed in Python 3. The except statement automatically
         # clears the exception.
         pass
+
+    def consistent_round(val):
+        if (val % 1) >= 0.5:
+            return ceil(val)
+        else:
+            return round(val)
 
     update_wrapper = functools.update_wrapper
     wraps = functools.wraps
@@ -93,11 +120,23 @@ else:
         """
         return list(dictionary.values())
 
+    def getargspec(f):
+        full_argspec = inspect.getfullargspec(f)
+        return inspect.ArgSpec(
+            args=full_argspec.args,
+            varargs=full_argspec.varargs,
+            keywords=full_argspec.varkw,
+            defaults=full_argspec.defaults,
+        )
+
 
 unicode = type(u'')
 
 __all__ = [
     'PY2',
+    'consistent_round',
+    'contextmanager',
+    'escape_html',
     'exc_clear',
     'mappingproxy',
     'unicode',

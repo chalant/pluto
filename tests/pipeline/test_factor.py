@@ -15,6 +15,7 @@ from numpy import (
     datetime64,
     empty,
     eye,
+    inf,
     log1p,
     nan,
     ones,
@@ -30,11 +31,12 @@ from zipline.lib.labelarray import LabelArray
 from zipline.lib.rank import masked_rankdata_2d
 from zipline.lib.normalize import naive_grouped_rowwise_apply as grouped_apply
 from zipline.pipeline import Classifier, Factor, Filter, Pipeline
-from zipline.pipeline.data import DataSet, Column
+from zipline.pipeline.data import DataSet, Column, EquityPricing
 from zipline.pipeline.factors import (
     CustomFactor,
     DailyReturns,
     Returns,
+    PercentChange,
 )
 from zipline.pipeline.factors.factor import winsorize as zp_winsorize
 from zipline.testing import (
@@ -44,7 +46,7 @@ from zipline.testing import (
     permute_rows,
 )
 from zipline.testing.fixtures import (
-    WithEquityPricingPipelineEngine,
+    WithUSEquityPricingPipelineEngine,
     ZiplineTestCase,
 )
 from zipline.testing.predicates import assert_equal
@@ -58,7 +60,7 @@ from zipline.utils.numpy_utils import (
 from zipline.utils.math_utils import nanmean, nanstd
 from zipline.utils.pandas_utils import new_pandas, skip_pipeline_new_pandas
 
-from .base import BasePipelineTestCase
+from .base import BaseUSEquityPipelineTestCase
 
 
 class F(Factor):
@@ -131,7 +133,7 @@ def scipy_winsorize_with_nan_handling(array, limits):
     return sorted_winsorized[unsorter]
 
 
-class FactorTestCase(BasePipelineTestCase):
+class FactorTestCase(BaseUSEquityPipelineTestCase):
 
     def init_instance_fixtures(self):
         super(FactorTestCase, self).init_instance_fixtures()
@@ -572,7 +574,6 @@ class FactorTestCase(BasePipelineTestCase):
 
         today = datetime64(1, 'ns')
         assets = arange(3)
-        out = empty((3,), dtype=float)
 
         seed(seed_value)  # Seed so we get deterministic results.
         test_data = abs(randn(window_length, 3))
@@ -584,6 +585,41 @@ class FactorTestCase(BasePipelineTestCase):
         returns.compute(today, assets, out, test_data)
 
         check_allclose(expected, out)
+
+    @parameterized.expand([
+        (100, 15),
+        (101, 4),
+        (102, 100),
+        ])
+    def test_percentchange(self, seed_value, window_length):
+
+        pct_change = PercentChange(
+            inputs=[EquityPricing.close],
+            window_length=window_length,
+        )
+
+        today = datetime64(1, 'ns')
+        assets = arange(8)
+
+        seed(seed_value)  # Seed so we get deterministic results.
+        middle_rows = randn(window_length - 2, 8)
+        first_row = array([1, 2, 2, 1, -1, -1, 0, nan])
+        end_row = array([2, 1, 2, -2, 2, -2, 1, 1])
+        test_data = np.vstack([first_row, middle_rows, end_row])
+
+        # Calculate the expected percent change
+        expected = array([1, -0.5, 0, -3, 3, -1, inf, nan])
+
+        out = empty((8,), dtype=float)
+        pct_change.compute(today, assets, out, test_data)
+
+        check_allclose(expected, out)
+
+        with self.assertRaises(ValueError):
+            PercentChange(inputs=(), window_length=2)
+
+        with self.assertRaises(ValueError):
+            PercentChange(inputs=[EquityPricing.close], window_length=1)
 
     def gen_ranking_cases():
         seeds = range(int(1e4), int(1e5), int(1e4))
@@ -1287,21 +1323,21 @@ class FactorTestCase(BasePipelineTestCase):
         self.assertIsNot(f.deciles(), f.deciles(mask=m))
 
 
-class ShortReprTestCase(TestCase):
+class ReprTestCase(TestCase):
     """
-    Tests for short_repr methods of Factors.
+    Tests for term reprs.
     """
 
     def test_demean(self):
-        r = F().demean().short_repr()
+        r = F().demean().graph_repr()
         self.assertEqual(r, "GroupedRowTransform('demean')")
 
     def test_zscore(self):
-        r = F().zscore().short_repr()
+        r = F().zscore().graph_repr()
         self.assertEqual(r, "GroupedRowTransform('zscore')")
 
     def test_winsorize(self):
-        r = F().winsorize(min_percentile=.05, max_percentile=.95).short_repr()
+        r = F().winsorize(min_percentile=.05, max_percentile=.95).graph_repr()
         self.assertEqual(r, "GroupedRowTransform('winsorize')")
 
     def test_recarray_field_repr(self):
@@ -1310,14 +1346,14 @@ class ShortReprTestCase(TestCase):
             inputs = ()
             window_length = 5
 
-            def short_repr(self):
+            def recursive_repr(self):
                 return "CustomRepr()"
 
         a = MultipleOutputs().a
         b = MultipleOutputs().b
 
-        self.assertEqual(a.short_repr(), "CustomRepr().a")
-        self.assertEqual(b.short_repr(), "CustomRepr().b")
+        self.assertEqual(a.graph_repr(), "CustomRepr().a")
+        self.assertEqual(b.graph_repr(), "CustomRepr().b")
 
     def test_latest_repr(self):
 
@@ -1326,13 +1362,49 @@ class ShortReprTestCase(TestCase):
             b = Column(dtype=float64_dtype)
 
         self.assertEqual(
-            SomeDataSet.a.latest.short_repr(),
+            SomeDataSet.a.latest.graph_repr(),
             "Latest"
         )
         self.assertEqual(
-            SomeDataSet.b.latest.short_repr(),
+            SomeDataSet.b.latest.graph_repr(),
             "Latest"
         )
+
+    def test_recursive_repr(self):
+
+        class DS(DataSet):
+            a = Column(dtype=float64_dtype)
+            b = Column(dtype=float64_dtype)
+
+        class Input(CustomFactor):
+            inputs = ()
+            window_safe = True
+
+        class HasInputs(CustomFactor):
+            inputs = [Input(window_length=3), DS.a, DS.b]
+            window_length = 3
+
+        result = repr(HasInputs())
+        expected = "HasInputs([Input(...), DS.a, DS.b], 3)"
+        self.assertEqual(result, expected)
+
+    def test_rank_repr(self):
+        rank = DailyReturns().rank()
+        result = repr(rank)
+        expected = "Rank(DailyReturns(...), method='ordinal')"
+        self.assertEqual(result, expected)
+
+        recursive_repr = rank.recursive_repr()
+        self.assertEqual(recursive_repr, "Rank(...)")
+
+    def test_rank_repr_with_mask(self):
+        rank = DailyReturns().rank(mask=Mask())
+        result = repr(rank)
+        expected = "Rank(DailyReturns(...), method='ordinal', mask=Mask(...))"
+        self.assertEqual(result, expected)
+
+        recursive_repr = rank.recursive_repr()
+        self.assertEqual(recursive_repr, "Rank(...)")
 
 
 class TestWindowSafety(TestCase):
@@ -1413,8 +1485,9 @@ class TestPostProcessAndToWorkSpaceValue(ZiplineTestCase):
         )
 
 
-class TestSpecialCases(WithEquityPricingPipelineEngine,
+class TestSpecialCases(WithUSEquityPricingPipelineEngine,
                        ZiplineTestCase):
+    ASSET_FINDER_COUNTRY_CODE = 'US'
 
     def check_equivalent_terms(self, terms):
         self.assertTrue(len(terms) > 1, "Need at least two terms to compare")
@@ -1427,7 +1500,6 @@ class TestSpecialCases(WithEquityPricingPipelineEngine,
             assert_equal(results.loc[:, name], first_column, check_names=False)
 
     def test_daily_returns_is_special_case_of_returns(self):
-
         self.check_equivalent_terms({
             'daily': DailyReturns(),
             'manual_daily': Returns(window_length=2),
