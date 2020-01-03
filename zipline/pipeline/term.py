@@ -22,6 +22,7 @@ from zipline.errors import (
     NonSliceableTerm,
     NonWindowSafeInput,
     NotDType,
+    NonPipelineInputs,
     TermInputsNotSpecified,
     TermOutputsEmpty,
     UnsupportedDType,
@@ -43,22 +44,53 @@ from zipline.utils.sharedoc import (
     PIPELINE_DOWNSAMPLING_FREQUENCY_DOC,
 )
 
+from .domain import Domain, GENERIC, infer_domain
 from .downsample_helpers import expect_downsample_frequency
 from .sentinels import NotSpecified
 
 
 class Term(with_metaclass(ABCMeta, object)):
     """
-    Base class for terms in a Pipeline API compute graph.
+    Base class for objects that can appear in the compute graph of a
+    :class:`zipline.pipeline.Pipeline`.
+
+    Notes
+    -----
+    Most Pipeline API users only interact with :class:`Term` via subclasses:
+
+    - :class:`~zipline.pipeline.data.BoundColumn`
+    - :class:`~zipline.pipeline.Factor`
+    - :class:`~zipline.pipeline.Filter`
+    - :class:`~zipline.pipeline.Classifier`
+
+    Instances of :class:`Term` are **memoized**. If you call a Term's
+    constructor with the same arguments twice, the same object will be returned
+    from both calls:
+
+    **Example:**
+
+    >>> from zipline.pipeline.data import EquityPricing
+    >>> from zipline.pipeline.factors import SimpleMovingAverage
+    >>> x = SimpleMovingAverage(inputs=[EquityPricing.close], window_length=5)
+    >>> y = SimpleMovingAverage(inputs=[EquityPricing.close], window_length=5)
+    >>> x is y
+    True
+
+    .. warning::
+
+       Memoization of terms means that it's generally unsafe to modify
+       attributes of a term after construction.
     """
     # These are NotSpecified because a subclass is required to provide them.
     dtype = NotSpecified
-    domain = NotSpecified
     missing_value = NotSpecified
 
     # Subclasses aren't required to provide `params`.  The default behavior is
     # no params.
     params = ()
+
+    # All terms are generic by default.
+    domain = GENERIC
 
     # Determines if a term is safe to be used as a windowed input.
     window_safe = False
@@ -69,9 +101,9 @@ class Term(with_metaclass(ABCMeta, object)):
     _term_cache = WeakValueDictionary()
 
     def __new__(cls,
-                domain=domain,
-                dtype=dtype,
-                missing_value=missing_value,
+                domain=NotSpecified,
+                dtype=NotSpecified,
+                missing_value=NotSpecified,
                 window_safe=NotSpecified,
                 ndim=NotSpecified,
                 # params is explicitly not allowed to be passed to an instance.
@@ -87,8 +119,8 @@ class Term(with_metaclass(ABCMeta, object)):
         Caching previously-constructed Terms is **sane** because terms and
         their inputs are both conceptually immutable.
         """
-        # Subclasses can set override these class-level attributes to provide
-        # default values.
+        # Subclasses can override these class-level attributes to provide
+        # different default values for instances.
         if domain is NotSpecified:
             domain = cls.domain
         if dtype is NotSpecified:
@@ -234,10 +266,14 @@ class Term(with_metaclass(ABCMeta, object)):
         """
         Parameters
         ----------
-        domain : object
-            Unused placeholder.
+        domain : zipline.pipeline.domain.Domain
+            The domain of this term.
         dtype : np.dtype
             Dtype of this term's output.
+        missing_value : object
+            Missing value for this term.
+        ndim : 1 or 2
+            The dimensionality of this term.
         params : tuple[(str, hashable)]
             Tuple of key/value pairs of additional parameters.
         """
@@ -321,7 +357,7 @@ class Term(with_metaclass(ABCMeta, object)):
     @abstractproperty
     def inputs(self):
         """
-        A tuple of other Terms needed as direct inputs for this Term.
+        A tuple of other Terms needed as inputs for ``self``.
         """
         raise NotImplementedError('inputs')
 
@@ -335,8 +371,8 @@ class Term(with_metaclass(ABCMeta, object)):
     @abstractproperty
     def mask(self):
         """
-        A Filter representing asset/date pairs to include while
-        computing this Term. (True means include; False means exclude.)
+        A :class:`~zipline.pipeline.Filter` representing asset/date pairs to
+        while computing this Term. True means include; False means exclude.
         """
         raise NotImplementedError('mask')
 
@@ -348,8 +384,16 @@ class Term(with_metaclass(ABCMeta, object)):
         """
         raise NotImplementedError('dependencies')
 
-    def short_repr(self):
-        # Default short_repr is just the name of the type.
+    def graph_repr(self):
+        """A short repr to use when rendering GraphViz graphs.
+        """
+        # Default graph_repr is just the name of the type.
+        return type(self).__name__
+
+    def recursive_repr(self):
+        """A short repr to use when recursively rendering terms with inputs.
+        """
+        # Default recursive_repr is just the name of the type.
         return type(self).__name__
 
 
@@ -380,7 +424,7 @@ class AssetExists(Term):
     def __repr__(self):
         return "AssetExists()"
 
-    short_repr = __repr__
+    graph_repr = __repr__
 
     def _compute(self, today, assets, out):
         raise NotImplementedError(
@@ -408,7 +452,7 @@ class InputDates(Term):
     def __repr__(self):
         return "InputDates()"
 
-    short_repr = __repr__
+    graph_repr = __repr__
 
     def _compute(self, today, assets, out):
         raise NotImplementedError(
@@ -442,12 +486,14 @@ class ComputableTerm(Term):
     outputs = NotSpecified
     window_length = NotSpecified
     mask = NotSpecified
+    domain = NotSpecified
 
     def __new__(cls,
                 inputs=inputs,
                 outputs=outputs,
                 window_length=window_length,
                 mask=mask,
+                domain=domain,
                 *args, **kwargs):
 
         if inputs is NotSpecified:
@@ -459,6 +505,15 @@ class ComputableTerm(Term):
             # Allow users to specify lists as class-level defaults, but
             # normalize to a tuple so that inputs is hashable.
             inputs = tuple(inputs)
+
+            # Make sure all our inputs are valid pipeline objects before trying
+            # to infer a domain.
+            non_terms = [t for t in inputs if not isinstance(t, Term)]
+            if non_terms:
+                raise NonPipelineInputs(cls.__name__, non_terms)
+
+            if domain is NotSpecified:
+                domain = infer_domain(inputs)
 
         if outputs is NotSpecified:
             outputs = cls.outputs
@@ -479,6 +534,7 @@ class ComputableTerm(Term):
             outputs=outputs,
             mask=mask,
             window_length=window_length,
+            domain=domain,
             *args, **kwargs
         )
 
@@ -508,9 +564,17 @@ class ComputableTerm(Term):
     def _validate(self):
         super(ComputableTerm, self)._validate()
 
+        # Check inputs.
         if self.inputs is NotSpecified:
             raise TermInputsNotSpecified(termname=type(self).__name__)
 
+        if not isinstance(self.domain, Domain):
+            raise TypeError(
+                "Expected {}.domain to be an instance of Domain, "
+                "but got {}.".format(type(self).__name__, type(self.domain))
+            )
+
+        # Check outputs.
         if self.outputs is NotSpecified:
             pass
         elif not self.outputs:
@@ -542,7 +606,7 @@ class ComputableTerm(Term):
             # This isn't user error, this is a bug in our code.
             raise AssertionError("{term} has no mask".format(term=self))
 
-        if self.window_length:
+        if self.window_length > 1:
             for child in self.inputs:
                 if not child.window_safe:
                     raise NonWindowSafeInput(parent=self, child=child)
@@ -679,9 +743,12 @@ class ComputableTerm(Term):
             "{type}([{inputs}], {window_length})"
         ).format(
             type=type(self).__name__,
-            inputs=', '.join(i.name for i in self.inputs),
+            inputs=', '.join(i.recursive_repr() for i in self.inputs),
             window_length=self.window_length,
         )
+
+    def recursive_repr(self):
+        return type(self).__name__ + '(...)'
 
 
 class Slice(ComputableTerm):
@@ -690,7 +757,7 @@ class Slice(ComputableTerm):
 
     Parameters
     ----------
-    term : zipline.pipeline.term.Term
+    term : zipline.pipeline.Term
         The term from which to extract a column of data.
     asset : zipline.assets.Asset
         The asset corresponding to the column of `term` to be extracted.
@@ -714,9 +781,9 @@ class Slice(ComputableTerm):
         )
 
     def __repr__(self):
-        return "{parent_term}[{asset}])".format(
+        return "{parent_term}[{asset}]".format(
             type=type(self).__name__,
-            parent_term=self.inputs[0].__name__,
+            parent_term=self.inputs[0].recursive_repr(),
             asset=self._asset,
         )
 

@@ -162,6 +162,14 @@ Miscellaneous
 
 .. autofunction:: zipline.api.fetch_csv
 
+Blotters
+~~~~~~~~
+
+.. autoclass:: zipline.finance.blotter.blotter.Blotter
+   :members:
+
+.. autoclass:: zipline.finance.blotter.SimulationBlotter
+   :members:
 
 .. _pipeline-api:
 
@@ -176,11 +184,11 @@ Pipeline API
    :members:
    :member-order: groupwise
 
-.. autoclass:: zipline.pipeline.filters.Filter
+.. autoclass:: zipline.pipeline.Filter
    :members: __and__, __or__
    :exclude-members: dtype
 
-.. autoclass:: zipline.pipeline.factors.Factor
+.. autoclass:: zipline.pipeline.Factor
    :members: bottom, deciles, demean, linear_regression, pearsonr,
              percentile_between, quantiles, quartiles, quintiles, rank,
              spearmanr, top, winsorize, zscore, isnan, notnan, isfinite, eq,
@@ -189,11 +197,14 @@ Pipeline API
    :exclude-members: dtype
    :member-order: bysource
 
-.. autoclass:: zipline.pipeline.term.Term
+.. autoclass:: zipline.pipeline.Term
    :members:
    :exclude-members: compute_extra_rows, dependencies, inputs, mask, windowed
 
-.. autoclass:: zipline.pipeline.data.USEquityPricing
+.. autoclass:: zipline.pipeline.data.DataSet
+   :members:
+
+.. autoclass:: zipline.pipeline.data.EquityPricing
    :members: open, high, low, close, volume
    :undoc-members:
 
@@ -210,6 +221,9 @@ Built-in Factors
    :members:
 
 .. autoclass:: zipline.pipeline.factors.BusinessDaysUntilNextEvent
+   :members:
+
+.. autoclass:: zipline.pipeline.factors.DailyReturns
    :members:
 
 .. autoclass:: zipline.pipeline.factors.ExponentialWeightedMovingAverage
@@ -237,6 +251,9 @@ Built-in Factors
    :members:
 
 .. autoclass:: zipline.pipeline.factors.RollingSpearmanOfReturns
+   :members:
+
+.. autoclass:: zipline.pipeline.factors.SimpleBeta
    :members:
 
 .. autoclass:: zipline.pipeline.factors.RSI
@@ -336,10 +353,10 @@ Writers
 .. autoclass:: zipline.data.minute_bars.BcolzMinuteBarWriter
    :members:
 
-.. autoclass:: zipline.data.us_equity_pricing.BcolzDailyBarWriter
+.. autoclass:: zipline.data.bcolz_daily_bars.BcolzDailyBarWriter
    :members:
 
-.. autoclass:: zipline.data.us_equity_pricing.SQLiteAdjustmentWriter
+.. autoclass:: zipline.data.adjustments.SQLiteAdjustmentWriter
    :members:
 
 .. autoclass:: zipline.assets.AssetDBWriter
@@ -350,10 +367,10 @@ Readers
 .. autoclass:: zipline.data.minute_bars.BcolzMinuteBarReader
    :members:
 
-.. autoclass:: zipline.data.us_equity_pricing.BcolzDailyBarReader
+.. autoclass:: zipline.data.bcolz_daily_bars.BcolzDailyBarReader
    :members:
 
-.. autoclass:: zipline.data.us_equity_pricing.SQLiteAdjustmentReader
+.. autoclass:: zipline.data.adjustments.SQLiteAdjustmentReader
    :members:
 
 .. autoclass:: zipline.assets.AssetFinder
