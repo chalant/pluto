@@ -7,7 +7,7 @@ from trading_calendars.calendar_utils import global_calendar_dispatcher as gcd
 from pluto.data.download.executors_factory import order_executor
 from pluto.data.download.executors.executor import Schedule
 from pluto.data.download.dispatchers import Dispatcher
-from pluto.data.ingestion.ingesters import DailyEquityIngester
+from pluto.data.ingestion.ingester import DailyEquityIngester
 
 from logbook import Logger, StreamHandler
 
