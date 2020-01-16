@@ -1,10 +1,9 @@
 import datetime
-
 import collections
+import threading
 
 import pandas as pd
 
-from protos import clock_pb2
 
 from pluto.control.clock import clock
 from pluto.trading_calendars import calendar_utils as cu
@@ -46,11 +45,7 @@ def get_generator(calendar, sessions, minute_emission=False, frequency='day'):
 
 
 class MinuteSimulationLoop(object):
-    def __init__(self, start_dt, end_dt, control_mode):
-
-        if not isinstance(control_mode, simulation_mode.SimulationControlMode):
-            raise TypeError('Expected {} got {}'.format(
-                simulation_mode.SimulationControlMode, control_mode))
+    def __init__(self, control_mode, start_dt, end_dt):
 
         self._clocks = clocks = {}
         # create fake clock
@@ -65,40 +60,36 @@ class MinuteSimulationLoop(object):
 
         self._control_mode = control_mode
 
-        self._queue_lock = threading.Lock()
+        self._execution_lock = threading.Lock()
         self._to_execute = collections.deque()
 
     def start(self):
         calendar = self._calendar
-        ended = []
-        # list of active exchanges
-        active = []
+
         control_mode = self._control_mode
-        clock_factory = self._get_clocks
-        signals = []
 
         for ts, evt in get_generator(calendar, calendar.all_sessions):
-            with self._queue_lock:
-                while True:
-                    try:
-                        command = self._to_execute.popleft()
-                        command(control_mode, clock_factory)
-                    except IndexError:
-                        break
+            #acquire lock so that no further commands are executed here
+            #while this block is being executed
+            with self._execution_lock:
+                #process any cached values
+                self._process(ts)
+                signals = []
+                # aggregate the signals into a single signal.
+                for cl in self._clocks.values():
+                    signal = cl.update(ts)
+                    if signal:
+                        ts, c_evt, exchange = signal
+                        signals.append(signal)
 
-            # aggregate the signals into a single signal.
-            for cl in self._clocks.values():
-                signal = cl.update(ts)
-                if signal:
-                    ts, c_evt, exchange = signal
-                    signals.append(signal)
-
-            # update the mode
-            control_mode.update(ts, evt, signals)
+                #processes all cached commands
+                control_mode.process()
+                # update the mode
+                control_mode.clock_update(ts, evt, signals)
 
     def execute(self, command):
-        with self._queue_lock:
-            self._to_execute.append(command)
+        with self._execution_lock:
+            command(self._control_mode, self._get_clocks)
 
     def stop(self):
         pass
@@ -123,3 +114,6 @@ class MinuteSimulationLoop(object):
             clocks.pop('fake')
         except KeyError:
             pass
+
+    def _process(self, ts):
+        pass

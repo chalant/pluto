@@ -12,7 +12,7 @@ service Gateway {
 service Manager {
     //for managing strategies: we can put a strategy into a live or a paper environment or both
     rpc InspectCode (CodeInspectionRequest) returns (CodeInspectionResponse);
-    //locks a strategy so that it can't be modfied or overwritten
+    //locks a strategy so that it can't be modified or overwritten
     rpc Deploy(DeployRequest) returns (DeploymentResponse);
 }
 
@@ -71,8 +71,8 @@ message Strategy {
 }
 
 message DeployRequest {
-    string strategy_id = 1;
-    bytes strategy = 2;
+    //request deployment of a session.
+    string session_id = 1;
 }
 
 message LoginRequest {

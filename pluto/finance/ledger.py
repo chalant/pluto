@@ -17,8 +17,8 @@ from pluto.utils import saving
 
 
 class LiveLedger(saving.Savable):
-    def __init__(self, capital, data_frequency, start_date, lookback_length):
-        self._lookback = lookback_length
+    def __init__(self, capital, data_frequency, start_date, look_back):
+        self._look_back = look_back
 
         # metric only uses array
         self.daily_returns_array = collections.deque()
@@ -415,7 +415,7 @@ class LiveLedger(saving.Savable):
         #add returns each bar
         returns = self.daily_returns_array
         returns.append(self.todays_returns())
-        if self._session_count == self._lookback:
+        if self._session_count == self._look_back:
             returns.popleft()
             self._session_count = 0
         self._sessions = sessions

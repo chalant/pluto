@@ -28,14 +28,13 @@ message Status {
 message RunRequest {
     RunMode mode = 1; //necessary in realtime mode not in backtesting
     repeated RunParams run_params = 2;
-    google.protobuf.Timestamp start_timestamp = 3; //this is optional
+    google.protobuf.Timestamp end = 3; //indicates the date from which we pre
 }
 
 message RunParams {
-    string strategy_id = 1;
-    string capital_ratio = 2;
-    string universe = 3;
-    //Frequency data_frequency = 4;
+    string session_id = 1;
+    float capital_ratio = 2;
+    float max_leverage = 3;
 }
 
 enum RunMode {

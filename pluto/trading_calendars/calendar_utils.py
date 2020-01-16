@@ -1,19 +1,19 @@
-from trading_calendars import calendar_utils as cu
-
 import itertools as it
 
-from trading_calendars import trading_calendar as tc
 import datetime as dt
 
 from dateutil import relativedelta as rd
 
-from pluto.coms.utils import conversions as cvr
-
-from protos import calendar_pb2 as cpb
-from pluto.trading_calendars import wrappers as wr
+from trading_calendars import trading_calendar as tc
+from trading_calendars import calendar_utils as cu
 
 import pandas as pd
 from pandas.tseries import holiday, offsets
+
+from protos import calendar_pb2 as cpb
+
+from pluto.coms.utils import conversions as cvr
+from pluto.trading_calendars import wrappers as wr
 
 def get_calendar_in_range(name, start_dt, end_dt=None):
     """
@@ -120,16 +120,24 @@ class TradingCalendar(tc.TradingCalendar):
         )
 
     def special_closes(self):
-        return [(sp.time,
-                 tc.HolidayCalendar([self._from_proto_holiday(hol) for hol in sp.holidays]))
-                for sp in self._proto_calendar.special_closes]
+        return [
+            (sp.time,
+             tc.HolidayCalendar(
+                 [self._from_proto_holiday(hol)
+                  for hol in sp.holidays]))
+            for sp in self._proto_calendar.special_closes]
 
     def special_closes_adhoc(self):
-        return [(sp.time,
-                 [cvr.to_datetime(t).strftime("%Y-%m-%d") for t in sp.dates])
-                for sp in self._proto_calendar.special_closes_adhoc]
+        return [
+            (sp.time,
+             [cvr.to_datetime(t).strftime("%Y-%m-%d")
+              for t in sp.dates])
+            for sp in self._proto_calendar.special_closes_adhoc]
 
 def from_proto_calendar(proto_calendar, start, end=None):
     if end is None:
         end = start + pd.Timedelta(days=365)
     return TradingCalendar(start, end, proto_calendar)
+
+def to_proto_calendar(calendar):
+    pass

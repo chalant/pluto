@@ -8,7 +8,13 @@ from pluto.finance.metrics import tracker_state_pb2 as trs
 
 
 class MetricsTracker(saving.Savable):
-    def __init__(self, benchmark_source, capital, data_frequency, start_dt, look_back, metrics=None):
+    def __init__(self,
+                 benchmark_source,
+                 capital,
+                 data_frequency,
+                 start_dt,
+                 look_back,
+                 metrics=None):
         """
 
         Parameters
@@ -20,7 +26,11 @@ class MetricsTracker(saving.Savable):
         look_back: int
         """
         self._benchmark_source = benchmark_source
-        self._ledger = ledger.LiveLedger(capital, data_frequency, start_dt, look_back)
+        self._ledger = ledger.LiveLedger(
+            capital,
+            data_frequency,
+            start_dt,
+            look_back)
 
         self._capital_base = capital
 

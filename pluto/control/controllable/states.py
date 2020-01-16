@@ -1,3 +1,5 @@
+from abc import abstractmethod, ABC
+
 from protos.clock_pb2 import (
     SESSION_START,
     SESSION_END,
@@ -6,7 +8,7 @@ from protos.clock_pb2 import (
     TRADE_END
 )
 
-class State(object):
+class State(ABC):
     def __init__(self, controllable):
         self._controllable = controllable
 
@@ -14,6 +16,7 @@ class State(object):
         return self._aggregate(self._controllable, ts, evt, signals)
 
     #todo: we only need active exchanges for BAR and TRADE_END events
+    @abstractmethod
     def _aggregate(self, controllable, ts, evt, signals):
         raise NotImplementedError
 
@@ -47,8 +50,7 @@ class InSession(State):
         active = []
         for t, c_evt, exchange in signals:
             # filter exchanges
-            # todo: map exchange to itself so that we can use get() => faster
-            if exchange in exchanges:
+            if exchanges.get(exchange):
                 # search for a session start event if it have not be done yet.
                 if c_evt == SESSION_START:
                     active.append((c_evt, exchange))

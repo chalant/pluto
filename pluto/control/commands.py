@@ -1,9 +1,30 @@
 from abc import ABC, abstractmethod
 
+
 class Command(ABC):
     @abstractmethod
+    def _command(self):
+        raise NotImplementedError(self._command.__name__())
+
+    @abstractmethod
     def __call__(self, control_mode, clock_factory):
+        '''
+
+        Parameters
+        ----------
+        control_mode: pluto.control.modes.mode.ControlMode
+        clock_factory: function
+
+        Returns
+        -------
+
+        '''
         raise NotImplementedError
+
+    @abstractmethod
+    def __add__(self, other):
+        raise NotImplementedError
+
 
 class Stop(Command):
     def __init__(self, params, liquidate=False):
@@ -12,30 +33,15 @@ class Stop(Command):
 
 
     def __call__(self, control_mode, clock_factory):
-        mode = control_mode
-        sessions = mode.sessions
-        liquidate = self._liquidate
+        control_mode.stop(self._params)
 
-        to_stop = set(session.id for session in sessions) & set(p.session_id for p in self._params)
-
-        if liquidate:
-            for session in to_stop:
-                mode._liquidate(session)
-        else:
-            for session in to_stop:
-                mode.stop(session)
-
-class Setup(Command):
-    def __init__(self, params, exchanges):
+class Run(Command):
+    def __init__(self, directory, params, exchanges):
         self._params = params
         self._exchanges = exchanges
+        self._directory = directory
 
     def __call__(self, control_mode, clock_factory):
-        '''
-        runs a session
-            1)load/create and store domain
-            2)load/create and store sessions (and strategies)
-        '''
 
         # todo: we need to make sure that all the positions have been liquidated before adding new
         # sessions and updating parameters, HOW?
@@ -50,10 +56,7 @@ class Setup(Command):
 
         # schedule all sessions that are not in the params for liquidation
 
-        mode = control_mode
         #the mode manages capital assignments and leverage ratios..
+        clock_factory(self._exchanges)
+        control_mode.add_strategies(self._directory, self._params)
 
-        #todo: exchanges are computed from universes externally.
-        exchanges = self._exchanges
-        clock_factory(exchanges)
-        mode.add_strategies(self._params)

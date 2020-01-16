@@ -32,6 +32,7 @@ message PushResponse {
 }
 
 message SaveRequest {
+    string strategy_id = 1;
     bytes strategy = 2;
 }
 
@@ -44,13 +45,16 @@ message StrategyRequest {
 }
 
 message SetupRequest {
-    //setup the run parameters of the dev environment
-    float capital = 1;
-    float max_leverage = 2;
+    //setup parameters of the strategy
+    string strategy_id = 1;
+    string universe = 2;
+    int32 look_back = 5;
+    string data_frequency = 6;
     google.protobuf.Timestamp start = 3;
     google.protobuf.Timestamp end = 4;
 }
 
 message SetupResponse {
-
+    //session_id that will be used to run the strategy
+    string session_id = 1;
 }

@@ -9,7 +9,7 @@ from protos import interface_pb2_grpc as interface
 from protos import controller_pb2_grpc as ctl
 
 from pluto.explorer import explorer
-from pluto.controller import controller
+from pluto.controller import controllerservice
 from pluto.interface.utils import grpc_interceptors as interceptors
 from pluto.interface import manager, credentials
 from pluto.interface.utils import security
@@ -32,7 +32,7 @@ class Gateway(interface.GatewayServicer):
         # self._editor = edt = editor.Editor(drt)
         self._monitor = mtr = manager.Manager(drt)
         self._explorer = exp = explorer.Explorer(drt)
-        self._controller = clr = controller.LiveController(drt)
+        self._controller = clr = controllerservice.LiveController(drt)
 
 
         self._logged_in = False
@@ -47,7 +47,6 @@ class Gateway(interface.GatewayServicer):
             interceptors=ath + avl)
 
         interface.add_GatewayServicer_to_server(self, server)
-        interface.add_EditorServicer_to_server(edt, server)
         interface.add_MonitorServicer_to_server(mtr, server)
         interface.add_ExplorerServicer_to_server(exp, server)
         ctl.add_ControllerServicer_to_server(clr, server)
