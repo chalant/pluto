@@ -27,7 +27,9 @@ def get_dir(name, root=None):
 @with_root
 def get_file_path(name, root=None):
     if not path.isfile(name):
-        raise FileNotFoundError
+        #touch file if it does not exist
+        with open(name, 'w'):
+            pass
     return name
 
 @with_root

@@ -1,109 +1,196 @@
 import abc
 
-class Controllable(object):
-    def __init__(self, stub, strategy, exchanges):
-        self._stub = stub
-        self._strategy = strategy
+def load_implementation(strategy):
+    buffer = b''
+    for bytes_ in strategy.get_implementation():
+        buffer += bytes_
+    return buffer
 
-        self._exchanges = exchanges
-        self._num_exchanges = len(exchanges)
+class Info(object):
+    def session_id(self):
+        return
 
-        #todo initialize the stub with the proper parameters
-        stub.Initiliaze()
+    def capital_ratio(self):
+        return
 
-    def update(self, ts, evt, signals):
-        stub = self._stub
+    def max_leverage(self):
+        return
 
-        stub.Cloc_Update()
 
 class ControlMode(abc.ABC):
-    def __init__(self):
-        #todo: we get the capital from the broker.
-        #todo: in simulation, the broker is just a placeholder for capital and max_leverage...
-        self._broker = broker = self._create_broker()
-        self._trader = self._create_trader(broker.address)
+    def __init__(self, framework_url):
+        '''
 
-        self._domain_filters = {}
-        #maps session id to a session
-        self._sessions = []
-        self._controllables = {}
+        Parameters
+        ----------
+        framework_url: str
+        '''
+        # todo: we get the capital from the broker.
+        # todo: in simulation, the broker is just a placeholder for capital and max_leverage...
+        self._broker = self._create_broker()
 
-        self._strategy_to_exchanges = {}
-        self._exchanges_to_strategies = {}
+        # maps session id to a session
+        self._running = {}
+        self._processes = {}
 
+        self._params_buffer = None
+
+        self._to_update = set()
+        self._to_stop = set()
+
+        self._framework_url = framework_url
 
     @property
-    def sessions(self):
-        return self._broker.sessions
+    def running_sessions(self):
+        '''
 
-    def liquidate(self, session):
-        self._domain_filters[session.domain_id].liquidate(session)
+        Returns
+        -------
+        typing.Iterable[Info]
+        '''
+        return self._running.values()
 
-    @property
-    @abc.abstractmethod
-    def name(self):
-        raise NotImplementedError
+    def process(self):
+        # pushes all the changes to the controllables
+        # todo: problem: we need to re-distribute the capital from "stopped"
+        # controllables, but we don't know the capital we will get from the liquidation
+        # => the capital we be assigned on the next iteration => we re-balance the
+        # capital on each loop we can still attribute available capital
+
+        processes = self._processes
+        broker = self._broker
+
+        for p in self._to_stop:
+            # remove the controllable from the dict and stop it
+            # this will liquidate all the positions
+            processes.pop(p).stop()
+
+        params = self._params_buffer
+
+        for p in self._to_update:
+            param = params[p]
+            capital = broker.compute_capital(param.capital_ratio)
+            processes[p].parameter_update(capital, param.max_leverage)
+
+    def stop(self, params):
+        # add to
+        self._to_stop = {p.session_id for p in params} | self._to_stop
 
     def clock_update(self, dt, evt, signals):
-        #update all the controllables
-        #note: in live mode, we download data and update the controllables data
+        # update all the controllables
+        # note: in live mode, we download data and update the controllables data
         # => the download is made at loop level how do we update the controllables?
-        #before updating them.
+        # before updating them.
 
         # self._broker.update(dt, evt, signals)
 
-        for controllable in self._controllables:
-            controllable.update(dt, evt, signals)
-
-    def data_update(self, data):
-        #this is called before the clock update  by the loop
-        for controllable in self._controllables:
-            controllable.data_update(data)
+        for process in self._processes.values():
+            process.clock_update(dt, evt, signals)
 
     def broker_update(self, dt, evt):
-        #called before clock update by the loop
+        # called before clock update by the loop
         self._broker.update(dt, evt)
 
-    def add_strategies(self, params):
-        controllables = self._controllables
+    def add_strategies(self, directory, params):
+        '''
 
+        Parameters
+        ----------
+        directory : typing.pluto.interface.directory._Read
+        params : typing.Iterable[pluto.controller.controller.RunParameter]
+
+        '''
+        # todo: must immediately create and initialize the controllables
+        # since the params contain a session_id, we need to load
+        # the initialization parameters "static" parameters and send them to
+        # the controllable.
+        processes = self._processes
+
+        # note: the params include a mix of running sessions and new sessions.
+        # if a sessions capital_ratio is 0, then liquidate it.
+
+        # make sure that the total ratio doesn't exceed 1
         if sum([param.capital_ratio for param in params]) > 1:
-            raise RuntimeError()
+            raise RuntimeError('Sum of capital ratios must be below or equal to 1')
 
-        capital = self._broker.capital
+        self._params_buffer = params_per_id = {p.session_id: p for p in params}
+        # todo: create launch controllable server,
+        running = self._running
 
-        for param in params:
-            self._add_strategy(
-                controllables,
-                param.strategy,
-                param.exchanges,
-                self._compute_capital(capital, param.capital_ratio),
-                param.max_leverage)
+        ids = set([param.session_id for param in params])
+        # stop any session that isn't present in the parameters
+        running_ids = set(running.keys())
+        to_run_ids = ids - running_ids
+
+        self._to_update = update_ids = (ids & running_ids) | to_run_ids
+        self._to_stop = to_run_ids - (to_run_ids | update_ids)
+
+        broker = self._broker
+        framework_url = self._framework_url
+
+        def filter_to_run():
+            for r in to_run_ids:
+                yield params_per_id.get(r)
+
+        #create and initialize process so that we can run it later.
+        per_str_id = {}
+        #cache
+        strategies = {}
+
+        for p in filter_to_run():
+            stg_id = p.strategy_id
+            stg = strategies.get(stg_id, None)
+            if not stg:
+                strategies[stg_id] = directory.get_strategy(stg_id)
+            lst = per_str_id.get(stg_id, None)
+            if not lst:
+                per_str_id[stg_id] = lst = []
+            lst.append(p)
+
+        for key, values in per_str_id.items():
+            implementation = load_implementation(strategies.pop(key))
+            for p in values:
+                # todo: should put these steps in a thread
+                session_id = p.session_id
+                process = self._create_process(session_id, framework_url)
+                capital = broker.compute_capital(p.capital_ratio)
+                #adjusts the max_leverage based on available margins from the broker
+                max_leverage = broker.adjust_max_leverage(p.max_leverage)
+
+                #todo: put in the necessary parameters
+                # data_frequency (from the session)
+                # bundle_name (note: the universe has a bundle as property)
+
+                sess = p.session
+                process.initialize(
+                    start=p.start,
+                    end=p.end,
+                    capital=capital,
+                    max_leverage=max_leverage,
+                    universe=sess.universe_name,
+                    look_back=sess.look_back,
+                    data_frequency=sess.data_frequency,
+                    strategy=implementation)
+
+                processes[session_id] = process
 
     def _add_strategy(self, controllables, strategy, exchanges, capital_ratio, max_leverage):
-        #todo: if a strategy is already running on a set of exchanges, update its parameters
-        #todo: how to set capital?
+        # todo: if a strategy is already running on a set of exchanges, update its parameters
+        # todo: how to set capital?
 
-        #todo: we must delegate the capital update to the broker.
+        # todo: we must delegate the capital update to the broker.
 
-        #the controllable's account gets updated each minute using the data of the master
+        # the controllable's account gets updated each minute using the data of the master
         # account. The controllable filters the data.  So when updating capital, we update capital
         # ratio and maybe max leverage.
-        #todo: parameters update must be sent ON MINUTE_END or SESSION_END, it will then get processed
+        # todo: parameters update must be sent ON MINUTE_END or SESSION_END, it will then get processed
         # by the controllable on the next BAR or SESSION_START
 
-        #todo: the controllables make trades by calling the broker service.
+        # todo: the controllables make trades by calling the broker service.
         # the next minute, the broker send "state" (positions, etc.) each controllable tracks its own
         # orders, so it filters-out its own positions etc.
 
-        #todo: if data frequency is 'day' we can't emit the BAR event each minute...
-        # we should only emit the BAR event once at each execution close.
-        # in live mode, we must track data more frequently (executed trades etc.)
-        # controller side, (in live) the clock should run each minute, controllable side, if
-        # it is running on daily mode, BAR event must be skipped until we reach the LAST_BAR,
-        # then it emits a BAR event.
-
-        #todo PROBLEM: in daily mode (live) we can place orders before the market closes, so that
+        # todo PROBLEM: in daily mode (live) we can place orders before the market closes, so that
         # they get processed on the same day, or we can place them the next day before the market
         # closes, since in the simulation, we use next day's closing price.
         # ideally, we should buy as close as possible to the closing price => so buy before market
@@ -119,34 +206,21 @@ class ControlMode(abc.ABC):
         # so the STANDARD is: buy as close as possible to the current price. and since we don't have
         # enough data in daily mode, we will be using the previous closing price for slippage simulation.
 
-        #todo: need to add a LAST_BAR event for live daily strategies since the BAR event is emited
+        # todo: need to add a LAST_BAR event for live daily strategies since the BAR event is emited
         # each minute. NOTE: the TRADE_END is emitted some minutes before the SESSION_END event
         # so that we can place trades before the market closes (live). In live we leave a margin
         # of say, 5 to 10 minutes before market close.
         # in live, the closing price, is the price 5 minute before the market closes...
 
-        #todo: order fillings should be simulated each minute... (we will repeat the same price for
+        # todo: order fillings should be simulated each minute... (we will repeat the same price for
         # 5 minutes...), should also be done controller-side, since it is the one that holds the
         # broker.
 
-        #todo: add a TRADE_END event, emitted some minutes before market closes...
+        # todo: add a TRADE_END event, emitted some minutes before market closes...
         # PROBLEM: how do we update the broker state? In backtesting mode, it is updated depending
         # on the data_frequency (daily or minutely) in live, it is updated minutely.
 
-        exchanges.sort()
-        id_ = hash(tuple(exchanges) + (strategy.id))
-
-        cbl = controllables.get(id_, None)
-        if cbl:
-            #todo set parameters
-            cbl.update_parameters()
-        else:
-            stub = self._create_trader(self._broker.address)
-            controllable = Controllable(stub, strategy, exchanges)
-            controllables[id_] = controllable
-
-    def _compute_capital(self, capital, capital_ratio):
-        return capital * capital_ratio
+        pass
 
     @abc.abstractmethod
     def _update(self, dt, evt, signals):
@@ -157,5 +231,11 @@ class ControlMode(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _create_trader(self, broker_url):
-        raise NotImplementedError
+    def _create_process(self, session_id, framework_url):
+        '''
+
+        Returns
+        -------
+        pluto.control.modes.process.process.Process
+        '''
+        raise NotImplementedError(self._create_process.__name__)

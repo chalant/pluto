@@ -13,8 +13,6 @@ import "protos/calendar.proto";
 
 service Controllable {
     /*A service to be controlled by a controller service*/
-    //the controller calls this method to send a data bundle to the controllable
-    rpc UpdateDataBundle (stream Chunk) returns (google.protobuf.Empty);
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
     //called to initialize the controllable (sends initparams)
     //(strategy etc.)
@@ -29,7 +27,6 @@ service Controllable {
     rpc UpdateCalendar (stream Chunk) returns (google.protobuf.Empty);
     //TODO: should return the state of the controllable after it stopped...
     rpc Stop (StopRequest) returns (stream Chunk);
-    rpc IngestData(stream Chunk) returns (google.protobuf.Empty);
 }
 
 message InitParams {
@@ -41,9 +38,10 @@ message InitParams {
     float max_leverage = 5;
     string data_frequency = 6;
     string platform = 7;
-    Calendar calendar = 8;
-    google.protobuf.Timestamp start = 9;
-    google.protobuf.Timestamp end = 10;
+    string universe = 8;
+    int32 look_back = 9;
+    google.protobuf.Timestamp start = 10;
+    google.protobuf.Timestamp end = 12;
 }
 
 message UpdateRequest {

@@ -7,17 +7,20 @@ import threading
 
 import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import orm
 
 from pluto.interface.utils import paths
 from pluto.interface.utils import db_utils
 
-_DIRECTORY = 'Strategies'
-_METADATA_FILE = 'metadata'
+_STREAM_CHUNK_SIZE = 64 * 1024
+_DIRECTORY = paths.get_dir('Strategies')
+_METADATA_FILE = paths.get_file_path('metadata', _DIRECTORY)
 
 metadata = sa.MetaData()
 Base = declarative_base(metadata=metadata)
-engine = db_utils.create_engine(_METADATA_FILE, metadata, _DIRECTORY)
-Session = db_utils.get_session_maker(engine)
+engine = db_utils.create_engine(_METADATA_FILE)
+DBSession = db_utils.get_session_maker(engine)
+
 
 def _check_scope(func):
     def wrapper(instance, *args, **kwargs):
@@ -36,30 +39,107 @@ def _check_scope(func):
         if instance.closed:
             raise RuntimeError('cannot perform action outside of scope!')
         return func(instance, *args, **kwargs)
+
     return wrapper
 
 
 class StrategyMetadata(Base):
-    __tablename__ = 'directory_metadata'
+    __tablename__ = 'strategies_metadata'
 
     id = sa.Column(sa.String, primary_key=True, nullable=False)
     name = sa.Column(sa.String)
-    directory_path = sa.Column(sa.String, nullable=False)
+    file_path = sa.Column(sa.String, nullable=False)
     locked = sa.Column(sa.Boolean, nullable=False)
+    sessions = orm.relationship("Session")
 
 
-class _Strategy(object):
-    _STREAM_CHUNK_SIZE = 64 * 1024
+class SessionMetadata(Base):
+    __tablename__ = 'sessions_metadata'
 
+    id = sa.Column(sa.String, primary_key=True, nullable=False)
+    strategy_id = sa.Column(sa.String, sa.ForeignKey(StrategyMetadata.id))
+    data_frequency = sa.Column(sa.String, nullable=False)
+    directory = sa.Column(sa.String, nullable=False)
+    universe = sa.Column(sa.String, nullable=False)
+    look_back = sa.Column(sa.Integer)
+
+
+class Scoped(object):
+    def __init__(self, context):
+        '''
+
+        Parameters
+        ----------
+        context: _Mode
+        '''
+        self._context = context
+
+    @property
+    def closed(self):
+        return self._context.closed
+
+#todo: add look_back property
+#todo: add data_frequency as property
+class _Session(Scoped):
+    __slots__ = ['_path', '_universe', '_context', '_id', '_stg_id']
+
+    def __init__(self, meta, context):
+        '''
+
+        Parameters
+        ----------
+        meta: SessionMetadata
+        context: _Mode
+        '''
+        super(_Session, self).__init__(context)
+        self._path = meta.directory
+        self._universe = meta.universe
+        self._context = context
+        self._id = meta.id
+        self._stg_id = meta.strategy_id
+        self._look_back = meta.look_back
+        self._data_frequency = meta.data_frequency
+
+    @property
+    def look_back(self):
+        return self._look_back
+
+    @property
+    def data_frequency(self):
+        return self._data_frequency
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def universe_name(self):
+        return self._universe
+
+    @property
+    def strategy_id(self):
+        return self._stg_id
+
+    def get_strategy(self, chunk_size=_STREAM_CHUNK_SIZE):
+        with open(self._stg_id + '.py', 'rb') as f:
+            while True:
+                data = f.read(chunk_size)
+                if not data:
+                    break
+                yield data
+
+
+class _Strategy(Scoped):
     def __init__(self, metadata, context):
         '''
 
         Parameters
         ----------
-        metadata: sch.StrategyMetadata
+        metadata: StrategyMetadata
         context: _Mode
         '''
-        self._path = metadata.directory_path
+        super(_Strategy, self).__init__(context)
+        self._path = metadata.file_path
         self._locked = metadata.locked
         self._name = metadata.name
         self._id = metadata.id
@@ -69,10 +149,6 @@ class _Strategy(object):
     @property
     def locked(self):
         return self._locked
-
-    @property
-    def closed(self):
-        return self._context.closed
 
     @property
     def mode(self):
@@ -88,10 +164,10 @@ class _Strategy(object):
 
     @property
     def path(self):
-        return path.join(self._path, 'strategy.py')
+        return self._path
 
     def get_implementation(self, chunk_size=_STREAM_CHUNK_SIZE):
-        with open(path.join(self._path, 'strategy.py'), 'rb') as f:
+        with open(self._path + '.py', 'rb') as f:
             while True:
                 data = f.read(chunk_size)
                 if not data:
@@ -121,20 +197,6 @@ class _Strategy(object):
     def _lock(self, metadata):
         pass
 
-    #todo
-    def get_performance(self, mode):
-        if mode == 'live':
-            pass
-        elif mode == 'paper':
-            pass
-
-    def write_performance(self, mode, packet):
-        self._write_performance(metadata, mode, packet)
-
-    #todo
-    def _write_performance(self, metadata, mode, packet):
-        raise NotImplementedError
-
 
 class _WritableStrategy(_Strategy):
     def _lock(self, metadata):
@@ -142,14 +204,11 @@ class _WritableStrategy(_Strategy):
 
     def _store(self, metadata, bytes_):
         if not self._locked:
-            with open(path.join(self._path, 'strategy.py'), 'wb') as f:
+            with open(self._path + '.py', 'wb') as f:
                 f.write(bytes_)
         else:
             raise RuntimeError('Cannot overwrite a locked strategy')
 
-    #todo
-    def _write_performance(self, metadata, mode, packet):
-        raise NotImplementedError
 
 class _Mode(ABC):
     def __init__(self, session):
@@ -162,6 +221,40 @@ class _Mode(ABC):
         self._session = session
         self._closed = True
         self._lock = threading.Lock()
+
+    def get_session(self, session_id):
+        return _Session(
+            self._session.query(
+                SessionMetadata)
+                .get(session_id), self)
+
+    def add_session(self, strategy_id, universe):
+        '''
+
+        Parameters
+        ----------
+        strategy_id: str
+        universe: str
+
+        Returns
+        -------
+        _Session
+        '''
+
+        # we use the args pair as key
+        id_ = hash((strategy_id, universe))
+        sess_meta = self._session.query(SessionMetadata) \
+            .filter(SessionMetadata.id == id_).one_or_none()
+
+        if not sess_meta:
+            pth = paths.get_dir(id_, _DIRECTORY)
+            sess_meta = SessionMetadata(
+                id=id_,
+                strategy_id=strategy_id,
+                directory=pth)
+            self._session.add(sess_meta)
+
+        return _Session(sess_meta, self)
 
     @property
     def closed(self):
@@ -210,7 +303,6 @@ class _Mode(ABC):
         '''
         return self._add_strategy(self._session, name)
 
-
     @abstractmethod
     def _get_strategy(self, metadata, context):
         raise NotImplementedError
@@ -241,9 +333,10 @@ class _Mode(ABC):
                 return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        #wait for any ongoing transactions
+        # wait for any ongoing transactions
         with self._lock:
             self.close()
+
 
 class _Read(_Mode):
     def _get_strategy(self, metadata, context):
@@ -260,9 +353,8 @@ class _Read(_Mode):
 
 
 class _Write(_Mode):
-    def __init__(self, session, directory):
+    def __init__(self, session):
         super(_Write, self).__init__(session)
-        self._root_path = directory
 
     def _get_strategy(self, metadata, context):
         return _WritableStrategy(metadata, context)
@@ -271,17 +363,16 @@ class _Write(_Mode):
         session = self._session
 
         id_ = uuid.uuid4().hex
-        pth = paths.get_dir(id_, self._root_path)
+        pth = paths.get_file_path(id_, _DIRECTORY)
 
-        stg_meta = StrategyMetadata(id=id_, name=name, directory_path=pth, locked=False)
+        stg_meta = StrategyMetadata(id=id_, name=name, file_path=pth, locked=False)
         session.add(stg_meta)
 
-        with open(path.join(pth, 'strategy.py'), mode='wb') as f:
+        with open(pth + '.py', mode='wb') as f:
             f.write(self._get_template())
 
         return _WritableStrategy(metadata, self)
 
-    #todo
     def _get_template(self):
         # todo: return a basic template with the necessary functions
         return b''
@@ -296,8 +387,8 @@ class _Write(_Mode):
 
 class Directory(object):
     def __init__(self):
-        self._session = session = Session()
-        self._reader = _Read(session)
+        self._session = sess = DBSession()
+        self._reader = _Read(sess)
 
     def write(self):
         '''
@@ -307,8 +398,8 @@ class Directory(object):
         _Write
         '''
 
-        #we create a new writer with a new session for each write request.
-        return _Write(Session(), _DIRECTORY)
+        # we create a new writer with a new session for each write request.
+        return _Write(DBSession())
 
     def read(self):
         '''
@@ -317,7 +408,7 @@ class Directory(object):
         -------
         _Read
         '''
-        #we always return the same reader.
+        # we always return the same reader.
         return self._reader
 
     def open(self):
@@ -330,6 +421,6 @@ class Directory(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        #blocks until the reader is released by another thread.
+        # blocks until the reader is released by another thread.
         self._reader.close()
         self._session.close()

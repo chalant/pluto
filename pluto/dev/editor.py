@@ -47,6 +47,8 @@ class Editor(dev_rpc.EditorServicer):
                 yield data_pb2.Chunk(chunk=b)
 
     def Save(self, request_iterator, context):
+        #todo: if a strategy is locked, then copy it and create a new id for this
+        # strategy, so that we don't overwrite the locked strategy
         with self._directory.write() as d:
             buffer = ''
             for chunk in request_iterator:

@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from copy import copy
-from collections import deque
 
 import pandas as pd
 import logbook
@@ -10,6 +9,8 @@ from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 from zipline.finance import asset_restrictions
 from zipline.finance.order import ORDER_STATUS
+from zipline.pipeline.data import USEquityPricing
+from zipline.pipeline.loaders import USEquityPricingLoader
 
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
@@ -21,7 +22,7 @@ log = logbook.Logger('Controllable')
 class Controllable(ABC, saving.Savable):
     def __init__(self):
         self._metrics_tracker = None
-        self._bundle = bundle
+        self._bundle = None
         self._calendar = None
 
         self._blotter = None
@@ -37,29 +38,39 @@ class Controllable(ABC, saving.Savable):
         self._capital_change_deltas = {}
         self._capital_changes = {}
 
-        #script namespace
+        # script namespace
         self._namespace = {}
 
         self._calendar = None
+        self._universe = None
 
         self._sessions = pd.Series()
+
+        self._end_dt = None
+        self._look_back = None
 
     def initialize(self,
                    start_dt,
                    end_dt,
-                   calendar,
+                   universe,
                    strategy,
                    bundle_name,
                    capital,
                    max_leverage,
                    data_frequency,
                    arena,
-                   platform):
+                   platform,
+                   look_back):
 
-        #end_dt is the previous day
+        calendar = universe.get_calendar(start_dt, end_dt)
+        # end_dt is the previous day
+        self._end_dt = end_dt
         self._calendar = calendar
+        self._universe = universe
+        self._look_back = look_back
         if data_frequency == 'minute':
             self._emission_rate = 'minute'
+
             def calculate_minute_capital_changes(dt, algo, emission_rate):
                 self._calculate_capital_changes(dt, emission_rate, is_interday=False)
         else:
@@ -78,13 +89,12 @@ class Controllable(ABC, saving.Savable):
 
         self._sessions = sessions = params.sessions
 
-        #we assume that the data has already been ingested => the controller must first
+        # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
-        loader = bundler.get_bundle_loader()
+        loader = bundler.get_bundle_loader()  # todo
         bundle = loader(bundle_name)
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
-
 
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
@@ -96,8 +106,8 @@ class Controllable(ABC, saving.Savable):
         )
 
         # load s&p 500 index as benchmark_asset.
-        #todo: we can't load the benchmark data like this for now...
-        #todo: we need a special file for benchmark data
+        # todo: we can't load the benchmark data like this for now...
+        # todo: we need a special file for benchmark data...
         asset = asset_finder.lookup_symbol('^GSPC', end_dt)
         self._benchmark_source = benchmark_source = bs.BenchmarkSource(
             asset,
@@ -106,8 +116,13 @@ class Controllable(ABC, saving.Savable):
             self._data_portal,
             self._emission_rate)
 
-        look_back = (end_dt - start_dt) + pd.Timedelta('1 Day')
-        self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(benchmark_source, capital, data_frequency, start_dt, look_back)
+        self._metrics_tracker = metrics_tracker = \
+            tracker.MetricsTracker(
+                benchmark_source,
+                capital,
+                data_frequency,
+                start_dt,
+                look_back)
         self._blotter = blotter = self._create_blotter()
 
         restrictions = asset_restrictions.NoRestrictions()
@@ -118,22 +133,39 @@ class Controllable(ABC, saving.Savable):
             restrictions,
             data_frequency)
 
-        def choose_loader(column): #todo use readers from the bundler
-            raise NotImplementedError(choose_loader.__name__)
+        # todo: we need more pipeline loaders (fundamentals etc.)
+        pipeline_loader = USEquityPricingLoader.without_fx(
+            bundle.equity_daily_bar_reader,
+            bundle.adjustment_reader,
+        )
+
+        def choose_loader(column):
+            if column in USEquityPricing.columns:
+                return pipeline_loader
+            raise ValueError(
+                "No PipelineLoader registered for column %s." % column
+            )
 
         def noop(*args, **kwargs):
             pass
 
-        code = compile(strategy,'', 'exec')
+        code = compile(strategy, '', 'exec')
         exec(code, self._namespace)
         namespace = self._namespace
 
-        #the algorithm object is just for exposing methods (api) that are needed by the user
+        # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
 
-        algo = self._get_algorithm_class()
-
-        self._algo = algo
+        self._algo = self._get_algorithm_class(
+            params,
+            data_portal,
+            blotter,
+            metrics_tracker,
+            choose_loader,
+            namespace.get('initialize', noop),
+            namespace.get('before_trading_start', noop),
+            namespace.get('handle_data', noop),
+            namespace.get('analyze', noop))
 
     @abstractmethod
     def _get_algorithm_class(self,
@@ -157,6 +189,12 @@ class Controllable(ABC, saving.Savable):
         return self._get_minute_message(dt, self._algo, self._metrics_tracker, self._data_portal)
 
     def session_start(self, dt):
+
+        end_dt = self._end_dt
+        if dt == end_dt:
+            #reload a new calendar
+            start_dt = end_dt - pd.Timedelta(days=self._look_back)
+            self._calendar = self._universe.get_calendar(start_dt, end_dt)
 
         self._sync_last_sale_prices(dt)
         self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
@@ -204,7 +242,7 @@ class Controllable(ABC, saving.Savable):
 
         # todo: assets are must be restricted to the provided exchanges
 
-        #self._restrictions.set_exchanges(exchanges)
+        # self._restrictions.set_exchanges(exchanges)
         current_data = self._current_data
 
         new_transactions, new_commissions, closed_orders = blotter.get_transactions(current_data)
@@ -234,9 +272,9 @@ class Controllable(ABC, saving.Savable):
         self._benchmark_source.on_minute_end(dt, portal, calendar, sessions)
         metrics_tracker.handle_minute_close(dt, portal, sessions)
 
-        #todo: save state in some file (also add a controllable state?)
+        # todo: save state in some file (also add a controllable state?)
         # todo: this should be handled by a thread. Note: this must be done at the end of a bar
-        # todo: when restoring state, we need to process orders that happend between last_checkpoint
+        # todo: when restoring state, we need to process orders that happened between last_checkpoint
         #  and today
         state = metrics_tracker.get_state(dt)
 
@@ -256,8 +294,8 @@ class Controllable(ABC, saving.Savable):
 
         algo.validate_algo_controls()
 
-        #updates the sessions (live)
-        self._sessions = sessions = self._get_sessions(dt, calendar, self._params)
+        # updates the sessions (live)
+        self._sessions = sessions = self._get_sessions(dt, self._params)
         return self._get_daily_message(
             dt,
             algo,
@@ -267,11 +305,19 @@ class Controllable(ABC, saving.Savable):
             sessions
         )
 
-    @abstractmethod
     def _get_sessions(self, dt, params):
-        raise NotImplementedError(self._get_sessions.__name__)
+        sessions = self._sessions_array
+        if sessions[-1] != dt:
+            sessions.popleft()
+            sessions.append(dt)
+            params.start_session = sessions[0].normalize()
+            params.end_session = dt
+            return pd.DatetimeIndex(sessions)
+        else:
+            return self._sessions
 
     def stop(self, dt):
+        # todo: sell all the positions
         pass
 
     def liquidate(self, dt):
@@ -292,7 +338,7 @@ class Controllable(ABC, saving.Savable):
         raise NotImplementedError
 
     def update_capital(self, dt, capital):
-        self._capital_changes = {dt : {'type' : 'target', 'value' : capital}}
+        self._capital_changes = {dt: {'type': 'target', 'value': capital}}
 
     def update_calendar(self, dt, calendar):
         raise NotImplementedError(self.update_calendar.__name__)
@@ -449,7 +495,7 @@ class Controllable(ABC, saving.Savable):
             self._last_sync_time = dt
 
     def _calculate_capital_changes(self, dt, emission_rate, is_interday,
-                                  portfolio_value_adjustment=0.0):
+                                   portfolio_value_adjustment=0.0):
         """
         If there is a capital change for a given dt, this means that the change
         occurs before `handle_data` on the given dt. In the case of the

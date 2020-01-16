@@ -34,9 +34,6 @@ class SimulationControllable(controllable.Controllable):
             analyze
         )
 
-    def _get_sessions(self, dt, sim_params):
-        return self._sessions
-
     def _update_blotter(self, blotter, broker_data):
         pass
 

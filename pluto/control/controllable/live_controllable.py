@@ -40,17 +40,6 @@ class LiveControllable(controllable.Controllable):
             analyze
         )
 
-    def _get_sessions(self, dt, params):
-        sessions = self._sessions_array
-        if sessions[-1] != dt:
-            sessions.popleft()
-            sessions.append(dt)
-            params.start_session = sessions[0].normalize()
-            params.end_session = dt
-            return DatetimeIndex(sessions)
-        else:
-            return self._sessions
-
     def _update_blotter(self, blotter, broker_data):
         blotter.update(broker_data)
 
