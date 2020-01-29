@@ -36,7 +36,7 @@ class Manager(itf_rpc.ManagerServicer):
         '''
 
         # todo: deploying the strategy "freezes" it to the universe
-        with self._directory.write() as d:
+        with self._directory.write_event() as d:
             stg = d.get_strategy(request.strategy_id)
             # todo: must check if the script can actually run without errors.
             try:

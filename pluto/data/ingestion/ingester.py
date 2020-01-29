@@ -18,7 +18,7 @@ class Ingester(object):
         frames: iterable[tuple(str, pandas.DataFrame)]
 
         '''
-		self._daily_bar.write(country_code, frames)
+		self._daily_bar.write_event(country_code, frames)
 
 	def ingest_minute_bars(self, country_code, frames):
 		'''
@@ -29,7 +29,7 @@ class Ingester(object):
         frames: iterable[tuple(str, pandas.DataFrame)]
 
         '''
-		self._minute_bar.write(country_code, frames)
+		self._minute_bar.write_event(country_code, frames)
 		raise NotImplementedError('Minute bars not supported yet.')
 
 	def ingest_adjustments(self, frames):
@@ -42,7 +42,7 @@ class Ingester(object):
 							   exchanges,
 							   root_symbols,
 							   equity_supplementary_mappings):
-		self._assets_metadata.write(
+		self._assets_metadata.write_event(
 			equities,
 			futures,
 			exchanges,

@@ -78,11 +78,12 @@ class MetricsTracker(saving.Savable):
     def update_account(self, dt, main_account):
         self._ledger.update_account(main_account)
 
+
     def get_state(self, dt):
         return trs.TrackerState(
-            first_open_session=conversions.to_proto_timestamp(self._first_open_session.to_datetime()),
+            first_open_session=conversions.to_proto_timestamp(self._first_open_session),
             account_state=self._ledger.get_state(dt),
-            last_checkpoint=conversions.to_proto_timestamp(dt.to_datetime())
+            last_checkpoint=conversions.to_proto_timestamp(dt)
         ).SerializeToString()
 
     def restore_state(self, state):
@@ -93,7 +94,7 @@ class MetricsTracker(saving.Savable):
 
         self._first_open_session = pd.Timestamp(conversions.to_datetime(tr_state.first_open_session),tz='UTC')
 
-        ledger.restore_state(tr_state.account_state)
+        self._last_checkpoint = ledger.restore_state(tr_state.account_state)
 
 
     def handle_minute_close(self, dt, data_portal, trading_calendar, sessions):

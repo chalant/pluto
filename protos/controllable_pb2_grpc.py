@@ -8,10 +8,8 @@ from protos import data_pb2 as protos_dot_data__pb2
 
 
 class ControllableStub(object):
-  """TODO: State: bytes...
-
-  A service to be controller by a controller service
-  """
+  # missing associated documentation comment in .proto file
+  pass
 
   def __init__(self, channel):
     """Constructor.
@@ -19,11 +17,6 @@ class ControllableStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.UpdateDataBundle = channel.stream_unary(
-        '/Controllable/UpdateDataBundle',
-        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
-        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-        )
     self.UpdateParameters = channel.unary_unary(
         '/Controllable/UpdateParameters',
         request_serializer=protos_dot_controller__pb2.ParametersUpdateRequest.SerializeToString,
@@ -31,7 +24,7 @@ class ControllableStub(object):
         )
     self.Initialize = channel.stream_unary(
         '/Controllable/Initialize',
-        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
+        request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
     self.ClockUpdate = channel.unary_unary(
@@ -41,75 +34,51 @@ class ControllableStub(object):
         )
     self.UpdateAccount = channel.stream_unary(
         '/Controllable/UpdateAccount',
-        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
+        request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
-    self.UpdateCalendar = channel.stream_unary(
-        '/Controllable/UpdateCalendar',
-        request_serializer=protos_dot_data__pb2.Data.SerializeToString,
-        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-        )
-    self.Stop = channel.unary_stream(
+    self.Stop = channel.unary_unary(
         '/Controllable/Stop',
-        request_serializer=protos_dot_controller__pb2.StopParams.SerializeToString,
-        response_deserializer=protos_dot_data__pb2.Data.FromString,
+        request_serializer=protos_dot_controller__pb2.StopRequest.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
 
 
 class ControllableServicer(object):
-  """TODO: State: bytes...
-
-  A service to be controller by a controller service
-  """
-
-  def UpdateDataBundle(self, request_iterator, context):
-    """the controller calls this method to send a data bundle to the controllable
-    """
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
+  # missing associated documentation comment in .proto file
+  pass
 
   def UpdateParameters(self, request, context):
-    # missing associated documentation comment in .proto file
-    pass
+    """A service that is called by a controller
+    """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
   def Initialize(self, request_iterator, context):
-    """called to initialize the controllable (sends initparams)
-    (strategy etc.)
-    """
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-  def ClockUpdate(self, request, context):
-    """TODO: should return the state of the strategy run session at each update...
-    update sends an UpdateRequest. since this could get arbitrarily big, we send it
-    in chunks of bytes.
-    """
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
-  def UpdateAccount(self, request_iterator, context):
     # missing associated documentation comment in .proto file
     pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def UpdateCalendar(self, request_iterator, context):
-    """receives periodic calendar updates
+  def ClockUpdate(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def UpdateAccount(self, request_iterator, context):
+    """for updating positions, transactions etc.
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
   def Stop(self, request, context):
-    """TODO: should return the state of the controllable after it stopped...
-    """
+    # missing associated documentation comment in .proto file
+    pass
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
@@ -117,11 +86,6 @@ class ControllableServicer(object):
 
 def add_ControllableServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'UpdateDataBundle': grpc.stream_unary_rpc_method_handler(
-          servicer.UpdateDataBundle,
-          request_deserializer=protos_dot_data__pb2.Data.FromString,
-          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-      ),
       'UpdateParameters': grpc.unary_unary_rpc_method_handler(
           servicer.UpdateParameters,
           request_deserializer=protos_dot_controller__pb2.ParametersUpdateRequest.FromString,
@@ -129,7 +93,7 @@ def add_ControllableServicer_to_server(servicer, server):
       ),
       'Initialize': grpc.stream_unary_rpc_method_handler(
           servicer.Initialize,
-          request_deserializer=protos_dot_data__pb2.Data.FromString,
+          request_deserializer=protos_dot_data__pb2.Chunk.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
       'ClockUpdate': grpc.unary_unary_rpc_method_handler(
@@ -139,18 +103,13 @@ def add_ControllableServicer_to_server(servicer, server):
       ),
       'UpdateAccount': grpc.stream_unary_rpc_method_handler(
           servicer.UpdateAccount,
-          request_deserializer=protos_dot_data__pb2.Data.FromString,
+          request_deserializer=protos_dot_data__pb2.Chunk.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
-      'UpdateCalendar': grpc.stream_unary_rpc_method_handler(
-          servicer.UpdateCalendar,
-          request_deserializer=protos_dot_data__pb2.Data.FromString,
-          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-      ),
-      'Stop': grpc.unary_stream_rpc_method_handler(
+      'Stop': grpc.unary_unary_rpc_method_handler(
           servicer.Stop,
-          request_deserializer=protos_dot_controller__pb2.StopParams.FromString,
-          response_serializer=protos_dot_data__pb2.Data.SerializeToString,
+          request_deserializer=protos_dot_controller__pb2.StopRequest.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

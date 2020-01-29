@@ -16,6 +16,7 @@ service Editor {
 
 service Environment {
     rpc Setup(SetupRequest) returns (SetupResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
 }
 
 message NewStrategyRequest {
@@ -57,4 +58,13 @@ message SetupRequest {
 message SetupResponse {
     //session_id that will be used to run the strategy
     string session_id = 1;
+}
+
+message DeleteRequest {
+    //request a session deletion
+    string session_id = 1;
+}
+
+message DeleteResponse {
+
 }

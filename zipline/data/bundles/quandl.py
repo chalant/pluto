@@ -212,13 +212,13 @@ def quandl_bundle(environ,
         raw_data[['symbol', 'date']],
         show_progress
     )
-    asset_db_writer.write(asset_metadata)
+    asset_db_writer.write_event(asset_metadata)
 
     symbol_map = asset_metadata.symbol
     sessions = calendar.sessions_in_range(start_session, end_session)
 
     raw_data.set_index(['date', 'symbol'], inplace=True)
-    daily_bar_writer.write(
+    daily_bar_writer.write_event(
         parse_pricing_and_vol(
             raw_data,
             sessions,
@@ -230,7 +230,7 @@ def quandl_bundle(environ,
     raw_data.reset_index(inplace=True)
     raw_data['symbol'] = raw_data['symbol'].astype('category')
     raw_data['sid'] = raw_data.symbol.cat.codes
-    adjustment_writer.write(
+    adjustment_writer.write_event(
         splits=parse_splits(
             raw_data[[
                 'sid',

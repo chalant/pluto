@@ -37,8 +37,18 @@ class AbstractUniverse(abc.ABC):
 
     @property
     @abc.abstractmethod
+    def bundle_name(self):
+        raise NotImplementedError(self.bundle_name.__name__())
+
+    @property
+    @abc.abstractmethod
     def asset_filter(self):
         raise NotImplementedError(self.asset_filter.__name__())
+
+    @property
+    @abc.abstractmethod
+    def platform(self):
+        raise NotImplementedError(self.platform.__name__())
 
 
 class Universe(AbstractUniverse):
@@ -91,11 +101,23 @@ class Universe(AbstractUniverse):
                              for exchange in self._exchanges)))
             self._calendar_path = cal_path = result.fetchone()['file_path']
 
-            with open(cal_path) as f:
-                proto = calendar_pb2.Calendar()
-                proto.ParseFromString(f.read())
+        with open(cal_path) as f:
+            proto = calendar_pb2.Calendar()
+            proto.ParseFromString(f.read())
 
-            return cu.from_proto_calendar(proto, start, end)
+        return cu.from_proto_calendar(proto, start, end)
+
+    @property
+    def bundle_name(self):
+        bundle = self._bundle_name
+        if not bundle:
+            with engine.begin() as conn:
+                stm = schemas.universes
+                result = conn.execute(
+                    sa.select([stm.c.bundle])
+                        .where(self._name == stm.c.universe))
+                self._bundle_name = bundle = result.fetchone()['bundle']
+        return bundle
 
     @property
     def asset_filter(self):
@@ -106,10 +128,14 @@ class Universe(AbstractUniverse):
         else:
             return asset_filter
 
+    @property
+    def platform(self):
+        return 'pluto'
+
 
 class TestUniverse(AbstractUniverse):
-    # this universe uses the quantopian bundle,
-    # so no need to filter
+    # for testing purposes, it is not meant to be
+    # used in production
     @property
     def name(self):
         return 'test'
@@ -125,8 +151,16 @@ class TestUniverse(AbstractUniverse):
     def asset_filter(self):
         return None
 
+    @property
+    def platform(self):
+        return 'zipline'
 
-def get_universe(name=None):
+    @property
+    def bundle_name(self):
+        return 'quantopian-quandl'
+
+
+def get_universe(name):
     '''
 
     Parameters
@@ -137,7 +171,7 @@ def get_universe(name=None):
     -------
     AbstractUniverse
     '''
-    if not name:
+    if name == 'test':
         return TestUniverse()
     else:
         return Universe(name, writer.get_directory(name))

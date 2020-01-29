@@ -245,7 +245,7 @@ class TestPersistence(WithSimParams, WithTradingEnvironment, ZiplineTestCase):
             pass
         """
         algo_filename = "algo.py"
-        algo_path = tmpdir.write(algo_filename, algo_text)
+        algo_path = tmpdir.write_event(algo_filename, algo_text)
         state_filename = os.path.join(tmpdir.path, "state_file")
 
         algo = self.make_trading_algo(state_filename, algo_path)
@@ -295,7 +295,7 @@ class TestPersistence(WithSimParams, WithTradingEnvironment, ZiplineTestCase):
                                         initialize=TestPersistence.noop,
                                         handle_data=TestPersistence.noop)
 
-        tmpdir.write("state_file", b"roken")
+        tmpdir.write_event("state_file", b"roken")
 
         with self.assertRaises(ValueError) as e:
             algo_1.initialize()
@@ -311,7 +311,7 @@ class TestPersistence(WithSimParams, WithTradingEnvironment, ZiplineTestCase):
             context.state_from_handle_data = 13
         """
         algo_filename_1 = "algo_1.py"
-        algo_path_1 = tmpdir.write(algo_filename_1, algo_text_1)
+        algo_path_1 = tmpdir.write_event(algo_filename_1, algo_text_1)
 
         state_filename_1 = os.path.join(tmpdir.path, "state_file_1")
         algo_1 = self.make_trading_algo(state_filename_1,
@@ -328,7 +328,7 @@ class TestPersistence(WithSimParams, WithTradingEnvironment, ZiplineTestCase):
             context.state_from_handle_data = 5
         """
         algo_filename_2 = "algo_2.py"
-        algo_path_2 = tmpdir.write(algo_filename_2, algo_text_2)
+        algo_path_2 = tmpdir.write_event(algo_filename_2, algo_text_2)
 
         state_filename_2 = os.path.join(tmpdir.path, "state_file_2")
         algo_2 = self.make_trading_algo(state_filename_2,

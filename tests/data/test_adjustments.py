@@ -156,7 +156,7 @@ class TestSQLiteAdjustmentsWriter(WithTradingCalendars,
             ix += len(dividends)
             dividends[col] = extra_dates
 
-        self.writer_from_close(close).write(dividends=dividends)
+        self.writer_from_close(close).write_event(dividends=dividends)
         dfs = self.component_dataframes()
         dividend_payouts = dfs.pop('dividend_payouts')
         dividend_ratios = dfs.pop('dividends')
@@ -223,7 +223,7 @@ class TestSQLiteAdjustmentsWriter(WithTradingCalendars,
             columns=['effective_date', 'ratio', 'sid'],
         ).sort_values(sort_key)
 
-        self.writer_without_pricing(dates, sids).write(**{name: input_})
+        self.writer_without_pricing(dates, sids).write_event(**{name: input_})
         dfs = self.component_dataframes()
 
         output = dfs.pop(name).sort_values(sort_key)
@@ -264,7 +264,7 @@ class TestSQLiteAdjustmentsWriter(WithTradingCalendars,
             ix += len(input_)
             input_[col] = extra_dates
 
-        self.writer_without_pricing(dates, sids).write(stock_dividends=input_)
+        self.writer_without_pricing(dates, sids).write_event(stock_dividends=input_)
         dfs = self.component_dataframes()
 
         output = dfs.pop('stock_dividend_payouts').sort_values(sort_key)
@@ -285,7 +285,7 @@ class TestSQLiteAdjustmentsWriter(WithTradingCalendars,
             date_dtype = np.dtype('int64')
 
         # Write all empty frames.
-        self.writer_without_pricing(dates, sids).write()
+        self.writer_without_pricing(dates, sids).write_event()
 
         dfs = self.component_dataframes(convert_dates)
 

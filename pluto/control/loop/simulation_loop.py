@@ -4,11 +4,11 @@ import threading
 
 import pandas as pd
 
-
 from pluto.control.clock import clock
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.control.clock import sim_engine as sim
-from pluto.control.modes import simulation_mode
+
+from protos import clock_pb2
 
 
 def get_generator(calendar, sessions, minute_emission=False, frequency='day'):
@@ -69,22 +69,28 @@ class MinuteSimulationLoop(object):
         control_mode = self._control_mode
 
         for ts, evt in get_generator(calendar, calendar.all_sessions):
-            #acquire lock so that no further commands are executed here
-            #while this block is being executed
+            # acquire lock so that no further commands are executed here
+            # while this block is being executed
             with self._execution_lock:
-                #process any cached values
+                # process any cached values
                 self._process(ts)
+                #call for any update that needs to be done before
+                #anythin else
+                control_mode.update(ts, evt)
+                # process cached commands
+                control_mode.process(ts)
                 signals = []
                 # aggregate the signals into a single signal.
                 for cl in self._clocks.values():
                     signal = cl.update(ts)
                     if signal:
-                        ts, c_evt, exchange = signal
+                        ts, evt, exchange = signal
+                        signal = clock_pb2.Signal(
+                            timestamp=ts,
+                            event=evt,
+                            exchange=exchange)
                         signals.append(signal)
-
-                #processes all cached commands
-                control_mode.process()
-                # update the mode
+                # continue execution
                 control_mode.clock_update(ts, evt, signals)
 
     def execute(self, command):

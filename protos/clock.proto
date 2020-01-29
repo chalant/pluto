@@ -53,11 +53,18 @@ enum Event {
     CALENDAR = 9;
 }
 
+message Signal {
+    google.protobuf.Timestamp timestamp = 1;
+    Event event = 2;
+    string exchange = 3;
+}
+
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
     Event event = 2;
-    repeated string exchanges = 3;
+    repeated Signal signals = 3;
 }
+
 
 enum Frequency {
     MINUTE = 0;
@@ -86,4 +93,8 @@ message RealtimeClockParameters {
 
 message State {
     bool alive = 1;
+}
+
+message ClockEvents {
+    repeated ClockEvent clock_events = 1;
 }
