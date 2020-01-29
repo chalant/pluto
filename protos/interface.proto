@@ -18,15 +18,31 @@ service Manager {
 
 service Explorer {
     rpc StrategyList (StrategyFilter) returns (stream StrategyResponse);
+    rpc UniverseList(UniverseListRequest) returns (stream UniverseListResponse);
+    rpc SessionList(SessionListRequest) returns (stream SessionListResponse);
 }
 
 service Hub {
-    //service for getting and updating the strategy directory
+    //service for getting and updating the directory
     rpc GetDirectory(DirectoryRequest) returns (stream Chunk);
     rpc StoreDirectory(stream Chunk) returns (google.protobuf.Empty);
 }
 
+message SessionListRequest {
 
+}
+
+message SessionListResponse {
+
+}
+
+message UniverseListRequest {
+
+}
+
+message UniverseListResponse {
+    string name = 1;
+}
 
 message DirectoryRequest {
 

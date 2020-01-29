@@ -1,35 +1,69 @@
 import threading
 import signal
-from abc import ABC, abstractmethod
 from concurrent import futures
 import queue
 import sys
+import abc
 
 import grpc
-
+import click
 from google.protobuf import empty_pb2 as emp
 
+from pluto.interface.utils import paths
 from pluto.coms.utils import conversions
-from pluto.trading_calendars import calendar_utils as cu
-from pluto.coms.utils import conversions as crv
-from pluto.control.controllable import states as st
-from pluto.control.controllable import simulation_controllable as sc
 from pluto.control.controllable import commands
-from pluto.data.universes import universes
+from pluto.control.controllable import simulation_controllable as sc
+from pluto.utils import saving
+from pluto.control.events_log import events_log
 
 from protos import controllable_pb2
+from protos import controllable_pb2_grpc as cbl_rpc
 from protos.clock_pb2 import (
     BAR,
-    TRADE_END
-)
+    TRADE_END)
 
-import click
-
-from protos import controllable_pb2_grpc as cbl_rpc
+ROOT = paths.get_dir('controllable')
+DIR = paths.get_file_path('states', ROOT)
 
 
-class FrequencyFilter(ABC):
-    @abstractmethod
+def get_controllable(mode):
+    '''
+
+    Parameters
+    ----------
+    mode: str
+
+    Returns
+    -------
+    pluto.control.controllable.controllable.Controllable
+    '''
+    if mode == 'simulation':
+        return sc.SimulationControllable()
+    elif mode == 'live':
+        raise NotImplementedError('live controllable')
+    else:
+        return
+
+
+class _StateStorage(object):
+    def __init__(self, storage_path):
+        self._storage_path = storage_path
+
+    def store(self, dt, controllable):
+        with open(self._storage_path, 'wb') as f:
+            f.write(controllable.get_state(dt))
+
+    def load_state(self, session_id):
+        return ''
+
+
+class _NoStateStorage(object):
+    def store(self, dt, controllable):
+        pass
+
+
+class FrequencyFilter(abc.ABC):
+    @abc.abstractmethod
     def filter(self, evt_exc_pairs):
         raise NotImplementedError
 
@@ -52,59 +86,85 @@ class MinuteFilter(FrequencyFilter):
         return exchanges
 
 
-class ControllableService(cbl_rpc.ControllableServicer):
-    def __init__(self, controller_url):
-        self._calendar = None
-        self._controller = None
-        self._ctl_url = controller_url
+class _ServiceState(abc.ABC):
+    __slots__ = ['_service', '_controllable']
 
-        self._session = None
+    def __init__(self, service, controllable):
+        self._service = service
+        self._controllable = controllable
+
+    def execute(self, command):
+        self._execute(self._service, command, self._controllable)
+
+    @abc.abstractmethod
+    def _execute(self, service, command, controllable):
+        raise NotImplementedError
+
+
+class _Recovering(_ServiceState):
+    def _execute(self, service, command, controllable):
+        if command.dt <= controllable.current_dt:
+            # don't do anything if the signal has "expired" this might happen
+            # if the service receives signals while restoring state...
+            pass
+        else:
+            # set state to running since we're synchronized
+            service.state = service.ready
+            # set controllable run state to ready
+            controllable.run_state = controllable.ready
+            # execute command
+            command()
+
+
+class _Ready(_ServiceState):
+    def _execute(self, service, command, controllable):
+        command()
+
+
+class _PerformanceWriter(object):
+    # class for writing performance in some file...
+    # todo: need to write to session_id and execution mode (live, paper, simulation)
+    # live and paper cannot be over-written, only appended
+    # todo: the writer can make a call-back to some observers
+    # we also have a reader (which is a writer observer)
+    # the reader reads the performance in the file and waits for updates from the writer.
+    # the updates are read before getting written in the filesystem.
+    def __init__(self, session_id, mode):
+        pass
+
+    def performance_update(self, performance):
+        print(performance)
+        # writer.PerformancePacketUpdate(
+        #     crv.to_proto_performance_packet(
+        #         controllable.session_end(dt)))
+
+
+class ControllableService(cbl_rpc.ControllableServicer, saving.Savable):
+    def __init__(self, framework_url):
+        self._perf_writer = None
+        self._ctl_url = framework_url
 
         self._stop = False
-        self._start_flag = False
-        self._session_start = False
-        self._started = False
 
-        self._bfs_flag = False
         self._frequency_filter = None
-
-        self._exchanges = None
-
-        self._session_end = []
-
-        self._out_session = st.OutSession(self)
-        self._active = st.Active(self)
-        self._in_session = st.InSession(self)
-        self._bfs = st.BFS(self)
-        self._idle = idle = st.Idle(self)
-
-        self._state = idle
 
         # used for queueing commands
         self._queue = queue.Queue()
         self._thread = None
 
-    # todo need to use an interceptor to check for tokens etc.
-    def _with_metadata(self, rpc, params):
-        '''If we're not registered, an RpcError will be raised. Registration is handled
-        externally.'''
-        return rpc(params, metadata=(('Token', self._token)))
+        self._controllable = cbl = None
+
+        self._ready = _Ready(self, cbl)
+        self._recovery = recovery = _Recovering(self, cbl)
+        self._state = recovery
+
+        self._strategy_path = None
+        self._directory = None
+        self._state_storage = _NoStateStorage()
 
     @property
-    def out_session(self):
-        return self._out_session
-
-    @property
-    def active(self):
-        return self._active
-
-    @property
-    def in_session(self):
-        return self._in_session
-
-    @property
-    def bfs(self):
-        return self._bfs
+    def frequency_filter(self):
+        return self._frequency_filter
 
     @property
     def state(self):
@@ -114,9 +174,17 @@ class ControllableService(cbl_rpc.ControllableServicer):
     def state(self, value):
         self._state = value
 
-    @property
-    def exchanges(self):
-        return self._exchanges
+    def ready(self):
+        return self._ready
+
+    def recovering(self):
+        return self._recovery
+
+    # todo need to use an interceptor to check for tokens etc.
+    def _with_metadata(self, rpc, params):
+        '''If we're not registered, an RpcError will be raised. Registration is handled
+        externally.'''
+        return rpc(params, metadata=(('Token', self._token)))
 
     def stop(self):
         pass
@@ -131,16 +199,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         id_ = params.id  # the id of the controllable => will be used in performance updates
         universe = params.universe
-        uni = universes.get_universe(universe)
-        self._exchanges = {exchange: exchange for exchange in universe.exchanges}
-        platform = params.platform
         capital = params.capital
         max_leverage = params.max_leverage
         strategy = params.strategy
-        bundle_name = params.bundle_name
         data_frequency = params.data_frequency
-        start_dt = params.start_dt
-        end_dt = params.end.ToDatetime()
+        start_dt = conversions.to_datetime(params.start)
+        end_dt = conversions.to_datetime(params.end)
         look_back = params.look_back
 
         if data_frequency == 'day':
@@ -151,29 +215,83 @@ class ControllableService(cbl_rpc.ControllableServicer):
         mode = params.mode
 
         controllable = get_controllable(mode)
+
+        self._directory = dir_ = paths.get_dir(id_, DIR)
+        # activate state storage if we're in live mode
+        if mode == 'live':
+            self._state_storage = _StateStorage(
+                paths.get_file_path('state', dir_))
+
         if controllable:
             self._controllable = controllable
             controllable.initialize(
+                id_,
                 start_dt,
                 end_dt,
-                uni,
+                universe,
                 strategy,
-                bundle_name,
                 capital,
                 max_leverage,
                 data_frequency,
                 mode,
-                platform,
                 look_back)
-            self._state = self._out_session
             # run the thread
+            self._state = self._ready
             self._thread = thread = threading.Thread(target=self._run)
             thread.start()
         else:
             context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
             context.set_details("Mode {} doesn't exist".format(mode))
-
         return emp.Empty()
+
+    def _run(self):
+        queue = self._queue
+        while not self._stop:
+            self._state.execute(queue.get())
+
+    def _load_state(self, session_id):
+        with open(paths.get_file_path(session_id, DIR), 'rb') as f:
+            params = f.read()
+            state = controllable_pb2.ControllableState()
+            state.ParseFromString(params)
+            return state
+
+    def restore_state(self, session_id):
+        # 1)create controllable, (PROBLEM: need mode (from controllable?))
+        # 2)call restore state on it => this will restore its session_state
+        # 4)load events from the events log and push them in the queue
+        #    PROBLEM: we need the datetime (from controllable? => current_dt)
+        # 5)start thread => this will start executing events in the queue
+        # 6)the controllable must ignore "expired" events : events that have already been processed
+        state = self._load_state(session_id)
+        self._controllable = controllable = get_controllable(state.mode)
+
+        with open('strategy', self._directory) as f:
+            strategy = f.read()
+
+        controllable.restore_state(state, strategy)
+        # set run_state to recovering
+        controllable.run_state = controllable.recovering
+        events = events_log.read(session_id, controllable.current_dt)
+        # play all missed events since last checkpoint (controllable is in recovery mode)
+        perf_writer = self._perf_writer
+        frequency_filter = self._frequency_filter
+        state_storage = self._state_storage
+
+        for evt_type, evt in events:
+            if evt_type == 'clock':
+                commands.ClockUpdate(
+                    perf_writer,
+                    controllable,
+                    frequency_filter,
+                    evt,
+                    state_storage)()
+            elif evt_type == 'parameter':
+                commands.CapitalUpdate(controllable, evt)()
+            elif evt_type == 'broker':
+                pass  # todo
+            else:
+                pass
 
     def Stop(self, request, context):
         # todo needs to liquidate positions and wipe the state.
@@ -181,15 +299,20 @@ class ControllableService(cbl_rpc.ControllableServicer):
         return emp.Empty()
 
     def UpdateParameters(self, request, context):
-        self._controllable.update_parameters(request)
+        self._queue.put(
+            commands.CapitalUpdate(
+                self._controllable,
+                request
+            )
+        )
         return emp.Empty()
 
     def UpdateAccount(self, request_iterator, context):
-        self._controllable.update_account(request_iterator)
+        # todo
+        # self._queue.put(
+        #     commands.
+        # )
         return emp.Empty()
-
-    def UpdateBroker(self, request_iterator, context):
-        pass
 
     def ClockUpdate(self, request, context):
         '''Note: an update call might arrive while the step is executing..., so
@@ -199,24 +322,14 @@ class ControllableService(cbl_rpc.ControllableServicer):
         # NOTE: use FixedBasisPointsSlippage for slippage simulation.
         self._queue.put(
             commands.ClockUpdate(
-                self._controller,
-                self,
+                self._perf_writer,
+                self._controllable,
                 self._frequency_filter,
-                self._state,
-                request)
+                request,
+                self._state_storage
+            )
         )
         return emp.Empty()
-
-    def _update(self, dt, event, calendar, broker_state):
-        raise NotImplementedError
-
-    def _run(self):
-        queue = self._queue
-        while not self._stop:
-            self._execute(queue.get())
-
-    def _execute(self, command):
-        command()
 
 
 class Server(object):
@@ -244,25 +357,6 @@ class Server(object):
 _SERVER = Server()
 
 
-def get_controllable(mode):
-    '''
-
-    Parameters
-    ----------
-    mode: str
-
-    Returns
-    -------
-    pluto.control.controllable.controllable.Controllable
-    '''
-    if mode == 'simulation':
-        return sc.SimulationControllable()
-    elif mode == 'live':
-        return
-    else:
-        return
-
-
 def termination_handler(signum, frame):
     _SERVER.stop()
 
@@ -280,20 +374,12 @@ def cli():
     pass
 
 
-# todo: when launching, we need to check if a previous state exists...
-# if it does, we need to request all events that occurred starting from the latest checkpoint
-# if we haven't reached the last bar, we can continue execution (execute on the next bar).
-# If the session ended send performance packet etc. Any events between last checkpoint and now
-# that doesn't involve placing trades (session_end, minute_end, session_start) can be executed.
-# bar events will be executed on the next call after launch. When "replaying" the events, we
-# should not make any call-back to the controller or place any trades. We "replay" so that we can
-# synchronize variables (calendars, session_index etc.) => We need a "recovery" state or something
-# after that, we can resume to normal execution (in-session etc.)
-# all this logic must be done when launching the script.
 @cli.command()
 @click.argument('framework_url')
-@cli.option('-cu', '--controllable_url')
-def start(framework_url, controllable_url):
+@click.argument('session_id')
+@cli.option('-cu', '--controllable-url')
+@cli.option('--recovery', is_flag=True)
+def start(framework_url, session_id, controllable_url, recovery):
     '''
 
     Parameters
@@ -301,27 +387,25 @@ def start(framework_url, controllable_url):
     framework_url : str
         url for exchanging messages with the controller
     controllable_url: str
-        this server's url
-
-    Returns
-    -------
-
     '''
-    service = ControllableService(framework_url)
-    # todo: check if we have a state file.
 
+    # If the controllable fails, it will be relaunched by the controller.
+
+    # TODO: save the framework_url for future use. NOTE: the framework url must be immutable
+    # (is a service in kubernetes)
+    service = ControllableService(framework_url)
     # run forever or until an exception occurs, in which case, send back a report to the controller
     # or write to a log file. If the strategy crashes internally, there might be some bug that
     # need reviewing
+    if recovery:
+        service.restore_state(session_id)
     try:
         _SERVER.start(
             service,
             controllable_url)
-    except Exception:
-        # todo: store the state and send back a report to the controller.
-        state = service.get_state()
-
-    # if the script crashes for external reasons  it will restart and resume from its previous state.
+    except Exception as e:
+        # todo: write to log?, send report to controller?
+        pass
 
 
 if __name__ == '__main__':

@@ -23,10 +23,13 @@ class Savable(abc.ABC):
         ----------
         state : bytes
 
+        Returns
+        -------
+        pandas.Timestamp
         """
         if not isinstance(state, bytes):
             raise TypeError('Expected an argument of type {} got {}'.format(bytes, type(state)))
-        self._restore_state(state)
+        return self._restore_state(state)
 
     @abc.abstractmethod
     def _restore_state(self, state):

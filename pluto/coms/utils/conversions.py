@@ -11,9 +11,11 @@ from zipline import protocol
 
 from google.protobuf import timestamp_pb2 as pr_ts
 
+def datetime_from_bytes(bytes_):
+    ts = pr_ts.Timestamp()
+    to_datetime(ts.ParseFromString(bytes_))
 
 def to_proto_timestamp(dt):
-    # todo: what if it is a pandas.Timestamp?
     """
 
     Parameters
@@ -24,9 +26,6 @@ def to_proto_timestamp(dt):
     -------
     google.protobuf.timestamp_pb2.Timestamp
     """
-
-    if isinstance(dt, Timestamp):
-        dt = dt.to_datetime().replace(tzinfo=None)
     ts = pr_ts.Timestamp()
     ts.FromDatetime(dt)
     return ts

@@ -30,7 +30,10 @@ class LiveLedger(saving.Savable):
         self._account = protocol.MutableView(account)
 
         # an immutable portfolio is necessary to prevent the user from overriding values
-        self._immutable_portfolio = ip = protocol.Portfolio(start_date, capital_base=capital)
+        self._immutable_portfolio = ip = protocol.Portfolio(
+            start_date,
+            capital_base=capital)
+
         self._portfolio = protocol.MutableView(ip)
 
         self._position_tracker = ledger.PositionTracker(data_frequency)
@@ -47,6 +50,8 @@ class LiveLedger(saving.Savable):
 
         self._dirty_portfolio_ = False
         self._dirty_account = True
+
+        self._last_checkpoint = None
 
     @property
     def first_session(self):
@@ -405,14 +410,14 @@ class LiveLedger(saving.Savable):
         self._previous_total_returns = self._portfolio.returns
 
         # remove the earliest return each start of session if any
-        #in live, every x time, (days between end_dt and start_dt), we pop the left-most element
+        # in live, every x time, (days between end_dt and start_dt), we pop the left-most element
         # this will never happen in simulation mode, so it is safe for both to share the same
         # implementation.
 
         self._session_count += 1
 
     def end_of_bar(self, sessions):
-        #add returns each bar
+        # add returns each bar
         returns = self.daily_returns_array
         returns.append(self.todays_returns())
         if self._session_count == self._look_back:
@@ -457,9 +462,9 @@ class LiveLedger(saving.Savable):
 
         return self._processed_transactions.get(dt, [])
 
+
     def get_state(self, dt):
-        #todo: also store the session_count and (lookback period (can be saved in controllable?)).
-        return acc.LedgerState(
+        state = acc.LedgerState(
             session_count=self._session_count,
             portfolio=cv.to_proto_portfolio(self._immutable_portfolio),
             account=cv.to_proto_account(self._immutable_account),
@@ -467,13 +472,13 @@ class LiveLedger(saving.Savable):
             orders=[cv.to_proto_order(order) for order in self._orders_by_id.values()],
             first_session=cv.to_proto_timestamp(self._start_dt.to_datetime()),
             daily_returns=[acc.Return(timestamp=ts, value=val) for ts, val in
-                           zip(self._sessions, self.daily_returns_array)]
-        ).SerializeToString()
+                           zip(self._sessions, self.daily_returns_array)])
+        self._last_checkpoint = dt
+        return state.SerializeToString()
 
     def restore_state(self, state):
-        #todo: after restoring state, we need to get transactions made starting from the last_checkpoint
-        # in order to update the orders state. (filled etc.) => we pull this from the broker service
-        # the broker push its state for trades made on the previous minute
+        self._restored = True
+
         l = acc.LedgerState()
         l.ParseFromString(state)
         self._portfolio = cv.to_zp_portfolio(l.portfolio)
@@ -485,4 +490,4 @@ class LiveLedger(saving.Savable):
         for ret in l.daily_returns:
             dra.append(ret.value)
         self._start_dt = l.first_session
-
+        self._last_checkpoint = l.last_checkpoint

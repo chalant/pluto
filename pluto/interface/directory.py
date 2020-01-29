@@ -78,8 +78,6 @@ class Scoped(object):
     def closed(self):
         return self._context.closed
 
-#todo: add look_back property
-#todo: add data_frequency as property
 class _Session(Scoped):
     __slots__ = ['_path', '_universe', '_context', '_id', '_stg_id']
 
@@ -228,7 +226,7 @@ class _Mode(ABC):
                 SessionMetadata)
                 .get(session_id), self)
 
-    def add_session(self, strategy_id, universe):
+    def add_session(self, strategy_id, universe, data_frequency, look_back):
         '''
 
         Parameters
@@ -251,7 +249,10 @@ class _Mode(ABC):
             sess_meta = SessionMetadata(
                 id=id_,
                 strategy_id=strategy_id,
-                directory=pth)
+                directory=pth,
+                data_frequeny=data_frequency,
+                universe=universe,
+                look_back=look_back)
             self._session.add(sess_meta)
 
         return _Session(sess_meta, self)

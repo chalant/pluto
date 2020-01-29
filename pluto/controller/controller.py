@@ -12,9 +12,16 @@ class RunParameter(object):
         '_capital_ratio',
         '_max_leverage',
         '_start_dt',
-        '_end_dt']
+        '_end_dt',
+        '_platform']
 
-    def __init__(self, session, capital_ratio, max_leverage, start_dt, end_dt):
+    def __init__(self,
+                 session,
+                 capital_ratio,
+                 max_leverage,
+                 start_dt,
+                 end_dt,
+                 platform):
         '''
 
         Parameters
@@ -24,12 +31,14 @@ class RunParameter(object):
         max_leverage : float
         start_dt : pandas.Timestamp
         end_dt : pandas.Timestamp
+        platform : str
         '''
         self._session = session
         self._capital_ratio = capital_ratio
         self._max_leverage = max_leverage
         self._start_dt = start_dt
         self._end_dt = end_dt
+        self._platform = platform
 
     @property
     def session_id(self):
@@ -59,29 +68,34 @@ class RunParameter(object):
     def end(self):
         return self._end_dt
 
+    @property
+    def platform(self):
+        return self._platform
+
 
 class Controller(abc.ABC):
-    def active_sessions(self):
-        return
+    def running_sessions(self):
+        raise NotImplementedError
 
     def run(self, directory, params):
         raise NotImplementedError
 
 
 class SimulationController(Controller):
-    def __init__(self, framework_url ,capital, max_leverage, start, end):
+    def __init__(self, framework_url, capital, max_leverage, start, end):
         self._start = start
         self._end = end
 
-        self._mode = mode = simulation_mode.SimulationControlMode(
-            framework_url,
-            capital,
-            max_leverage
-        )
-        self._loop = simulation_loop.MinuteSimulationLoop(
-            mode,
-            start,
-            end)
+        self._mode = mode = \
+            simulation_mode.SimulationControlMode(
+                framework_url,
+                capital,
+                max_leverage)
+        self._loop = \
+            simulation_loop.MinuteSimulationLoop(
+                mode,
+                start,
+                end)
         super(SimulationController, self).__init__()
 
     @property
@@ -103,7 +117,7 @@ class SimulationController(Controller):
         start = self._start
         end = self._end
 
-        uni = {} #universe cache
+        uni = {}  # universe cache
         for p in params:
             session = directory.get_session(p.session_id)
             uni_name = session.universe_name
@@ -117,7 +131,8 @@ class SimulationController(Controller):
                     p.capital_ratio,
                     p.max_leverage,
                     start,
-                    end))
+                    end,
+                    'pluto'))
         loop.execute(commands.Run(directory, params, set(exchanges)))
         loop.start()
         # todo: if the loop is already running, raise an error? in live,
@@ -136,7 +151,7 @@ class LiveController(Controller):
         exchanges = []
         for session, capital_ratio, max_leverage in params:
             exchanges.extend(session.exchanges)
-            #todo what should be the end date? today? previous open session?
+            # todo what should be the end date? today? previous open session?
             # the start dt should be : end_dt - session.look_back
             parameters.append(
                 RunParameter(

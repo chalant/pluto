@@ -146,7 +146,7 @@ def _render(g, out, format_, include_asset_exists=False):
             "Error(s) while rendering graph: %s" % proc_stderr.decode('utf-8')
         )
 
-    out.write(proc_stdout)
+    out.write_event(proc_stdout)
 
 
 def display_graph(g, format='svg', include_asset_exists=False):
@@ -169,7 +169,7 @@ def display_graph(g, format='svg', include_asset_exists=False):
 
 
 def writeln(f, s):
-    f.write((s + '\n').encode('utf-8'))
+    f.write_event((s + '\n').encode('utf-8'))
 
 
 def fmt(obj):

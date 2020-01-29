@@ -9,39 +9,26 @@ import "protos/clock.proto";
 import "protos/data.proto";
 import "protos/calendar.proto";
 
-//TODO: State: bytes...
-
 service Controllable {
-    /*A service to be controlled by a controller service*/
+    /*A service that is called by a controller*/
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
-    //called to initialize the controllable (sends initparams)
-    //(strategy etc.)
     rpc Initialize (stream Chunk) returns (google.protobuf.Empty);
-    //TODO: should return the state of the strategy run session at each update...
-    //update sends an UpdateRequest. since this could get arbitrarily big, we send it
-    //in chunks of bytes.
     rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
     //for updating positions, transactions etc.
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
-    //receives periodic calendar updates
-    rpc UpdateCalendar (stream Chunk) returns (google.protobuf.Empty);
-    //TODO: should return the state of the controllable after it stopped...
-    rpc Stop (StopRequest) returns (stream Chunk);
+    rpc Stop (StopRequest) returns (google.protobuf.Empty);
 }
 
 message InitParams {
     string id = 1;
     bytes strategy = 2;
-    string bundle_name = 11;
     float capital = 3;
-    repeated string exchanges = 4;
-    float max_leverage = 5;
-    string data_frequency = 6;
-    string platform = 7;
-    string universe = 8;
-    int32 look_back = 9;
-    google.protobuf.Timestamp start = 10;
-    google.protobuf.Timestamp end = 12;
+    float max_leverage = 4;
+    string data_frequency = 5;
+    string universe = 6;
+    int32 look_back = 7;
+    google.protobuf.Timestamp start = 8;
+    google.protobuf.Timestamp end = 9;
 }
 
 message UpdateRequest {
@@ -52,4 +39,17 @@ message UpdateRequest {
 
 message UpdateReply {
 
+}
+
+message ControllableState {
+    string session_id = 1;
+    string session_state = 2;
+    string capital = 3;
+    string universe = 4;
+    int32 look_back = 5;
+    string data_frequency = 6;
+    google.protobuf.Timestamp start = 7;
+    google.protobuf.Timestamp end = 8;
+    google.protobuf.Timestamp checkpoint = 9;
+    bytes metrics_tracker_state = 10;
 }

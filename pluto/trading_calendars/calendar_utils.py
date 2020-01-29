@@ -140,4 +140,5 @@ def from_proto_calendar(proto_calendar, start, end=None):
     return TradingCalendar(start, end, proto_calendar)
 
 def to_proto_calendar(calendar):
+    #todo
     pass

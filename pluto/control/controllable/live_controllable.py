@@ -10,7 +10,6 @@ class LiveControllable(controllable.Controllable):
     def __init__(self, broker_stub):
         super(LiveControllable, self).__init__()
         self._broker = broker_stub
-        self._sessions_array = deque()
         self._last_session_update = None
 
     def _get_algorithm_class(self,

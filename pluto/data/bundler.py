@@ -40,7 +40,6 @@ def get_bundle_loader(platform):
         #returns the zipline bundle load function
         return bundles.load
     else:
-
         def load(bundle_name='pluto'):
             daily_bars_reader = io.daily_bars_reader(paths.daily_bars(bundle_name))
             minute_bars_reader = io.minute_bars_reader(paths.minute_bars(bundle_name))

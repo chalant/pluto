@@ -4,6 +4,8 @@ from copy import copy
 import pandas as pd
 import logbook
 
+from collections import deque
+
 from zipline.finance import trading
 from zipline.data import data_portal as dp
 from zipline.protocol import BarData
@@ -12,18 +14,48 @@ from zipline.finance.order import ORDER_STATUS
 from zipline.pipeline.data import USEquityPricing
 from zipline.pipeline.loaders import USEquityPricingLoader
 
+from pluto.coms.utils import conversions
+from pluto.control.controllable import synchronization_states as ss
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
-from pluto.utils import saving
 from pluto.data import bundler
+from pluto.data.universes import universes
+
+from protos import controllable_pb2
 
 log = logbook.Logger('Controllable')
 
-class Controllable(ABC, saving.Savable):
+
+class _State(ABC):
+    @abstractmethod
+    def handle_data(self, algo, current_data, dt):
+        raise NotImplementedError
+
+    @abstractmethod
+    def before_trading_starts(self, current_data, dt):
+        raise NotImplementedError
+
+
+class _Recovering(_State):
+    def handle_data(self, algo, current_data, dt):
+        # does nothing
+        pass
+
+    def before_trading_starts(self, algo, current_data):
+        pass
+
+
+class _Ready(_State):
+    def handle_data(self, algo, current_data, dt):
+        algo.event_manager.handle_data(algo, current_data, dt)
+
+    def before_trading_starts(self, algo, current_dt):
+        algo.before_trading_start(current_dt)
+
+
+class Controllable(ABC):
     def __init__(self):
         self._metrics_tracker = None
-        self._bundle = None
-        self._calendar = None
 
         self._blotter = None
         self._asset_finder = None
@@ -43,31 +75,114 @@ class Controllable(ABC, saving.Savable):
 
         self._calendar = None
         self._universe = None
+        self._exchanges = None
 
         self._sessions = pd.Series()
+        self._sessions_array = deque()
 
+        self._start_dt = None
         self._end_dt = None
         self._look_back = None
+        self._current_dt = None
+
+        self._out_session = ss.OutSession(self)
+        self._active = ss.Active(self)
+        self._in_session = ss.InSession(self)
+        self._bfs = ss.BFS(self)
+        self._idle = idle = ss.Idle(self)
+
+        self._state = idle
+
+        self._ready = _Ready()
+        self._recovering = recovering = _Recovering()
+        self._run_state = recovering
+
+    @property
+    def out_session(self):
+        return self._out_session
+
+    @property
+    def active(self):
+        return self._active
+
+    @property
+    def in_session(self):
+        return self._in_session
+
+    @property
+    def bfs(self):
+        return self._bfs
+
+    @property
+    def state(self):
+        return self._idle
+
+    @state.setter
+    def state(self, value):
+        self._state = value
+
+    @property
+    def exchanges(self):
+        return self._exchanges
+
+    @property
+    def current_dt(self):
+        return self._current_dt
+
+    @property
+    def run_state(self):
+        return self._run_state
+
+    @run_state.setter
+    def run_state(self, value):
+        self._run_state = value
+
+    @property
+    def recovering(self):
+        return self._recovering
+
+    @property
+    def ready(self):
+        return self._ready
 
     def initialize(self,
+                   session_id,
                    start_dt,
                    end_dt,
                    universe,
                    strategy,
-                   bundle_name,
                    capital,
                    max_leverage,
                    data_frequency,
                    arena,
-                   platform,
                    look_back):
+        '''
 
-        calendar = universe.get_calendar(start_dt, end_dt)
+        Parameters
+        ----------
+        start_dt: pandas.Timestamp
+        end_dt: pandas.Timestamp
+        universe: str
+        strategy: bytes
+        capital: float
+        max_leverage: float
+        data_frequency: str
+        arena: str
+        look_back: int
+
+        '''
+
+        uni = universes.get_universe(universe)
+        self._exchanges = {exchange: exchange for exchange in uni.exchanges}
+        calendar = uni.get_calendar(start_dt, end_dt)
+        self._session_id = session_id
+        self._start_dt = start_dt
         # end_dt is the previous day
         self._end_dt = end_dt
         self._calendar = calendar
-        self._universe = universe
+        self._universe = uni
         self._look_back = look_back
+        self._data_frequency = data_frequency
         if data_frequency == 'minute':
             self._emission_rate = 'minute'
 
@@ -88,11 +203,12 @@ class Controllable(ABC, saving.Savable):
             arena=arena)
 
         self._sessions = sessions = params.sessions
+        self._sessions_array = deque(sessions.array)
 
         # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
-        loader = bundler.get_bundle_loader()  # todo
-        bundle = loader(bundle_name)
+        loader = bundler.get_bundle_loader(uni.platform)
+        bundle = loader(uni.bundle_name)
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
 
@@ -156,7 +272,7 @@ class Controllable(ABC, saving.Savable):
         # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
 
-        self._algo = self._get_algorithm_class(
+        self._algo = algo = self._get_algorithm_class(
             params,
             data_portal,
             blotter,
@@ -166,6 +282,10 @@ class Controllable(ABC, saving.Savable):
             namespace.get('before_trading_start', noop),
             namespace.get('handle_data', noop),
             namespace.get('analyze', noop))
+
+        self._state = self._out_session
+        # initialize the algo (called only once per lifetime)
+        algo.initialize({})  # todo: kwargs?
 
     @abstractmethod
     def _get_algorithm_class(self,
@@ -186,15 +306,22 @@ class Controllable(ABC, saving.Savable):
         raise NotImplementedError(self._get_algorithm_class.__name__)
 
     def minute_end(self, dt):
-        return self._get_minute_message(dt, self._algo, self._metrics_tracker, self._data_portal)
+        return self._get_minute_message(
+            dt,
+            self._algo,
+            self._metrics_tracker,
+            self._data_portal,
+            self._calendar,
+            self._sessions)
 
     def session_start(self, dt):
 
         end_dt = self._end_dt
-        if dt == end_dt:
-            #reload a new calendar
-            start_dt = end_dt - pd.Timedelta(days=self._look_back)
-            self._calendar = self._universe.get_calendar(start_dt, end_dt)
+        if dt > end_dt:
+            # reload a new calendar
+            self._start_dt = start_dt = dt - pd.Timedelta(days=self._look_back)
+            self._end_dt = dt
+            self._calendar = self._universe.get_calendar(start_dt, dt)
 
         self._sync_last_sale_prices(dt)
         self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
@@ -225,23 +352,25 @@ class Controllable(ABC, saving.Savable):
         algo = self._algo
         self._current_dt = dt
         algo.on_dt_changed(dt)
-        algo.before_trading_start(self._current_data)
+
+        self._run_state.before_trading_starts(algo, self._current_data)
 
     def bar(self, dt):
         self._sync_last_sale_prices(dt)
         self._current_dt = dt
 
+        metrics_tracker = self._metrics_tracker
+
         algo = self._algo
         algo.on_dt_changed(dt)
         blotter = self._blotter
-        metrics_tracker = self._metrics_tracker
+
         calendar = self._calendar
         sessions = self._sessions
 
         capital_changes = self._calculate_minute_capital_changes(dt, self._emission_rate)
 
-        # todo: assets are must be restricted to the provided exchanges
-
+        # todo: assets must be restricted to the provided exchanges
         # self._restrictions.set_exchanges(exchanges)
         current_data = self._current_data
 
@@ -256,7 +385,8 @@ class Controllable(ABC, saving.Savable):
         for commission in new_commissions:
             metrics_tracker.process_commission(commission)
 
-        algo.event_manager.handle_data(algo, current_data, dt)
+        # handle_data is not called while in recovery
+        self._run_state.handle_data(algo, current_data, dt)
 
         # grab any new orders from the blotter, then clear the list.
         # this includes cancelled orders.
@@ -272,11 +402,10 @@ class Controllable(ABC, saving.Savable):
         self._benchmark_source.on_minute_end(dt, portal, calendar, sessions)
         metrics_tracker.handle_minute_close(dt, portal, sessions)
 
-        # todo: save state in some file (also add a controllable state?)
-        # todo: this should be handled by a thread. Note: this must be done at the end of a bar
-        # todo: when restoring state, we need to process orders that happened between last_checkpoint
-        #  and today
-        state = metrics_tracker.get_state(dt)
+        # todo: non-blocking!
+        # todo: PROBLEM: we might have some conflicts in state, since we could have
+        # multiple controllables with the same session_id running in different
+        # modes...
 
         return capital_changes
 
@@ -305,6 +434,38 @@ class Controllable(ABC, saving.Savable):
             sessions
         )
 
+    def get_state(self, dt):
+        metrics_tracker = self._metrics_tracker
+        return controllable_pb2.ControllableState(
+            session_id=self._session_id,
+            session_state=self._state.name,
+            capital=metrics_tracker.portfolio.cash,
+            max_leverage=metrics_tracker.account.leverage,
+            universe=self._universe.name,
+            look_back=self._look_back,
+            data_frequency=self._data_frequency,
+            start=conversions.to_proto_timestamp(self._start_dt),
+            end=conversions.to_proto_timestamp(self._end_dt),
+            checkpoint=conversions.to_proto_timestamp(dt),
+            metrics_tracker_state=metrics_tracker.get_state(dt)
+        ).SerializeToString()
+
+    def restore_state(self, state, strategy):
+        self.initialize(
+            state.session_id,
+            conversions.to_datetime(state.start_dt),
+            conversions.to_datetime(state.end_dt),
+            state.universe,
+            strategy,
+            state.capital,
+            state.max_leverage,
+            state.data_frequency,
+            state.mode,
+            state.look_back)
+
+        self._state = ss.get_state(state.session_state, self)
+        self._current_dt = conversions.to_datetime(state.checkpoint)
+
     def _get_sessions(self, dt, params):
         sessions = self._sessions_array
         if sessions[-1] != dt:
@@ -312,15 +473,12 @@ class Controllable(ABC, saving.Savable):
             sessions.append(dt)
             params.start_session = sessions[0].normalize()
             params.end_session = dt
-            return pd.DatetimeIndex(sessions)
+            return pd.DatetimeIndex(sessions).ar
         else:
             return self._sessions
 
     def stop(self, dt):
-        # todo: sell all the positions
-        pass
-
-    def liquidate(self, dt):
+        # todo: liquidate all positions
         pass
 
     def update_blotter(self, broker_data):
@@ -339,12 +497,6 @@ class Controllable(ABC, saving.Savable):
 
     def update_capital(self, dt, capital):
         self._capital_changes = {dt: {'type': 'target', 'value': capital}}
-
-    def update_calendar(self, dt, calendar):
-        raise NotImplementedError(self.update_calendar.__name__)
-
-    def get_simulation_dt(self):
-        return self._current_dt
 
     @abstractmethod
     def _create_blotter(self, cancel_policy=None):
@@ -407,10 +559,13 @@ class Controllable(ABC, saving.Savable):
         minute_message['minute_perf']['recorded_vars'] = rvars
         return minute_message
 
+    def get_current_dt(self):
+        return self._current_dt
+
     def _create_bar_data(self, data_portal, calendar, restrictions, data_frequency):
         return BarData(
             data_portal=data_portal,
-            simulation_dt_func=self.get_simulation_dt,
+            simulation_dt_func=self.get_current_dt,
             data_frequency=data_frequency,
             trading_calendar=calendar,
             restrictions=restrictions

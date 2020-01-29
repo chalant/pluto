@@ -11,6 +11,8 @@ from pluto.dev import editor
 from pluto.explorer import explorer
 from pluto.controller import controllerservice, controller
 from pluto.data.universes import universes
+from pluto.coms.utils import conversions
+
 
 class Environment(development.EnvironmentServicer):
     def __init__(self, directory, framework_url):
@@ -22,7 +24,7 @@ class Environment(development.EnvironmentServicer):
         self._framework_url = framework_url
 
         # pool = futures.ThreadPoolExecutor()
-        #server used for the framework objects (controllables, broker, etc.)
+        # server used for the framework objects (controllables, broker, etc.)
         # self._framework_server = grpc.server(pool)
         self._server = server = grpc.server(futures.ThreadPoolExecutor())
 
@@ -32,17 +34,19 @@ class Environment(development.EnvironmentServicer):
 
     def Setup(self, request, context):
         directory = self._directory
-        with directory.write() as w:
-            #note: if no universe is provided, use the default universe.
-            #a session regroups a set of "static" parameters (aren't likely to change overtime)
+        with directory.write_event() as w:
+            look_back = request.look_back
+            data_frequency = request.data_frequency
+            # note: if no universe is provided, use the default universe.
+            # a session regroups a set of "static" parameters (aren't likely to change overtime)
             session = w.add_session(
                 request.strategy_id,
-                universes.get_universe(request.universe))
+                universes.get_universe(request.universe),
+                data_frequency,
+                look_back if look_back else 150)
 
         start = request.start
         end = request.end
-        look_back = request.look_back
-        data_frequency = request.data_frequency
 
         self._controller = sim_ctl = \
             controllerservice.ControllerService(
@@ -51,16 +55,34 @@ class Environment(development.EnvironmentServicer):
                     self._framework_url,
                     request.capital,
                     request.max_leverage,
-                    start.ToDatetime(),
-                    end.ToDatetime()))
+                    conversions.to_datetime(start),
+                    conversions.to_datetime(end)))
 
-        #enable controller service
+        # enable controller service
         ctl_rpc.add_ControllerServicer_to_server(sim_ctl, self._server)
 
-        return dev_rpc.SetupResponse(session_id = session.id)
+        return dev_rpc.SetupResponse(session_id=session.id)
+
+    def Delete(self, request, context):
+        # todo deletes the (local) session, along with all the associated performance files
+        pass
+
+    def _test_strategy(self, strategy, path):
+        script = strategy.decode('utf-8')
+        # todo : see zipline/algorithm.py
+        # todo : must set a namespace.
+        # todo: we need to prepare the whole environment for running the strategy
+        # (see zipline/algorithm.py).
+        # todo : run a small test to check for errors: raise a runtime error
+        # if the strategy contains errors send the interpreters output to the
+        # client.
+        # 1)syntax errors, 2)execution errors
+        # todo: write the output stream and send it back to the client as a string
+        # this stage should raise some syntax errors.
+        ast = compile(script, path, 'exec')
 
     def start(self, port, address='localhost'):
-        self._server.start(address+':'+port)
+        self._server.start(address + ':' + port)
 
     def stop(self, grace=0):
         self._server.stop(grace)

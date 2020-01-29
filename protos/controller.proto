@@ -2,10 +2,9 @@ syntax = "proto3";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+
 import "protos/metrics.proto";
-
 import "protos/clock.proto";
-
 import "protos/data.proto";
 
 service Controller {
@@ -35,6 +34,11 @@ message RunParams {
     string session_id = 1;
     float capital_ratio = 2;
     float max_leverage = 3;
+}
+
+message RunParamsList {
+    repeated RunParams run_params = 1;
+    google.protobuf.Timestamp timestamp = 2;
 }
 
 enum RunMode {

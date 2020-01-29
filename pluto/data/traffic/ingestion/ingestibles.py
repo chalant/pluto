@@ -91,7 +91,7 @@ class DailyEquityIngester(Ingester):
 		def gen():
 			for sid,symbol in self._md:
 				yield sid,self._db.get_bars(symbol,calendar)
-		daily_bar_writer.write(gen())
+		daily_bar_writer.write_event(gen())
 
 class AssetDataIngester(Ingester):
 	def __init__(self,meta_data,equity_data_collection):

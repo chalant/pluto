@@ -12,6 +12,10 @@ class State(ABC):
     def __init__(self, controllable):
         self._controllable = controllable
 
+    @property
+    def name(self):
+        raise NotImplementedError
+
     def aggregate(self, ts, evt, signals):
         return self._aggregate(self._controllable, ts, evt, signals)
 
@@ -25,6 +29,10 @@ class BFS(State):
         super(BFS, self).__init__(controllable)
         self._session_end = 0
         self._num_exchanges = len(controllable.exchanges)
+
+    @property
+    def name(self):
+        return 'bfs'
 
     def _aggregate(self, controllable, ts, evt, signals):
         exchanges = controllable.exchanges
@@ -45,48 +53,57 @@ class BFS(State):
             return
 
 class InSession(State):
+    @property
+    def name(self):
+        return 'in_session'
+
     def _aggregate(self, controllable, ts, evt, signals):
         exchanges = controllable.exchanges
         active = []
         for t, c_evt, exchange in signals:
             # filter exchanges
             if exchanges.get(exchange):
-                # search for a session start event if it have not be done yet.
+                # filter active exchanges
                 if c_evt == SESSION_START:
                     active.append((c_evt, exchange))
         if active:
+            #move to active state, the strategy is ready to start executing
             controllable.state = controllable.active
             return (ts, SESSION_START, active)
         else:
             return
 
 class Active(State):
+    @property
+    def name(self):
+        return 'active'
+
     def _aggregate(self, controllable, ts, evt, signals):
         exchanges = controllable.exchanges
         active = []
         for t, c_evt, exchange in signals:
-            # filter exchanges
-            # todo: map exchange to itself so that we can use get() => faster
-            if exchange in exchanges:
-                # search for a session start event if it have not be done yet.
+            if exchanges.get(exchange):
+                #filter active exchanges
                 if c_evt == BEFORE_TRADING_START:
                     active.append((c_evt, exchange))
         if active:
-            controllable.state = controllable.active
+            controllable.state = controllable.bfs
             return (ts, BEFORE_TRADING_START, active)
         else:
             return
 
 class OutSession(State):
+    @property
+    def name(self):
+        return 'out_session'
+
     def _aggregate(self, controllable, ts, evt, signals):
         if evt == SESSION_START:
             exchanges = controllable.exchanges
             active = []
-            flag = False
             for t, c_evt, exchange in signals:
                 # filter exchanges
-                # todo: map exchange to itself so that we can use get() => faster
-                if exchange in exchanges:
+                if exchanges.get(exchange):
                     # search for a session start event if it have not be done yet.
                     if c_evt == SESSION_START:
                         # flag if we hit one SESSION_START event
@@ -102,5 +119,24 @@ class OutSession(State):
             return
 
 class Idle(State):
+    @property
+    def name(self):
+        return 'idle'
+
     def _aggregate(self, controllable, ts, evt, signals):
+        return
+
+
+def get_state(name, controllable):
+    if name == 'bfs':
+        return BFS(controllable)
+    elif name == 'in_session':
+        return InSession(controllable)
+    elif name == 'out_session':
+        return OutSession(controllable)
+    elif name == 'active':
+        return Active(controllable)
+    elif name == 'idle':
+        return Idle(controllable)
+    else:
         return
