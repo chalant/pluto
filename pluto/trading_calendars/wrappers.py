@@ -9,11 +9,13 @@ class OpenOffsetFix(TradingCalendar):
         '''
         self._calendar_type = calendar_type
         self._open_offset = calendar_type.open_offset.fget(self)
-        super(OpenOffsetFix, self).__init__(start, end)
 
-    @property
-    def open_offset(self):
-        return 0
+        try:
+            self.regular_early_close = calendar_type.regular_early_close
+        except AttributeError:
+            pass
+
+        super(OpenOffsetFix, self).__init__(start, end)
 
     @property
     def close_offset(self):

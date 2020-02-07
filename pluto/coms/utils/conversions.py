@@ -20,7 +20,7 @@ def to_proto_timestamp(dt):
 
     Parameters
     ----------
-    dt: pandas.Timestamp or datetime.datetime
+    dt: pandas.Timestamp
 
     Returns
     -------
@@ -32,7 +32,7 @@ def to_proto_timestamp(dt):
 
 
 def to_datetime(proto_ts):
-    return proto_ts.ToDatetime()
+    return Timestamp(proto_ts.ToDatetime(), tz='UTC')
 
 
 def to_pandas_timestamp(protos_ts, tz=None):

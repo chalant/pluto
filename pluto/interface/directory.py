@@ -13,14 +13,12 @@ from pluto.interface.utils import paths
 from pluto.interface.utils import db_utils
 
 _STREAM_CHUNK_SIZE = 64 * 1024
-_DIRECTORY = paths.get_dir('Strategies')
+_DIRECTORY = paths.get_dir('strategies')
 _METADATA_FILE = paths.get_file_path('metadata', _DIRECTORY)
 
-metadata = sa.MetaData()
-Base = declarative_base(metadata=metadata)
+Base = declarative_base()
 engine = db_utils.create_engine(_METADATA_FILE)
 DBSession = db_utils.get_session_maker(engine)
-
 
 def _check_scope(func):
     def wrapper(instance, *args, **kwargs):
@@ -50,7 +48,7 @@ class StrategyMetadata(Base):
     name = sa.Column(sa.String)
     file_path = sa.Column(sa.String, nullable=False)
     locked = sa.Column(sa.Boolean, nullable=False)
-    sessions = orm.relationship("Session")
+    sessions = orm.relationship("SessionMetadata")
 
 
 class SessionMetadata(Base):
@@ -165,7 +163,7 @@ class _Strategy(Scoped):
         return self._path
 
     def get_implementation(self, chunk_size=_STREAM_CHUNK_SIZE):
-        with open(self._path + '.py', 'rb') as f:
+        with open(self._path, 'rb') as f:
             while True:
                 data = f.read(chunk_size)
                 if not data:
@@ -202,7 +200,7 @@ class _WritableStrategy(_Strategy):
 
     def _store(self, metadata, bytes_):
         if not self._locked:
-            with open(self._path + '.py', 'wb') as f:
+            with open(self._path, 'wb') as f:
                 f.write(bytes_)
         else:
             raise RuntimeError('Cannot overwrite a locked strategy')
@@ -217,7 +215,7 @@ class _Mode(ABC):
         session: sqlalchemy.orm.Session
         '''
         self._session = session
-        self._closed = True
+        self._closed = False
         self._lock = threading.Lock()
 
     def get_session(self, session_id):
@@ -240,8 +238,9 @@ class _Mode(ABC):
         '''
 
         # we use the args pair as key
-        id_ = hash((strategy_id, universe))
-        sess_meta = self._session.query(SessionMetadata) \
+        id_ = strategy_id+universe
+        session = self._session
+        sess_meta = session.query(SessionMetadata) \
             .filter(SessionMetadata.id == id_).one_or_none()
 
         if not sess_meta:
@@ -250,10 +249,11 @@ class _Mode(ABC):
                 id=id_,
                 strategy_id=strategy_id,
                 directory=pth,
-                data_frequeny=data_frequency,
+                data_frequency=data_frequency,
                 universe=universe,
                 look_back=look_back)
-            self._session.add(sess_meta)
+            session.add(sess_meta)
+            print('Done!')
 
         return _Session(sess_meta, self)
 
@@ -286,8 +286,11 @@ class _Mode(ABC):
         -------
         typing.Generator[_Strategy]
         '''
-        for m in self._session.query(StrategyMetadata).all():
+
+        print('Fetching list...')
+        for m in self._session.query(StrategyMetadata):
             yield self._get_strategy(m, self)
+        print('Done')
 
     @_check_scope
     def add_strategy(self, name):
@@ -313,10 +316,6 @@ class _Mode(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def _enter(self):
-        raise NotImplementedError
-
-    @abstractmethod
     def _close(self, session, exc_type, exc_val, exc_tb):
         raise NotImplementedError
 
@@ -328,15 +327,12 @@ class _Mode(ABC):
 
     def __enter__(self):
         with self._lock:
-            if self._closed:
-                self._enter()
-                self._closed = False
-                return self
+            self._closed = False
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # wait for any ongoing transactions
-        with self._lock:
-            self.close()
+        self.close()
 
 
 class _Read(_Mode):
@@ -345,9 +341,6 @@ class _Read(_Mode):
 
     def _add_strategy(self, session, name):
         raise RuntimeError('Cannot add a strategy in read mode')
-
-    def _enter(self):
-        pass
 
     def _close(self, session, exc_type, exc_val, exc_tb):
         pass
@@ -364,19 +357,21 @@ class _Write(_Mode):
         session = self._session
 
         id_ = uuid.uuid4().hex
-        pth = paths.get_file_path(id_, _DIRECTORY)
+        pth = paths.get_file_path(id_+'.py', _DIRECTORY)
 
         stg_meta = StrategyMetadata(id=id_, name=name, file_path=pth, locked=False)
         session.add(stg_meta)
 
-        with open(pth + '.py', mode='wb') as f:
+        session.flush()
+
+        with open(pth, mode='wb') as f:
             f.write(self._get_template())
 
-        return _WritableStrategy(metadata, self)
+        return _WritableStrategy(stg_meta, self)
 
     def _get_template(self):
         # todo: return a basic template with the necessary functions
-        return b''
+        return b'Hello World!!!'
 
     def _close(self, session, exc_type, exc_val, exc_tb):
         if not exc_val:
@@ -390,7 +385,6 @@ class Directory(object):
     def __init__(self):
         self._session = sess = DBSession()
         self._reader = _Read(sess)
-
     def write(self):
         '''
 
@@ -425,3 +419,5 @@ class Directory(object):
         # blocks until the reader is released by another thread.
         self._reader.close()
         self._session.close()
+
+Base.metadata.create_all(engine)

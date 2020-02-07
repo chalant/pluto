@@ -23,13 +23,13 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x12protos/clock.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15protos/calendar.proto\"\x83\x01\n\x10\x43\x61lendarMetadata\x12)\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1b\n\x08\x63\x61lendar\x18\x03 \x01(\x0b\x32\t.Calendar\":\n\nAttributes\x12,\n\x11\x63\x61lendar_metadata\x18\x02 \x01(\x0b\x32\x11.CalendarMetadata\"`\n\x06Signal\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\x12\x10\n\x08\x65xchange\x18\x03 \x01(\t\"l\n\nClockEvent\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x65vent\x18\x02 \x01(\x0e\x32\x06.Event\x12\x18\n\x07signals\x18\x03 \x03(\x0b\x32\x07.Signal\"\xd4\x01\n\x19SimulationClockParameters\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12.\n\nstart_date\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12!\n\remission_rate\x18\x06 \x01(\x0e\x32\n.Frequency\"-\n\x17SimulationRunParameters\x12\x12\n\nsession_id\x18\x01 \x01(\t\"`\n\x17RealtimeClockParameters\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t\x12!\n\remission_rate\x18\x03 \x01(\x0e\x32\n.Frequency\"\x16\n\x05State\x12\r\n\x05\x61live\x18\x01 \x01(\x08\"0\n\x0b\x43lockEvents\x12!\n\x0c\x63lock_events\x18\x01 \x03(\x0b\x32\x0b.ClockEvent*\xa4\x01\n\x05\x45vent\x12\x0e\n\nINITIALIZE\x10\x00\x12\x11\n\rSESSION_START\x10\x01\x12\x18\n\x14\x42\x45\x46ORE_TRADING_START\x10\x02\x12\x07\n\x03\x42\x41R\x10\x03\x12\x0e\n\nMINUTE_END\x10\x04\x12\r\n\tTRADE_END\x10\x05\x12\x0f\n\x0bSESSION_END\x10\x06\x12\r\n\tLIQUIDATE\x10\x07\x12\x08\n\x04STOP\x10\x08\x12\x0c\n\x08\x43\x41LENDAR\x10\t*\"\n\tFrequency\x12\n\n\x06MINUTE\x10\x00\x12\t\n\x05\x44\x41ILY\x10\x01\x32\x44\n\rClockListener\x12\x33\n\x0cOnClockEvent\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty2\x85\x01\n\x15SimulationClockRouter\x12\x33\n\x08Register\x12\x1a.SimulationClockParameters\x1a\x0b.Attributes\x12\x37\n\x03Run\x12\x18.SimulationRunParameters\x1a\x16.google.protobuf.Empty2H\n\x13RealtimeClockRouter\x12\x31\n\x08Register\x12\x18.RealtimeClockParameters\x1a\x0b.Attributes2y\n\rRealtimeClock\x12\x31\n\x08Register\x12\x18.RealtimeClockParameters\x1a\x0b.Attributes\x12\x35\n\x03Run\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xa9\x01\n\x0fSimulationClock\x12\x33\n\x08Register\x12\x1a.SimulationClockParameters\x1a\x0b.Attributes\x12\x35\n\x03Run\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12*\n\x08GetState\x12\x16.google.protobuf.Empty\x1a\x06.Stateb\x06proto3')
+  serialized_pb=_b('\n\x12protos/clock.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15protos/calendar.proto\"\x83\x01\n\x10\x43\x61lendarMetadata\x12)\n\x05start\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1b\n\x08\x63\x61lendar\x18\x03 \x01(\x0b\x32\t.Calendar\":\n\nAttributes\x12,\n\x11\x63\x61lendar_metadata\x18\x02 \x01(\x0b\x32\x11.CalendarMetadata\"d\n\x06Signal\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x05\x65vent\x18\x02 \x01(\x0e\x32\n.EventType\x12\x10\n\x08\x65xchange\x18\x03 \x01(\t\"p\n\nClockEvent\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x05\x65vent\x18\x02 \x01(\x0e\x32\n.EventType\x12\x18\n\x07signals\x18\x03 \x03(\x0b\x32\x07.Signal\"\xd4\x01\n\x19SimulationClockParameters\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\t\x12.\n\nstart_date\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12,\n\x08\x65nd_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12!\n\remission_rate\x18\x06 \x01(\x0e\x32\n.Frequency\"-\n\x17SimulationRunParameters\x12\x12\n\nsession_id\x18\x01 \x01(\t\"`\n\x17RealtimeClockParameters\x12\x0b\n\x03url\x18\x01 \x01(\t\x12\x15\n\rcalendar_name\x18\x02 \x01(\t\x12!\n\remission_rate\x18\x03 \x01(\x0e\x32\n.Frequency\"\x16\n\x05State\x12\r\n\x05\x61live\x18\x01 \x01(\x08\"0\n\x0b\x43lockEvents\x12!\n\x0c\x63lock_events\x18\x01 \x03(\x0b\x32\x0b.ClockEvent*\xa8\x01\n\tEventType\x12\x0e\n\nINITIALIZE\x10\x00\x12\x11\n\rSESSION_START\x10\x01\x12\x18\n\x14\x42\x45\x46ORE_TRADING_START\x10\x02\x12\x07\n\x03\x42\x41R\x10\x03\x12\x0e\n\nMINUTE_END\x10\x04\x12\r\n\tTRADE_END\x10\x05\x12\x0f\n\x0bSESSION_END\x10\x06\x12\r\n\tLIQUIDATE\x10\x07\x12\x08\n\x04STOP\x10\x08\x12\x0c\n\x08\x43\x41LENDAR\x10\t*\"\n\tFrequency\x12\n\n\x06MINUTE\x10\x00\x12\t\n\x05\x44\x41ILY\x10\x01\x32\x44\n\rClockListener\x12\x33\n\x0cOnClockEvent\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty2\x85\x01\n\x15SimulationClockRouter\x12\x33\n\x08Register\x12\x1a.SimulationClockParameters\x1a\x0b.Attributes\x12\x37\n\x03Run\x12\x18.SimulationRunParameters\x1a\x16.google.protobuf.Empty2H\n\x13RealtimeClockRouter\x12\x31\n\x08Register\x12\x18.RealtimeClockParameters\x1a\x0b.Attributes2y\n\rRealtimeClock\x12\x31\n\x08Register\x12\x18.RealtimeClockParameters\x1a\x0b.Attributes\x12\x35\n\x03Run\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty2\xa9\x01\n\x0fSimulationClock\x12\x33\n\x08Register\x12\x1a.SimulationClockParameters\x1a\x0b.Attributes\x12\x35\n\x03Run\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12*\n\x08GetState\x12\x16.google.protobuf.Empty\x1a\x06.Stateb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,protos_dot_calendar__pb2.DESCRIPTOR,])
 
-_EVENT = _descriptor.EnumDescriptor(
-  name='Event',
-  full_name='Event',
+_EVENTTYPE = _descriptor.EnumDescriptor(
+  name='EventType',
+  full_name='EventType',
   filename=None,
   file=DESCRIPTOR,
   values=[
@@ -76,12 +76,12 @@ _EVENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=944,
-  serialized_end=1108,
+  serialized_start=952,
+  serialized_end=1120,
 )
-_sym_db.RegisterEnumDescriptor(_EVENT)
+_sym_db.RegisterEnumDescriptor(_EVENTTYPE)
 
-Event = enum_type_wrapper.EnumTypeWrapper(_EVENT)
+EventType = enum_type_wrapper.EnumTypeWrapper(_EVENTTYPE)
 _FREQUENCY = _descriptor.EnumDescriptor(
   name='Frequency',
   full_name='Frequency',
@@ -99,8 +99,8 @@ _FREQUENCY = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1110,
-  serialized_end=1144,
+  serialized_start=1122,
+  serialized_end=1156,
 )
 _sym_db.RegisterEnumDescriptor(_FREQUENCY)
 
@@ -237,7 +237,7 @@ _SIGNAL = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=301,
-  serialized_end=397,
+  serialized_end=401,
 )
 
 
@@ -281,8 +281,8 @@ _CLOCKEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=399,
-  serialized_end=507,
+  serialized_start=403,
+  serialized_end=515,
 )
 
 
@@ -347,8 +347,8 @@ _SIMULATIONCLOCKPARAMETERS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=510,
-  serialized_end=722,
+  serialized_start=518,
+  serialized_end=730,
 )
 
 
@@ -378,8 +378,8 @@ _SIMULATIONRUNPARAMETERS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=724,
-  serialized_end=769,
+  serialized_start=732,
+  serialized_end=777,
 )
 
 
@@ -423,8 +423,8 @@ _REALTIMECLOCKPARAMETERS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=771,
-  serialized_end=867,
+  serialized_start=779,
+  serialized_end=875,
 )
 
 
@@ -454,8 +454,8 @@ _STATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=869,
-  serialized_end=891,
+  serialized_start=877,
+  serialized_end=899,
 )
 
 
@@ -485,8 +485,8 @@ _CLOCKEVENTS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=893,
-  serialized_end=941,
+  serialized_start=901,
+  serialized_end=949,
 )
 
 _CALENDARMETADATA.fields_by_name['start'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
@@ -494,9 +494,9 @@ _CALENDARMETADATA.fields_by_name['end'].message_type = google_dot_protobuf_dot_t
 _CALENDARMETADATA.fields_by_name['calendar'].message_type = protos_dot_calendar__pb2._CALENDAR
 _ATTRIBUTES.fields_by_name['calendar_metadata'].message_type = _CALENDARMETADATA
 _SIGNAL.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_SIGNAL.fields_by_name['event'].enum_type = _EVENT
+_SIGNAL.fields_by_name['event'].enum_type = _EVENTTYPE
 _CLOCKEVENT.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_CLOCKEVENT.fields_by_name['event'].enum_type = _EVENT
+_CLOCKEVENT.fields_by_name['event'].enum_type = _EVENTTYPE
 _CLOCKEVENT.fields_by_name['signals'].message_type = _SIGNAL
 _SIMULATIONCLOCKPARAMETERS.fields_by_name['start_date'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _SIMULATIONCLOCKPARAMETERS.fields_by_name['end_date'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
@@ -512,7 +512,7 @@ DESCRIPTOR.message_types_by_name['SimulationRunParameters'] = _SIMULATIONRUNPARA
 DESCRIPTOR.message_types_by_name['RealtimeClockParameters'] = _REALTIMECLOCKPARAMETERS
 DESCRIPTOR.message_types_by_name['State'] = _STATE
 DESCRIPTOR.message_types_by_name['ClockEvents'] = _CLOCKEVENTS
-DESCRIPTOR.enum_types_by_name['Event'] = _EVENT
+DESCRIPTOR.enum_types_by_name['EventType'] = _EVENTTYPE
 DESCRIPTOR.enum_types_by_name['Frequency'] = _FREQUENCY
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -587,8 +587,8 @@ _CLOCKLISTENER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1146,
-  serialized_end=1214,
+  serialized_start=1158,
+  serialized_end=1226,
   methods=[
   _descriptor.MethodDescriptor(
     name='OnClockEvent',
@@ -611,8 +611,8 @@ _SIMULATIONCLOCKROUTER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=1,
   serialized_options=None,
-  serialized_start=1217,
-  serialized_end=1350,
+  serialized_start=1229,
+  serialized_end=1362,
   methods=[
   _descriptor.MethodDescriptor(
     name='Register',
@@ -644,8 +644,8 @@ _REALTIMECLOCKROUTER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=2,
   serialized_options=None,
-  serialized_start=1352,
-  serialized_end=1424,
+  serialized_start=1364,
+  serialized_end=1436,
   methods=[
   _descriptor.MethodDescriptor(
     name='Register',
@@ -668,8 +668,8 @@ _REALTIMECLOCK = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=3,
   serialized_options=None,
-  serialized_start=1426,
-  serialized_end=1547,
+  serialized_start=1438,
+  serialized_end=1559,
   methods=[
   _descriptor.MethodDescriptor(
     name='Register',
@@ -701,8 +701,8 @@ _SIMULATIONCLOCK = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=4,
   serialized_options=None,
-  serialized_start=1550,
-  serialized_end=1719,
+  serialized_start=1562,
+  serialized_end=1731,
   methods=[
   _descriptor.MethodDescriptor(
     name='Register',

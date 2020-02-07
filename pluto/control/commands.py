@@ -3,10 +3,6 @@ from abc import ABC, abstractmethod
 
 class Command(ABC):
     @abstractmethod
-    def _command(self):
-        raise NotImplementedError(self._command.__name__())
-
-    @abstractmethod
     def __call__(self, control_mode, clock_factory):
         '''
 

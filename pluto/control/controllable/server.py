@@ -2,7 +2,6 @@ import threading
 import signal
 from concurrent import futures
 import queue
-import sys
 import abc
 
 import grpc
@@ -13,7 +12,6 @@ from pluto.interface.utils import paths
 from pluto.coms.utils import conversions
 from pluto.control.controllable import commands
 from pluto.control.controllable import simulation_controllable as sc
-from pluto.utils import saving
 from pluto.control.events_log import events_log
 
 from protos import controllable_pb2
@@ -23,7 +21,7 @@ from protos.clock_pb2 import (
     TRADE_END)
 
 ROOT = paths.get_dir('controllable')
-DIR = paths.get_file_path('states', ROOT)
+DIR = paths.get_dir('states', ROOT)
 
 
 def get_controllable(mode):
@@ -133,13 +131,14 @@ class _PerformanceWriter(object):
         pass
 
     def performance_update(self, performance):
-        print(performance)
+        # print(performance)
         # writer.PerformancePacketUpdate(
         #     crv.to_proto_performance_packet(
         #         controllable.session_end(dt)))
+        pass
 
 
-class ControllableService(cbl_rpc.ControllableServicer, saving.Savable):
+class ControllableService(cbl_rpc.ControllableServicer):
     def __init__(self, framework_url):
         self._perf_writer = None
         self._ctl_url = framework_url
@@ -191,8 +190,8 @@ class ControllableService(cbl_rpc.ControllableServicer, saving.Savable):
 
     def Initialize(self, request_iterator, context):
         b = b''
-        for bytes_ in request_iterator:
-            b += bytes_
+        for chunk in request_iterator:
+            b += chunk.data
 
         params = controllable_pb2.InitParams()
         params.ParseFromString(b)
@@ -207,7 +206,7 @@ class ControllableService(cbl_rpc.ControllableServicer, saving.Savable):
         end_dt = conversions.to_datetime(params.end)
         look_back = params.look_back
 
-        if data_frequency == 'day':
+        if data_frequency == 'daily':
             self._frequency_filter = DayFilter()
         elif data_frequency == 'minute':
             self._frequency_filter = MinuteFilter()
@@ -237,6 +236,7 @@ class ControllableService(cbl_rpc.ControllableServicer, saving.Savable):
                 look_back)
             # run the thread
             self._state = self._ready
+            self._perf_writer = _PerformanceWriter(id_, mode)
             self._thread = thread = threading.Thread(target=self._run)
             thread.start()
         else:
@@ -344,7 +344,7 @@ class Server(object):
         else:
             port = server.add_insecure_port(url)
         cbl_rpc.add_ControllableServicer_to_server(controllable, server)
-        sys.stdout.write(port)
+        print(port)
         server.start()
         self._event.wait()
         controllable.stop()
@@ -377,15 +377,15 @@ def cli():
 @cli.command()
 @click.argument('framework_url')
 @click.argument('session_id')
-@cli.option('-cu', '--controllable-url')
-@cli.option('--recovery', is_flag=True)
+@click.option('-cu', '--controllable-url')
+@click.option('--recovery', is_flag=True)
 def start(framework_url, session_id, controllable_url, recovery):
     '''
 
     Parameters
     ----------
     framework_url : str
-        url for exchanging messages with the controller
+        url for callbacks
     controllable_url: str
     '''
 

@@ -19,21 +19,21 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x11protos/data.proto\"\x14\n\x04\x44\x61ta\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x62\x06proto3')
+  serialized_pb=_b('\n\x11protos/data.proto\"\x15\n\x05\x43hunk\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x62\x06proto3')
 )
 
 
 
 
-_DATA = _descriptor.Descriptor(
-  name='Data',
-  full_name='Data',
+_CHUNK = _descriptor.Descriptor(
+  name='Chunk',
+  full_name='Chunk',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='data', full_name='Data.data', index=0,
+      name='data', full_name='Chunk.data', index=0,
       number=1, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
@@ -52,18 +52,18 @@ _DATA = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=21,
-  serialized_end=41,
+  serialized_end=42,
 )
 
-DESCRIPTOR.message_types_by_name['Data'] = _DATA
+DESCRIPTOR.message_types_by_name['Chunk'] = _CHUNK
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-Data = _reflection.GeneratedProtocolMessageType('Data', (_message.Message,), dict(
-  DESCRIPTOR = _DATA,
+Chunk = _reflection.GeneratedProtocolMessageType('Chunk', (_message.Message,), dict(
+  DESCRIPTOR = _CHUNK,
   __module__ = 'protos.data_pb2'
-  # @@protoc_insertion_point(class_scope:Data)
+  # @@protoc_insertion_point(class_scope:Chunk)
   ))
-_sym_db.RegisterMessage(Data)
+_sym_db.RegisterMessage(Chunk)
 
 
 # @@protoc_insertion_point(module_scope)

@@ -15,7 +15,7 @@ def load_implementation(strategy):
 
 
 class ControlMode(abc.ABC):
-    def __init__(self, framework_url):
+    def __init__(self, framework_url, process_factory):
         '''
 
         Parameters
@@ -37,6 +37,8 @@ class ControlMode(abc.ABC):
         self._framework_url = framework_url
 
         self._event_writer = self._create_event_writer()
+
+        self._process_factory = process_factory
 
     @property
     def running_sessions(self):
@@ -102,8 +104,8 @@ class ControlMode(abc.ABC):
         # self._broker.update(dt, evt, signals)
 
         clock_event = clock_pb2.ClockEvent(
-            dt=conversions.to_proto_timestamp(dt),
-            evt=evt,
+            timestamp=conversions.to_proto_timestamp(dt),
+            event=evt,
             signals=signals
         )
 
@@ -178,6 +180,8 @@ class ControlMode(abc.ABC):
                 per_str_id[stg_id] = lst = []
             lst.append(p)
 
+        mode = self._mode_name()
+
         for key, values in per_str_id.items():
             implementation = load_implementation(strategies.pop(key))
             for p in values:
@@ -196,7 +200,8 @@ class ControlMode(abc.ABC):
                     universe=sess.universe_name,
                     look_back=sess.look_back,
                     data_frequency=sess.data_frequency,
-                    strategy=implementation)
+                    strategy=implementation,
+                    mode=mode)
 
                 processes[session_id] = process
 
@@ -208,7 +213,6 @@ class ControlMode(abc.ABC):
     def _create_broker(self):
         raise NotImplementedError
 
-    @abc.abstractmethod
     def _create_process(self, session_id, framework_url):
         '''
 
@@ -216,8 +220,12 @@ class ControlMode(abc.ABC):
         -------
         pluto.control.modes.process.process.Process
         '''
-        raise NotImplementedError(self._create_process.__name__)
+        return self._process_factory.create_process(session_id, framework_url)
 
     @abc.abstractmethod
     def _create_event_writer(self):
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def _mode_name(self):
+        raise NotImplementedError()

@@ -1,11 +1,7 @@
+import threading
 from concurrent import futures
 
 import grpc
-
-from protos import development_pb2 as dev_rpc
-from protos import development_pb2_grpc as development
-from protos import controller_pb2_grpc as ctl_rpc
-from protos import interface_pb2_grpc as interface
 
 from pluto.dev import editor
 from pluto.explorer import explorer
@@ -13,35 +9,46 @@ from pluto.controller import controllerservice, controller
 from pluto.data.universes import universes
 from pluto.coms.utils import conversions
 
+from protos import development_pb2 as dev_rpc
+from protos import development_pb2_grpc as development
+from protos import controller_pb2_grpc as ctl_rpc
+from protos import interface_pb2_grpc as interface
+
 
 class Environment(development.EnvironmentServicer):
-    def __init__(self, directory, framework_url):
+    def __init__(self, server, directory, framework_url, process_factory):
         self._directory = directory
-        self._explorer = exp = explorer.Explorer(directory)
-        self._editor = edt = editor.Editor(directory)
-
+        self._server = server
         self._controller = None
         self._framework_url = framework_url
 
-        # pool = futures.ThreadPoolExecutor()
-        # server used for the framework objects (controllables, broker, etc.)
-        # self._framework_server = grpc.server(pool)
-        self._server = server = grpc.server(futures.ThreadPoolExecutor())
+        self._explorer = exp = explorer.Explorer(directory)
+        self._editor = edt = editor.Editor(directory)
 
-        development.add_EnvironmentServicer_to_server(self, server)
+        self._process_factory = process_factory
+
         development.add_EditorServicer_to_server(edt, server)
         interface.add_ExplorerServicer_to_server(exp, server)
 
+    def LoadSession(self, request, context):
+        # todo: load previously set session
+        pass
+
     def Setup(self, request, context):
         directory = self._directory
-        with directory.write_event() as w:
+        with directory.write() as w:
             look_back = request.look_back
             data_frequency = request.data_frequency
             # note: if no universe is provided, use the default universe.
             # a session regroups a set of "static" parameters (aren't likely to change overtime)
+
+            # todo: the same strategy can't run on the same universe and data_frequency
+            # the data frequency should be set at user-level? (framework-level for now...)
+
+            # if this set of parameters all ready exists, return that session instead
             session = w.add_session(
                 request.strategy_id,
-                universes.get_universe(request.universe),
+                request.universe,
                 data_frequency,
                 look_back if look_back else 150)
 
@@ -52,6 +59,7 @@ class Environment(development.EnvironmentServicer):
             controllerservice.ControllerService(
                 directory,
                 controller.SimulationController(
+                    self._process_factory,
                     self._framework_url,
                     request.capital,
                     request.max_leverage,
@@ -81,8 +89,40 @@ class Environment(development.EnvironmentServicer):
         # this stage should raise some syntax errors.
         ast = compile(script, path, 'exec')
 
-    def start(self, port, address='localhost'):
-        self._server.start(address + ':' + port)
+    def stop(self):
+        ctrl = self._controller
+        if ctrl:
+            ctrl.Stop()
 
-    def stop(self, grace=0):
-        self._server.stop(grace)
+class Server(object):
+    def __init__(self):
+        self._event = threading.Event()
+        self._server = grpc.server(futures.ThreadPoolExecutor())
+
+        self._environment = None
+        self._framework_url = None
+
+    def initialize(self, directory, framework_url):
+        self._directory = directory
+        self._framework_url = framework_url
+
+        server = self._server
+
+        self._environment = env = Environment(server, directory, framework_url)
+        development.add_EnvironmentServicer_to_server(env, server)
+
+    def serve(self):
+        server = self._server
+        server.add_insecure_port(self._framework_url)
+
+        server.start()
+        event = self._event
+        event.clear()
+        event.wait()
+        env = self._environment
+        if env:
+            env.stop()
+        server.stop(0)
+
+    def stop(self):
+        self._event.set()

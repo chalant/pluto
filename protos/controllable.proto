@@ -7,7 +7,6 @@ import "protos/broker.proto";
 import "protos/controller.proto";
 import "protos/clock.proto";
 import "protos/data.proto";
-import "protos/calendar.proto";
 
 service Controllable {
     /*A service that is called by a controller*/
@@ -29,11 +28,12 @@ message InitParams {
     int32 look_back = 7;
     google.protobuf.Timestamp start = 8;
     google.protobuf.Timestamp end = 9;
+    string mode = 10;
 }
 
 message UpdateRequest {
     google.protobuf.Timestamp timestamp = 1;
-    Event event = 2;
+    EventType event = 2;
     BrokerState broker_state = 3;
 }
 

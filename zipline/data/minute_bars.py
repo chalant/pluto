@@ -29,7 +29,6 @@ from pandas import HDFStore
 import tables
 from six import with_metaclass
 from toolz import keymap, valmap
-from trading_calendars import get_calendar
 
 from zipline.data._minute_bar_internal import (
     minute_value,
@@ -44,6 +43,7 @@ from zipline.utils.cli import maybe_show_progress
 from zipline.utils.compat import mappingproxy
 from zipline.utils.memoize import lazyval
 
+from pluto.trading_calendars import calendar_utils
 
 logger = logbook.Logger('MinuteBars')
 
@@ -226,14 +226,14 @@ class BcolzMinuteBarMetadata(object):
                 minutes_per_day = US_EQUITIES_MINUTES_PER_DAY
 
             if version >= 2:
-                calendar = get_calendar(raw_data['calendar_name'])
+                calendar = calendar_utils.get_calendar(raw_data['calendar_name'])
                 start_session = pd.Timestamp(
                     raw_data['start_session'], tz='UTC')
                 end_session = pd.Timestamp(raw_data['end_session'], tz='UTC')
             else:
                 # No calendar info included in older versions, so
                 # default to NYSE.
-                calendar = get_calendar('XNYS')
+                calendar = calendar_utils.get_calendar('XNYS')
 
                 start_session = pd.Timestamp(
                     raw_data['first_trading_day'], tz='UTC')

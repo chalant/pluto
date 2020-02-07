@@ -17,6 +17,7 @@ class State(ABC):
         raise NotImplementedError
 
     def aggregate(self, ts, evt, signals):
+        # print(self.name)
         return self._aggregate(self._controllable, ts, evt, signals)
 
     #todo: we only need active exchanges for BAR and TRADE_END events
@@ -24,28 +25,31 @@ class State(ABC):
     def _aggregate(self, controllable, ts, evt, signals):
         raise NotImplementedError
 
-class BFS(State):
+class Trading(State):
     def __init__(self, controllable):
-        super(BFS, self).__init__(controllable)
+        super(Trading, self).__init__(controllable)
         self._session_end = 0
-        self._num_exchanges = len(controllable.exchanges)
+        self._num_exchanges = len(controllable.calendars)
 
     @property
     def name(self):
-        return 'bfs'
+        return 'trading'
 
     def _aggregate(self, controllable, ts, evt, signals):
-        exchanges = controllable.exchanges
+        calendars = controllable.calendars
         active = []
-        for t, c_evt, exchange in signals:
-            if exchange in exchanges:
+        for signal in signals:
+            exchange = signal.exchange
+            c_evt = signal.event
+            if exchange in calendars:
                 if c_evt == SESSION_END:
                     self._session_end += 1
                     if self._session_end == self._num_exchanges:
                         self._session_end = 0
                         controllable.state = controllable.out_session
-                        return ts, SESSION_END, []
-                elif c_evt == BAR or  c_evt == TRADE_END:
+                        return signal.timestamp, SESSION_END, []
+                elif c_evt == BAR or c_evt == TRADE_END:
+                    ts = signal.timestamp
                     active.append((c_evt, exchange))
         if active:
             return ts, evt, active
@@ -58,18 +62,21 @@ class InSession(State):
         return 'in_session'
 
     def _aggregate(self, controllable, ts, evt, signals):
-        exchanges = controllable.exchanges
+        calendars = controllable.calendars
         active = []
-        for t, c_evt, exchange in signals:
+        for signal in signals:
             # filter exchanges
-            if exchanges.get(exchange):
+            exchange = signal.exchange
+            c_evt = signal.event
+            if calendars.get(exchange):
                 # filter active exchanges
                 if c_evt == SESSION_START:
+                    ts = signal.timestamp
                     active.append((c_evt, exchange))
         if active:
             #move to active state, the strategy is ready to start executing
             controllable.state = controllable.active
-            return (ts, SESSION_START, active)
+            return ts, SESSION_START, active
         else:
             return
 
@@ -79,16 +86,19 @@ class Active(State):
         return 'active'
 
     def _aggregate(self, controllable, ts, evt, signals):
-        exchanges = controllable.exchanges
+        calendars = controllable.calendars
         active = []
-        for t, c_evt, exchange in signals:
-            if exchanges.get(exchange):
+        for signal in signals:
+            exchange = signal.exchange
+            c_evt = signal.event
+            if calendars.get(exchange):
                 #filter active exchanges
                 if c_evt == BEFORE_TRADING_START:
+                    ts = signal.timestamp
                     active.append((c_evt, exchange))
         if active:
             controllable.state = controllable.bfs
-            return (ts, BEFORE_TRADING_START, active)
+            return ts, BEFORE_TRADING_START, active
         else:
             return
 
@@ -99,18 +109,21 @@ class OutSession(State):
 
     def _aggregate(self, controllable, ts, evt, signals):
         if evt == SESSION_START:
-            exchanges = controllable.exchanges
+            calendars = controllable.calendars
             active = []
-            for t, c_evt, exchange in signals:
+            for signal in signals:
                 # filter exchanges
-                if exchanges.get(exchange):
+                s_evt = signal.event
+                exchange = signal.exchange
+                if calendars.get(signal.exchange):
                     # search for a session start event if it have not be done yet.
-                    if c_evt == SESSION_START:
+                    if s_evt == SESSION_START:
+                        ts = signal.timestamp
                         # flag if we hit one SESSION_START event
-                        active.append((c_evt, exchange))
+                        active.append((s_evt, exchange))
             if active:
                 controllable.state = controllable.active
-                return (ts, SESSION_START, active)
+                return ts, SESSION_START, active
             else:
                 #no session_start event in signals
                 controllable.state = controllable.in_session
@@ -129,7 +142,7 @@ class Idle(State):
 
 def get_state(name, controllable):
     if name == 'bfs':
-        return BFS(controllable)
+        return Trading(controllable)
     elif name == 'in_session':
         return InSession(controllable)
     elif name == 'out_session':

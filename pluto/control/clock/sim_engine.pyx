@@ -33,7 +33,7 @@ NANOS_IN_MINUTE = _nanos_in_minute
 cdef class MinuteSimulationClock:
     cdef bool minute_emission
     cdef np.int64_t[:] market_opens_nanos, market_closes_nanos, bts_nanos, \
-        sessions_nanos
+        sessions_nanos, trade_end_nanos
     cdef dict minutes_by_session
 
     def __init__(self,

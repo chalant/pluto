@@ -7,7 +7,7 @@ from protos.clock_pb2 import (
     BEFORE_TRADING_START
 )
 
-from pluto.coms.utils import conversions as crv
+from pluto.coms.utils import conversions
 
 
 class Command(abc.ABC):
@@ -63,8 +63,8 @@ class ClockUpdate(Command):
     def _execute(self, request):
         # todo: what about capital updates etc? => each request is bound to a function
         # ex:
-        evt = request.clock_event.event
-        dt = request.clock_event.dt
+        evt = request.event
+        dt = conversions.to_datetime(request.timestamp)
         signals = request.signals
         controllable = self._controllable
 
@@ -78,11 +78,11 @@ class ClockUpdate(Command):
             # exchanges will be used to filter the assets and the resulting assets will
             # be used to filter data
             # only run when the observed exchanges are active
+            dt = conversions.to_datetime(ts)
             if e == SESSION_START:
                 controllable.session_start(dt)
             elif e == BEFORE_TRADING_START:
                 controllable.before_trading_starts(dt)
-
             elif e == SESSION_END:
                 # todo: we need to identify the controllable (needs an id)
                 # send performance packet to controller.

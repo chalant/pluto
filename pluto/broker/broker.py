@@ -27,6 +27,9 @@ class SimulationBroker(Broker):
     def adjust_max_leverage(self, max_leverage):
         return max_leverage
 
+    def update(self, dt, evt):
+        return
+
 
 class LiveBroker(Broker):
     def __init__(self):

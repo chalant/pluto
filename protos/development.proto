@@ -15,8 +15,8 @@ service Editor {
 }
 
 service Environment {
-    rpc Setup(SetupRequest) returns (SetupResponse);
-    rpc Delete(DeleteRequest) returns (DeleteResponse);
+    rpc Setup (SetupRequest) returns (SetupResponse);
+    rpc Delete (DeleteRequest) returns (DeleteResponse);
 }
 
 message NewStrategyRequest {
@@ -48,6 +48,8 @@ message StrategyRequest {
 message SetupRequest {
     //setup parameters of the strategy
     string strategy_id = 1;
+    float capital = 7;
+    float max_leverage = 8;
     string universe = 2;
     int32 look_back = 5;
     string data_frequency = 6;

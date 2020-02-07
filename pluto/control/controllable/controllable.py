@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from copy import copy
 
+from collections import deque
+
 import pandas as pd
 import logbook
-
-from collections import deque
 
 from zipline.finance import trading
 from zipline.data import data_portal as dp
@@ -13,6 +13,7 @@ from zipline.finance import asset_restrictions
 from zipline.finance.order import ORDER_STATUS
 from zipline.pipeline.data import USEquityPricing
 from zipline.pipeline.loaders import USEquityPricingLoader
+from zipline.utils import api_support
 
 from pluto.coms.utils import conversions
 from pluto.control.controllable import synchronization_states as ss
@@ -57,6 +58,7 @@ class Controllable(ABC):
     def __init__(self):
         self._metrics_tracker = None
 
+        self._data_portal = None
         self._blotter = None
         self._asset_finder = None
         self._algo = None
@@ -64,8 +66,10 @@ class Controllable(ABC):
         self._account = None
         self._current_data = None
 
+        self._last_sync_time = None
         self._calculate_minute_capital_changes = None
         self._emission_rate = 'daily'
+        self._data_frequency = 'daily'
 
         self._capital_change_deltas = {}
         self._capital_changes = {}
@@ -75,23 +79,25 @@ class Controllable(ABC):
 
         self._calendar = None
         self._universe = None
-        self._exchanges = None
+        self._calendars = None
 
         self._sessions = pd.Series()
         self._sessions_array = deque()
 
+        self._session_id = None
         self._start_dt = None
         self._end_dt = None
         self._look_back = None
         self._current_dt = None
+        self._params = None
 
-        self._out_session = ss.OutSession(self)
-        self._active = ss.Active(self)
-        self._in_session = ss.InSession(self)
-        self._bfs = ss.BFS(self)
-        self._idle = idle = ss.Idle(self)
+        self._out_session = None
+        self._active = None
+        self._in_session = None
+        self._bfs = None
+        self._idle = None
 
-        self._state = idle
+        self._state = None
 
         self._ready = _Ready()
         self._recovering = recovering = _Recovering()
@@ -115,15 +121,15 @@ class Controllable(ABC):
 
     @property
     def state(self):
-        return self._idle
+        return self._state
 
     @state.setter
     def state(self, value):
         self._state = value
 
     @property
-    def exchanges(self):
-        return self._exchanges
+    def calendars(self):
+        return self._calendars
 
     @property
     def current_dt(self):
@@ -172,9 +178,20 @@ class Controllable(ABC):
 
         '''
 
+        self._last_sync_time = start_dt
         uni = universes.get_universe(universe)
-        self._exchanges = {exchange: exchange for exchange in uni.exchanges}
-        calendar = uni.get_calendar(start_dt, end_dt)
+        self._calendars = {cal:cal for cal in uni.calendars}
+
+        self._out_session = ss.OutSession(self)
+        self._active = ss.Active(self)
+        self._in_session = ss.InSession(self)
+        self._bfs = ss.Trading(self)
+        self._idle = idle = ss.Idle(self)
+        self._state = idle
+
+        #todo: load calendar by adding a day to avoid index errors
+        print('START', start_dt, 'END', end_dt)
+        calendar = uni.get_calendar(start_dt, end_dt + pd.Timedelta(days=1))
         self._session_id = session_id
         self._start_dt = start_dt
         # end_dt is the previous day
@@ -186,10 +203,10 @@ class Controllable(ABC):
         if data_frequency == 'minute':
             self._emission_rate = 'minute'
 
-            def calculate_minute_capital_changes(dt, algo, emission_rate):
+            def calculate_minute_capital_changes(dt, emission_rate):
                 self._calculate_capital_changes(dt, emission_rate, is_interday=False)
         else:
-            def calculate_minute_capital_changes(dt, algo, emission_rate):
+            def calculate_minute_capital_changes(dt, emission_rate):
                 return []
 
         self._calculate_minute_capital_changes = calculate_minute_capital_changes
@@ -203,7 +220,7 @@ class Controllable(ABC):
             arena=arena)
 
         self._sessions = sessions = params.sessions
-        self._sessions_array = deque(sessions.array)
+        self._sessions_array = deque(sessions)
 
         # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
@@ -212,24 +229,29 @@ class Controllable(ABC):
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
 
+        #todo: equity_minute_bar_reader fix
+        #todo: equity_daily_reader should instanciate a calendar...
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
             first_trading_day=first_trading_day,
-            equity_minute_reader=bundle.equity_minute_bar_reader,
+            # equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
-            adjustment_reader=bundle.adjustment_reader
-        )
+            adjustment_reader=bundle.adjustment_reader)
 
         # load s&p 500 index as benchmark_asset.
         # todo: we can't load the benchmark data like this for now...
         # todo: we need a special file for benchmark data...
-        asset = asset_finder.lookup_symbol('^GSPC', end_dt)
-        self._benchmark_source = benchmark_source = bs.BenchmarkSource(
+        # todo: '^GSPC' should be the benchmark...
+        asset = asset_finder.lookup_symbol('AAPL', end_dt)
+
+        # todo the benchmark creation should depend on the mode
+        self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
             asset,
             calendar,
             sessions,
             self._data_portal,
+            self._look_back,
             self._emission_rate)
 
         self._metrics_tracker = metrics_tracker = \
@@ -272,6 +294,8 @@ class Controllable(ABC):
         # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
 
+        # todo: the algo should call the data portal of the controllable, since it might be
+        # re-assigned
         self._algo = algo = self._get_algorithm_class(
             params,
             data_portal,
@@ -279,13 +303,16 @@ class Controllable(ABC):
             metrics_tracker,
             choose_loader,
             namespace.get('initialize', noop),
-            namespace.get('before_trading_start', noop),
             namespace.get('handle_data', noop),
+            namespace.get('before_trading_start', noop),
             namespace.get('analyze', noop))
 
         self._state = self._out_session
+        self._run_state = self._ready
         # initialize the algo (called only once per lifetime)
-        algo.initialize({})  # todo: kwargs?
+        api_support.set_algo_instance(algo)
+        algo.initialize(**{})  # todo: kwargs?
+        algo.initialized = True
 
     @abstractmethod
     def _get_algorithm_class(self,
@@ -321,7 +348,22 @@ class Controllable(ABC):
             # reload a new calendar
             self._start_dt = start_dt = dt - pd.Timedelta(days=self._look_back)
             self._end_dt = dt
+            #todo: all the objects that depend on the calendar won't get this new value...
+            #todo: add a day to dt
+            #todo: reset all the instances that depend on the calendar:
+            # -SimulationParameters <==== Reload entirely
+            # -DataPortal <=== We need to reload this entirely
+
             self._calendar = self._universe.get_calendar(start_dt, dt)
+            # updates the sessions (live)
+            #FIXME: review this
+            params = self._params
+            sessions = self._sessions_array
+            sessions.popleft()
+            sessions.append(dt)
+            params.start_session = sessions[0]
+            params.end_session = dt
+            self._sessions = pd.Series(sessions)
 
         self._sync_last_sale_prices(dt)
         self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
@@ -334,7 +376,9 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         metrics_tracker.handle_market_open(
             dt,
-            data_portal)
+            data_portal,
+            self._calendar,
+            self._sessions)
 
         # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
@@ -353,6 +397,7 @@ class Controllable(ABC):
         self._current_dt = dt
         algo.on_dt_changed(dt)
 
+        api_support.set_algo_instance(algo)
         self._run_state.before_trading_starts(algo, self._current_data)
 
     def bar(self, dt):
@@ -400,7 +445,7 @@ class Controllable(ABC):
 
         portal = self._data_portal
         self._benchmark_source.on_minute_end(dt, portal, calendar, sessions)
-        metrics_tracker.handle_minute_close(dt, portal, sessions)
+        metrics_tracker.handle_minute_close(dt, portal, calendar, sessions)
 
         # todo: non-blocking!
         # todo: PROBLEM: we might have some conflicts in state, since we could have
@@ -419,19 +464,22 @@ class Controllable(ABC):
         calendar = self._calendar
         algo = self._algo
 
-        self._cleanup_expired_assets(dt, data_portal, blotter, metrics_tracker, position_assets)
+        self._cleanup_expired_assets(
+            dt,
+            data_portal,
+            blotter,
+            metrics_tracker,
+            position_assets)
 
-        algo.validate_algo_controls()
+        algo.validate_account_controls()
 
-        # updates the sessions (live)
-        self._sessions = sessions = self._get_sessions(dt, self._params)
         return self._get_daily_message(
             dt,
             algo,
             metrics_tracker,
             data_portal,
             calendar,
-            sessions
+            self._sessions
         )
 
     def get_state(self, dt):
@@ -465,17 +513,6 @@ class Controllable(ABC):
 
         self._state = ss.get_state(state.session_state, self)
         self._current_dt = conversions.to_datetime(state.checkpoint)
-
-    def _get_sessions(self, dt, params):
-        sessions = self._sessions_array
-        if sessions[-1] != dt:
-            sessions.popleft()
-            sessions.append(dt)
-            params.start_session = sessions[0].normalize()
-            params.end_session = dt
-            return pd.DatetimeIndex(sessions).ar
-        else:
-            return self._sessions
 
     def stop(self, dt):
         # todo: liquidate all positions

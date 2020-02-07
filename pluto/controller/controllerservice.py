@@ -18,8 +18,6 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
 
     def Run(self, request, context):
         with self._directory.read() as d:
-            # clock events. Or we could just check if the clock time is in the sessions...
-            # the sessions are created by combining calendars of different exchanges.
             # we should flag a strategy if its back-test was successful (without errors).
 
             # todo: if this method is called while it is running, it will add the sessions to the loop
