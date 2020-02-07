@@ -40,7 +40,7 @@ message Attributes {
 }
 
 
-enum Event {
+enum EventType {
     INITIALIZE = 0;
     SESSION_START = 1;
     BEFORE_TRADING_START = 2;
@@ -55,13 +55,13 @@ enum Event {
 
 message Signal {
     google.protobuf.Timestamp timestamp = 1;
-    Event event = 2;
+    EventType event = 2;
     string exchange = 3;
 }
 
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
-    Event event = 2;
+    EventType event = 2;
     repeated Signal signals = 3;
 }
 

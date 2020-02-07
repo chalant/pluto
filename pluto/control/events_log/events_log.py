@@ -15,6 +15,7 @@ DIR = paths.get_dir('events', ROOT)
 FILE = paths.get_file_path('metadata', DIR)
 
 engine = db_utils.create_engine(FILE)
+schema.metadata.create_all(engine)
 
 
 class _NoOpEventLogWriter(object):

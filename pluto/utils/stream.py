@@ -1,5 +1,7 @@
 import io
 
+from protos import data_pb2
+
 _DEFAULT_SIZE = 1024 * 64 #64kb
 
 def chunk_bytes(bytes_, chunk_size=_DEFAULT_SIZE):
@@ -9,4 +11,4 @@ def chunk_bytes(bytes_, chunk_size=_DEFAULT_SIZE):
             if buffer == b'':
                 break
             else:
-                yield buffer
+                yield data_pb2.Chunk(data=buffer)

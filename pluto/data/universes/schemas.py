@@ -53,6 +53,7 @@ bundles = sa.Table(
 
 universes = sa.Table(
     'universes',
+    metadata,
     sa.Column(
         'universe',
         sa.String,

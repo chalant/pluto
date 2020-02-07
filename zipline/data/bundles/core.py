@@ -12,11 +12,8 @@ from toolz import curry, complement, take
 
 from ..adjustments import SQLiteAdjustmentReader, SQLiteAdjustmentWriter
 from ..bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
-from ..us_equity_pricing import (
-    SQLiteFundamentalsWriter,
-    SQLiteFundamentalsReader,
-)
-from ..minute_bars import (
+
+from zipline.data.minute_bars import (
     BcolzMinuteBarReader,
     BcolzMinuteBarWriter,
 )
@@ -60,12 +57,6 @@ def adjustment_db_path(bundle_name, timestr, environ=None):
         environ=environ,
     )
 
-def fundamentals_db_path(bundle_name, timestr, environ=None):
-    return pth.data_path(
-        fundamentals_db_relative(bundle_name, timestr, environ),
-        environ=environ,
-    )
-
 
 def cache_path(bundle_name, environ=None):
     return pth.data_path(
@@ -94,9 +85,6 @@ def asset_db_relative(bundle_name, timestr, environ=None, db_version=None):
     db_version = ASSET_DB_VERSION if db_version is None else db_version
 
     return bundle_name, timestr, 'assets-%d.sqlite' % db_version
-
-def fundamentals_db_relative(bundle_name, timestr, environ=None):
-    return bundle_name, timestr, 'fundamentals.db'
 
 def to_bundle_ingest_dirname(ts):
     """Convert a pandas Timestamp into the name of the directory for the
@@ -153,7 +141,7 @@ RegisteredBundle = namedtuple(
 BundleData = namedtuple(
     'BundleData',
     'asset_finder equity_minute_bar_reader equity_daily_bar_reader '
-    'adjustment_reader fundamentals_reader',
+    'adjustment_reader',
 )
 
 BundleCore = namedtuple(
@@ -434,21 +422,11 @@ def _make_bundle_core():
                             BcolzDailyBarReader(daily_bars_path),
                             overwrite=True,)
                     )
-
-                    fundamentals_db_writer = stack.enter_context(
-                        SQLiteFundamentalsWriter(
-                            wd.getpath(*fundamentals_db_relative(
-                                name, timestr, environ=environ)),
-                            calendar.all_sessions,
-                            overwrite=True,
-                        )
-                    )
             else:
                 daily_bar_writer = None
                 minute_bar_writer = None
                 asset_db_writer = None
                 adjustment_db_writer = None
-                fundamentals_db_writer = None
                 if assets_versions:
                     raise ValueError('Need to ingest a bundle that creates '
                                      'writers in order to downgrade the assets'
@@ -459,7 +437,6 @@ def _make_bundle_core():
                 minute_bar_writer,
                 daily_bar_writer,
                 adjustment_db_writer,
-                fundamentals_db_writer,
                 calendar,
                 start_session,
                 end_session,
@@ -548,9 +525,6 @@ def _make_bundle_core():
             ),
             adjustment_reader=SQLiteAdjustmentReader(
                 adjustment_db_path(name, timestr, environ=environ),
-            ),
-            fundamentals_reader = SQLiteFundamentalsReader(
-                fundamentals_db_path(name,timestr,environ=environ)
             )
         )
 

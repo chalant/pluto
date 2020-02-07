@@ -87,7 +87,7 @@ class DailyLedgerField(Metric):
 
     def end_of_session(self, **kwargs):
         field = self._packet_field
-        packet = kwargs['ledger']
+        packet = kwargs['packet']
         packet['cumulative_perf'][field] = packet['daily_perf'][field] = \
             (self._get_ledger_field(kwargs.pop('ledger')))
 
@@ -120,7 +120,7 @@ class StartOfPeriodLedgerField(Metric):
 
 class Returns(Metric):
     def _end_of_period(self, field, packet, ledger):
-        packet[field]['returns'] = ledger.todays_returns
+        packet[field]['returns'] = ledger.todays_returns()
         packet['cumulative_perf']['returns'] = ledger.portfolio.returns
         packet['cumulative_risk_metrics']['algorithm_period_returns'] = \
             (ledger.portfolio.returns)
@@ -177,7 +177,7 @@ class PNL(Metric):
         self._previous_pnl = 0.0
 
     def start_of_session(self, **kwargs):
-        self._previous_pnl = kwargs.pop('ledger').portofolio.pnl
+        self._previous_pnl = kwargs.pop('ledger').portfolio.pnl
 
     def _end_of_period(self, field, packet, ledger):
         pnl = ledger.portfolio.pnl
@@ -273,8 +273,7 @@ class AlphaBeta(Metric):
         risk = kwargs.pop('packet')['cumulative_risk_metrics']
         alpha, beta = ep.alpha_beta_aligned(
             kwargs.pop('ledger').daily_returns,
-            kwargs.pop('benchmark_source').daily_returns()
-        )
+            kwargs.pop('benchmark_source').daily_returns())
 
         if np.isnan(alpha):
             alpha = None
@@ -330,7 +329,7 @@ class _ConstantCumulativeRiskMetric(Metric):
     def end_of_bar(self, **kwargs):
         kwargs.pop('packet')['cumulative_risk_metrics'][self._field] = self._value
 
-    def end_of_session(self, kwargs):
+    def end_of_session(self, **kwargs):
         kwargs.pop('packet')['cumulative_risk_metrics'][self._field] = self._value
 
 

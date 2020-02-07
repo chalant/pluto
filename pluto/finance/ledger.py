@@ -10,13 +10,12 @@ from zipline.finance._finance_ext import (
     PositionStats
 )
 
+from pluto.coms.utils import conversions as cv
+
 from protos import ledger_state_pb2 as acc
 
-from pluto.coms.utils import conversions as cv
-from pluto.utils import saving
 
-
-class LiveLedger(saving.Savable):
+class LiveLedger(object):
     def __init__(self, capital, data_frequency, start_date, look_back):
         self._look_back = look_back
 
@@ -45,6 +44,7 @@ class LiveLedger(saving.Savable):
 
         self._payout_last_sale_prices = {}
 
+        self._data_frequency = data_frequency
         self._start_dt = start_date
         self._session_count = -1
 
@@ -52,6 +52,10 @@ class LiveLedger(saving.Savable):
         self._dirty_account = True
 
         self._last_checkpoint = None
+
+    @property
+    def position_tracker(self):
+        return self._position_tracker
 
     @property
     def first_session(self):
@@ -79,6 +83,54 @@ class LiveLedger(saving.Savable):
 
     @property
     def account(self):
+        if self._dirty_account:
+            portfolio = self.portfolio
+
+            account = self._account
+
+            stats = self._position_tracker.stats
+            portfolio_value = portfolio.portfolio_value
+            # If no attribute is found in the ``_account_overrides`` resort to
+            # the following default values. If an attribute is found use the
+            # existing value. For instance, a broker may provide updates to
+            # these attributes. In this case we do not want to over write the
+            # broker values with the default values.
+            account.settled_cash = portfolio.cash
+            account.accrued_interest = 0.0
+            account.buying_power = np.inf
+            account.equity_with_loan = portfolio_value
+            account.total_positions_value = (
+                    portfolio_value - portfolio.cash
+            )
+            account.total_positions_exposure = (
+                portfolio.positions_exposure
+            )
+            account.regt_equity = portfolio.cash
+            account.regt_margin = np.inf
+            account.initial_margin_requirement = 0.0
+            account.maintenance_margin_requirement = 0.0
+            account.available_funds = portfolio.cash
+            account.excess_liquidity = portfolio.cash
+            account.cushion = (
+                (portfolio.cash / portfolio_value)
+                if portfolio_value else
+                np.nan
+            )
+            account.day_trades_remaining = np.inf
+            (account.net_liquidation,
+             account.gross_leverage,
+             account.net_leverage) = \
+                portfolio_value, *self._calculate_period_stats(portfolio_value, stats)
+
+            account.leverage = account.gross_leverage
+
+            # # apply the overrides
+            # for k, v in self._account_overrides.items():
+            #     setattr(account, k, v)
+
+            # the account has been fully synced
+            self._dirty_account = False
+
         return self._immutable_account
 
     def update_account(self, main_account):
@@ -416,17 +468,20 @@ class LiveLedger(saving.Savable):
 
         self._session_count += 1
 
-    def end_of_bar(self, sessions):
-        # add returns each bar
-        returns = self.daily_returns_array
-        returns.append(self.todays_returns())
-        if self._session_count == self._look_back:
-            returns.popleft()
-            self._session_count = 0
-        self._sessions = sessions
+    def end_of_bar(self):
+        if self._data_frequency == 'minute':
+            self.daily_returns_array.append(self.todays_returns())
 
     def end_of_session(self, sessions):
-        pass
+        returns = self.daily_returns_array
+        if self._data_frequency == 'daily':
+            # todo: only pop when in live ?
+            if self._session_count == self._look_back:
+                returns.popleft()
+                self._session_count = 0
+            returns.append(self.todays_returns())
+
+        self._sessions = sessions
 
     # called by the algorithm object
     def capital_change(self, change_amount):

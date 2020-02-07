@@ -35,7 +35,8 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
         self.data_portal = data_portal
 
-        self.sims_params = sim_params
+        self.asset_finder = data_portal.asset_finder
+        self.sim_params = sim_params
         self.trading_calendar = sim_params.trading_calendar
         self._last_sync_time = pd.NaT
 
@@ -54,6 +55,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         # symbols to sids, and can be set using set_symbol_lookup_date()
         self._symbol_lookup_date = None
 
+        self.initialized = False
         self._initialize = initialize
         self._before_trading_start = before_trading_start
         self._handle_data = handle_data
@@ -80,6 +82,15 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
     @property
     def portfolio(self):
         return self._metrics_tracker.portfolio
+
+    def initialize(self, *args, **kwargs):
+        self._initialize(self, *args, **kwargs)
+
+    def analyze(self, perf):
+        if not self._analyze:
+            return
+
+        return self._analyze(perf)
 
     def run(self, data_portal=None):
         pass

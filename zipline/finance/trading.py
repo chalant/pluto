@@ -22,7 +22,7 @@ from zipline.utils.pandas_utils import normalize_date
 
 from functools import partial
 
-from pandas._libs.tslibs import normalize_date
+from pandas.tslib import normalize_date
 from six import string_types
 from sqlalchemy import create_engine
 
@@ -215,9 +215,17 @@ class SimulationParameters(object):
     def start_session(self):
         return self._start_session
 
+    @start_session.setter
+    def start_session(self, val):
+        self._start_session = val
+
     @property
     def end_session(self):
         return self._end_session
+
+    @end_session.setter
+    def end_session(self, val):
+        self._end_session = val
 
     @property
     def first_open(self):

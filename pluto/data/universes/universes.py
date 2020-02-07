@@ -23,6 +23,11 @@ class AssetFilter(object):
 class AbstractUniverse(abc.ABC):
     @property
     @abc.abstractmethod
+    def calendars(self):
+        raise NotImplementedError(self.calendars.__name__())
+
+    @property
+    @abc.abstractmethod
     def name(self):
         raise NotImplementedError(self.name.__name__())
 
@@ -144,6 +149,10 @@ class TestUniverse(AbstractUniverse):
     def exchanges(self):
         return ('AMEX', 'NASDAQ', 'NYSE')
 
+    @property
+    def calendars(self):
+        return ('XNYS',)
+
     def get_calendar(self, start, end):
         return cu.get_calendar_in_range('XNYS', start, end)
 
@@ -157,7 +166,10 @@ class TestUniverse(AbstractUniverse):
 
     @property
     def bundle_name(self):
-        return 'quantopian-quandl'
+        return 'quandl'
+
+    def load_bundle(self):
+        pass
 
 
 def get_universe(name):

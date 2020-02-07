@@ -82,7 +82,13 @@ class Controller(abc.ABC):
 
 
 class SimulationController(Controller):
-    def __init__(self, framework_url, capital, max_leverage, start, end):
+    def __init__(self,
+                 process_factory,
+                 framework_url,
+                 capital,
+                 max_leverage,
+                 start,
+                 end):
         self._start = start
         self._end = end
 
@@ -90,7 +96,8 @@ class SimulationController(Controller):
             simulation_mode.SimulationControlMode(
                 framework_url,
                 capital,
-                max_leverage)
+                max_leverage,
+                process_factory)
         self._loop = \
             simulation_loop.MinuteSimulationLoop(
                 mode,
@@ -112,7 +119,7 @@ class SimulationController(Controller):
 
         '''
         loop = self._loop
-        exchanges = []
+        calendars = []
         parameters = []
         start = self._start
         end = self._end
@@ -124,7 +131,7 @@ class SimulationController(Controller):
             universe = uni.get(uni_name, None)
             if not universe:
                 uni[universe] = universe = universes.get_universe(uni_name)
-            exchanges.extend(universe.exchanges)
+            calendars.extend(universe.calendars)
             parameters.append(
                 RunParameter(
                     session,
@@ -133,9 +140,9 @@ class SimulationController(Controller):
                     start,
                     end,
                     'pluto'))
-        loop.execute(commands.Run(directory, params, set(exchanges)))
+        loop.execute(commands.Run(directory, parameters, set(calendars)))
         loop.start()
-        # todo: if the loop is already running, raise an error? in live,
+        #todo: if the loop is already running, raise an error? in live,
         # the run method behaves differently (can be called multiple times)
 
     def stop(self):

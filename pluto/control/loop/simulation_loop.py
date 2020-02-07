@@ -1,51 +1,19 @@
-import datetime
 import collections
 import threading
 
-import pandas as pd
-
+from pluto.coms.utils import conversions
 from pluto.control.clock import clock
 from pluto.trading_calendars import calendar_utils as cu
-from pluto.control.clock import sim_engine as sim
+from pluto.control.clock.utils import get_generator
 
 from protos import clock_pb2
 
 
-def get_generator(calendar, sessions, minute_emission=False, frequency='day'):
-    # loops every x frequency
-
-    trading_o_and_c = calendar.schedule.loc[sessions]
-    market_closes = trading_o_and_c['market_close']
-
-    if minute_emission:
-        market_opens = trading_o_and_c['market_open']
-        execution_opens = calendar.execution_time_from_open(market_opens)
-        execution_closes = calendar.execution_time_from_close(market_closes)
-    else:
-        execution_closes = calendar.execution_time_from_close(market_closes)
-        execution_opens = execution_closes
-
-    if frequency == 'minute':
-        return sim.MinuteSimulationClock(
-            sessions,
-            execution_opens,
-            execution_closes,
-            pd.DatetimeIndex([ts - pd.Timedelta(minutes=2) for ts in execution_opens]),
-            pd.DatetimeIndex([ts - pd.Timedelta(minutes=15) for ts in execution_closes]),
-            minute_emission)
-    else:
-        return sim.MinuteSimulationClock(
-            sessions,
-            execution_closes,
-            execution_closes,
-            pd.DatetimeIndex([ts - pd.Timedelta(minutes=2) for ts in execution_opens]),
-            execution_closes,
-            minute_emission
-        )
-
-
 class MinuteSimulationLoop(object):
     def __init__(self, control_mode, start_dt, end_dt):
+
+        self._start_dt = start_dt
+        self._end_dt = end_dt
 
         self._clocks = clocks = {}
         # create fake clock
@@ -84,9 +52,9 @@ class MinuteSimulationLoop(object):
                 for cl in self._clocks.values():
                     signal = cl.update(ts)
                     if signal:
-                        ts, evt, exchange = signal
+                        sts, s_evt, exchange = signal
                         signal = clock_pb2.Signal(
-                            timestamp=ts,
+                            timestamp=conversions.to_proto_timestamp(sts),
                             event=evt,
                             exchange=exchange)
                         signals.append(signal)
@@ -103,13 +71,14 @@ class MinuteSimulationLoop(object):
     def _create_clock(self, exchange):
         return clock.Clock(
             exchange,
-            # todo: if the current date time is above the open time, we need to move to the next session.
-            pd.Timestamp(pd.Timestamp.combine(pd.Timestamp.utcnow(), datetime.time.min), tz='UTC'),
+            self._start_dt,
+            self._end_dt,
             minute_emission=True)
 
     def _get_clocks(self, exchanges):
         clocks = self._clocks
         for exchange in exchanges:
+            exchange = cu.resolve_alias(exchange)
             cl = clocks.get(exchange, None)
             if not cl:
                 # create clock, put it in the queue and return it.

@@ -3,7 +3,8 @@ from collections import Iterable
 from pluto.data.universes import schemas
 from pluto.interface.utils import paths, db_utils
 
-_DIRECTORY = paths.get_dir('Universes', 'data')
+_ROOT  = paths.get_dir('data')
+_DIRECTORY = paths.get_dir('universes', _ROOT)
 _FILE = paths.get_file_path('metadata', _DIRECTORY)
 
 engine = db_utils.create_engine(_FILE)

@@ -28,7 +28,7 @@ class LiveControlMode(mode.ControlMode):
         evt
         event_writer: pluto.control.events_log.events_log._EventsLogWriter
         broker: pluto.broker.broker.Broker
-        processes: typing.Iterable[pluto.control.modes.processes.process.Process]
+        processes: typing.Iterable[pluto.control.modes.processes.process_factory.ProcessFactory]
 
         '''
         # called before clock update by the loop

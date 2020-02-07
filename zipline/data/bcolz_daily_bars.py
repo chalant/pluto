@@ -32,7 +32,6 @@ from pandas import (
 )
 from six import iteritems, viewkeys
 from toolz import compose
-from trading_calendars import get_calendar
 
 from zipline.data.session_bars import CurrencyAwareSessionBarReader
 from zipline.data.bar_reader import (
@@ -45,8 +44,9 @@ from zipline.utils.input_validation import expect_element
 from zipline.utils.numpy_utils import iNaT, float64_dtype, uint32_dtype
 from zipline.utils.memoize import lazyval
 from zipline.utils.cli import maybe_show_progress
-from ._equities import _compute_row_slices, _read_bcolz_data
+from zipline.data._equities import _compute_row_slices, _read_bcolz_data
 
+from pluto.trading_calendars import calendar_utils
 
 logger = logbook.Logger('UsEquityPricing')
 
@@ -467,7 +467,7 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
             # backwards compatibility with old formats, will remove
             return DatetimeIndex(self._table.attrs['calendar'], tz='UTC')
         else:
-            cal = get_calendar(self._table.attrs['calendar_name'])
+            cal = calendar_utils.get_calendar(self._table.attrs['calendar_name'])
             start_session_ns = self._table.attrs['start_session_ns']
             start_session = Timestamp(start_session_ns, tz='UTC')
 
@@ -519,7 +519,7 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
     @lazyval
     def trading_calendar(self):
         if 'calendar_name' in self._table.attrs.attrs:
-            return get_calendar(self._table.attrs['calendar_name'])
+            return calendar_utils.get_calendar(self._table.attrs['calendar_name'])
         else:
             return None
 

@@ -13,10 +13,10 @@ def create_engine(file_path):
     -------
     sqlalchemy.engine.Engine
     '''
-    db_uri = 'sqlite:///{}'
+    db_uri = 'sqlite:///{}?check_same_thread=False'
     db_uri = db_uri.format(file_path)
     return sa.create_engine(db_uri)
 
 
 def get_session_maker(engine):
-    return orm.sessionmaker(engine)
+    return orm.sessionmaker(bind=engine)

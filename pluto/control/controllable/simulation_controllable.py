@@ -41,7 +41,7 @@ class SimulationControllable(controllable.Controllable):
         pass
 
     def _create_blotter(self, cancel_policy=None):
-        return simulation_blotter.Blotter(cancel_policy)
+        return simulation_blotter.SimulationBlotter(cancel_policy)
 
 
 
