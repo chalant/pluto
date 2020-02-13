@@ -12,6 +12,7 @@ from zipline.errors import (
 
 from zipline.finance._finance_ext import minute_annual_volatility
 
+
 class BenchmarkSource(abc.ABC):
     def __init__(self,
                  benchmark_asset,
@@ -39,17 +40,28 @@ class BenchmarkSource(abc.ABC):
         self._minute_end_dt = trading_calendar.session_close(end)
 
         self._look_back = look_back
+
         self._daily_returns = None
         self._cumulative_returns = None
-        self._session_idx = -1
-        self._daily_returns_array = deque()
+        self._annual_volatility = None
 
-        #todo: should also pre-compute volatility and cumulative returns
+        self._minute_annual_volatility = None
+        self._minute_cumulative_returns = None
+
+        self._session_idx = -1
+        self._daily_index = -1
+        self._minute_index = -1
+        self._minute_recomputed = False
+        self._day_recomputed = False
+
+        self._daily_returns_array = deque()
+        self._minute_returns_array = deque()
+
         if len(sessions) == 0:
             self._precalculated_series = pd.Series()
         else:
             self._validate_benchmark(benchmark_asset, sessions, data_portal)
-            #in live, we get the previous session, and in simulation we get the current session.
+            # in live, we get the previous session, and in simulation we get the current session.
             self._precalculated_series, self._daily_returns = \
                 self._calculate_benchmark_series(
                     benchmark_asset,
@@ -59,19 +71,25 @@ class BenchmarkSource(abc.ABC):
                     emission_rate,
                     end + pd.Timedelta('1 Day'))
             returns = self._daily_returns
-            self._cumulative_returns = np.cumprod(1 + returns.values)
-            self._annual_volatility = (returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
+            self._cumulative_returns = np.cumprod(1 + returns.values) - 1
+            self._annual_volatility = (
+                    returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
+
+            if self._emission_rate == 'minute':
+                p_returns = self._precalculated_series
+                self._minute_cumulative_returns = np.cumprod(1 + p_returns.values) - 1
+                self._minute_annual_volatility = (
+                        returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
 
     def on_session_start(self, sessions):
         self._start_dt = sessions[0]
         self._session_idx += 1
 
-
     def on_session_end(self, data_portal, trading_calendar, sessions):
         end = sessions[-1]
         if self._emission_rate == 'daily':
             if self._recompute_hook():
-                #only compute if the emission_rate is daily
+                # only compute if the emission_rate is daily
                 self._precalculated_series, self._daily_returns = \
                     self._calculate_benchmark_series(
                         self._benchmark_asset,
@@ -81,22 +99,25 @@ class BenchmarkSource(abc.ABC):
                         'daily',
                         end
                     )
-                returns = self._daily_returns
-                self._cumulative_returns = np.cumprod(1 + returns.values)
+                returns = self._precalculated_series
+                self._cumulative_returns = np.cumprod(1 + returns.values) - 1
                 self._annual_volatility = (returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
+                self._daily_index = -1
+                self._day_recomputed = True
 
+        if not self._day_recomputed:
+            self._daily_index += 1
 
-            returns = self._daily_returns_array
-            if self._session_idx == self._look_back:
-                returns.popleft()
-                self._session_idx = 0
-            returns.append(self._daily_returns[self._session_idx])
+        returns = self._daily_returns_array
+        if self._session_idx == self._look_back:
+            returns.popleft()
+            self._session_idx = 0
+        returns.append(self._daily_returns[self._daily_index])
 
         start = sessions[0]
         self._open_dt = trading_calendar.session_open(start)
         self._minute_end_dt = trading_calendar.session_close(end)
         self._end_dt = end
-
 
     def on_minute_end(self, dt, data_portal, trading_calendar, sessions):
         if self._emission_rate == 'minute':
@@ -109,32 +130,42 @@ class BenchmarkSource(abc.ABC):
                         trading_calendar,
                         'minute',
                         dt)
-                returns = self._precalculated_series.values
-                self._cumulative_returns = np.cumprod(1 + returns)
-                self._annual_volatility = minute_annual_volatility(
-                    returns.index.normalize().view('int64'),
-                    returns.values,
+                period_returns = self._precalculated_series.values
+                self._minute_cumulative_returns = np.cumprod(1 + period_returns) - 1
+                self._mminute_annual_volatility = minute_annual_volatility(
+                    period_returns.index.normalize().view('int64'),
+                    period_returns.values,
                     self._daily_returns.values)
-            self._daily_returns_array.append(
-                self._daily_returns[self._session_idx])
+                self._minute_index = -1
+                self._minute_recomputed = True
+
+            if not self._minute_recomputed:
+                self._minute_index += 1
             self._minute_end_dt = dt
 
     @abc.abstractmethod
     def _recompute_hook(self):
-        #check wether we should recompute the series.
+        # check whether we should recompute the series.
         raise NotImplementedError
 
     def daily_returns(self):
-        #todo: this array must be of the same length as ledger.daily_returns
         return np.array(self._daily_returns_array)
 
     @property
     def cumulative_returns(self):
-        return self._cumulative_returns
+        return self._cumulative_returns[self._daily_index]
 
     @property
     def annual_volatility(self):
-        return self._annual_volatility
+        return self._annual_volatility[self._daily_index]
+
+    @property
+    def minute_cumulative_returns(self):
+        return self._minute_cumulative_returns[self._minute_index]
+
+    @property
+    def minute_annual_volatility(self):
+        return self._minute_annual_volatility[self._minute_index]
 
     def get_range(self):
         series = self._precalculated_series
@@ -143,21 +174,21 @@ class BenchmarkSource(abc.ABC):
         return
 
     def _calculate_benchmark_series(self, asset, sessions, data_portal, trading_calendar, emission_rate, end_dt):
-        #FIXME: we are reloading all series at each call. We only need the previous and most recent price
+        # FIXME: we are reloading all series at each call. We only need the previous and most recent price
         # => load a window of length 2, calculate percentage change, append it to returns array
         # when we pre-calculate, we load a data window ending at the most recent close datetime, then
         # append newly computed data to it...
         # formula: (v2 - v1)/v1
 
         if emission_rate == "minute":
-            #calculate returns until most recent minute end
-            #FIXME: the last minute will be either below or equal to end_dt...
+            # calculate returns until most recent minute end
+            # FIXME: the last minute will be either below or equal to end_dt...
             # simulation expects minutes above end_dt as-well... add one day in sim?
             minutes = trading_calendar.minutes_in_range(sessions[0], end_dt)
             benchmark_series = data_portal.get_history_window(
                 [asset],
                 minutes[-1],
-                bar_count=len(minutes) + 1,
+                bar_count=len(minutes),
                 frequency="1m",
                 field="price",
                 data_frequency=emission_rate,
@@ -165,7 +196,7 @@ class BenchmarkSource(abc.ABC):
             )[asset]
 
             return (
-                benchmark_series.pct_change()[1:],
+                benchmark_series.pct_change(),
                 self.downsample_minute_return_series(trading_calendar, benchmark_series))
 
         start_date = asset.start_date
@@ -188,7 +219,9 @@ class BenchmarkSource(abc.ABC):
                 ffill=True
             )[asset]
 
-            returns = benchmark_series.pct_change()[1:]
+            # benchmark_series.to_csv('benchmark_series')
+            returns = benchmark_series.pct_change()
+            returns[0] = 0
             return returns, returns
         elif start_date == first_trading_day:
             # Attempt to handle case where stock data starts on first
@@ -219,7 +252,7 @@ class BenchmarkSource(abc.ABC):
 
             first_day_return = (first_close - first_open) / first_open
 
-            returns = benchmark_series.pct_change()[:]
+            returns = benchmark_series.pct_change()
             returns[0] = first_day_return
             return returns, returns
         else:
@@ -273,6 +306,7 @@ class BenchmarkSource(abc.ABC):
 
     def get_value(self, dt):
         return self._precalculated_series.loc[dt]
+
 
 class SimulationBenchmarkSource(BenchmarkSource):
     def _recompute_hook(self):

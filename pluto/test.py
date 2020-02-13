@@ -1,4 +1,5 @@
 from concurrent import futures
+import time
 
 import grpc
 
@@ -112,12 +113,12 @@ def setup(strategy_id, capital=50000, max_leverage=1.0, universe='test'):
 
 
 def run(capital_ratio=1.0, max_leverage=1.0):
-    start_ = pd.Timestamp('1990-01-02 00:00:00')
+    t0 = time.time()
     client.run(
         capital_ratio,
         max_leverage
     )
-
+    print('Took', time.time() - t0)
 
 def add_strategy(name):
     b = b''

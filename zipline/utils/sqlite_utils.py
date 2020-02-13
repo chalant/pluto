@@ -38,13 +38,13 @@ def verify_sqlite_path_exists(path):
 def check_and_create_connection(path, require_exists):
     if require_exists:
         verify_sqlite_path_exists(path)
-    return sqlite3.connect(path)
+    return sqlite3.connect(path,check_same_thread=False)
 
 
 def check_and_create_engine(path, require_exists):
     if require_exists:
         verify_sqlite_path_exists(path)
-    return sa.create_engine('sqlite:///' + path + '?check_same_thread=False')
+    return sa.create_engine('sqlite:///' + path)
 
 
 def coerce_string_to_conn(require_exists):
