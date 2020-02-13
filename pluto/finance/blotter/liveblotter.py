@@ -61,8 +61,9 @@ class LiveBlotter(blotter.Blotter):
             if o:
                 order = broker_data.orders[order_id]
                 transactions.append(transaction)
-                commissions.append({'asset':transaction.asset,
-                                    'cost':transaction.commission})
+                commissions.append(
+                    {'asset':transaction.asset,
+                     'cost':transaction.commission})
                 orders[order_id] = order #update the order state
                 if not order.open:
                     closed_orders.append(orders[order_id])

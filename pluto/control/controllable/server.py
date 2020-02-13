@@ -131,11 +131,12 @@ class _PerformanceWriter(object):
         pass
 
     def performance_update(self, performance):
+        with open(paths.get_file_path('performance', ROOT), 'a') as f:
+            f.write(str(performance)+'\n')
         # print(performance)
         # writer.PerformancePacketUpdate(
         #     crv.to_proto_performance_packet(
         #         controllable.session_end(dt)))
-        pass
 
 
 class ControllableService(cbl_rpc.ControllableServicer):

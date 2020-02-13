@@ -6,7 +6,9 @@ from collections import deque
 import pandas as pd
 import logbook
 
+
 from zipline.finance import trading
+from zipline.data import loader as ld
 from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 from zipline.finance import asset_restrictions
@@ -189,8 +191,7 @@ class Controllable(ABC):
         self._idle = idle = ss.Idle(self)
         self._state = idle
 
-        #todo: load calendar by adding a day to avoid index errors
-        print('START', start_dt, 'END', end_dt)
+        #load calendar by adding a day to avoid index errors
         calendar = uni.get_calendar(start_dt, end_dt + pd.Timedelta(days=1))
         self._session_id = session_id
         self._start_dt = start_dt
@@ -229,7 +230,7 @@ class Controllable(ABC):
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
 
-        #todo: equity_minute_bar_reader fix
+        #todo: equity_minute_bar_reader fix: should not instanciate the calendar
         #todo: equity_daily_reader should instanciate a calendar...
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
@@ -244,6 +245,7 @@ class Controllable(ABC):
         # todo: we need a special file for benchmark data...
         # todo: '^GSPC' should be the benchmark...
         asset = asset_finder.lookup_symbol('AAPL', end_dt)
+        # ld.load_market_data(calendar.day, sessions)
 
         # todo the benchmark creation should depend on the mode
         self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
@@ -421,6 +423,8 @@ class Controllable(ABC):
 
         new_transactions, new_commissions, closed_orders = blotter.get_transactions(current_data)
 
+        blotter.prune_orders(closed_orders)
+
         for transaction in new_transactions:
             metrics_tracker.process_transaction(transaction)
 
@@ -442,10 +446,6 @@ class Controllable(ABC):
         # in what perf period they were placed.
         for new_order in new_orders:
             metrics_tracker.process_order(new_order)
-
-        portal = self._data_portal
-        self._benchmark_source.on_minute_end(dt, portal, calendar, sessions)
-        metrics_tracker.handle_minute_close(dt, portal, calendar, sessions)
 
         # todo: non-blocking!
         # todo: PROBLEM: we might have some conflicts in state, since we could have

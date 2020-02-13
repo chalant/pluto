@@ -120,10 +120,10 @@ class StartOfPeriodLedgerField(Metric):
 
 class Returns(Metric):
     def _end_of_period(self, field, packet, ledger):
-        packet[field]['returns'] = ledger.todays_returns()
-        packet['cumulative_perf']['returns'] = ledger.portfolio.returns
-        packet['cumulative_risk_metrics']['algorithm_period_returns'] = \
-            (ledger.portfolio.returns)
+        portfolio_returns = ledger.portfolio.returns
+        packet[field]['returns'] = ledger.todays_returns(portfolio_returns)
+        packet['cumulative_perf']['returns'] = portfolio_returns
+        packet['cumulative_risk_metrics']['algorithm_period_returns'] = portfolio_returns
 
     def end_of_bar(self, **kwargs):
         return self._end_of_period('minute_perf', kwargs.pop('packet'), kwargs.pop('ledger'))
@@ -139,20 +139,19 @@ class BenchmarkReturnsAndVolatility(Metric):
     def start_of_session(self, **kwargs):
         self._current_session = kwargs.pop('dt')
 
-    def _compute_minute_cumulative_returns(self, returns):
-        return (1 + returns).cumprod() - 1
-
     def end_of_bar(self, **kwargs):
         if kwargs.pop('emission_rate') == 'minute':
             benchmark_source = kwargs.pop('benchmark_source')
             packet = kwargs.pop('packet')
 
-            r = benchmark_source.cumulative_returns[-1]
+            r = benchmark_source.minute_cumulative_returns
+
+
             if np.isnan(r):
                 r = None
             packet['cumulative_risk_metrics']['benchmark_period_return'] = r
 
-            v = benchmark_source.annual_volatility[-1]
+            v = benchmark_source.minute_annual_volatility
             if np.isnan(v):
                 v = None
             packet['cumulative_risk_metrics']['benchmark_volatility'] = v
@@ -161,12 +160,14 @@ class BenchmarkReturnsAndVolatility(Metric):
         packet = kwargs.pop('packet')
 
         benchmark_source = kwargs.pop('benchmark_source')
-        r = benchmark_source.cumulative_returns[-1]
+        r = benchmark_source.cumulative_returns
+
         if np.isnan(r):
             r = None
         packet['cumulative_risk_metrics']['benchmark_period_return'] = r
 
-        v = benchmark_source.annual_volatility[-1]
+        v = benchmark_source.annual_volatility
+
         if np.isnan(v):
             v = None
         packet['cumulative_risk_metrics']['benchmark_volatility'] = v
@@ -271,6 +272,7 @@ class AlphaBeta(Metric):
 
     def end_of_bar(self, **kwargs):
         risk = kwargs.pop('packet')['cumulative_risk_metrics']
+
         alpha, beta = ep.alpha_beta_aligned(
             kwargs.pop('ledger').daily_returns,
             kwargs.pop('benchmark_source').daily_returns())

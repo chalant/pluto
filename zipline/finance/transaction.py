@@ -22,16 +22,13 @@ from zipline.utils.input_validation import expect_types
 
 
 class Transaction(object):
-    __slots__ = ['asset','amount','dt','price','order_id','commission','type']
-
     @expect_types(asset=Asset)
-    def __init__(self, asset, amount, dt, price, order_id, commission):
+    def __init__(self, asset, amount, dt, price, order_id):
         self.asset = asset
         self.amount = amount
         self.dt = dt
         self.price = price
         self.order_id = order_id
-        self.commission = commission
         self.type = DATASOURCE_TYPE.TRANSACTION
 
     def __getitem__(self, name):

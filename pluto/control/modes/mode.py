@@ -73,7 +73,7 @@ class ControlMode(abc.ABC):
         for p in self._to_update:
             param = params[p]
             capital = broker.compute_capital(param.capital_ratio)
-            max_leverage = broker.adjust_leverage(param.max_leverage)
+            max_leverage = broker.adjust_max_leverage(param.max_leverage)
             params = controller_pb2.RunParams(
                 session_id=p,
                 capital=capital,

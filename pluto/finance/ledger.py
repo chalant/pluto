@@ -53,6 +53,9 @@ class LiveLedger(object):
 
         self._last_checkpoint = None
 
+        self._previous_total_returns = 0
+        self._ptr = 0
+
     @property
     def position_tracker(self):
         return self._position_tracker
@@ -79,6 +82,7 @@ class LiveLedger(object):
 
     @property
     def daily_returns(self):
+
         return np.array(self.daily_returns_array)
 
     @property
@@ -453,34 +457,41 @@ class LiveLedger(object):
             )
         return total
 
-    def todays_returns(self):
-        return ((self._portfolio.returns + 1) /
-                (self._previous_total_returns + 1) -
-                1)
+    def todays_returns(self, returns):
+        return ((returns + 1) /
+                (self._ptr + 1) - 1)
+
 
     def start_of_session(self, session_label):
-        self._previous_total_returns = self._portfolio.returns
 
         # remove the earliest return each start of session if any
         # in live, every x time, (days between end_dt and start_dt), we pop the left-most element
         # this will never happen in simulation mode, so it is safe for both to share the same
         # implementation.
 
+        #TODO: watch out for this
+        self._processed_transactions.clear()
+        self._orders_by_modified.clear()
+        self._orders_by_id.clear()
+
+        self._ptr = self._previous_total_returns
         self._session_count += 1
 
     def end_of_bar(self):
         if self._data_frequency == 'minute':
-            self.daily_returns_array.append(self.todays_returns())
+            self.daily_returns_array.append(self.todays_returns(self.portfolio.returns))
 
     def end_of_session(self, sessions):
         returns = self.daily_returns_array
+        portfolio_returns = self.portfolio.returns
         if self._data_frequency == 'daily':
             # todo: only pop when in live ?
             if self._session_count == self._look_back:
                 returns.popleft()
                 self._session_count = 0
-            returns.append(self.todays_returns())
+            returns.append(self.todays_returns(portfolio_returns))
 
+        self._previous_total_returns = portfolio_returns
         self._sessions = sessions
 
     # called by the algorithm object
@@ -516,7 +527,6 @@ class LiveLedger(object):
             ]
 
         return self._processed_transactions.get(dt, [])
-
 
     def get_state(self, dt):
         state = acc.LedgerState(
