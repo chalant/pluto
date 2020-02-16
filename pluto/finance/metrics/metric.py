@@ -161,7 +161,6 @@ class BenchmarkReturnsAndVolatility(Metric):
 
         benchmark_source = kwargs.pop('benchmark_source')
         r = benchmark_source.cumulative_returns
-
         if np.isnan(r):
             r = None
         packet['cumulative_risk_metrics']['benchmark_period_return'] = r

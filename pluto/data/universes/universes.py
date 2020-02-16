@@ -110,6 +110,7 @@ class Universe(AbstractUniverse):
             proto = calendar_pb2.Calendar()
             proto.ParseFromString(f.read())
 
+
         return cu.from_proto_calendar(proto, start, end)
 
     @property

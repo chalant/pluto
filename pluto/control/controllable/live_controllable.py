@@ -13,8 +13,8 @@ class LiveControllable(controllable.Controllable):
         self._last_session_update = None
 
     def _get_algorithm_class(self,
+                             controllable,
                              params,
-                             data_portal,
                              blotter,
                              metrics_tracker,
                              get_pipeline_loader,
@@ -28,8 +28,8 @@ class LiveControllable(controllable.Controllable):
         pluto.algorithm.TradingAlgorithm
         '''
         return algorithm.LiveTradingAlgorithm(
+            controllable,
             params,
-            data_portal,
             blotter,
             metrics_tracker,
             get_pipeline_loader,

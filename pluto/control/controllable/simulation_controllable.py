@@ -8,8 +8,8 @@ class SimulationControllable(controllable.Controllable):
         super(SimulationControllable, self).__init__()
 
     def _get_algorithm_class(self,
+                             controllable,
                              params,
-                             data_portal,
                              blotter,
                              metrics_tracker,
                              get_pipeline_loader,
@@ -23,8 +23,8 @@ class SimulationControllable(controllable.Controllable):
         pluto.algorithm.TradingAlgorithm
         '''
         return algorithm.TradingAlgorithm(
+            controllable,
             params,
-            data_portal,
             blotter,
             metrics_tracker,
             get_pipeline_loader,
