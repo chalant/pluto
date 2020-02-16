@@ -6,9 +6,7 @@ from collections import deque
 import pandas as pd
 import logbook
 
-
 from zipline.finance import trading
-from zipline.data import loader as ld
 from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 from zipline.finance import asset_restrictions
@@ -23,6 +21,7 @@ from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
 from pluto.data import bundler
 from pluto.data.universes import universes
+from pluto.data import benchmark
 
 from protos import controllable_pb2
 
@@ -82,6 +81,8 @@ class Controllable(ABC):
         self._calendar = None
         self._universe = None
         self._calendars = None
+        self._benchmark = None
+        self._benchmark_source = None
 
         self._sessions = pd.Series()
         self._sessions_array = deque()
@@ -153,6 +154,18 @@ class Controllable(ABC):
     def ready(self):
         return self._ready
 
+    @property
+    def data_portal(self):
+        return self._data_portal
+
+    @property
+    def trading_calendar(self):
+        return self._calendar
+
+    @property
+    def asset_finder(self):
+        return self._asset_finder
+
     def initialize(self,
                    session_id,
                    start_dt,
@@ -168,6 +181,7 @@ class Controllable(ABC):
 
         Parameters
         ----------
+        session_id: str
         start_dt: pandas.Timestamp
         end_dt: pandas.Timestamp
         universe: str
@@ -182,7 +196,7 @@ class Controllable(ABC):
 
         self._last_sync_time = start_dt
         uni = universes.get_universe(universe)
-        self._calendars = {cal:cal for cal in uni.calendars}
+        self._calendars = {cal: cal for cal in uni.calendars}
 
         self._out_session = ss.OutSession(self)
         self._active = ss.Active(self)
@@ -191,7 +205,8 @@ class Controllable(ABC):
         self._idle = idle = ss.Idle(self)
         self._state = idle
 
-        #load calendar by adding a day to avoid index errors
+        # FIXME: add one day to end_dt?
+        # load calendar by adding a day to avoid index errors
         calendar = uni.get_calendar(start_dt, end_dt + pd.Timedelta(days=1))
         self._session_id = session_id
         self._start_dt = start_dt
@@ -201,6 +216,7 @@ class Controllable(ABC):
         self._universe = uni
         self._look_back = look_back
         self._data_frequency = data_frequency
+
         if data_frequency == 'minute':
             self._emission_rate = 'minute'
 
@@ -217,6 +233,7 @@ class Controllable(ABC):
             end_dt,
             calendar,
             capital,
+            emission_rate=data_frequency,
             data_frequency=data_frequency,
             arena=arena)
 
@@ -226,46 +243,39 @@ class Controllable(ABC):
         # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
         loader = bundler.get_bundle_loader(uni.platform)
-        bundle = loader(uni.bundle_name)
+        self._bundle = bundle = loader(uni.bundle_name)
         self._asset_finder = asset_finder = bundle.asset_finder
         first_trading_day = bundle.equity_daily_bar_reader.first_trading_day
 
-        #todo: equity_minute_bar_reader fix: should not instanciate the calendar
-        #todo: equity_daily_reader should instanciate a calendar...
+        # todo: equity_minute_bar_reader fix: should not instanciate the calendar
+        # todo: equity_daily_reader should instanciate a calendar...
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
             first_trading_day=first_trading_day,
-            # equity_minute_reader=bundle.equity_minute_bar_reader,
+            equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader)
 
-        # load s&p 500 index as benchmark_asset.
-        # todo: we can't load the benchmark data like this for now...
-        # todo: we need a special file for benchmark data...
-        # todo: '^GSPC' should be the benchmark...
-        asset = asset_finder.lookup_symbol('AAPL', end_dt)
-        # ld.load_market_data(calendar.day, sessions)
-
-        # todo the benchmark creation should depend on the mode
+        # todo: create benchmark source instance based on the run mode.
+        # (simulation benchmark, live benchmark)
         self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
-            asset,
             calendar,
             sessions,
-            self._data_portal,
+            benchmark.Benchmark('^GSPC'),
             self._look_back,
             self._emission_rate)
 
-        self._metrics_tracker = metrics_tracker = \
-            tracker.MetricsTracker(
-                benchmark_source,
-                capital,
-                data_frequency,
-                start_dt,
-                look_back)
+        self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(
+            benchmark_source,
+            capital,
+            data_frequency,
+            start_dt,
+            look_back)
+
         self._blotter = blotter = self._create_blotter()
 
-        restrictions = asset_restrictions.NoRestrictions()
+        self._restrictions = restrictions = asset_restrictions.NoRestrictions()
 
         self._current_data = self._create_bar_data(
             data_portal,
@@ -299,8 +309,8 @@ class Controllable(ABC):
         # todo: the algo should call the data portal of the controllable, since it might be
         # re-assigned
         self._algo = algo = self._get_algorithm_class(
+            self,
             params,
-            data_portal,
             blotter,
             metrics_tracker,
             choose_loader,
@@ -318,8 +328,8 @@ class Controllable(ABC):
 
     @abstractmethod
     def _get_algorithm_class(self,
+                             controllable,
                              params,
-                             data_portal,
                              blotter,
                              metrics_tracker,
                              get_pipeline_loader,
@@ -348,24 +358,55 @@ class Controllable(ABC):
         end_dt = self._end_dt
         if dt > end_dt:
             # reload a new calendar
-            self._start_dt = start_dt = dt - pd.Timedelta(days=self._look_back)
+            start_dt = dt - pd.Timedelta(days=self._look_back)
             self._end_dt = dt
-            #todo: all the objects that depend on the calendar won't get this new value...
-            #todo: add a day to dt
-            #todo: reset all the instances that depend on the calendar:
+            # todo: all the objects that depend on the calendar won't get this new value...
+            # todo: add a day to dt
+            # todo: reset all the instances that depend on the calendar:
             # -SimulationParameters <==== Reload entirely
             # -DataPortal <=== We need to reload this entirely
 
-            self._calendar = self._universe.get_calendar(start_dt, dt)
-            # updates the sessions (live)
-            #FIXME: review this
-            params = self._params
+            self._calendar = calendar = self._universe.get_calendar(start_dt, dt)
+            self._start_dt = fs = calendar.first_session
+            look_back = calendar.last_session - fs
+
             sessions = self._sessions_array
+            # reload calendar if it is not the full look-back period
+            if look_back < self._look_back:
+                self._end_dt = end = fs + pd.Timedelta(days=150)
+                self._calendar = calendar = self._universe.get_calendar(fs, end)
+                dt = end
             sessions.popleft()
             sessions.append(dt)
-            params.start_session = sessions[0]
-            params.end_session = dt
-            self._sessions = pd.Series(sessions)
+
+            # updates the sessions (live)
+            params = self._params
+            self._params = trading.SimulationParameters(
+                fs,
+                dt,
+                calendar,
+                params.capital_base,
+                params.emission_rate,
+                params.data_frequency,
+                params.arena
+            )
+
+            bundle = self._bundle
+
+            self._data_portal = data_portal = dp.DataPortal(
+                asset_finder=self._asset_finder,
+                trading_calendar=calendar,
+                first_trading_day=fs,
+                equity_minute_reader=bundle.equity_minute_bar_reader,
+                equity_daily_reader=bundle.equity_daily_bar_reader,
+                adjustment_reader=bundle.adjustment_reader
+            )
+
+            self._current_data = self._create_bar_data(
+                data_portal,
+                calendar,
+                self._restrictions,
+                params.data_frequency)
 
         self._sync_last_sale_prices(dt)
         self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
@@ -411,9 +452,6 @@ class Controllable(ABC):
         algo = self._algo
         algo.on_dt_changed(dt)
         blotter = self._blotter
-
-        calendar = self._calendar
-        sessions = self._sessions
 
         capital_changes = self._calculate_minute_capital_changes(dt, self._emission_rate)
 
