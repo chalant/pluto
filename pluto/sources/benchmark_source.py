@@ -191,14 +191,14 @@ class BenchmarkSource(abc.ABC):
         # last trading day of the simulation, going up to one day
         # before the simulation start day (so that we can get the %
         # change on day 1)
-        #todo start from prior session to get an initial return
+        prev = trading_calendar.previous_session_label(sessions[0])
         benchmark_series = benchmark.get_history_window(
-            sessions[0],
+            prev,
             sessions[-1],
             frequency="1d")
 
-        returns = benchmark_series.pct_change()
-        returns[0] = 0
+        #todo: handle case where there is no data for the starting session
+        returns = benchmark_series.pct_change()[1:]
         return returns, returns
 
     # def _validate_benchmark(self, benchmark_asset, sessions, data_portal):

@@ -5,10 +5,6 @@ import numpy as np
 from zipline.assets import Future
 from zipline.finance import ledger
 from zipline import protocol
-from zipline.finance._finance_ext import (
-    calculate_position_tracker_stats,
-    PositionStats
-)
 
 from pluto.coms.utils import conversions as cv
 
@@ -22,7 +18,6 @@ class LiveLedger(object):
         # metric only uses array
         self.daily_returns_array = collections.deque()
 
-        self._stats = PositionStats.new()
         self._positions = None
 
         self._immutable_account = account = protocol.Account()
@@ -31,7 +26,7 @@ class LiveLedger(object):
         # an immutable portfolio is necessary to prevent the user from overriding values
         self._immutable_portfolio = ip = protocol.Portfolio(
             start_date,
-            capital_base=capital)
+            capital)
 
         self._portfolio = protocol.MutableView(ip)
 
@@ -54,7 +49,6 @@ class LiveLedger(object):
         self._last_checkpoint = None
 
         self._previous_total_returns = 0
-        self._ptr = 0
 
     @property
     def position_tracker(self):
@@ -82,7 +76,6 @@ class LiveLedger(object):
 
     @property
     def daily_returns(self):
-
         return np.array(self.daily_returns_array)
 
     @property
@@ -459,8 +452,7 @@ class LiveLedger(object):
 
     def todays_returns(self, returns):
         return ((returns + 1) /
-                (self._ptr + 1) - 1)
-
+                (self._previous_total_returns + 1) - 1)
 
     def start_of_session(self, session_label):
 
@@ -469,13 +461,14 @@ class LiveLedger(object):
         # this will never happen in simulation mode, so it is safe for both to share the same
         # implementation.
 
-        #TODO: watch out for this
+        # TODO: watch out for this
         self._processed_transactions.clear()
         self._orders_by_modified.clear()
         self._orders_by_id.clear()
 
-        self._ptr = self._previous_total_returns
+        # self._ptr = self._previous_total_returns
         self._session_count += 1
+        self._previous_total_returns = self.portfolio.returns
 
     def end_of_bar(self):
         if self._data_frequency == 'minute':
@@ -484,14 +477,14 @@ class LiveLedger(object):
     def end_of_session(self, sessions):
         returns = self.daily_returns_array
         portfolio_returns = self.portfolio.returns
-        if self._data_frequency == 'daily':
-            # todo: only pop when in live ?
-            if self._session_count == self._look_back:
-                returns.popleft()
-                self._session_count = 0
-            returns.append(self.todays_returns(portfolio_returns))
+        # if self._data_frequency == 'daily':
+        # todo: only pop when in live ?
+        if self._session_count == self._look_back:
+            returns.popleft()
+            self._session_count = 0
+        returns.append(self.todays_returns(portfolio_returns))
 
-        self._previous_total_returns = portfolio_returns
+        # self._previous_total_returns = portfolio_returns
         self._sessions = sessions
 
     # called by the algorithm object

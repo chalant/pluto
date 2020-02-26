@@ -1,9 +1,5 @@
-from collections import deque
-
-from pandas import DatetimeIndex
-
 from pluto.control.controllable import controllable
-from pluto.finance.blotter import liveblotter
+from pluto.finance import liveblotter
 from pluto import algorithm
 
 class LiveControllable(controllable.Controllable):
@@ -17,7 +13,7 @@ class LiveControllable(controllable.Controllable):
                              params,
                              blotter,
                              metrics_tracker,
-                             get_pipeline_loader,
+                             pipeline_loader,
                              initialize,
                              before_trading_start,
                              handle_data,
@@ -32,7 +28,7 @@ class LiveControllable(controllable.Controllable):
             params,
             blotter,
             metrics_tracker,
-            get_pipeline_loader,
+            pipeline_loader,
             initialize,
             before_trading_start,
             handle_data,

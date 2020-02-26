@@ -1,8 +1,8 @@
 from zipline.data import (
     adjustments,
     hdf5_daily_bars)
-from zipline.assets import assets
 
+from pluto.assets import assets
 from pluto.data.io import daily_bars
 from pluto.data.io import paths
 

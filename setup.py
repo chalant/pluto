@@ -354,7 +354,7 @@ conditional_arguments = {
 }
 
 setup(
-    name='zipline-lib',
+    name='pluto',
     url="https://github.com/chalant/zipline-core",
     version=versioneer.get_version(),
     cmdclass=LazyBuildExtCommandClass(versioneer.get_cmdclass()),
@@ -365,7 +365,7 @@ setup(
         ],
     },
     author='chalant',
-    packages=find_packages(include=['contrib','contrib.*','zipline', 'zipline.*']),
+    packages=find_packages(include=['pluto','pluto.*','zipline', 'zipline.*']),
     ext_modules=ext_modules,
     include_package_data=True,
     license='Apache 2.0',

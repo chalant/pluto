@@ -89,6 +89,7 @@ class EquityPricingLoader(implements(PipelineLoader)):
             sids,
         )
 
+        # print(raw_arrays)
         # Currency convert raw_arrays in place if necessary. We use shifted
         # dates to load currency conversion rates to make them line up with
         # dates used to fetch prices.

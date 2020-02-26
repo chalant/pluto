@@ -544,13 +544,13 @@ class BcolzDailyBarReader(SessionBarReader):
 			return DatetimeIndex(self._table.attrs['calendar'], tz='UTC')
 		else:
 			cal = get_calendar(self._table.attrs['calendar_name'])
-			start_session_ns = self._table.attrs['start_session_ns']
-			start_session = Timestamp(start_session_ns, tz='UTC')
+			# start_session_ns = self._table.attrs['start_session_ns']
+			# start_session = Timestamp(start_session_ns, tz='UTC')
+			#
+			# end_session_ns = self._table.attrs['end_session_ns']
+			# end_session = Timestamp(end_session_ns, tz='UTC')
 
-			end_session_ns = self._table.attrs['end_session_ns']
-			end_session = Timestamp(end_session_ns, tz='UTC')
-
-			sessions = cal.sessions_in_range(start_session, end_session)
+			sessions = cal.all_sessions
 
 			return sessions
 
@@ -655,6 +655,8 @@ class BcolzDailyBarReader(SessionBarReader):
 			assets,
 		)
 		read_all = len(assets) > self._read_all_threshold
+
+		print(columns, start_date, end_date, assets)
 		return _read_bcolz_data(
 			self._table,
 			(end_idx - start_idx + 1, len(assets)),

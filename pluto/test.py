@@ -100,12 +100,14 @@ client = Client(env)
 
 
 def setup(strategy_id, capital=50000, max_leverage=1.0, universe='test'):
-    start_ = pd.Timestamp('1990-01-02 00:00:00')
+    start_ = pd.Timestamp('2013-10-07', tz='utc')
+    end = start_ + pd.Timedelta(days=150)
+
     display(
         client.setup(
             strategy_id,
             start_,
-            start_ + pd.Timedelta(days=2000),
+            end,
             capital, max_leverage,
             universe,
             'daily',

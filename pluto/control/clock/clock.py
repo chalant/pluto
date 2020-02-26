@@ -42,10 +42,13 @@ class Clock(object):
         # todo: we should consider reloading when there is a calendar update...
         # todo: should we catch a stop iteration?
         ts, evt = self._nxt_dt, self._nxt_evt
-
+        exchange = self._exchange
         if dt >= ts:
-            self._nxt_dt, self._nxt_evt = self._next_(dt)
-            return ts, evt, self._exchange
+            try:
+                self._nxt_dt, self._nxt_evt = self._next_(dt)
+                return ts, evt, exchange
+            except StopExecution:
+                return ts, evt, exchange
         else:
             # don't call next
             # clock is in advance, so will return nothing until it is in-sync

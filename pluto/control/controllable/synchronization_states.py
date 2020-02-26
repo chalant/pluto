@@ -37,26 +37,29 @@ class Trading(State):
 
     def _aggregate(self, controllable, ts, evt, signals):
         calendars = controllable.calendars
-        active = []
+        target = []
         for signal in signals:
             exchange = signal.exchange
             c_evt = signal.event
-            if exchange in calendars:
+            if calendars.get(exchange):
                 if c_evt == SESSION_END:
                     self._session_end += 1
                     if self._session_end == self._num_exchanges:
                         self._session_end = 0
                         controllable.state = controllable.out_session
-                        return signal.timestamp, SESSION_END, []
+                        target.append((c_evt, exchange))
+                        ts = signal.timestamp
+                        # return signal.timestamp, SESSION_END, []
                 elif c_evt == BAR or c_evt == TRADE_END:
                     ts = signal.timestamp
-                    active.append((c_evt, exchange))
-        if active:
-            return ts, evt, active
+                    target.append((c_evt, exchange))
+        if target:
+            return ts, evt, target
         else:
             return
 
 class InSession(State):
+    #waits for the first session start event
     @property
     def name(self):
         return 'in_session'
@@ -81,6 +84,7 @@ class InSession(State):
             return
 
 class Active(State):
+    #waits for the first bfs event
     @property
     def name(self):
         return 'active'
@@ -103,6 +107,8 @@ class Active(State):
             return
 
 class OutSession(State):
+    #waits for the first session start event, or moves to in session state if no session start event
+    # occurs
     @property
     def name(self):
         return 'out_session'

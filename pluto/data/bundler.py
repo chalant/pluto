@@ -1,5 +1,7 @@
 from functools import partial
 
+import os
+
 from zipline.data import bundles
 
 from pluto.data.io import paths
@@ -34,10 +36,7 @@ class Bundle(object):
 
 
 def get_bundle_loader(platform):
-    '''creates a bundle object from the specified format'''
-
     if platform != 'pluto':
-        #returns the zipline bundle load function
         return bundles.load
     else:
         def load(bundle_name='pluto'):

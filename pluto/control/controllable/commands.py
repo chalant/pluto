@@ -87,7 +87,7 @@ class ClockUpdate(Command):
                 # todo: we need to identify the controllable (needs an id)
                 # send performance packet to controller.
                 # todo: write the performance in a file (don't sent it back to the controller)
-
+                # or send back performance and write to file
                 writer.performance_update(controllable.session_end(dt))
 
             elif e == MINUTE_END:
@@ -102,6 +102,11 @@ class ClockUpdate(Command):
                     # note: in daily mode, this can still be called more than once (if it is
                     # a different exchange)
                     controllable.bar(dt)
+
+                # todo: non-blocking!
+                # todo: PROBLEM: we might have some conflicts in state, since we could have
+                # multiple controllables with the same session_id running in different
+                # modes...
+                # todo: store state
                 # todo: store the controllable state
-                # state = controllable.get_state()
                 self._state_store.store(dt, controllable)

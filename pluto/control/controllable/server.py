@@ -48,6 +48,11 @@ class _StateStorage(object):
         self._storage_path = storage_path
 
     def store(self, dt, controllable):
+        # todo: non-blocking!
+        # todo: PROBLEM: we might have some conflicts in state, since we could have
+        # multiple controllables with the same session_id running in different
+        # modes...
+
         with open(self._storage_path, 'wb') as f:
             f.write(controllable.get_state(dt))
 
@@ -131,8 +136,9 @@ class _PerformanceWriter(object):
         pass
 
     def performance_update(self, performance):
+        print(performance['cumulative_perf']['period_close'])
         with open(paths.get_file_path('performance', ROOT), 'a') as f:
-            f.write(str(performance)+'\n')
+            f.write(str(performance['cumulative_risk_metrics'])+'\n')
         # print(performance)
         # writer.PerformancePacketUpdate(
         #     crv.to_proto_performance_packet(
@@ -321,6 +327,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         from the queue...
         '''
         # NOTE: use FixedBasisPointsSlippage for slippage simulation.
+
         self._queue.put(
             commands.ClockUpdate(
                 self._perf_writer,
