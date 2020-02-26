@@ -367,7 +367,7 @@ _cache = {}
 def resolve_alias(name):
     return global_calendar_dispatcher.resolve_alias(name)
 
-def get_calendar_in_range(name, start_dt, end_dt=None):
+def get_calendar_in_range(name, start_dt, end_dt=None, cache=False):
     """
 
     Parameters
@@ -380,6 +380,7 @@ def get_calendar_in_range(name, start_dt, end_dt=None):
     -------
     trading_calendars.TradingCalendar
     """
+
     dis = global_calendar_dispatcher
     try:
         factory = dis._calendar_factories[name]
@@ -389,11 +390,17 @@ def get_calendar_in_range(name, start_dt, end_dt=None):
     if end_dt is None:
         end_dt = start_dt + pd.Timedelta(days=10)
     cal = wr.OpenOffsetFix(start_dt, end_dt, factory)
-    _cache[name] = cal
+    if cache:
+        #cache the latest instance
+        _cache[name] = cal
     return cal
 
 def get_calendar(name):
-    return _cache[name]
+    try:
+        cal = _cache[name]
+        return cal
+    except KeyError:
+        raise RuntimeError("Calendar instance doesn't exist.")
 
 class TradingCalendar(tc.TradingCalendar):
     #todo: instead of calling init, we should call __new__
@@ -489,9 +496,10 @@ class TradingCalendar(tc.TradingCalendar):
               for t in sp.dates])
             for sp in self._proto_calendar.special_closes_adhoc]
 
-def from_proto_calendar(proto_calendar, start, end=None):
+def from_proto_calendar(proto_calendar, start, end=None, cache=False):
     if end is None:
         end = start + pd.Timedelta(days=365)
+    #todo: cache the calendar
     return TradingCalendar(start, end, proto_calendar)
 
 def to_proto_calendar(calendar):

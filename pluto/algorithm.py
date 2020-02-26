@@ -1,18 +1,33 @@
 import logbook
+import warnings
 
+import numpy as np
 import pandas as pd
 
 from zipline import algorithm
 from zipline.utils import events
 from zipline.utils import cache
-from zipline.utils.pandas_utils import clear_dataframe_indexer_caches
+from zipline.utils.pandas_utils import (
+    clear_dataframe_indexer_caches,
+    normalize_date
+)
+
+from zipline.utils.math_utils import (
+    tolerant_equals,
+)
+
+from zipline.errors import (
+    CannotOrderDelistedAsset
+)
 
 from zipline.pipeline.engine import (
     ExplodingPipelineEngine,
-    SimplePipelineEngine)
+    SimplePipelineEngine
+)
 
 from zipline.utils.api_support import (
-    api_method)
+    api_method,
+)
 
 from zipline.utils.preprocess import preprocess
 from zipline.utils.input_validation import (
@@ -21,13 +36,14 @@ from zipline.utils.input_validation import (
 
 log = logbook.Logger("TradingAlgorithm")
 
+#TODO: we need to store the algorithm state as-well=> store its dictionary variable etc.
 class TradingAlgorithm(algorithm.TradingAlgorithm):
     def __init__(self,
                  controllable,
                  sim_params,
                  blotter,
                  metrics_tracker,
-                 get_pipeline_loader,
+                 pipeline_loader,
                  initialize,
                  handle_data,
                  before_trading_start,
@@ -49,7 +65,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         self.sim_params = sim_params
         self._last_sync_time = pd.NaT
 
-        self.init_engine(get_pipeline_loader)
+        self.init_engine(pipeline_loader)
         self._pipelines = {}
 
         # Create an already-expired cache so that we compute the first time
@@ -86,10 +102,12 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
     @property
     def account(self):
+        self._controllable.sync_last_sale_prices()
         return self._metrics_tracker.account
 
     @property
     def portfolio(self):
+        self._controllable.sync_last_sale_prices()
         return self._metrics_tracker.portfolio
 
     def initialize(self, *args, **kwargs):
@@ -107,7 +125,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
     def get_generator(self):
         return
 
-    def init_engine(self, get_loader):
+    def init_engine(self, pipeline_loader):
         """
         Construct and store a PipelineEngine from loader.
 
@@ -116,14 +134,44 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
         controllable = self._controllable
 
-        if get_loader is not None:
+        loader = pipeline_loader
+
+        if loader is not None:
             self.engine = SimplePipelineEngine(
-                get_loader,
-                controllable.asset_finder,
-                self.default_pipeline_domain(controllable.trading_calendar),
+                loader,
+                controllable,
+                controllable.domain
             )
         else:
             self.engine = ExplodingPipelineEngine()
+
+    @api_method
+    def schedule_function(self,
+                          func,
+                          date_rule=None,
+                          time_rule=None,
+                          half_days=True,
+                          calendar=None):
+
+        # When the user calls schedule_function(func, <time_rule>), assume that
+        # the user meant to specify a time rule but no date rule, instead of
+        # a date rule and no time rule as the signature suggests
+        if isinstance(date_rule, (events.AfterOpen, events.BeforeClose)) and not time_rule:
+            warnings.warn('Got a time rule for the second positional argument '
+                          'date_rule. You should use keyword argument '
+                          'time_rule= when calling schedule_function without '
+                          'specifying a date_rule', stacklevel=3)
+
+        date_rule = date_rule or events.date_rules.every_day()
+        time_rule = ((time_rule or events.time_rules.every_minute())
+                     if self.sim_params.data_frequency == 'minute' else
+                     # If we are in daily mode the time_rule is ignored.
+                     events.time_rules.every_minute())
+
+        cal = self._controllable.trading_calendar
+        self.add_event(
+            events.make_eventrule(date_rule, time_rule, cal, half_days),
+            func)
 
     def get_history_window(self, bar_count, frequency, assets, field, ffill):
         controllable = self._controllable
@@ -291,6 +339,82 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         """
         return self._controllable.asset_finder.lookup_future_symbol(symbol)
 
+    def _calculate_order_value_amount(self, asset, value):
+        """
+                Calculates how many shares/contracts to order based on the type of
+                asset being ordered.
+                """
+        # Make sure the asset exists, and that there is a last price for it.
+        # FIXME: we should use BarData's can_trade logic here, but I haven't
+        # yet found a good way to do that.
+
+        dt = self.datetime
+        normalized_date = normalize_date(dt)
+
+        if normalized_date < asset.start_date:
+            raise CannotOrderDelistedAsset(
+                msg="Cannot order {0}, as it started trading on"
+                    " {1}.".format(asset.symbol, asset.start_date)
+            )
+        elif normalized_date > asset.end_date:
+            raise CannotOrderDelistedAsset(
+                msg="Cannot order {0}, as it stopped trading on"
+                    " {1}.".format(asset.symbol, asset.end_date)
+            )
+        else:
+            last_price = \
+                self._controllable.current_data.current(asset, "price")
+
+            if np.isnan(last_price):
+                raise CannotOrderDelistedAsset(
+                    msg="Cannot order {0} on {1} as there is no last "
+                        "price for the security.".format(
+                        asset.symbol,
+                        dt
+                    )
+                )
+
+        if tolerant_equals(last_price, 0):
+            zero_message = "Price of 0 for {psid}; can't infer value".format(
+                psid=asset
+            )
+            if self.logger:
+                self.logger.debug(zero_message)
+            # Don't place any order
+            return 0
+
+        value_multiplier = asset.price_multiplier
+
+        return value / (last_price * value_multiplier)
+
+
+    def run_pipeline(self, pipeline, start_session, chunksize):
+        sessions = self._controllable.trading_calendar.all_sessions
+
+        # Load data starting from the previous trading day...
+        start_date_loc = sessions.get_loc(start_session)
+
+        # ...continuing until either the day before the simulation end, or
+        # until chunksize days of data have been loaded.
+        sim_end_session = self._controllable.run_params.end_session
+
+        end_loc = min(
+            start_date_loc + chunksize,
+            sessions.get_loc(sim_end_session)
+        )
+
+        end_session = sessions[end_loc]
+
+        return (
+            self.engine.run_pipeline(
+                pipeline,
+                start_session,
+                end_session
+            ),
+            end_session
+        )
+
+
 class LiveTradingAlgorithm(TradingAlgorithm):
     def run_pipeline(self, pipeline, end_session, chunksize):
         """
@@ -315,7 +439,7 @@ class LiveTradingAlgorithm(TradingAlgorithm):
         # Load data until the day before end session...
         end_date_loc = sessions.get_loc(end_session)
 
-        #todo: chunk size = end_dt - start_dt
+        # todo: chunk size = end_dt - start_dt
         start_loc = end_date_loc - chunksize
 
         start_session = sessions[start_loc]

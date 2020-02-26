@@ -208,6 +208,7 @@ class MetricsTracker(object):
 
         for metric in self._metrics:
             metric.end_of_session(
+                dt=dt,
                 packet=packet,
                 ledger=ledger,
                 benchmark_source=benchmark_source,

@@ -30,6 +30,8 @@ from zipline.utils.input_validation import expect_types, optional
 from zipline.utils.memoize import lazyval
 from zipline.utils.pandas_utils import days_at_time
 
+from pluto.trading_calendars import calendar_utils
+
 
 class IDomain(Interface):
     """Domain interface.
@@ -188,7 +190,7 @@ class EquityCalendarDomain(Domain):
 
     @lazyval
     def calendar(self):
-        return get_calendar(self.calendar_name)
+        return calendar_utils.get_calendar(self.calendar_name)
 
     def all_sessions(self):
         return self.calendar.all_sessions

@@ -467,16 +467,15 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
             # backwards compatibility with old formats, will remove
             return DatetimeIndex(self._table.attrs['calendar'], tz='UTC')
         else:
-            cal = calendar_utils.get_calendar(self._table.attrs['calendar_name'])
-            start_session_ns = self._table.attrs['start_session_ns']
-            start_session = Timestamp(start_session_ns, tz='UTC')
-
-            end_session_ns = self._table.attrs['end_session_ns']
-            end_session = Timestamp(end_session_ns, tz='UTC')
-
-            sessions = cal.sessions_in_range(start_session, end_session)
-
-            return sessions
+            cal = calendar_utils.get_calendar_in_range(
+                self._table.attrs['calendar_name'],
+                Timestamp(
+                    self._table.attrs['start_session_ns'],
+                    tz='UTC'),
+                Timestamp(
+                    self._table.attrs['end_session_ns'],
+                    tz='UTC'))
+            return cal.all_sessions
 
     @lazyval
     def _first_rows(self):
@@ -706,5 +705,14 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
             return price
 
     def currency_codes(self, sids):
-        # TODO: Better handling for this.
-        return np.full(len(sids), b'USD', dtype='S3')
+        # XXX: This is pretty inefficient. This reader doesn't really support
+        # country codes, so we always either return USD or None if we don't
+        # know about the sid at all.
+        first_rows = self._first_rows
+        out = []
+        for sid in sids:
+            if sid in first_rows:
+                out.append('USD')
+            else:
+                out.append(None)
+        return np.array(out, dtype=object)

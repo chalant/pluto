@@ -12,7 +12,7 @@ class SimulationControllable(controllable.Controllable):
                              params,
                              blotter,
                              metrics_tracker,
-                             get_pipeline_loader,
+                             pipeline_loader,
                              initialize,
                              before_trading_start,
                              handle_data,
@@ -27,10 +27,10 @@ class SimulationControllable(controllable.Controllable):
             params,
             blotter,
             metrics_tracker,
-            get_pipeline_loader,
+            pipeline_loader,
             initialize,
-            before_trading_start,
             handle_data,
+            before_trading_start,
             analyze
         )
 

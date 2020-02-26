@@ -272,9 +272,12 @@ class AlphaBeta(Metric):
     def end_of_bar(self, **kwargs):
         risk = kwargs.pop('packet')['cumulative_risk_metrics']
 
+        ledger_returns = kwargs.pop('ledger').daily_returns
+        benchmark_returns = kwargs.pop('benchmark_source').daily_returns()
+
         alpha, beta = ep.alpha_beta_aligned(
-            kwargs.pop('ledger').daily_returns,
-            kwargs.pop('benchmark_source').daily_returns())
+            ledger_returns,
+            benchmark_returns)
 
         if np.isnan(alpha):
             alpha = None

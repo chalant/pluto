@@ -35,7 +35,6 @@ class MinuteSimulationLoop(object):
         calendar = self._calendar
 
         control_mode = self._control_mode
-
         for ts, evt in get_generator(calendar, calendar.all_sessions):
             # acquire lock so that no further commands are executed here
             # while this block is being executed

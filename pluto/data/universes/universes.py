@@ -32,7 +32,18 @@ class AbstractUniverse(abc.ABC):
         raise NotImplementedError(self.name.__name__())
 
     @abc.abstractmethod
-    def get_calendar(self, start, end):
+    def get_calendar(self, start, end, cache=False):
+        '''
+
+        Parameters
+        ----------
+        start
+        end
+
+        Returns
+        -------
+        trading_calendars.TradingCalendar
+        '''
         raise NotImplementedError(self.get_calendar.__name__())
 
     @property
@@ -84,7 +95,7 @@ class Universe(AbstractUniverse):
                             .where(stm.c.universe == self._name))]
         return exchanges
 
-    def get_calendar(self, start, end):
+    def get_calendar(self, start, end, cache=False):
         '''
 
         Parameters
@@ -110,8 +121,8 @@ class Universe(AbstractUniverse):
             proto = calendar_pb2.Calendar()
             proto.ParseFromString(f.read())
 
-
-        return cu.from_proto_calendar(proto, start, end)
+        #todo: the calendar should have a name.
+        return cu.from_proto_calendar(proto, start, end, cache)
 
     @property
     def bundle_name(self):
@@ -154,8 +165,8 @@ class TestUniverse(AbstractUniverse):
     def calendars(self):
         return ('XNYS',)
 
-    def get_calendar(self, start, end):
-        return cu.get_calendar_in_range('XNYS', start, end)
+    def get_calendar(self, start, end, cache=False):
+        return cu.get_calendar_in_range('XNYS', start, end, cache)
 
     @property
     def asset_filter(self):

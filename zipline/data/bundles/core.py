@@ -11,13 +11,13 @@ from trading_calendars import get_calendar
 from toolz import curry, complement, take
 
 from ..adjustments import SQLiteAdjustmentReader, SQLiteAdjustmentWriter
-from ..bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
+from zipline.data.bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
 
 from zipline.data.minute_bars import (
     BcolzMinuteBarReader,
     BcolzMinuteBarWriter,
 )
-from zipline.assets import AssetDBWriter, AssetFinder, ASSET_DB_VERSION
+from zipline.assets import AssetDBWriter, ASSET_DB_VERSION
 from zipline.assets.asset_db_migrations import downgrade
 from zipline.utils.cache import (
     dataframe_cache,
@@ -28,6 +28,8 @@ from zipline.utils.compat import mappingproxy
 from zipline.utils.input_validation import ensure_timestamp, optionally
 import zipline.utils.paths as pth
 from zipline.utils.preprocess import preprocess
+
+from pluto.assets import assets
 
 
 def asset_db_path(bundle_name, timestr, environ=None, db_version=None):
@@ -514,7 +516,7 @@ def _make_bundle_core():
             timestamp = pd.Timestamp.utcnow()
         timestr = most_recent_data(name, timestamp, environ=environ)
         return BundleData(
-            asset_finder=AssetFinder(
+            asset_finder=assets.AssetFinder(
                 asset_db_path(name, timestr, environ=environ),
             ),
             equity_minute_bar_reader=BcolzMinuteBarReader(
