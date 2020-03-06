@@ -87,6 +87,9 @@ class ControlMode(abc.ABC):
                 timestamp=conversions.to_proto_timestamp(dt))
             writer.write_event('parameter', run_params)
 
+    def get_process(self, session_id):
+        return self._processes.get(session_id, None)
+
     def stop(self, params):
         # add to
         self._to_stop = {p.session_id for p in params} | self._to_stop

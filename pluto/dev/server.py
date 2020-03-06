@@ -27,7 +27,7 @@ def cli():
 @cli.command()
 @click.option('--address', default='[::]:50051')
 def start(address):
-    with directory.Directory() as d:
+    with directory._Directory() as d:
         _SERVER.initialize(d, address)
         _SERVER.serve()
 

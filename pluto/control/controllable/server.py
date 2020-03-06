@@ -3,26 +3,26 @@ import signal
 from concurrent import futures
 import queue
 import abc
+from functools import partial
 
 import grpc
 import click
 from google.protobuf import empty_pb2 as emp
 
-from pluto.interface.utils import paths
+from pluto.interface.utils import paths, method_access
+from pluto.interface import directory
 from pluto.coms.utils import conversions
 from pluto.control.controllable import commands
 from pluto.control.controllable import simulation_controllable as sc
 from pluto.control.events_log import events_log
 
+
 from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
+from protos import interface_pb2_grpc as itf
 from protos.clock_pb2 import (
     BAR,
     TRADE_END)
-
-ROOT = paths.get_dir('controllable')
-DIR = paths.get_dir('states', ROOT)
-
 
 def get_controllable(mode):
     '''
@@ -42,22 +42,56 @@ def get_controllable(mode):
     else:
         return
 
+class _NoneObserver(object):
+    def clear(self):
+        pass
+
+    def update(self, performance):
+        pass
+
+class _Observer(object):
+    def __init__(self, monitor_stub, file_path):
+        self._stub = monitor_stub
+        self._reload = True
+        self._file_path = file_path
+
+    def clear(self):
+        self._reload = True
+
+    def update(self, performance):
+        stub = self._stub
+        #todo: must specify the session_id in the metadata
+        if self._reload == True:
+            with open(self._file_path, 'rb') as f:
+                for line in f.readline():
+                    method_access.invoke(stub.PerformanceUpdate, line)
+            self._reload = False
+        else:
+            stub.PerformanceUpdate(performance)
 
 class _StateStorage(object):
-    def __init__(self, storage_path):
+    def __init__(self, storage_path, thread_pool):
+        '''
+
+        Parameters
+        ----------
+        storage_path: str
+        thread_pool: concurrent.futures.ThreadPoolExecutor
+        '''
         self._storage_path = storage_path
+        self._thread_pool = thread_pool
+
+    def _write(self, state):
+        #todo: should we append instead of over-writing?
+        with(self._storage_path, 'wb') as f:
+            f.write(state)
 
     def store(self, dt, controllable):
-        # todo: non-blocking!
-        # todo: PROBLEM: we might have some conflicts in state, since we could have
-        # multiple controllables with the same session_id running in different
-        # modes...
+        self._thread_pool.submit(partial(self._write, state=controllable.get_state(dt)))
 
-        with open(self._storage_path, 'wb') as f:
-            f.write(controllable.get_state(dt))
-
-    def load_state(self, session_id):
-        return ''
+    def load_state(self):
+        with open(self._storage_path, 'rb') as f:
+            return f.read()
 
 
 class _NoStateStorage(object):
@@ -132,24 +166,48 @@ class _PerformanceWriter(object):
     # we also have a reader (which is a writer observer)
     # the reader reads the performance in the file and waits for updates from the writer.
     # the updates are read before getting written in the filesystem.
-    def __init__(self, session_id, mode):
-        pass
+    def __init__(self, monitor_stub, file_path, thread_pool):
+        '''
+
+        Parameters
+        ----------
+        file_path: str
+        thread_pool: concurrent.futures.ThreadPoolExecutor
+        '''
+        self._path = file_path
+        self._thread_pool = thread_pool
+
+        self._none_observer = none = _NoneObserver()
+        self._observer = _Observer(monitor_stub, file_path)
+        self._current_observer = none
+
+        self._lock = threading.Lock()
+
+    def _write(self, performance, path):
+        with self._lock:
+            packet = conversions.to_proto_performance_packet(performance).SerializeToString()
+            self._current_observer.update(packet)
+            with open(path, 'ab') as f:
+                f.write(packet+'\n')
 
     def performance_update(self, performance):
-        print(performance['cumulative_perf']['period_close'])
-        with open(paths.get_file_path('performance', ROOT), 'a') as f:
-            f.write(str(performance['cumulative_risk_metrics'])+'\n')
-        # print(performance)
-        # writer.PerformancePacketUpdate(
-        #     crv.to_proto_performance_packet(
-        #         controllable.session_end(dt)))
+        self._thread_pool.submit(partial(self._write, performance=performance, path=self._path))
+
+    def observe(self):
+        with self._lock:
+            observer = self._observer
+            observer.clear()
+            self._current_observer = observer
+
+    def stop_observing(self):
+        with self._lock:
+            self._current_observer = self._none_observer
+
 
 
 class ControllableService(cbl_rpc.ControllableServicer):
-    def __init__(self, framework_url):
+    def __init__(self, monitor_stub):
         self._perf_writer = None
-        self._ctl_url = framework_url
-
         self._stop = False
 
         self._frequency_filter = None
@@ -167,6 +225,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._strategy_path = None
         self._directory = None
         self._state_storage = _NoStateStorage()
+
+        self._root_dir = root = paths.get_dir('controllable')
+        self._states_dir = paths.get_dir('states', root)
+
+        self._thread_pool = futures.ThreadPoolExecutor(5)
+        self._monitor_stub = monitor_stub
 
     @property
     def frequency_filter(self):
@@ -195,6 +259,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
     def stop(self):
         pass
 
+    @method_access.framework_method
     def Initialize(self, request_iterator, context):
         b = b''
         for chunk in request_iterator:
@@ -222,11 +287,35 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         controllable = get_controllable(mode)
 
-        self._directory = dir_ = paths.get_dir(id_, DIR)
+        #todo: we should have a directory for performance
+
+        self._directory = dir_ = paths.get_dir(
+            id_, paths.get_dir('states', self._root_dir))
         # activate state storage if we're in live mode
-        if mode == 'live':
+
+        # todo: it would be cleaner to have an utils file for common paths
+        perf_path = paths.get_file_path(
+                mode,
+                paths.get_dir(
+                    id_,
+                    paths.get_dir('strategies')))
+
+        if mode == 'live' or mode == 'paper':
             self._state_storage = _StateStorage(
-                paths.get_file_path('state', dir_))
+                paths.get_file_path(mode, paths.get_dir(id_, dir_)),
+                self._thread_pool)
+
+        else:
+            #clear file if we're in simulation mode
+            with open(perf_path, 'wb') as f:
+                f.truncate(0)
+
+        #todo: we need a monitor stub
+        self._perf_writer = _PerformanceWriter(
+            self._monitor_stub,
+            paths.get_file_path(perf_path),
+            self._thread_pool
+        )
 
         if controllable:
             self._controllable = controllable
@@ -243,7 +332,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 look_back)
             # run the thread
             self._state = self._ready
-            self._perf_writer = _PerformanceWriter(id_, mode)
+
             self._thread = thread = threading.Thread(target=self._run)
             thread.start()
         else:
@@ -257,7 +346,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
             self._state.execute(queue.get())
 
     def _load_state(self, session_id):
-        with open(paths.get_file_path(session_id, DIR), 'rb') as f:
+        with open(paths.get_file_path(session_id, self._states_dir), 'rb') as f:
             params = f.read()
             state = controllable_pb2.ControllableState()
             state.ParseFromString(params)
@@ -285,6 +374,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
         frequency_filter = self._frequency_filter
         state_storage = self._state_storage
 
+        #todo: need to handle all the event types
+
         for evt_type, evt in events:
             if evt_type == 'clock':
                 commands.ClockUpdate(
@@ -300,11 +391,13 @@ class ControllableService(cbl_rpc.ControllableServicer):
             else:
                 pass
 
+    @method_access.framework_only
     def Stop(self, request, context):
         # todo needs to liquidate positions and wipe the state.
         self._stop = True
         return emp.Empty()
 
+    @method_access.framework_only
     def UpdateParameters(self, request, context):
         self._queue.put(
             commands.CapitalUpdate(
@@ -314,6 +407,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         )
         return emp.Empty()
 
+    @method_access.framework_only
     def UpdateAccount(self, request_iterator, context):
         # todo
         # self._queue.put(
@@ -321,6 +415,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         # )
         return emp.Empty()
 
+    @method_access.framework_only
     def ClockUpdate(self, request, context):
         '''Note: an update call might arrive while the step is executing..., so
         we must queue the update message... => the step must be a thread that pulls data
@@ -339,6 +434,13 @@ class ControllableService(cbl_rpc.ControllableServicer):
         )
         return emp.Empty()
 
+    @method_access.framework_only
+    def Watch(self, request, context):
+        self._perf_writer.observer()
+
+    @method_access.framework_only
+    def StopWatching(self, request, context):
+        self._perf_writer.stop_observing()
 
 class Server(object):
     def __init__(self):
@@ -383,11 +485,13 @@ def cli():
 
 
 @cli.command()
+@click.argument('framework_id')
 @click.argument('framework_url')
 @click.argument('session_id')
+@click.argument('root_dir')
 @click.option('-cu', '--controllable-url')
 @click.option('--recovery', is_flag=True)
-def start(framework_url, session_id, controllable_url, recovery):
+def start(framework_id, framework_url, session_id, root_dir, controllable_url, recovery):
     '''
 
     Parameters
@@ -401,19 +505,26 @@ def start(framework_url, session_id, controllable_url, recovery):
 
     # TODO: save the framework_url for future use. NOTE: the framework url must be immutable
     # (is a service in kubernetes)
-    service = ControllableService(framework_url)
+
     # run forever or until an exception occurs, in which case, send back a report to the controller
     # or write to a log file. If the strategy crashes internally, there might be some bug that
     # need reviewing
-    if recovery:
-        service.restore_state(session_id)
-    try:
-        _SERVER.start(
-            service,
-            controllable_url)
-    except Exception as e:
-        # todo: write to log?, send report to controller?
-        pass
+
+    with directory.StubDirectory(root_dir):
+        #set the framework_id if ran as a process
+        method_access._framework_id = framework_id
+        service = ControllableService(
+            itf.MonitorStub(grpc.insecure_channel(framework_url))
+        )
+        if recovery:
+            service.restore_state(session_id)
+        try:
+            _SERVER.start(
+                service,
+                controllable_url)
+        except Exception as e:
+            # todo: write to log?, send report to controller?
+            raise RuntimeError('Unexpected error', e)
 
 
 if __name__ == '__main__':

@@ -7,8 +7,6 @@ import "protos/metrics.proto";
 service Controller {
     rpc Stop(StopRequest) returns (StopResponse);
     rpc Run(RunRequest) returns (RunResponse);
-    //watch a particular strategy performance stream.
-    rpc Watch(WatchRequest) returns (stream PerformancePacket);
 }
 
 enum SessionStatus {
@@ -55,7 +53,7 @@ message StopResponse {
 }
 
 message WatchRequest {
-    string strategy_id = 1;
+    string session_id = 1;
 }
 
 message Performance {

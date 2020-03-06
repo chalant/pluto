@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x16protos/interface.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11protos/data.proto\"\x12\n\x10\x44irectoryRequest\"\x0f\n\rLogoutRequest\"\x10\n\x0eLogoutResponse\",\n\x15\x43odeInspectionRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"*\n\x16\x43odeInspectionResponse\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\"\x10\n\x0eStrategyFilter\"V\n\x10StrategyResponse\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x1f\n\x06status\x18\x03 \x03(\x0b\x32\x0f.StrategyStatus\"!\n\x0eStrategyStatus\x12\x0f\n\x07running\x18\x01 \x01(\x08\"C\n\x08Strategy\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08universe\x18\x02 \x01(\t\x12\x10\n\x08strategy\x18\x03 \x01(\x0c\"6\n\rDeployRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"3\n\x0cLoginRequest\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\"\x1e\n\rLoginResponse\x12\r\n\x05token\x18\x01 \x01(\x0c\"r\n\x12\x44\x65ploymentResponse\x12*\n\x06status\x18\x01 \x01(\x0e\x32\x1a.DeploymentResponse.Status\x12\x0f\n\x07\x64\x65tails\x18\x02 \x01(\x0c\"\x1f\n\x06Status\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01\x32\\\n\x07Gateway\x12&\n\x05Login\x12\r.LoginRequest\x1a\x0e.LoginResponse\x12)\n\x06Logout\x12\x0e.LogoutRequest\x1a\x0f.LogoutResponse2x\n\x07Manager\x12>\n\x0bInspectCode\x12\x16.CodeInspectionRequest\x1a\x17.CodeInspectionResponse\x12-\n\x06\x44\x65ploy\x12\x0e.DeployRequest\x1a\x13.DeploymentResponse2@\n\x08\x45xplorer\x12\x34\n\x0cStrategyList\x12\x0f.StrategyFilter\x1a\x11.StrategyResponse0\x01\x32\x66\n\x03Hub\x12+\n\x0cGetDirectory\x12\x11.DirectoryRequest\x1a\x06.Chunk0\x01\x12\x32\n\x0eStoreDirectory\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x16protos/interface.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x11protos/data.proto\"\"\n\x0cWatchRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\x0f\n\rWatchResponse\")\n\x13StopWatchingRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\x16\n\x14StopWatchingResponse\"\x14\n\x12SessionListRequest\"\x15\n\x13SessionListResponse\"\x15\n\x13UniverseListRequest\"$\n\x14UniverseListResponse\x12\x0c\n\x04name\x18\x01 \x01(\t\"\x12\n\x10\x44irectoryRequest\"\x0f\n\rLogoutRequest\"\x10\n\x0eLogoutResponse\",\n\x15\x43odeInspectionRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"*\n\x16\x43odeInspectionResponse\x12\x10\n\x08strategy\x18\x01 \x01(\x0c\"\x10\n\x0eStrategyFilter\"V\n\x10StrategyResponse\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x1f\n\x06status\x18\x03 \x03(\x0b\x32\x0f.StrategyStatus\"!\n\x0eStrategyStatus\x12\x0f\n\x07running\x18\x01 \x01(\x08\"C\n\x08Strategy\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08universe\x18\x02 \x01(\t\x12\x10\n\x08strategy\x18\x03 \x01(\x0c\"#\n\rDeployRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"3\n\x0cLoginRequest\x12\x11\n\tuser_name\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\x0c\"\x1e\n\rLoginResponse\x12\r\n\x05token\x18\x01 \x01(\x0c\"r\n\x12\x44\x65ploymentResponse\x12*\n\x06status\x18\x01 \x01(\x0e\x32\x1a.DeploymentResponse.Status\x12\x0f\n\x07\x64\x65tails\x18\x02 \x01(\x0c\"\x1f\n\x06Status\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01\x32\\\n\x07Gateway\x12&\n\x05Login\x12\r.LoginRequest\x1a\x0e.LoginResponse\x12)\n\x06Logout\x12\x0e.LogoutRequest\x1a\x0f.LogoutResponse2x\n\x07Manager\x12>\n\x0bInspectCode\x12\x16.CodeInspectionRequest\x1a\x17.CodeInspectionResponse\x12-\n\x06\x44\x65ploy\x12\x0e.DeployRequest\x1a\x13.DeploymentResponse2\xbb\x01\n\x08\x45xplorer\x12\x34\n\x0cStrategyList\x12\x0f.StrategyFilter\x1a\x11.StrategyResponse0\x01\x12=\n\x0cUniverseList\x12\x14.UniverseListRequest\x1a\x15.UniverseListResponse0\x01\x12:\n\x0bSessionList\x12\x13.SessionListRequest\x1a\x14.SessionListResponse0\x01\x32\x66\n\x03Hub\x12+\n\x0cGetDirectory\x12\x11.DirectoryRequest\x1a\x06.Chunk0\x01\x12\x32\n\x0eStoreDirectory\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x32\xa5\x01\n\x07Monitor\x12&\n\x05Watch\x12\r.WatchRequest\x1a\x0e.WatchResponse\x12;\n\x0cStopWatching\x12\x14.StopWatchingRequest\x1a\x15.StopWatchingResponse\x12\x35\n\x11PerformanceUpdate\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -44,10 +44,223 @@ _DEPLOYMENTRESPONSE_STATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=653,
-  serialized_end=684,
+  serialized_start=860,
+  serialized_end=891,
 )
 _sym_db.RegisterEnumDescriptor(_DEPLOYMENTRESPONSE_STATUS)
+
+
+_WATCHREQUEST = _descriptor.Descriptor(
+  name='WatchRequest',
+  full_name='WatchRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='session_id', full_name='WatchRequest.session_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=74,
+  serialized_end=108,
+)
+
+
+_WATCHRESPONSE = _descriptor.Descriptor(
+  name='WatchResponse',
+  full_name='WatchResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=110,
+  serialized_end=125,
+)
+
+
+_STOPWATCHINGREQUEST = _descriptor.Descriptor(
+  name='StopWatchingRequest',
+  full_name='StopWatchingRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='session_id', full_name='StopWatchingRequest.session_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=127,
+  serialized_end=168,
+)
+
+
+_STOPWATCHINGRESPONSE = _descriptor.Descriptor(
+  name='StopWatchingResponse',
+  full_name='StopWatchingResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=170,
+  serialized_end=192,
+)
+
+
+_SESSIONLISTREQUEST = _descriptor.Descriptor(
+  name='SessionListRequest',
+  full_name='SessionListRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=194,
+  serialized_end=214,
+)
+
+
+_SESSIONLISTRESPONSE = _descriptor.Descriptor(
+  name='SessionListResponse',
+  full_name='SessionListResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=216,
+  serialized_end=237,
+)
+
+
+_UNIVERSELISTREQUEST = _descriptor.Descriptor(
+  name='UniverseListRequest',
+  full_name='UniverseListRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=239,
+  serialized_end=260,
+)
+
+
+_UNIVERSELISTRESPONSE = _descriptor.Descriptor(
+  name='UniverseListResponse',
+  full_name='UniverseListResponse',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='name', full_name='UniverseListResponse.name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=262,
+  serialized_end=298,
+)
 
 
 _DIRECTORYREQUEST = _descriptor.Descriptor(
@@ -69,8 +282,8 @@ _DIRECTORYREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=74,
-  serialized_end=92,
+  serialized_start=300,
+  serialized_end=318,
 )
 
 
@@ -93,8 +306,8 @@ _LOGOUTREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=94,
-  serialized_end=109,
+  serialized_start=320,
+  serialized_end=335,
 )
 
 
@@ -117,8 +330,8 @@ _LOGOUTRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=111,
-  serialized_end=127,
+  serialized_start=337,
+  serialized_end=353,
 )
 
 
@@ -148,8 +361,8 @@ _CODEINSPECTIONREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=129,
-  serialized_end=173,
+  serialized_start=355,
+  serialized_end=399,
 )
 
 
@@ -179,8 +392,8 @@ _CODEINSPECTIONRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=175,
-  serialized_end=217,
+  serialized_start=401,
+  serialized_end=443,
 )
 
 
@@ -203,8 +416,8 @@ _STRATEGYFILTER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=219,
-  serialized_end=235,
+  serialized_start=445,
+  serialized_end=461,
 )
 
 
@@ -248,8 +461,8 @@ _STRATEGYRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=237,
-  serialized_end=323,
+  serialized_start=463,
+  serialized_end=549,
 )
 
 
@@ -279,8 +492,8 @@ _STRATEGYSTATUS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=325,
-  serialized_end=358,
+  serialized_start=551,
+  serialized_end=584,
 )
 
 
@@ -324,8 +537,8 @@ _STRATEGY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=360,
-  serialized_end=427,
+  serialized_start=586,
+  serialized_end=653,
 )
 
 
@@ -337,16 +550,9 @@ _DEPLOYREQUEST = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='strategy_id', full_name='DeployRequest.strategy_id', index=0,
+      name='session_id', full_name='DeployRequest.session_id', index=0,
       number=1, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='strategy', full_name='DeployRequest.strategy', index=1,
-      number=2, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b(""),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -362,8 +568,8 @@ _DEPLOYREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=429,
-  serialized_end=483,
+  serialized_start=655,
+  serialized_end=690,
 )
 
 
@@ -400,8 +606,8 @@ _LOGINREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=485,
-  serialized_end=536,
+  serialized_start=692,
+  serialized_end=743,
 )
 
 
@@ -431,8 +637,8 @@ _LOGINRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=538,
-  serialized_end=568,
+  serialized_start=745,
+  serialized_end=775,
 )
 
 
@@ -470,13 +676,21 @@ _DEPLOYMENTRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=570,
-  serialized_end=684,
+  serialized_start=777,
+  serialized_end=891,
 )
 
 _STRATEGYRESPONSE.fields_by_name['status'].message_type = _STRATEGYSTATUS
 _DEPLOYMENTRESPONSE.fields_by_name['status'].enum_type = _DEPLOYMENTRESPONSE_STATUS
 _DEPLOYMENTRESPONSE_STATUS.containing_type = _DEPLOYMENTRESPONSE
+DESCRIPTOR.message_types_by_name['WatchRequest'] = _WATCHREQUEST
+DESCRIPTOR.message_types_by_name['WatchResponse'] = _WATCHRESPONSE
+DESCRIPTOR.message_types_by_name['StopWatchingRequest'] = _STOPWATCHINGREQUEST
+DESCRIPTOR.message_types_by_name['StopWatchingResponse'] = _STOPWATCHINGRESPONSE
+DESCRIPTOR.message_types_by_name['SessionListRequest'] = _SESSIONLISTREQUEST
+DESCRIPTOR.message_types_by_name['SessionListResponse'] = _SESSIONLISTRESPONSE
+DESCRIPTOR.message_types_by_name['UniverseListRequest'] = _UNIVERSELISTREQUEST
+DESCRIPTOR.message_types_by_name['UniverseListResponse'] = _UNIVERSELISTRESPONSE
 DESCRIPTOR.message_types_by_name['DirectoryRequest'] = _DIRECTORYREQUEST
 DESCRIPTOR.message_types_by_name['LogoutRequest'] = _LOGOUTREQUEST
 DESCRIPTOR.message_types_by_name['LogoutResponse'] = _LOGOUTRESPONSE
@@ -491,6 +705,62 @@ DESCRIPTOR.message_types_by_name['LoginRequest'] = _LOGINREQUEST
 DESCRIPTOR.message_types_by_name['LoginResponse'] = _LOGINRESPONSE
 DESCRIPTOR.message_types_by_name['DeploymentResponse'] = _DEPLOYMENTRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
+WatchRequest = _reflection.GeneratedProtocolMessageType('WatchRequest', (_message.Message,), dict(
+  DESCRIPTOR = _WATCHREQUEST,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:WatchRequest)
+  ))
+_sym_db.RegisterMessage(WatchRequest)
+
+WatchResponse = _reflection.GeneratedProtocolMessageType('WatchResponse', (_message.Message,), dict(
+  DESCRIPTOR = _WATCHRESPONSE,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:WatchResponse)
+  ))
+_sym_db.RegisterMessage(WatchResponse)
+
+StopWatchingRequest = _reflection.GeneratedProtocolMessageType('StopWatchingRequest', (_message.Message,), dict(
+  DESCRIPTOR = _STOPWATCHINGREQUEST,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:StopWatchingRequest)
+  ))
+_sym_db.RegisterMessage(StopWatchingRequest)
+
+StopWatchingResponse = _reflection.GeneratedProtocolMessageType('StopWatchingResponse', (_message.Message,), dict(
+  DESCRIPTOR = _STOPWATCHINGRESPONSE,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:StopWatchingResponse)
+  ))
+_sym_db.RegisterMessage(StopWatchingResponse)
+
+SessionListRequest = _reflection.GeneratedProtocolMessageType('SessionListRequest', (_message.Message,), dict(
+  DESCRIPTOR = _SESSIONLISTREQUEST,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:SessionListRequest)
+  ))
+_sym_db.RegisterMessage(SessionListRequest)
+
+SessionListResponse = _reflection.GeneratedProtocolMessageType('SessionListResponse', (_message.Message,), dict(
+  DESCRIPTOR = _SESSIONLISTRESPONSE,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:SessionListResponse)
+  ))
+_sym_db.RegisterMessage(SessionListResponse)
+
+UniverseListRequest = _reflection.GeneratedProtocolMessageType('UniverseListRequest', (_message.Message,), dict(
+  DESCRIPTOR = _UNIVERSELISTREQUEST,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:UniverseListRequest)
+  ))
+_sym_db.RegisterMessage(UniverseListRequest)
+
+UniverseListResponse = _reflection.GeneratedProtocolMessageType('UniverseListResponse', (_message.Message,), dict(
+  DESCRIPTOR = _UNIVERSELISTRESPONSE,
+  __module__ = 'protos.interface_pb2'
+  # @@protoc_insertion_point(class_scope:UniverseListResponse)
+  ))
+_sym_db.RegisterMessage(UniverseListResponse)
 
 DirectoryRequest = _reflection.GeneratedProtocolMessageType('DirectoryRequest', (_message.Message,), dict(
   DESCRIPTOR = _DIRECTORYREQUEST,
@@ -591,8 +861,8 @@ _GATEWAY = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=686,
-  serialized_end=778,
+  serialized_start=893,
+  serialized_end=985,
   methods=[
   _descriptor.MethodDescriptor(
     name='Login',
@@ -624,8 +894,8 @@ _MANAGER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=1,
   serialized_options=None,
-  serialized_start=780,
-  serialized_end=900,
+  serialized_start=987,
+  serialized_end=1107,
   methods=[
   _descriptor.MethodDescriptor(
     name='InspectCode',
@@ -657,8 +927,8 @@ _EXPLORER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=2,
   serialized_options=None,
-  serialized_start=902,
-  serialized_end=966,
+  serialized_start=1110,
+  serialized_end=1297,
   methods=[
   _descriptor.MethodDescriptor(
     name='StrategyList',
@@ -667,6 +937,24 @@ _EXPLORER = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_STRATEGYFILTER,
     output_type=_STRATEGYRESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='UniverseList',
+    full_name='Explorer.UniverseList',
+    index=1,
+    containing_service=None,
+    input_type=_UNIVERSELISTREQUEST,
+    output_type=_UNIVERSELISTRESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='SessionList',
+    full_name='Explorer.SessionList',
+    index=2,
+    containing_service=None,
+    input_type=_SESSIONLISTREQUEST,
+    output_type=_SESSIONLISTRESPONSE,
     serialized_options=None,
   ),
 ])
@@ -681,8 +969,8 @@ _HUB = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=3,
   serialized_options=None,
-  serialized_start=968,
-  serialized_end=1070,
+  serialized_start=1299,
+  serialized_end=1401,
   methods=[
   _descriptor.MethodDescriptor(
     name='GetDirectory',
@@ -706,5 +994,47 @@ _HUB = _descriptor.ServiceDescriptor(
 _sym_db.RegisterServiceDescriptor(_HUB)
 
 DESCRIPTOR.services_by_name['Hub'] = _HUB
+
+
+_MONITOR = _descriptor.ServiceDescriptor(
+  name='Monitor',
+  full_name='Monitor',
+  file=DESCRIPTOR,
+  index=4,
+  serialized_options=None,
+  serialized_start=1404,
+  serialized_end=1569,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='Watch',
+    full_name='Monitor.Watch',
+    index=0,
+    containing_service=None,
+    input_type=_WATCHREQUEST,
+    output_type=_WATCHRESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='StopWatching',
+    full_name='Monitor.StopWatching',
+    index=1,
+    containing_service=None,
+    input_type=_STOPWATCHINGREQUEST,
+    output_type=_STOPWATCHINGRESPONSE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='PerformanceUpdate',
+    full_name='Monitor.PerformanceUpdate',
+    index=2,
+    containing_service=None,
+    input_type=protos_dot_data__pb2._CHUNK,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_MONITOR)
+
+DESCRIPTOR.services_by_name['Monitor'] = _MONITOR
 
 # @@protoc_insertion_point(module_scope)

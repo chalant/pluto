@@ -43,7 +43,7 @@ class ZiplineAPI(object):
 
 def api_method(f):
     # Decorator that adds the decorated class method as a callable
-    # function (wrapped) to zipline.api
+    # function (wrapped) to pluto.api
     @wraps(f)
     def wrapped(*args, **kwargs):
         # Get the instance and call the method
@@ -54,7 +54,7 @@ def api_method(f):
                 % f.__name__
             )
         return getattr(algo_instance, f.__name__)(*args, **kwargs)
-    # Add functor to zipline.api
+    # Add functor to pluto.api
     setattr(api, f.__name__, wrapped)
     api.__all__.append(f.__name__)
     f.is_api_method = True

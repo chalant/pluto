@@ -32,7 +32,7 @@ def to_bytes(message):
 def stream(iterable):
     '''a generator that yields data by chunk'''
     for chunk in iterable:
-        yield data_pb2.Data(data=chunk)
+        yield data_pb2.Chunk(data=chunk)
 
 
 class Dev(rpc.DevServicer):

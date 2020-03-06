@@ -26,6 +26,7 @@ message NewStrategyRequest {
 
 message NewStrategyResponse {
     bytes template = 1;
+    string strategy_id = 2;
 }
 
 message PushResponse {

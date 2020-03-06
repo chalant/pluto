@@ -9,11 +9,14 @@ from pluto.control.clock.utils import get_generator
 from protos import clock_pb2
 
 
-class MinuteSimulationLoop(object):
-    def __init__(self, control_mode, start_dt, end_dt):
+class SimulationLoop(object):
+    def __init__(self, control_mode, start_dt, end_dt, frequency='day', max_reloads=0):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
+
+        self._frequency = frequency
+        self._max_reloads = max_reloads
 
         self._clocks = clocks = {}
         # create fake clock
@@ -35,7 +38,7 @@ class MinuteSimulationLoop(object):
         calendar = self._calendar
 
         control_mode = self._control_mode
-        for ts, evt in get_generator(calendar, calendar.all_sessions):
+        for ts, evt in get_generator(calendar, calendar.all_sessions, self._frequency):
             # acquire lock so that no further commands are executed here
             # while this block is being executed
             with self._execution_lock:
@@ -49,6 +52,8 @@ class MinuteSimulationLoop(object):
                 signals = []
                 # aggregate the signals into a single signal.
                 for cl in self._clocks.values():
+                    #todo: how do we know the clock has ended?
+                    #todo:
                     signal = cl.update(ts)
                     if signal:
                         sts, s_evt, exchange = signal
@@ -72,7 +77,8 @@ class MinuteSimulationLoop(object):
             exchange,
             self._start_dt,
             self._end_dt,
-            minute_emission=True)
+            minute_emission=True,
+            max_reloads=self._max_reloads)
 
     def _get_clocks(self, exchanges):
         clocks = self._clocks

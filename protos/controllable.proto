@@ -16,6 +16,9 @@ service Controllable {
     //for updating positions, transactions etc.
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
     rpc Stop (StopRequest) returns (google.protobuf.Empty);
+
+    rpc Watch(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc StopWatching(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 message InitParams {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright 2015 Quantopian, Inc.
+# Copyright 2014 Quantopian, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from zipline.api import order, symbol
-from zipline.finance import commission, slippage
 
-stocks = ['AAPL', 'MSFT']
+from pluto import api
+from pluto.finance import commission, slippage
 
 
 def initialize(context):
-    context.has_ordered = False
-    context.stocks = stocks
+    context.asset = api.symbol('AAPL')
 
     # Explicitly set the commission/slippage to the "old" value until we can
     # rebuild example data.
@@ -32,10 +30,25 @@ def initialize(context):
 
 
 def handle_data(context, data):
-    if not context.has_ordered:
-        for stock in context.stocks:
-            order(symbol(stock), 100)
-        context.has_ordered = True
+    api.order(context.asset, 10)
+    api.record(AAPL=data.current(context.asset, 'price'))
+
+
+# Note: this function can be removed if running
+# this algorithm on quantopian.com
+def analyze(context=None, results=None):
+    import matplotlib.pyplot as plt
+    # Plot the portfolio and asset data.
+    ax1 = plt.subplot(211)
+    results.portfolio_value.plot(ax=ax1)
+    ax1.set_ylabel('Portfolio value (USD)')
+    ax2 = plt.subplot(212, sharex=ax1)
+    results.AAPL.plot(ax=ax2)
+    ax2.set_ylabel('AAPL price (USD)')
+
+    # Show the plot.
+    plt.gcf().set_size_inches(18, 8)
+    plt.show()
 
 
 def _test_args():
@@ -44,6 +57,10 @@ def _test_args():
     import pandas as pd
 
     return {
-        'start': pd.Timestamp('2008', tz='utc'),
-        'end': pd.Timestamp('2013', tz='utc'),
+        'start': pd.Timestamp('2014-01-01', tz='utc'),
+        'end': pd.Timestamp('2014-11-01', tz='utc'),
+        'capital_base': 1e7,
+        'max_leverage': 1.0,
+        'look_back': None,
+        'data_frequency': 'daily'
     }

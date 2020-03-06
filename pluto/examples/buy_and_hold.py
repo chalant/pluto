@@ -13,8 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from zipline.api import order, symbol
-from zipline.finance import commission, slippage
+from pluto import api
+from pluto.finance import commission, slippage
 
 stocks = ['AAPL', 'MSFT']
 
@@ -34,7 +34,7 @@ def initialize(context):
 def handle_data(context, data):
     if not context.has_ordered:
         for stock in context.stocks:
-            order(symbol(stock), 100)
+            api.order(api.symbol(stock), 100)
         context.has_ordered = True
 
 
@@ -46,4 +46,8 @@ def _test_args():
     return {
         'start': pd.Timestamp('2008', tz='utc'),
         'end': pd.Timestamp('2013', tz='utc'),
+        'capital_base': 1e7,
+        'max_leverage': 1.0,
+        'look_back': None,
+        'data_frequency': 'daily'
     }
