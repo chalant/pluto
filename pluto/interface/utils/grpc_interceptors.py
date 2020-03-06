@@ -46,7 +46,6 @@ class Authenticity(grpc.ServerInterceptor):
                     return self._method_handler(unauthenticated)
             except KeyError:
                 return self._method_handler(unauthenticated)
-
         else:
             return continuation(handler_call_details)
 
@@ -81,9 +80,9 @@ class Availability(grpc.ServerInterceptor):
             if not self._available:
                 return self._method_handler(unavailable)
             else:
-                continuation(handler_call_details)
+                return continuation(handler_call_details)
         else:
-            continuation(handler_call_details)
+            return continuation(handler_call_details)
 
 
 def get_interceptors(interceptor_type):

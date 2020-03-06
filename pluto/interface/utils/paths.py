@@ -1,9 +1,16 @@
 from os import path, mkdir
 
-_ROOT = path.expanduser('~/.pluto')
+_ROOT = ''
 
-if not path.isdir(_ROOT):
-    mkdir(_ROOT)
+def root_is_set():
+    return _ROOT != ''
+
+def setup_root(root):
+    global _ROOT
+    _ROOT = root
+
+def remove_root():
+    _ROOT = ''
 
 def with_root(func):
     def wrapper(name, root=None):
@@ -11,13 +18,19 @@ def with_root(func):
             pth = path.join(root, name)
         else:
             pth = name
-        pth = path.join(_ROOT, pth)
-        func(pth, root)
-        return pth
+        if not _ROOT or not path.isdir(_ROOT):
+            raise RuntimeError('Outside of directory context')
+        else:
+            pth = path.join(_ROOT, pth)
+            func(pth, root)
+            return pth
     return wrapper
 
 def root():
-    return _ROOT
+    if not _ROOT:
+        raise RuntimeError('Outside of directory context')
+    else:
+        return _ROOT
 
 @with_root
 def get_dir(name, root=None):

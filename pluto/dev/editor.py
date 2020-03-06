@@ -9,7 +9,7 @@ class Editor(dev_rpc.EditorServicer):
 
         Parameters
         ----------
-        directory: pluto.interface.directory.Directory
+        directory: pluto.interface.directory.AbstractDirectory
         '''
         self._directory = directory
         self._loop = None

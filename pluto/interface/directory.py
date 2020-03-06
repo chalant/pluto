@@ -1,9 +1,8 @@
 import uuid
-
-from os import path
 from abc import ABC, abstractmethod
-
+import os
 import threading
+import shutil
 
 import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
@@ -13,12 +12,9 @@ from pluto.interface.utils import paths
 from pluto.interface.utils import db_utils
 
 _STREAM_CHUNK_SIZE = 64 * 1024
-_DIRECTORY = paths.get_dir('strategies')
-_METADATA_FILE = paths.get_file_path('metadata', _DIRECTORY)
 
 Base = declarative_base()
-engine = db_utils.create_engine(_METADATA_FILE)
-DBSession = db_utils.get_session_maker(engine)
+
 
 def _check_scope(func):
     def wrapper(instance, *args, **kwargs):
@@ -75,6 +71,7 @@ class Scoped(object):
     @property
     def closed(self):
         return self._context.closed
+
 
 class _Session(Scoped):
     __slots__ = ['_path', '_universe', '_context', '_id', '_stg_id']
@@ -207,7 +204,7 @@ class _WritableStrategy(_Strategy):
 
 
 class _Mode(ABC):
-    def __init__(self, session):
+    def __init__(self, session, directory):
         '''
 
         Parameters
@@ -217,6 +214,7 @@ class _Mode(ABC):
         self._session = session
         self._closed = False
         self._lock = threading.Lock()
+        self._directory = directory
 
     def get_session(self, session_id):
         return _Session(
@@ -238,13 +236,13 @@ class _Mode(ABC):
         '''
 
         # we use the args pair as key
-        id_ = strategy_id+universe
+        id_ = strategy_id + universe
         session = self._session
         sess_meta = session.query(SessionMetadata) \
             .filter(SessionMetadata.id == id_).one_or_none()
 
         if not sess_meta:
-            pth = paths.get_dir(id_, _DIRECTORY)
+            pth = paths.get_dir(id_, self._directory)
             sess_meta = SessionMetadata(
                 id=id_,
                 strategy_id=strategy_id,
@@ -305,14 +303,14 @@ class _Mode(ABC):
         -------
         _Strategy
         '''
-        return self._add_strategy(self._session, name)
+        return self._add_strategy(self._session, name, self._directory)
 
     @abstractmethod
     def _get_strategy(self, metadata, context):
         raise NotImplementedError
 
     @abstractmethod
-    def _add_strategy(self, session, name):
+    def _add_strategy(self, session, name, directory):
         raise NotImplementedError
 
     @abstractmethod
@@ -339,7 +337,7 @@ class _Read(_Mode):
     def _get_strategy(self, metadata, context):
         return _Strategy(metadata, context)
 
-    def _add_strategy(self, session, name):
+    def _add_strategy(self, session, name, directory):
         raise RuntimeError('Cannot add a strategy in read mode')
 
     def _close(self, session, exc_type, exc_val, exc_tb):
@@ -347,17 +345,17 @@ class _Read(_Mode):
 
 
 class _Write(_Mode):
-    def __init__(self, session):
-        super(_Write, self).__init__(session)
+    def __init__(self, session, directory):
+        super(_Write, self).__init__(session, directory)
 
     def _get_strategy(self, metadata, context):
         return _WritableStrategy(metadata, context)
 
-    def _add_strategy(self, session, name):
+    def _add_strategy(self, session, name, directory):
         session = self._session
 
         id_ = uuid.uuid4().hex
-        pth = paths.get_file_path(id_+'.py', _DIRECTORY)
+        pth = paths.get_file_path(id_ + '.py', directory)
 
         stg_meta = StrategyMetadata(id=id_, name=name, file_path=pth, locked=False)
         session.add(stg_meta)
@@ -380,11 +378,32 @@ class _Write(_Mode):
             session.rollout()
         session.close()
 
+class StubDirectory(object):
+    def __init__(self, root_dir):
+        self._root_dir = root_dir
 
-class Directory(object):
+    def __enter__(self):
+        if not paths.root_is_set():
+            paths.setup_root(self._root_dir)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+class AbstractDirectory(ABC):
     def __init__(self):
-        self._session = sess = DBSession()
-        self._reader = _Read(sess)
+        self._root_dir = None
+
+        self._session = None
+        self._reader = None
+
+        def exploding_factory():
+            raise RuntimeError('Outside of directory context')
+
+        self._session_factory = exploding_factory
+        self._strategy_dir = None
+
     def write(self):
         '''
 
@@ -394,7 +413,7 @@ class Directory(object):
         '''
 
         # we create a new writer with a new session for each write request.
-        return _Write(DBSession())
+        return _Write(self._session_factory(), self._strategy_dir)
 
     def read(self):
         '''
@@ -413,11 +432,57 @@ class Directory(object):
         self.__exit__(None, None, None)
 
     def __enter__(self):
+        self._root_dir = root_dir = self._create_root_directory()
+        if not os.path.isdir(root_dir):
+            os.mkdir(root_dir)
+        paths.setup_root(root_dir)
+        self._strategy_dir = strategies_dir = paths.get_dir('strategies')
+        metadata_file = paths.get_file_path('metadata', strategies_dir)
+        engine = db_utils.create_engine(metadata_file)
+        self._session_factory = fct = db_utils.get_session_maker(engine)
+        self._session = sess = fct()
+        self._reader = _Read(sess, strategies_dir)
+        Base.metadata.create_all(engine)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # blocks until the reader is released by another thread.
         self._reader.close()
         self._session.close()
+        self._exit(self._root_dir)
+        paths.remove_root()
 
-Base.metadata.create_all(engine)
+    @abstractmethod
+    def _create_root_directory(self):
+        raise NotImplementedError('_create_root_directory')
+
+    @abstractmethod
+    def _exit(self, root_dir):
+        raise NotImplementedError('_exit')
+
+
+class _Directory(AbstractDirectory):
+    def _create_root_directory(self):
+        return os.path.expanduser('~/.pluto')
+
+    def _exit(self, root_dir):
+        pass
+
+
+class _TempDirectory(AbstractDirectory):
+    def _create_root_directory(self):
+        return os.path.expanduser('~/tmp/pluto')
+
+    def _exit(self, root_dir):
+        # delete everything
+        shutil.rmtree(root_dir)
+
+_DIRECTORY = None
+
+def get_directory(environment):
+    global _DIRECTORY
+    if not _DIRECTORY:
+        if environment == 'test':
+            _DIRECTORY = _TempDirectory()
+        else:
+            _DIRECTORY = _Directory()
+    return _DIRECTORY

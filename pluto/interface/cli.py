@@ -97,7 +97,7 @@ def start(port, reset_credentials):
     # maybe expose some "interface" for communicating with the broker.
     # also provide credentials for each broker (paper, live, name)
     # note: by default, we have a simulation broker.
-    with directory.Directory() as d:
+    with directory._Directory() as d:
         gateway = interface.Gateway(creds, d)
         gateway.start(port)
         click.echo('Server listening on: {}'.format('localhost:{}'.format(port)))

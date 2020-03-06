@@ -63,6 +63,7 @@ class Gateway(interface.GatewayServicer):
                 self._check_credentials(request.username, request.password)
                 token = self._create_token()  # a new token is created each successful login.
 
+                #set token in the validators
                 for validator in self._authenticity:
                     validator.token = token
                 self._logged_in = True

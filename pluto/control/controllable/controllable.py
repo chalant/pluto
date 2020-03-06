@@ -19,9 +19,7 @@ from pluto.coms.utils import conversions
 from pluto.control.controllable import synchronization_states as ss
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
-from pluto.data import bundler
 from pluto.data.universes import universes
-from pluto.data import benchmark
 from pluto.pipeline import domain
 
 from protos import controllable_pb2
@@ -206,6 +204,8 @@ class Controllable(ABC):
         look_back: int
 
         '''
+
+        #todo: where should we create the directory?
         uni = universes.get_universe(universe)
         self._calendars = {cal: cal for cal in uni.calendars}
 
@@ -215,20 +215,13 @@ class Controllable(ABC):
         self._bfs = ss.Trading(self)
         self._idle = idle = ss.Idle(self)
         self._state = idle
-
-        # FIXME: add one day to end_dt?
-        # load calendar by adding a day to avoid index errors
-
         calendar = uni.get_calendar(
             start_dt - pd.Timedelta(days=150),
-            end_dt,
-            cache=True)
+            end_dt)
 
         self._session_id = session_id
         self._start_dt = start_dt
-        # end_dt is the previous day
         end_dt = calendar.last_session
-        print('Last Session', end_dt)
         self._end_dt = end_dt
         self._calendar = calendar
         self._universe = uni
@@ -236,6 +229,7 @@ class Controllable(ABC):
         self._data_frequency = data_frequency
 
         if data_frequency == 'minute':
+            #always set the emission_rate to a minute if the data_frequency is a minute
             self._emission_rate = 'minute'
 
             def calculate_minute_capital_changes(dt, emission_rate):
@@ -261,16 +255,13 @@ class Controllable(ABC):
 
         # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
-        self._loader = loader = bundler.get_bundle_loader(uni.platform)
-        self._bundle = bundle = loader(uni.bundle_name)
+        self._bundle = bundle = uni.load_bundle()
         self._asset_finder = asset_finder = bundle.asset_finder
         # todo: first trading day should be the start_dt?
         first_trading_day = calendar.first_session
 
         last_session = calendar.last_session
 
-        # todo: equity_minute_bar_reader fix: should not instanciate the calendar
-        # todo: equity_daily_reader should instanciate a calendar...
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
@@ -281,12 +272,13 @@ class Controllable(ABC):
             last_available_session=last_session,
             last_available_minute=calendar.minutes_for_session(last_session)[-1])
 
+        #todo: we need to load benchmark returns from a file using an evironment
         # todo: create benchmark source instance based on the run mode.
         # (simulation benchmark, live benchmark)
         self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
             self,
             sessions,
-            benchmark.Benchmark('SPY'),
+            uni.benchmark,
             self._look_back,
             self._emission_rate)
 
@@ -431,7 +423,7 @@ class Controllable(ABC):
             )
 
             # reload bundle so that it updates the calendar instance
-            bundle = self._loader(self._universe.bundle_name)
+            bundle = self._universe.load_bundle()
 
             self._data_portal = data_portal = dp.DataPortal(
                 asset_finder=self._asset_finder,
@@ -494,7 +486,7 @@ class Controllable(ABC):
         capital_changes = self._calculate_minute_capital_changes(dt, self._emission_rate)
 
         # todo: assets must be restricted to the provided exchanges
-        # self._restrictions.set_exchanges(exchanges)
+        # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
         new_transactions, new_commissions, closed_orders = blotter.get_transactions(current_data)

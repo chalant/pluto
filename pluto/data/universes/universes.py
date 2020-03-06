@@ -2,14 +2,16 @@ import abc
 
 import sqlalchemy as sa
 
+from zipline.data import bundles
+
 from protos import calendar_pb2
 
+from pluto.data import benchmark as bm
 from pluto.data.universes import writer
 from pluto.data.universes import schemas
 from pluto.trading_calendars import calendar_utils as cu
 
 engine = writer.engine
-
 
 class AssetFilter(object):
     def __init__(self, directory):
@@ -31,20 +33,8 @@ class AbstractUniverse(abc.ABC):
     def name(self):
         raise NotImplementedError(self.name.__name__())
 
-    @abc.abstractmethod
     def get_calendar(self, start, end, cache=False):
-        '''
-
-        Parameters
-        ----------
-        start
-        end
-
-        Returns
-        -------
-        trading_calendars.TradingCalendar
-        '''
-        raise NotImplementedError(self.get_calendar.__name__())
+        return cu.get_calendar_in_range('XNYS', start, end, cache)
 
     @property
     @abc.abstractmethod
@@ -66,6 +56,13 @@ class AbstractUniverse(abc.ABC):
     def platform(self):
         raise NotImplementedError(self.platform.__name__())
 
+    def load_bundle(self):
+        bundles.load(self.bundle_name)
+
+    @property
+    @abc.abstractmethod
+    def benchmark(self):
+        raise NotImplementedError('benchmark')
 
 class Universe(AbstractUniverse):
     def __init__(self, name, directory):
@@ -74,6 +71,8 @@ class Universe(AbstractUniverse):
         self._exchanges = None
         self._asset_filter = None
         self._calendar_path = None
+
+        self._benchmark = None
 
     @property
     def name(self):
@@ -121,7 +120,7 @@ class Universe(AbstractUniverse):
             proto = calendar_pb2.Calendar()
             proto.ParseFromString(f.read())
 
-        #todo: the calendar should have a name.
+        # todo: the calendar should have a name.
         return cu.from_proto_calendar(proto, start, end, cache)
 
     @property
@@ -149,13 +148,18 @@ class Universe(AbstractUniverse):
     def platform(self):
         return 'pluto'
 
+    def benchmark(self):
+        if not self._benchmark:
+            self._benchmark = bm.Benchmark('SPY')
+        return self._benchmark
 
-class TestUniverse(AbstractUniverse):
+
+class ZiplineQuandlUniverse(AbstractUniverse):
     # for testing purposes, it is not meant to be
     # used in production
     @property
     def name(self):
-        return 'test'
+        return 'zipline_quandl'
 
     @property
     def exchanges(self):
@@ -164,9 +168,6 @@ class TestUniverse(AbstractUniverse):
     @property
     def calendars(self):
         return ('XNYS',)
-
-    def get_calendar(self, start, end, cache=False):
-        return cu.get_calendar_in_range('XNYS', start, end, cache)
 
     @property
     def asset_filter(self):
@@ -180,8 +181,39 @@ class TestUniverse(AbstractUniverse):
     def bundle_name(self):
         return 'quandl'
 
+    def benchmark(self):
+        return bm.ZiplineBenchmark()
+
+
+class TestUniverse(AbstractUniverse):
+    def __init__(self):
+        self._environ = {'ZIPLINE_ROOT': 'example_data/root'}
+
+    @property
+    def name(self):
+        return 'test'
+
+    @property
+    def calendars(self):
+        return ('XNYS',)
+
+    @property
+    def platform(self):
+        return 'zipline'
+
+    @property
+    def bundle_name(self):
+        return 'test'
+
     def load_bundle(self):
-        pass
+        return bundles.load(
+            self.name,
+            environ=self._environ)
+
+    def benchmark(self):
+        return bm.ZiplineBenchmark(
+            environ=self._environ
+        )
 
 
 def get_universe(name):
@@ -197,5 +229,7 @@ def get_universe(name):
     '''
     if name == 'test':
         return TestUniverse()
+    elif name == 'quandl':
+        return ZiplineQuandlUniverse()
     else:
         return Universe(name, writer.get_directory(name))

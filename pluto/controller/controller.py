@@ -99,7 +99,7 @@ class SimulationController(Controller):
                 max_leverage,
                 process_factory)
         self._loop = \
-            simulation_loop.MinuteSimulationLoop(
+            simulation_loop.SimulationLoop(
                 mode,
                 start,
                 end)

@@ -1,27 +1,68 @@
 from pluto.control.modes.processes import process_factory
 from pluto.control.controllable import server
 
+class FakeContext(object):
+    __slots__ = ['_invocation_metadata']
+
+    def __init__(self, metadata=None):
+        self._invocation_metadata = metadata if metadata else ()
+
+    def invocation_metadata(self):
+        return self._invocation_metadata
+
+class ControllableStub(object):
+    def __init__(self, servicer):
+        self._servicer = servicer
+
+    def Initialize(self, request_iterator, metadata=None):
+        self._servicer.Initialize(request_iterator, FakeContext(metadata))
+
+    def UpdateParameters(self, request, metadata=None):
+        self._servicer.UpdateParameters(request, FakeContext(metadata))
+
+    def ClockUpdate(self, request, metadata=None):
+        self._servicer.ClockUpdate(request, FakeContext(metadata))
+
+    def Stop(self, request, metadata=None):
+        self._servicer.Stop(request, FakeContext(metadata))
+
+    def UpdateAccount(self, request_iterator, metadata=None):
+        self._servicer.UpdateAccount(request_iterator, FakeContext(metadata))
+
+    def Watch(self, request, metadata=None):
+        self._servicer.Watch(request, FakeContext(metadata))
+
+    def StopWatching(self, request, metadata=None):
+        self._servicer.StopWatching(request, FakeContext(metadata))
+
+class MonitorStub(object):
+    def __init__(self, monitor_servicer):
+        self._monitor_server = monitor_servicer
+
+    def Watch(self, request):
+        self._monitor_server.Watch(request, FakeContext())
+
+    def StopWatching(self, request):
+        self._monitor_server.StopWatching(request, FakeContext())
+
+    def PerformanceUpdate(self, request_iterator):
+        self._monitor_server.PerformanceUpdate(request_iterator, FakeContext())
 
 class InMemoryProcess(process_factory.Process):
-    def _create_controllable(self, framework_url, session_id):
-        return server.ControllableService(framework_url)
+    def __init__(self, monitor_servicer, framework_url, session_id, root_dir):
+        super(InMemoryProcess, self).__init__(framework_url, session_id, root_dir)
+        self._monitor_servicer = monitor_servicer
 
-    def _initialize(self, controllable, iterator):
-        controllable.Initialize(iterator, ())
+    def _create_controllable(self, framework_id, framework_url, session_id, root_dir):
+        return ControllableStub(server.ControllableService(MonitorStub(self._monitor_servicer)))
 
-    def _clock_update(self, controllable, clock_event):
-        controllable.ClockUpdate(clock_event, ())
-
-    def _parameter_update(self, controllable, params):
-        controllable.UpdataParameters(params)
-
-    def _account_update(self, controllable, iterator):
-        controllable.AccountUpdate(iterator, ())
-
-    def _stop(self, controllable, param):
-        controllable.Stop(param, ())
+    def _stop(self):
+        pass
 
 
 class InMemoryProcessFactory(process_factory.ProcessFactory):
-    def _create_process(self, framework_url, session_id):
-        return InMemoryProcess(framework_url, session_id)
+    def __init__(self, monitor_servicer):
+        self._monitor_servicer = monitor_servicer
+
+    def _create_process(self, framework_url, session_id, root_dir):
+        return InMemoryProcess(self._monitor_servicer, framework_url, session_id, root_dir)

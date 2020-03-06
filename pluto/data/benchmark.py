@@ -1,5 +1,8 @@
-from pluto.interface.utils import paths
 import pandas as pd
+
+from zipline.data.loader import ensure_benchmark_data
+
+from pluto.interface.utils import paths
 
 DIR = paths.get_dir('benchmark', paths.get_dir('data'))
 
@@ -32,3 +35,20 @@ class Benchmark(object):
         df = df.set_index('Date')
         return df['Close'][df.index.slice_indexer(start_dt, end_dt)].iloc[:]
 
+class ZiplineBenchmark(object):
+    def __init__(self, ticker='SPY', environ=None):
+        self._environ = environ
+        self._ticker = ticker
+
+    def get_history_window(self, start_dt, end_dt, frequency, ffill=True):
+        br = ensure_benchmark_data(
+            self._ticker,
+            start_dt,
+            end_dt,
+            pd.Timestamp.utcnow(),
+            # We need the trading_day to figure out the close prior to the first
+            # date so that we can compute returns for the first date.
+            end_dt,
+            self._environ,
+        )
+        return br[br.index.slice_indexer(start_dt, end_dt)].iloc[:]

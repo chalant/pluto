@@ -28,6 +28,29 @@ service Hub {
     rpc StoreDirectory(stream Chunk) returns (google.protobuf.Empty);
 }
 
+service Monitor {
+    rpc Watch(WatchRequest) returns (WatchResponse);
+    rpc StopWatching(StopWatchingRequest) returns (StopWatchingResponse);
+    //the monitor can receive data through this endpoint
+    rpc PerformanceUpdate(bytes) returns (google.protobuf.Empty);
+}
+
+message WatchRequest {
+    string session_id = 1;
+}
+
+message WatchResponse {
+
+}
+
+message StopWatchingRequest {
+    string session_id = 1;
+}
+
+message StopWatchingResponse {
+
+}
+
 message SessionListRequest {
 
 }

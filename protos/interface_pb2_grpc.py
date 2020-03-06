@@ -99,7 +99,7 @@ class ManagerServicer(object):
     raise NotImplementedError('Method not implemented!')
 
   def Deploy(self, request, context):
-    """locks a strategy so that it can't be modfied or overwritten
+    """locks a strategy so that it can't be modified or overwritten
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -139,6 +139,16 @@ class ExplorerStub(object):
         request_serializer=protos_dot_interface__pb2.StrategyFilter.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.StrategyResponse.FromString,
         )
+    self.UniverseList = channel.unary_stream(
+        '/Explorer/UniverseList',
+        request_serializer=protos_dot_interface__pb2.UniverseListRequest.SerializeToString,
+        response_deserializer=protos_dot_interface__pb2.UniverseListResponse.FromString,
+        )
+    self.SessionList = channel.unary_stream(
+        '/Explorer/SessionList',
+        request_serializer=protos_dot_interface__pb2.SessionListRequest.SerializeToString,
+        response_deserializer=protos_dot_interface__pb2.SessionListResponse.FromString,
+        )
 
 
 class ExplorerServicer(object):
@@ -152,6 +162,20 @@ class ExplorerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def UniverseList(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def SessionList(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_ExplorerServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -159,6 +183,16 @@ def add_ExplorerServicer_to_server(servicer, server):
           servicer.StrategyList,
           request_deserializer=protos_dot_interface__pb2.StrategyFilter.FromString,
           response_serializer=protos_dot_interface__pb2.StrategyResponse.SerializeToString,
+      ),
+      'UniverseList': grpc.unary_stream_rpc_method_handler(
+          servicer.UniverseList,
+          request_deserializer=protos_dot_interface__pb2.UniverseListRequest.FromString,
+          response_serializer=protos_dot_interface__pb2.UniverseListResponse.SerializeToString,
+      ),
+      'SessionList': grpc.unary_stream_rpc_method_handler(
+          servicer.SessionList,
+          request_deserializer=protos_dot_interface__pb2.SessionListRequest.FromString,
+          response_serializer=protos_dot_interface__pb2.SessionListResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(
@@ -193,7 +227,7 @@ class HubServicer(object):
   pass
 
   def GetDirectory(self, request, context):
-    """service for getting and updating the strategy directory
+    """service for getting and updating the directory
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -222,4 +256,80 @@ def add_HubServicer_to_server(servicer, server):
   }
   generic_handler = grpc.method_handlers_generic_handler(
       'Hub', rpc_method_handlers)
+  server.add_generic_rpc_handlers((generic_handler,))
+
+
+class MonitorStub(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def __init__(self, channel):
+    """Constructor.
+
+    Args:
+      channel: A grpc.Channel.
+    """
+    self.Watch = channel.unary_unary(
+        '/Monitor/Watch',
+        request_serializer=protos_dot_interface__pb2.WatchRequest.SerializeToString,
+        response_deserializer=protos_dot_interface__pb2.WatchResponse.FromString,
+        )
+    self.StopWatching = channel.unary_unary(
+        '/Monitor/StopWatching',
+        request_serializer=protos_dot_interface__pb2.StopWatchingRequest.SerializeToString,
+        response_deserializer=protos_dot_interface__pb2.StopWatchingResponse.FromString,
+        )
+    self.PerformanceUpdate = channel.stream_unary(
+        '/Monitor/PerformanceUpdate',
+        request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+
+
+class MonitorServicer(object):
+  # missing associated documentation comment in .proto file
+  pass
+
+  def Watch(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def StopWatching(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def PerformanceUpdate(self, request_iterator, context):
+    """the monitor can receive data through this endpoint
+    """
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+
+def add_MonitorServicer_to_server(servicer, server):
+  rpc_method_handlers = {
+      'Watch': grpc.unary_unary_rpc_method_handler(
+          servicer.Watch,
+          request_deserializer=protos_dot_interface__pb2.WatchRequest.FromString,
+          response_serializer=protos_dot_interface__pb2.WatchResponse.SerializeToString,
+      ),
+      'StopWatching': grpc.unary_unary_rpc_method_handler(
+          servicer.StopWatching,
+          request_deserializer=protos_dot_interface__pb2.StopWatchingRequest.FromString,
+          response_serializer=protos_dot_interface__pb2.StopWatchingResponse.SerializeToString,
+      ),
+      'PerformanceUpdate': grpc.stream_unary_rpc_method_handler(
+          servicer.PerformanceUpdate,
+          request_deserializer=protos_dot_data__pb2.Chunk.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+  }
+  generic_handler = grpc.method_handlers_generic_handler(
+      'Monitor', rpc_method_handlers)
   server.add_generic_rpc_handlers((generic_handler,))

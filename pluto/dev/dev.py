@@ -6,7 +6,6 @@ import grpc
 from pluto.dev import editor
 from pluto.explorer import explorer
 from pluto.controller import controllerservice, controller
-from pluto.data.universes import universes
 from pluto.coms.utils import conversions
 
 from protos import development_pb2 as dev_rpc
