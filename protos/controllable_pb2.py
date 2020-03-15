@@ -25,7 +25,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/broker.proto\x1a\x17protos/controller.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"\xf0\x01\n\nInitParams\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x04 \x01(\x02\x12\x16\n\x0e\x64\x61ta_frequency\x18\x05 \x01(\t\x12\x10\n\x08universe\x18\x06 \x01(\t\x12\x11\n\tlook_back\x18\x07 \x01(\x05\x12)\n\x05start\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04mode\x18\n \x01(\t\"}\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x05\x65vent\x18\x02 \x01(\x0e\x32\n.EventType\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply\"\xaf\x02\n\x11\x43ontrollableState\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rsession_state\x18\x02 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\t\x12\x10\n\x08universe\x18\x04 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\ncheckpoint\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1d\n\x15metrics_tracker_state\x18\n \x01(\x0c\x32\x99\x02\n\x0c\x43ontrollable\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12.\n\nInitialize\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x31\n\rUpdateAccount\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12,\n\x04Stop\x12\x0c.StopRequest\x1a\x16.google.protobuf.Emptyb\x06proto3')
+  serialized_pb=_b('\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/broker.proto\x1a\x17protos/controller.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\"\xf0\x01\n\nInitParams\x12\n\n\x02id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x04 \x01(\x02\x12\x16\n\x0e\x64\x61ta_frequency\x18\x05 \x01(\t\x12\x10\n\x08universe\x18\x06 \x01(\t\x12\x11\n\tlook_back\x18\x07 \x01(\x05\x12)\n\x05start\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0c\n\x04mode\x18\n \x01(\t\"}\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x05\x65vent\x18\x02 \x01(\x0e\x32\n.EventType\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply\"\xaf\x02\n\x11\x43ontrollableState\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rsession_state\x18\x02 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\t\x12\x10\n\x08universe\x18\x04 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\ncheckpoint\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1d\n\x15metrics_tracker_state\x18\n \x01(\x0c\x32\x92\x03\n\x0c\x43ontrollable\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12.\n\nInitialize\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x31\n\rUpdateAccount\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12,\n\x04Stop\x12\x0c.StopRequest\x1a\x16.google.protobuf.Empty\x12\x37\n\x05Watch\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12>\n\x0cStopWatching\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Emptyb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_broker__pb2.DESCRIPTOR,protos_dot_controller__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -339,7 +339,7 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   serialized_start=868,
-  serialized_end=1149,
+  serialized_end=1270,
   methods=[
   _descriptor.MethodDescriptor(
     name='UpdateParameters',
@@ -383,6 +383,24 @@ _CONTROLLABLE = _descriptor.ServiceDescriptor(
     index=4,
     containing_service=None,
     input_type=protos_dot_controller__pb2._STOPREQUEST,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Watch',
+    full_name='Controllable.Watch',
+    index=5,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='StopWatching',
+    full_name='Controllable.StopWatching',
+    index=6,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),

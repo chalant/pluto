@@ -22,7 +22,6 @@ from zipline.utils.pandas_utils import normalize_date
 
 from functools import partial
 
-from pandas.tslib import normalize_date
 from six import string_types
 from sqlalchemy import create_engine
 

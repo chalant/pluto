@@ -1,4 +1,5 @@
 from sqlalchemy import sql
+import abc
 
 from pluto.control.events_log import schema
 from pluto.interface.utils import paths, db_utils
@@ -10,15 +11,86 @@ from protos import (
     controller_pb2,
     broker_pb2)
 
-ROOT = paths.get_dir('control')
-DIR = paths.get_dir('events', ROOT)
-FILE = paths.get_file_path('metadata', DIR)
+class NoopIterator(object):
+    def __next__(self):
+        raise StopIteration
 
-engine = db_utils.create_engine(FILE)
-schema.metadata.create_all(engine)
+    def __iter__(self):
+        return self
+
+class AbstractEventsLog(object):
+    @abc.abstractmethod
+    def writer(self):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def read(self, session_id, datetime):
+        '''
+
+        Parameters
+        ----------
+        session_id: str
+        datetime: pandas.Timestamp
+
+        Returns
+        -------
+        typing.Iterable[_Event]
+        '''
+        raise NotImplementedError()
+
+class EventsLog(AbstractEventsLog):
 
 
-class _NoOpEventLogWriter(object):
+    def __init__(self):
+        root = paths.get_dir('control')
+        dir_ = paths.get_dir('events', root)
+        file_ = paths.get_file_path('metadata', dir_)
+
+        self._engine = engine = db_utils.create_engine(file_)
+        schema.metadata.create_all(engine)
+        self._writer = _EventsLogWriter(engine, dir_)
+
+    def read(self, session_id, datetime):
+        with self._engine.begin() as connection:
+            statement = sql.select(
+                [schema.datetimes.datetime,
+                 schema.events.file_path]) \
+                .join(schema.datetimes) \
+                .where(schema.datetimes.c.datetime > datetime)
+            result = connection.execute(statement)
+            values = []
+            for row in result:
+                values.append(_Events(
+                    row['datetime'],
+                    row['file_path']))
+            for evt in sorted(values):
+                with open(evt.file_path, 'rb') as f:
+                    for line in f.read():
+                        event = events_pb2.Event()
+                        event.ParseFromString(line)
+                        evt_type = event.event_type
+                        dt, evt = _create_event(evt_type, event.event)
+                        if dt > datetime:
+                            if evt_type == 'parameter':
+                                # filter session id
+                                if evt.session_id == session_id:
+                                    yield evt
+                            else:
+                                yield evt_type, evt
+
+class NoopEventsLog(object):
+    def __init__(self):
+        self._writer = _NoopEventLogWriter()
+        self._itr = NoopIterator()
+
+    def writer(self):
+        return self._writer
+
+    def read(self, session_id, datetime):
+        return self._itr
+
+
+class _NoopEventLogWriter(object):
     def initialize(self, datetime):
         pass
 
@@ -36,10 +108,12 @@ class _NoOpEventLogWriter(object):
 
 
 class _EventsLogWriter(object):
-    def __init__(self):
+    def __init__(self, engine, root_dir):
         self._connection = None
         self._path = None
         self._session = None
+        self._dir = root_dir
+        self._engine = engine
 
     def initialize(self, datetime):
         '''
@@ -51,7 +125,9 @@ class _EventsLogWriter(object):
         '''
 
         # called once per session
-        self._path = path = paths.get_file_path(str(datetime), DIR)
+        self._path = path = paths.get_file_path(
+            str(datetime),
+            self._dir)
         self._session = datetime
         self._connection.execute(
             schema.events.insert().values(
@@ -79,31 +155,26 @@ class _EventsLogWriter(object):
         -------
         _EventsLogWriter
         '''
-        self._connection = engine.connect()
-
+        self._connection = self._engine.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._connection.close()
 
+_noop_events_log = None
+_events_log = None
 
-_writer = _EventsLogWriter()
-_noop_writer = _NoOpEventLogWriter()
-
-
-def writer(mode='simulation'):
-    # we use a lock to avoid multiple datetime updates
-    '''
-
-    Returns
-    -------
-    _EventsLogWriter
-    '''
+def get_events_log(mode='simulation'):
     if mode == 'live':
-        return _writer
+        global _events_log
+        if not _events_log:
+            _events_log = EventsLog()
+        return _events_log
     else:
-        return _noop_writer
-
+        global _noop_events_log
+        if not _noop_events_log:
+            _noop_events_log = NoopEventsLog()
+        return _noop_events_log
 
 class _Events(object):
     __slots__ = ['datetime', 'file_path']
@@ -181,44 +252,3 @@ def _create_event(event_type, bytes_):
         event = broker_pb2.BrokerState()
         event.ParseFromString(bytes_)
         return conversions.to_datetime(event.timestamp), event
-
-
-def read(session_id, datetime):
-    '''
-
-    Parameters
-    ----------
-    session_id: str
-    datetime: pandas.Timestamp
-
-    Returns
-    -------
-    typing.Iterable[_Event]
-    '''
-
-    with engine.begin() as connection:
-        statement = sql.select(
-            [schema.datetimes.datetime,
-             schema.events.file_path]) \
-            .join(schema.datetimes) \
-            .where(schema.datetimes.c.datetime > datetime)
-        result = connection.execute(statement)
-        values = []
-        for row in result:
-            values.append(_Events(
-                row['datetime'],
-                row['file_path']))
-        for evt in sorted(values):
-            with open(evt.file_path, 'rb') as f:
-                for line in f.read():
-                    event = events_pb2.Event()
-                    event.ParseFromString(line)
-                    evt_type = event.event_type
-                    dt, evt = _create_event(evt_type, event.event)
-                    if dt > datetime:
-                        if evt_type == 'parameter':
-                            # filter session id
-                            if evt.session_id == session_id:
-                                yield evt
-                        else:
-                            yield evt_type, evt

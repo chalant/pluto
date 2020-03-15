@@ -165,4 +165,8 @@ def _test_args():
     return {
         'start': pd.Timestamp('2004', tz='utc'),
         'end': pd.Timestamp('2008', tz='utc'),
+        'capital_base': 1e7,
+        'max_leverage': None,
+        'look_back': 20,
+        'data_frequency': 'daily'
     }

@@ -22,7 +22,7 @@ message Status {
 message RunRequest {
     RunMode mode = 1; //necessary in realtime mode not in backtesting
     repeated RunParams run_params = 2;
-    google.protobuf.Timestamp end = 3; //indicates the date from which we pre
+    google.protobuf.Timestamp end = 3;
 }
 
 message RunParams {
@@ -52,25 +52,15 @@ message StopRequest {
 message StopResponse {
 }
 
-message WatchRequest {
-    string session_id = 1;
-}
-
 message Performance {
     repeated PerformancePacket packets = 1;
 }
 
 message PerformancePacket {
     CumulativeMetrics cumulative_perf = 1;
-    PeriodPerformance daily_perf = 2;
-    PeriodPerformance minutely_perf = 3;
+    PeriodMetrics period_perf = 2;
     CumulativeRiskMetrics cumulative_risk_metrics = 4;
-    string id = 5;
-}
-
-message PeriodPerformance {
-    CumulativeMetrics cumulative_metrics = 1;
-    PeriodCommonMetrics period_common_metrics = 2;
+    string packet_type = 5;
 }
 
 enum ControllerEvent {

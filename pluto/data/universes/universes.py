@@ -1,4 +1,5 @@
 import abc
+import os
 
 import sqlalchemy as sa
 
@@ -10,8 +11,6 @@ from pluto.data import benchmark as bm
 from pluto.data.universes import writer
 from pluto.data.universes import schemas
 from pluto.trading_calendars import calendar_utils as cu
-
-engine = writer.engine
 
 class AssetFilter(object):
     def __init__(self, directory):
@@ -72,6 +71,8 @@ class Universe(AbstractUniverse):
         self._asset_filter = None
         self._calendar_path = None
 
+        self._engine = writer.get_engine()
+
         self._benchmark = None
 
     @property
@@ -83,7 +84,7 @@ class Universe(AbstractUniverse):
         # query the exchanges associated with this universe
         exchanges = self._exchanges
         if not exchanges:
-            with engine.begin() as conn:
+            with self._engine.begin() as conn:
                 stm = schemas.universes
                 self._exchanges = \
                     exchanges = [
@@ -106,7 +107,7 @@ class Universe(AbstractUniverse):
         -------
         trading_calendars.TradingCalendar
         '''
-        with engine.begin() as conn:
+        with self._engine.begin() as conn:
             stm = schemas.calendars
             result = conn.execute(
                 sa.select([stm.c.file_path])
@@ -127,7 +128,7 @@ class Universe(AbstractUniverse):
     def bundle_name(self):
         bundle = self._bundle_name
         if not bundle:
-            with engine.begin() as conn:
+            with self._engine.begin() as conn:
                 stm = schemas.universes
                 result = conn.execute(
                     sa.select([stm.c.bundle])
@@ -181,21 +182,26 @@ class ZiplineQuandlUniverse(AbstractUniverse):
     def bundle_name(self):
         return 'quandl'
 
+    @property
     def benchmark(self):
         return bm.ZiplineBenchmark()
 
 
 class TestUniverse(AbstractUniverse):
-    def __init__(self):
-        self._environ = {'ZIPLINE_ROOT': 'example_data/root'}
-
     @property
     def name(self):
         return 'test'
 
     @property
+    def exchanges(self):
+        return ('AMEX', 'NYSE', 'NASDAQ')
+
+    @property
     def calendars(self):
         return ('XNYS',)
+
+    def asset_filter(self):
+        return
 
     @property
     def platform(self):
@@ -208,11 +214,12 @@ class TestUniverse(AbstractUniverse):
     def load_bundle(self):
         return bundles.load(
             self.name,
-            environ=self._environ)
+            environ=os.environ)
 
+    @property
     def benchmark(self):
         return bm.ZiplineBenchmark(
-            environ=self._environ
+            environ=os.environ
         )
 
 

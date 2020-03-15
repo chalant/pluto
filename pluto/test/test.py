@@ -4,6 +4,7 @@ import grpc
 
 from pluto.coms.utils import conversions
 from pluto.dev import dev
+from pluto.utils import stream
 
 from protos import controller_pb2
 from protos import development_pb2
@@ -48,6 +49,8 @@ class TestClient(object):
                 data_frequency='daily',
                 look_back=look_back), ())
 
+        self._mon = self._env._monitor
+
         self._session_id = sess_id = response.session_id
         return sess_id
 
@@ -84,7 +87,24 @@ class TestClient(object):
         return response
 
     def save(self, strategy_id, implementation):
-        self._edt.Save()
+        request = development_pb2.SaveRequest(
+            strategy_id=strategy_id,
+            strategy=implementation
+        ).SerializeToString()
+        self._edt.Save(stream.chunk_bytes(request), ())
 
     def watch(self, session_id):
-        pass
+        for perf in self._env._monitor.Watch(
+            interface_pb2.WatchRequest(session_id=session_id),
+            ()):
+            packet = controller_pb2.PerformancePacket()
+            packet.ParseFromString(perf.packet)
+            p = conversions.from_proto_performance_packet(packet)
+            yield p
+
+    def stop_watching(self, session_id):
+        self._env._monitor.StopWatching(
+            interface_pb2.StopWatchingRequest(
+                session_id=session_id
+            ),
+            ())

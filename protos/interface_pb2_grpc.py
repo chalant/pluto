@@ -269,7 +269,7 @@ class MonitorStub(object):
     Args:
       channel: A grpc.Channel.
     """
-    self.Watch = channel.unary_unary(
+    self.Watch = channel.unary_stream(
         '/Monitor/Watch',
         request_serializer=protos_dot_interface__pb2.WatchRequest.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.WatchResponse.FromString,
@@ -279,9 +279,9 @@ class MonitorStub(object):
         request_serializer=protos_dot_interface__pb2.StopWatchingRequest.SerializeToString,
         response_deserializer=protos_dot_interface__pb2.StopWatchingResponse.FromString,
         )
-    self.PerformanceUpdate = channel.stream_unary(
+    self.PerformanceUpdate = channel.unary_unary(
         '/Monitor/PerformanceUpdate',
-        request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
+        request_serializer=protos_dot_interface__pb2.Packet.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
 
@@ -304,8 +304,8 @@ class MonitorServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def PerformanceUpdate(self, request_iterator, context):
-    """the monitor can receive data through this endpoint
+  def PerformanceUpdate(self, request, context):
+    """the monitor can receive performance data through this method
     """
     context.set_code(grpc.StatusCode.UNIMPLEMENTED)
     context.set_details('Method not implemented!')
@@ -314,7 +314,7 @@ class MonitorServicer(object):
 
 def add_MonitorServicer_to_server(servicer, server):
   rpc_method_handlers = {
-      'Watch': grpc.unary_unary_rpc_method_handler(
+      'Watch': grpc.unary_stream_rpc_method_handler(
           servicer.Watch,
           request_deserializer=protos_dot_interface__pb2.WatchRequest.FromString,
           response_serializer=protos_dot_interface__pb2.WatchResponse.SerializeToString,
@@ -324,9 +324,9 @@ def add_MonitorServicer_to_server(servicer, server):
           request_deserializer=protos_dot_interface__pb2.StopWatchingRequest.FromString,
           response_serializer=protos_dot_interface__pb2.StopWatchingResponse.SerializeToString,
       ),
-      'PerformanceUpdate': grpc.stream_unary_rpc_method_handler(
+      'PerformanceUpdate': grpc.unary_unary_rpc_method_handler(
           servicer.PerformanceUpdate,
-          request_deserializer=protos_dot_data__pb2.Chunk.FromString,
+          request_deserializer=protos_dot_interface__pb2.Packet.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
   }

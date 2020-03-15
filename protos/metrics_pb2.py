@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x14protos/metrics.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/finance.proto\x1a\x15protos/protocol.proto\"\xe6\x03\n\x11\x43umulativeMetrics\x12/\n\x0bperiod_open\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0cperiod_close\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0f\n\x07returns\x18\x03 \x01(\x02\x12\x0b\n\x03pnl\x18\x04 \x01(\x02\x12\x11\n\tcash_flow\x18\x05 \x01(\x02\x12\x19\n\x11starting_exposure\x18\x06 \x01(\x02\x12\x17\n\x0f\x65nding_exposure\x18\x07 \x01(\x02\x12\x16\n\x0estarting_value\x18\x08 \x01(\x02\x12\x14\n\x0c\x65nding_value\x18\t \x01(\x02\x12\x15\n\rstarting_cash\x18\n \x01(\x02\x12\x13\n\x0b\x65nding_cash\x18\x0b \x01(\x02\x12\x13\n\x0blongs_count\x18\x0c \x01(\x03\x12\x14\n\x0cshorts_count\x18\r \x01(\x03\x12\x12\n\nlong_value\x18\x0e \x01(\x02\x12\x13\n\x0bshort_value\x18\x0f \x01(\x02\x12\x15\n\rlong_exposure\x18\x10 \x01(\x02\x12\x16\n\x0eshort_exposure\x18\x11 \x01(\x02\x12\x16\n\x0egross_leverage\x18\x12 \x01(\x02\x12\x14\n\x0cnet_leverage\x18\x13 \x01(\x02\"o\n\x13PeriodCommonMetrics\x12\x16\n\x06orders\x18\x01 \x03(\x0b\x32\x06.Order\x12\"\n\x0ctransactions\x18\x02 \x03(\x0b\x32\x0c.Transaction\x12\x1c\n\tpositions\x18\x03 \x03(\x0b\x32\t.Position\"\xff\x01\n\x15\x43umulativeRiskMetrics\x12\x1c\n\x14\x61lgorithm_volatility\x18\x01 \x01(\x02\x12\x1f\n\x17\x62\x65nchmark_period_return\x18\x02 \x01(\x02\x12\x1c\n\x14\x62\x65nchmark_volatility\x18\x03 \x01(\x02\x12\x1f\n\x17\x61lgorithm_period_return\x18\x04 \x01(\x02\x12\r\n\x05\x61lpha\x18\x05 \x01(\x02\x12\x0c\n\x04\x62\x65ta\x18\x06 \x01(\x02\x12\x0e\n\x06sharpe\x18\x07 \x01(\x02\x12\x0f\n\x07sortino\x18\x08 \x01(\x02\x12\x14\n\x0cmax_drawdown\x18\t \x01(\x02\x12\x14\n\x0cmax_leverage\x18\n \x01(\x02\x62\x06proto3')
+  serialized_pb=_b('\n\x14protos/metrics.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/finance.proto\x1a\x15protos/protocol.proto\"\x82\x04\n\x11\x43umulativeMetrics\x12/\n\x0bperiod_open\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0cperiod_close\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0f\n\x07returns\x18\x03 \x01(\x02\x12\x0b\n\x03pnl\x18\x04 \x01(\x02\x12\x14\n\x0c\x63\x61pital_used\x18\x05 \x01(\x02\x12\x19\n\x11starting_exposure\x18\x06 \x01(\x02\x12\x17\n\x0f\x65nding_exposure\x18\x07 \x01(\x02\x12\x16\n\x0estarting_value\x18\x08 \x01(\x02\x12\x14\n\x0c\x65nding_value\x18\t \x01(\x02\x12\x15\n\rstarting_cash\x18\n \x01(\x02\x12\x13\n\x0b\x65nding_cash\x18\x0b \x01(\x02\x12\x17\n\x0fportfolio_value\x18\x14 \x01(\x02\x12\x13\n\x0blongs_count\x18\x0c \x01(\x03\x12\x14\n\x0cshorts_count\x18\r \x01(\x03\x12\x12\n\nlong_value\x18\x0e \x01(\x02\x12\x13\n\x0bshort_value\x18\x0f \x01(\x02\x12\x15\n\rlong_exposure\x18\x10 \x01(\x02\x12\x16\n\x0eshort_exposure\x18\x11 \x01(\x02\x12\x16\n\x0egross_leverage\x18\x12 \x01(\x02\x12\x14\n\x0cnet_leverage\x18\x13 \x01(\x02\"i\n\rPeriodMetrics\x12\x16\n\x06orders\x18\x01 \x03(\x0b\x32\x06.Order\x12\"\n\x0ctransactions\x18\x02 \x03(\x0b\x32\x0c.Transaction\x12\x1c\n\tpositions\x18\x03 \x03(\x0b\x32\t.Position\"\xdd\x02\n\x15\x43umulativeRiskMetrics\x12\x17\n\x0f\x61lgo_volatility\x18\x01 \x01(\x02\x12\x1f\n\x17\x62\x65nchmark_period_return\x18\x02 \x01(\x02\x12\x1c\n\x14\x62\x65nchmark_volatility\x18\x03 \x01(\x02\x12\x1f\n\x17\x61lgorithm_period_return\x18\x04 \x01(\x02\x12\r\n\x05\x61lpha\x18\x05 \x01(\x02\x12\x0c\n\x04\x62\x65ta\x18\x06 \x01(\x02\x12\x0e\n\x06sharpe\x18\x07 \x01(\x02\x12\x0f\n\x07sortino\x18\x08 \x01(\x02\x12\x14\n\x0cmax_drawdown\x18\t \x01(\x02\x12\x14\n\x0cmax_leverage\x18\n \x01(\x02\x12\x14\n\x0ctrading_days\x18\x0b \x01(\x05\x12\x14\n\x0cperiod_label\x18\x0c \x01(\t\x12\x15\n\rexcess_return\x18\r \x01(\x02\x12\x1e\n\x16treasury_period_return\x18\x0e \x01(\x02\x62\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_finance__pb2.DESCRIPTOR,protos_dot_protocol__pb2.DESCRIPTOR,])
 
@@ -65,7 +65,7 @@ _CUMULATIVEMETRICS = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='cash_flow', full_name='CumulativeMetrics.cash_flow', index=4,
+      name='capital_used', full_name='CumulativeMetrics.capital_used', index=4,
       number=5, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
@@ -114,56 +114,63 @@ _CUMULATIVEMETRICS = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='longs_count', full_name='CumulativeMetrics.longs_count', index=11,
+      name='portfolio_value', full_name='CumulativeMetrics.portfolio_value', index=11,
+      number=20, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='longs_count', full_name='CumulativeMetrics.longs_count', index=12,
       number=12, type=3, cpp_type=2, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='shorts_count', full_name='CumulativeMetrics.shorts_count', index=12,
+      name='shorts_count', full_name='CumulativeMetrics.shorts_count', index=13,
       number=13, type=3, cpp_type=2, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='long_value', full_name='CumulativeMetrics.long_value', index=13,
+      name='long_value', full_name='CumulativeMetrics.long_value', index=14,
       number=14, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='short_value', full_name='CumulativeMetrics.short_value', index=14,
+      name='short_value', full_name='CumulativeMetrics.short_value', index=15,
       number=15, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='long_exposure', full_name='CumulativeMetrics.long_exposure', index=15,
+      name='long_exposure', full_name='CumulativeMetrics.long_exposure', index=16,
       number=16, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='short_exposure', full_name='CumulativeMetrics.short_exposure', index=16,
+      name='short_exposure', full_name='CumulativeMetrics.short_exposure', index=17,
       number=17, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='gross_leverage', full_name='CumulativeMetrics.gross_leverage', index=17,
+      name='gross_leverage', full_name='CumulativeMetrics.gross_leverage', index=18,
       number=18, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='net_leverage', full_name='CumulativeMetrics.net_leverage', index=18,
+      name='net_leverage', full_name='CumulativeMetrics.net_leverage', index=19,
       number=19, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
@@ -182,33 +189,33 @@ _CUMULATIVEMETRICS = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=103,
-  serialized_end=589,
+  serialized_end=617,
 )
 
 
-_PERIODCOMMONMETRICS = _descriptor.Descriptor(
-  name='PeriodCommonMetrics',
-  full_name='PeriodCommonMetrics',
+_PERIODMETRICS = _descriptor.Descriptor(
+  name='PeriodMetrics',
+  full_name='PeriodMetrics',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='orders', full_name='PeriodCommonMetrics.orders', index=0,
+      name='orders', full_name='PeriodMetrics.orders', index=0,
       number=1, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='transactions', full_name='PeriodCommonMetrics.transactions', index=1,
+      name='transactions', full_name='PeriodMetrics.transactions', index=1,
       number=2, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='positions', full_name='PeriodCommonMetrics.positions', index=2,
+      name='positions', full_name='PeriodMetrics.positions', index=2,
       number=3, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -226,8 +233,8 @@ _PERIODCOMMONMETRICS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=591,
-  serialized_end=702,
+  serialized_start=619,
+  serialized_end=724,
 )
 
 
@@ -239,7 +246,7 @@ _CUMULATIVERISKMETRICS = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='algorithm_volatility', full_name='CumulativeRiskMetrics.algorithm_volatility', index=0,
+      name='algo_volatility', full_name='CumulativeRiskMetrics.algo_volatility', index=0,
       number=1, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
@@ -308,6 +315,34 @@ _CUMULATIVERISKMETRICS = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='trading_days', full_name='CumulativeRiskMetrics.trading_days', index=10,
+      number=11, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='period_label', full_name='CumulativeRiskMetrics.period_label', index=11,
+      number=12, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='excess_return', full_name='CumulativeRiskMetrics.excess_return', index=12,
+      number=13, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='treasury_period_return', full_name='CumulativeRiskMetrics.treasury_period_return', index=13,
+      number=14, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -320,17 +355,17 @@ _CUMULATIVERISKMETRICS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=705,
-  serialized_end=960,
+  serialized_start=727,
+  serialized_end=1076,
 )
 
 _CUMULATIVEMETRICS.fields_by_name['period_open'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _CUMULATIVEMETRICS.fields_by_name['period_close'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_PERIODCOMMONMETRICS.fields_by_name['orders'].message_type = protos_dot_protocol__pb2._ORDER
-_PERIODCOMMONMETRICS.fields_by_name['transactions'].message_type = protos_dot_finance__pb2._TRANSACTION
-_PERIODCOMMONMETRICS.fields_by_name['positions'].message_type = protos_dot_protocol__pb2._POSITION
+_PERIODMETRICS.fields_by_name['orders'].message_type = protos_dot_protocol__pb2._ORDER
+_PERIODMETRICS.fields_by_name['transactions'].message_type = protos_dot_finance__pb2._TRANSACTION
+_PERIODMETRICS.fields_by_name['positions'].message_type = protos_dot_protocol__pb2._POSITION
 DESCRIPTOR.message_types_by_name['CumulativeMetrics'] = _CUMULATIVEMETRICS
-DESCRIPTOR.message_types_by_name['PeriodCommonMetrics'] = _PERIODCOMMONMETRICS
+DESCRIPTOR.message_types_by_name['PeriodMetrics'] = _PERIODMETRICS
 DESCRIPTOR.message_types_by_name['CumulativeRiskMetrics'] = _CUMULATIVERISKMETRICS
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -341,12 +376,12 @@ CumulativeMetrics = _reflection.GeneratedProtocolMessageType('CumulativeMetrics'
   ))
 _sym_db.RegisterMessage(CumulativeMetrics)
 
-PeriodCommonMetrics = _reflection.GeneratedProtocolMessageType('PeriodCommonMetrics', (_message.Message,), dict(
-  DESCRIPTOR = _PERIODCOMMONMETRICS,
+PeriodMetrics = _reflection.GeneratedProtocolMessageType('PeriodMetrics', (_message.Message,), dict(
+  DESCRIPTOR = _PERIODMETRICS,
   __module__ = 'protos.metrics_pb2'
-  # @@protoc_insertion_point(class_scope:PeriodCommonMetrics)
+  # @@protoc_insertion_point(class_scope:PeriodMetrics)
   ))
-_sym_db.RegisterMessage(PeriodCommonMetrics)
+_sym_db.RegisterMessage(PeriodMetrics)
 
 CumulativeRiskMetrics = _reflection.GeneratedProtocolMessageType('CumulativeRiskMetrics', (_message.Message,), dict(
   DESCRIPTOR = _CUMULATIVERISKMETRICS,

@@ -41,7 +41,8 @@ def rebalance(context, data):
     # Remove any assets that should no longer be in our portfolio.
     portfolio_assets = longs | shorts
     positions = context.portfolio.positions
-    for asset in viewkeys(positions) - set(portfolio_assets):
+
+    for asset in set(positions.keys()) - set(portfolio_assets):
         # This will fail if the asset was removed from our portfolio because it
         # was delisted.
         if data.can_trade(asset):
@@ -91,4 +92,5 @@ def _test_args():
         'capital_base': 100000,
         'max_leverage': 2.0,
         'look_back': 150,
+        'data_frequency': 'daily'
     }

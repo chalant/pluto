@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x18protos/development.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11protos/data.proto\"4\n\x12NewStrategyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08universe\x18\x02 \x01(\t\"\'\n\x13NewStrategyResponse\x12\x10\n\x08template\x18\x01 \x01(\x0c\"\x0e\n\x0cPushResponse\"4\n\x0bSaveRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"\x0e\n\x0cSaveResponse\"&\n\x0fStrategyRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\xdb\x01\n\x0cSetupRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x07 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x08 \x01(\x02\x12\x10\n\x08universe\x18\x02 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"#\n\rSetupResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"#\n\rDeleteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\x10\n\x0e\x44\x65leteResponse2\x9b\x01\n\x06\x45\x64itor\x12$\n\x03New\x12\x13.NewStrategyRequest\x1a\x06.Chunk0\x01\x12\x1f\n\x04Save\x12\x06.Chunk\x1a\r.SaveResponse(\x01\x12\x1f\n\x04Push\x12\x06.Chunk\x1a\r.PushResponse(\x01\x12)\n\x0bGetStrategy\x12\x10.StrategyRequest\x1a\x06.Chunk0\x01\x32`\n\x0b\x45nvironment\x12&\n\x05Setup\x12\r.SetupRequest\x1a\x0e.SetupResponse\x12)\n\x06\x44\x65lete\x12\x0e.DeleteRequest\x1a\x0f.DeleteResponseb\x06proto3')
+  serialized_pb=_b('\n\x18protos/development.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11protos/data.proto\"4\n\x12NewStrategyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08universe\x18\x02 \x01(\t\"<\n\x13NewStrategyResponse\x12\x10\n\x08template\x18\x01 \x01(\x0c\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\"\x0e\n\x0cPushResponse\"4\n\x0bSaveRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"\x0e\n\x0cSaveResponse\"&\n\x0fStrategyRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\xdb\x01\n\x0cSetupRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x07 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x08 \x01(\x02\x12\x10\n\x08universe\x18\x02 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"#\n\rSetupResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"#\n\rDeleteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\x10\n\x0e\x44\x65leteResponse2\x9b\x01\n\x06\x45\x64itor\x12$\n\x03New\x12\x13.NewStrategyRequest\x1a\x06.Chunk0\x01\x12\x1f\n\x04Save\x12\x06.Chunk\x1a\r.SaveResponse(\x01\x12\x1f\n\x04Push\x12\x06.Chunk\x1a\r.PushResponse(\x01\x12)\n\x0bGetStrategy\x12\x10.StrategyRequest\x1a\x06.Chunk0\x01\x32`\n\x0b\x45nvironment\x12&\n\x05Setup\x12\r.SetupRequest\x1a\x0e.SetupResponse\x12)\n\x06\x44\x65lete\x12\x0e.DeleteRequest\x1a\x0f.DeleteResponseb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -80,6 +80,13 @@ _NEWSTRATEGYRESPONSE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='strategy_id', full_name='NewStrategyResponse.strategy_id', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -93,7 +100,7 @@ _NEWSTRATEGYRESPONSE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=134,
-  serialized_end=173,
+  serialized_end=194,
 )
 
 
@@ -116,8 +123,8 @@ _PUSHRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=175,
-  serialized_end=189,
+  serialized_start=196,
+  serialized_end=210,
 )
 
 
@@ -154,8 +161,8 @@ _SAVEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=191,
-  serialized_end=243,
+  serialized_start=212,
+  serialized_end=264,
 )
 
 
@@ -178,8 +185,8 @@ _SAVERESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=245,
-  serialized_end=259,
+  serialized_start=266,
+  serialized_end=280,
 )
 
 
@@ -209,8 +216,8 @@ _STRATEGYREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=261,
-  serialized_end=299,
+  serialized_start=282,
+  serialized_end=320,
 )
 
 
@@ -289,8 +296,8 @@ _SETUPREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=302,
-  serialized_end=521,
+  serialized_start=323,
+  serialized_end=542,
 )
 
 
@@ -320,8 +327,8 @@ _SETUPRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=523,
-  serialized_end=558,
+  serialized_start=544,
+  serialized_end=579,
 )
 
 
@@ -351,8 +358,8 @@ _DELETEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=560,
-  serialized_end=595,
+  serialized_start=581,
+  serialized_end=616,
 )
 
 
@@ -375,8 +382,8 @@ _DELETERESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=597,
-  serialized_end=613,
+  serialized_start=618,
+  serialized_end=634,
 )
 
 _SETUPREQUEST.fields_by_name['start'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
@@ -471,8 +478,8 @@ _EDITOR = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=616,
-  serialized_end=771,
+  serialized_start=637,
+  serialized_end=792,
   methods=[
   _descriptor.MethodDescriptor(
     name='New',
@@ -522,8 +529,8 @@ _ENVIRONMENT = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=1,
   serialized_options=None,
-  serialized_start=773,
-  serialized_end=869,
+  serialized_start=794,
+  serialized_end=890,
   methods=[
   _descriptor.MethodDescriptor(
     name='Setup',

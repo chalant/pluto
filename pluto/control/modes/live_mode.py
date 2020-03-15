@@ -28,6 +28,6 @@ class LiveControlMode(mode.ControlMode):
             process.account_update(broker_state)
         event_writer.write_event('broker', broker_state)
 
-    def _create_event_writer(self):
-        return events_log.writer('live')
+    def _create_events_log(self):
+        return events_log.get_events_log('live')
 

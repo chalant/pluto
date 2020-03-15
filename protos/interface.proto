@@ -29,10 +29,16 @@ service Hub {
 }
 
 service Monitor {
-    rpc Watch(WatchRequest) returns (WatchResponse);
+    rpc Watch(WatchRequest) returns (stream WatchResponse);
     rpc StopWatching(StopWatchingRequest) returns (StopWatchingResponse);
-    //the monitor can receive data through this endpoint
-    rpc PerformanceUpdate(bytes) returns (google.protobuf.Empty);
+    //the monitor can receive performance data through this method
+    rpc PerformanceUpdate(Packet) returns (google.protobuf.Empty);
+}
+
+message Packet {
+    bytes packet = 1;
+    string session_id = 2;
+    bool end = 3;
 }
 
 message WatchRequest {
@@ -40,7 +46,7 @@ message WatchRequest {
 }
 
 message WatchResponse {
-
+    bytes packet = 1;
 }
 
 message StopWatchingRequest {

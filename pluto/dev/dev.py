@@ -5,8 +5,11 @@ import grpc
 
 from pluto.dev import editor
 from pluto.explorer import explorer
+from pluto.interface import monitor
 from pluto.controller import controllerservice, controller
 from pluto.coms.utils import conversions
+from pluto.control.modes import simulation_mode
+from pluto.control.loop import simulation_loop
 
 from protos import development_pb2 as dev_rpc
 from protos import development_pb2_grpc as development
@@ -19,6 +22,8 @@ class Environment(development.EnvironmentServicer):
         self._directory = directory
         self._server = server
         self._controller = None
+        self._controllers = {}
+        self._monitor = None
         self._framework_url = framework_url
 
         self._explorer = exp = explorer.Explorer(directory)
@@ -51,22 +56,35 @@ class Environment(development.EnvironmentServicer):
                 data_frequency,
                 look_back if look_back else 150)
 
-        start = request.start
-        end = request.end
+        start = conversions.to_datetime(request.start)
+        end = conversions.to_datetime(request.end)
 
-        self._controller = sim_ctl = \
-            controllerservice.ControllerService(
-                directory,
-                controller.SimulationController(
-                    self._process_factory,
-                    self._framework_url,
-                    request.capital,
-                    request.max_leverage,
-                    conversions.to_datetime(start),
-                    conversions.to_datetime(end)))
+        process_factory = self._process_factory
 
+        mode = simulation_mode.SimulationControlMode(
+            self._framework_url,
+            request.capital,
+            request.max_leverage,
+            process_factory)
+
+        loop = simulation_loop.SimulationLoop(mode, start, end)
+
+        self._monitor = mon = monitor.Monitor(mode)
+        # set monitor incase we have an in-memory process factory
+        process_factory.set_monitor_service(mon)
+
+        self._controller = sim_ctl = controllerservice.ControllerService(
+            directory,
+            controller.SimulationController(
+                mode,
+                loop,
+                start,
+                end))
+
+        server = self._server
         # enable controller service
-        ctl_rpc.add_ControllerServicer_to_server(sim_ctl, self._server)
+        ctl_rpc.add_ControllerServicer_to_server(sim_ctl, server)
+        interface.add_MonitorServicer_to_server(mon, server)
 
         return dev_rpc.SetupResponse(session_id=session.id)
 
@@ -92,6 +110,7 @@ class Environment(development.EnvironmentServicer):
         ctrl = self._controller
         if ctrl:
             ctrl.Stop()
+
 
 class Server(object):
     def __init__(self):

@@ -1,13 +1,14 @@
 import uuid
+import hashlib
 
 import grpc
 
-_framework_id = uuid.uuid4().hex
+_framework_id = hashlib.sha3_512().hexdigest()
 
-_metadata = (('framework_id', _framework_id))
+_metadata = (('framework_id', _framework_id),)
 
 def invoke(method, request):
-    method(request, metadata=_metadata)
+    return method(request, metadata=_metadata)
 
 def framework_only(func):
     def wrapper(instance, request, context):

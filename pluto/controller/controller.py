@@ -74,40 +74,21 @@ class RunParameter(object):
 
 
 class Controller(abc.ABC):
-    def running_sessions(self):
-        raise NotImplementedError
-
     def run(self, directory, params):
         raise NotImplementedError
 
 
 class SimulationController(Controller):
     def __init__(self,
-                 process_factory,
-                 framework_url,
-                 capital,
-                 max_leverage,
+                 mode,
+                 loop,
                  start,
                  end):
         self._start = start
         self._end = end
-
-        self._mode = mode = \
-            simulation_mode.SimulationControlMode(
-                framework_url,
-                capital,
-                max_leverage,
-                process_factory)
-        self._loop = \
-            simulation_loop.SimulationLoop(
-                mode,
-                start,
-                end)
+        self._mode = mode
+        self._loop = loop
         super(SimulationController, self).__init__()
-
-    @property
-    def running_sessions(self):
-        return self._mode.running_sessions
 
     def run(self, directory, params):
         '''

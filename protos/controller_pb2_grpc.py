@@ -24,11 +24,6 @@ class ControllerStub(object):
         request_serializer=protos_dot_controller__pb2.RunRequest.SerializeToString,
         response_deserializer=protos_dot_controller__pb2.RunResponse.FromString,
         )
-    self.Watch = channel.unary_stream(
-        '/Controller/Watch',
-        request_serializer=protos_dot_controller__pb2.WatchRequest.SerializeToString,
-        response_deserializer=protos_dot_controller__pb2.PerformancePacket.FromString,
-        )
 
 
 class ControllerServicer(object):
@@ -49,13 +44,6 @@ class ControllerServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
-  def Watch(self, request, context):
-    """watch a particular strategy performance stream.
-    """
-    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-    context.set_details('Method not implemented!')
-    raise NotImplementedError('Method not implemented!')
-
 
 def add_ControllerServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -68,11 +56,6 @@ def add_ControllerServicer_to_server(servicer, server):
           servicer.Run,
           request_deserializer=protos_dot_controller__pb2.RunRequest.FromString,
           response_serializer=protos_dot_controller__pb2.RunResponse.SerializeToString,
-      ),
-      'Watch': grpc.unary_stream_rpc_method_handler(
-          servicer.Watch,
-          request_deserializer=protos_dot_controller__pb2.WatchRequest.FromString,
-          response_serializer=protos_dot_controller__pb2.PerformancePacket.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

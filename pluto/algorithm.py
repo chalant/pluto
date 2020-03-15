@@ -36,7 +36,8 @@ from zipline.utils.input_validation import (
 
 log = logbook.Logger("TradingAlgorithm")
 
-#TODO: we need to store the algorithm state as-well=> store its dictionary variable etc.
+
+# TODO: we need to store the algorithm state as-well=> store its dictionary variable etc.
 class TradingAlgorithm(algorithm.TradingAlgorithm):
     def __init__(self,
                  controllable,
@@ -386,7 +387,6 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         value_multiplier = asset.price_multiplier
 
         return value / (last_price * value_multiplier)
-
 
     def run_pipeline(self, pipeline, start_session, chunksize):
         sessions = self._controllable.trading_calendar.all_sessions

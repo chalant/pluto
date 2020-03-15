@@ -1,9 +1,12 @@
 import threading
-import uuid
+import queue
+
+from google.protobuf import empty_pb2 as emp
 
 from pluto.interface.utils import method_access
 
 from protos import interface_pb2_grpc as itf
+from protos import interface_pb2 as msg
 
 class _Watcher(object):
     def __init__(self, process):
@@ -11,18 +14,20 @@ class _Watcher(object):
         self._process = process
 
         self._packet = None
+        self._queue = queue.Queue()
 
     def watch(self):
-        self._event.wait()
-        yield self._packet
-        self._event.clear()
+        while True:
+            packet = self._queue.get()
+            yield packet
+            if packet.end:
+                break
 
     def stop_watching(self):
         self._process.stop_watching()
 
     def performance_update(self, packet):
-        self._event.set()
-        self._packet = packet
+        self._queue.put(packet)
 
 class Monitor(itf.MonitorServicer):
     def __init__(self, control_mode):
@@ -38,26 +43,20 @@ class Monitor(itf.MonitorServicer):
 
     @method_access.framework_only
     def PerformanceUpdate(self, request, context):
-        #called by the controllable to update performance
-        #todo: this can only be called by the framework
-        #check if the token is correct, else do nothing or send an error
-        # request.token
-
         watcher = self._watch_list.get(request.session_id, None)
         if watcher:
             watcher.performance_update(request)
+        return emp.Empty()
 
     def Watch(self, request, context):
         session_id = request.session_id
         pr = self._control_mode.get_process(session_id)
-        token = uuid.uuid4().hex
-        self._tokens.append(token)
-        pr.watch(token)
+        pr.watch()
         self._watch_list[session_id] = watcher = _Watcher(pr)
-
         for packet in watcher.watch():
             yield packet
 
     def StopWatching(self, request, context):
         pr = self._watch_list.pop(request.session_id, None)
         pr.stop_watching()
+        return msg.StopWatchingRequest()
