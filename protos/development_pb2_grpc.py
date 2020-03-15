@@ -114,6 +114,11 @@ class EnvironmentStub(object):
         request_serializer=protos_dot_development__pb2.SetupRequest.SerializeToString,
         response_deserializer=protos_dot_development__pb2.SetupResponse.FromString,
         )
+    self.Delete = channel.unary_unary(
+        '/Environment/Delete',
+        request_serializer=protos_dot_development__pb2.DeleteRequest.SerializeToString,
+        response_deserializer=protos_dot_development__pb2.DeleteResponse.FromString,
+        )
 
 
 class EnvironmentServicer(object):
@@ -127,6 +132,13 @@ class EnvironmentServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def Delete(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_EnvironmentServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -134,6 +146,11 @@ def add_EnvironmentServicer_to_server(servicer, server):
           servicer.Setup,
           request_deserializer=protos_dot_development__pb2.SetupRequest.FromString,
           response_serializer=protos_dot_development__pb2.SetupResponse.SerializeToString,
+      ),
+      'Delete': grpc.unary_unary_rpc_method_handler(
+          servicer.Delete,
+          request_deserializer=protos_dot_development__pb2.DeleteRequest.FromString,
+          response_serializer=protos_dot_development__pb2.DeleteResponse.SerializeToString,
       ),
   }
   generic_handler = grpc.method_handlers_generic_handler(

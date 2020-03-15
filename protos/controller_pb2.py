@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/metrics.proto\"0\n\x06Status\x12&\n\x0esession_status\x18\x01 \x01(\x0e\x32\x0e.SessionStatus\"m\n\nRunRequest\x12\x16\n\x04mode\x18\x01 \x01(\x0e\x32\x08.RunMode\x12\x1e\n\nrun_params\x18\x02 \x03(\x0b\x32\n.RunParams\x12\'\n\x03\x65nd\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"L\n\tRunParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rcapital_ratio\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\"^\n\rRunParamsList\x12\x1e\n\nrun_params\x18\x01 \x03(\x0b\x32\n.RunParams\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\r\n\x0bRunResponse\"5\n\x0bStopRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0e\n\x0cStopResponse\"#\n\x0cWatchRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"2\n\x0bPerformance\x12#\n\x07packets\x18\x01 \x03(\x0b\x32\x12.PerformancePacket\"\xd8\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12&\n\ndaily_perf\x18\x02 \x01(\x0b\x32\x12.PeriodPerformance\x12)\n\rminutely_perf\x18\x03 \x01(\x0b\x32\x12.PeriodPerformance\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\n\n\x02id\x18\x05 \x01(\t\"x\n\x11PeriodPerformance\x12.\n\x12\x63umulative_metrics\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12\x33\n\x15period_common_metrics\x18\x02 \x01(\x0b\x32\x14.PeriodCommonMetrics\"D\n\x17ParametersUpdateRequest\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x02 \x01(\x02*/\n\rSessionStatus\x12\r\n\tCOMPLETED\x10\x00\x12\x0f\n\x0bINTERRUPTED\x10\x01*\x1e\n\x07RunMode\x12\t\n\x05PAPER\x10\x00\x12\x08\n\x04LIVE\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32\x81\x01\n\nController\x12#\n\x04Stop\x12\x0c.StopRequest\x1a\r.StopResponse\x12 \n\x03Run\x12\x0b.RunRequest\x1a\x0c.RunResponse\x12,\n\x05Watch\x12\r.WatchRequest\x1a\x12.PerformancePacket0\x01\x62\x06proto3')
+  serialized_pb=_b('\n\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/metrics.proto\"0\n\x06Status\x12&\n\x0esession_status\x18\x01 \x01(\x0e\x32\x0e.SessionStatus\"m\n\nRunRequest\x12\x16\n\x04mode\x18\x01 \x01(\x0e\x32\x08.RunMode\x12\x1e\n\nrun_params\x18\x02 \x03(\x0b\x32\n.RunParams\x12\'\n\x03\x65nd\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"L\n\tRunParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rcapital_ratio\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\"^\n\rRunParamsList\x12\x1e\n\nrun_params\x18\x01 \x03(\x0b\x32\n.RunParams\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\r\n\x0bRunResponse\"5\n\x0bStopRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\"\x0e\n\x0cStopResponse\"2\n\x0bPerformance\x12#\n\x07packets\x18\x01 \x03(\x0b\x32\x12.PerformancePacket\"\xb3\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12#\n\x0bperiod_perf\x18\x02 \x01(\x0b\x32\x0e.PeriodMetrics\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\x13\n\x0bpacket_type\x18\x05 \x01(\t\"D\n\x17ParametersUpdateRequest\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x02 \x01(\x02*/\n\rSessionStatus\x12\r\n\tCOMPLETED\x10\x00\x12\x0f\n\x0bINTERRUPTED\x10\x01*\x1e\n\x07RunMode\x12\t\n\x05PAPER\x10\x00\x12\x08\n\x04LIVE\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32S\n\nController\x12#\n\x04Stop\x12\x0c.StopRequest\x1a\r.StopResponse\x12 \n\x03Run\x12\x0b.RunRequest\x1a\x0c.RunResponseb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_metrics__pb2.DESCRIPTOR,])
 
@@ -43,8 +43,8 @@ _SESSIONSTATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1003,
-  serialized_end=1050,
+  serialized_start=807,
+  serialized_end=854,
 )
 _sym_db.RegisterEnumDescriptor(_SESSIONSTATUS)
 
@@ -66,8 +66,8 @@ _RUNMODE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1052,
-  serialized_end=1082,
+  serialized_start=856,
+  serialized_end=886,
 )
 _sym_db.RegisterEnumDescriptor(_RUNMODE)
 
@@ -93,8 +93,8 @@ _CONTROLLEREVENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1084,
-  serialized_end=1161,
+  serialized_start=888,
+  serialized_end=965,
 )
 _sym_db.RegisterEnumDescriptor(_CONTROLLEREVENT)
 
@@ -354,37 +354,6 @@ _STOPRESPONSE = _descriptor.Descriptor(
 )
 
 
-_WATCHREQUEST = _descriptor.Descriptor(
-  name='WatchRequest',
-  full_name='WatchRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='strategy_id', full_name='WatchRequest.strategy_id', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=_b("").decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=503,
-  serialized_end=538,
-)
-
-
 _PERFORMANCE = _descriptor.Descriptor(
   name='Performance',
   full_name='Performance',
@@ -411,8 +380,8 @@ _PERFORMANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=540,
-  serialized_end=590,
+  serialized_start=503,
+  serialized_end=553,
 )
 
 
@@ -431,28 +400,21 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='daily_perf', full_name='PerformancePacket.daily_perf', index=1,
+      name='period_perf', full_name='PerformancePacket.period_perf', index=1,
       number=2, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='minutely_perf', full_name='PerformancePacket.minutely_perf', index=2,
-      number=3, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='cumulative_risk_metrics', full_name='PerformancePacket.cumulative_risk_metrics', index=3,
+      name='cumulative_risk_metrics', full_name='PerformancePacket.cumulative_risk_metrics', index=2,
       number=4, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='id', full_name='PerformancePacket.id', index=4,
+      name='packet_type', full_name='PerformancePacket.packet_type', index=3,
       number=5, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
@@ -470,46 +432,8 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=593,
-  serialized_end=809,
-)
-
-
-_PERIODPERFORMANCE = _descriptor.Descriptor(
-  name='PeriodPerformance',
-  full_name='PeriodPerformance',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cumulative_metrics', full_name='PeriodPerformance.cumulative_metrics', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='period_common_metrics', full_name='PeriodPerformance.period_common_metrics', index=1,
-      number=2, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=811,
-  serialized_end=931,
+  serialized_start=556,
+  serialized_end=735,
 )
 
 
@@ -546,8 +470,8 @@ _PARAMETERSUPDATEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=933,
-  serialized_end=1001,
+  serialized_start=737,
+  serialized_end=805,
 )
 
 _STATUS.fields_by_name['session_status'].enum_type = _SESSIONSTATUS
@@ -558,11 +482,8 @@ _RUNPARAMSLIST.fields_by_name['run_params'].message_type = _RUNPARAMS
 _RUNPARAMSLIST.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _PERFORMANCE.fields_by_name['packets'].message_type = _PERFORMANCEPACKET
 _PERFORMANCEPACKET.fields_by_name['cumulative_perf'].message_type = protos_dot_metrics__pb2._CUMULATIVEMETRICS
-_PERFORMANCEPACKET.fields_by_name['daily_perf'].message_type = _PERIODPERFORMANCE
-_PERFORMANCEPACKET.fields_by_name['minutely_perf'].message_type = _PERIODPERFORMANCE
+_PERFORMANCEPACKET.fields_by_name['period_perf'].message_type = protos_dot_metrics__pb2._PERIODMETRICS
 _PERFORMANCEPACKET.fields_by_name['cumulative_risk_metrics'].message_type = protos_dot_metrics__pb2._CUMULATIVERISKMETRICS
-_PERIODPERFORMANCE.fields_by_name['cumulative_metrics'].message_type = protos_dot_metrics__pb2._CUMULATIVEMETRICS
-_PERIODPERFORMANCE.fields_by_name['period_common_metrics'].message_type = protos_dot_metrics__pb2._PERIODCOMMONMETRICS
 DESCRIPTOR.message_types_by_name['Status'] = _STATUS
 DESCRIPTOR.message_types_by_name['RunRequest'] = _RUNREQUEST
 DESCRIPTOR.message_types_by_name['RunParams'] = _RUNPARAMS
@@ -570,10 +491,8 @@ DESCRIPTOR.message_types_by_name['RunParamsList'] = _RUNPARAMSLIST
 DESCRIPTOR.message_types_by_name['RunResponse'] = _RUNRESPONSE
 DESCRIPTOR.message_types_by_name['StopRequest'] = _STOPREQUEST
 DESCRIPTOR.message_types_by_name['StopResponse'] = _STOPRESPONSE
-DESCRIPTOR.message_types_by_name['WatchRequest'] = _WATCHREQUEST
 DESCRIPTOR.message_types_by_name['Performance'] = _PERFORMANCE
 DESCRIPTOR.message_types_by_name['PerformancePacket'] = _PERFORMANCEPACKET
-DESCRIPTOR.message_types_by_name['PeriodPerformance'] = _PERIODPERFORMANCE
 DESCRIPTOR.message_types_by_name['ParametersUpdateRequest'] = _PARAMETERSUPDATEREQUEST
 DESCRIPTOR.enum_types_by_name['SessionStatus'] = _SESSIONSTATUS
 DESCRIPTOR.enum_types_by_name['RunMode'] = _RUNMODE
@@ -629,13 +548,6 @@ StopResponse = _reflection.GeneratedProtocolMessageType('StopResponse', (_messag
   ))
 _sym_db.RegisterMessage(StopResponse)
 
-WatchRequest = _reflection.GeneratedProtocolMessageType('WatchRequest', (_message.Message,), dict(
-  DESCRIPTOR = _WATCHREQUEST,
-  __module__ = 'protos.controller_pb2'
-  # @@protoc_insertion_point(class_scope:WatchRequest)
-  ))
-_sym_db.RegisterMessage(WatchRequest)
-
 Performance = _reflection.GeneratedProtocolMessageType('Performance', (_message.Message,), dict(
   DESCRIPTOR = _PERFORMANCE,
   __module__ = 'protos.controller_pb2'
@@ -649,13 +561,6 @@ PerformancePacket = _reflection.GeneratedProtocolMessageType('PerformancePacket'
   # @@protoc_insertion_point(class_scope:PerformancePacket)
   ))
 _sym_db.RegisterMessage(PerformancePacket)
-
-PeriodPerformance = _reflection.GeneratedProtocolMessageType('PeriodPerformance', (_message.Message,), dict(
-  DESCRIPTOR = _PERIODPERFORMANCE,
-  __module__ = 'protos.controller_pb2'
-  # @@protoc_insertion_point(class_scope:PeriodPerformance)
-  ))
-_sym_db.RegisterMessage(PeriodPerformance)
 
 ParametersUpdateRequest = _reflection.GeneratedProtocolMessageType('ParametersUpdateRequest', (_message.Message,), dict(
   DESCRIPTOR = _PARAMETERSUPDATEREQUEST,
@@ -672,8 +577,8 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1164,
-  serialized_end=1293,
+  serialized_start=967,
+  serialized_end=1050,
   methods=[
   _descriptor.MethodDescriptor(
     name='Stop',
@@ -691,15 +596,6 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_RUNREQUEST,
     output_type=_RUNRESPONSE,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='Watch',
-    full_name='Controller.Watch',
-    index=2,
-    containing_service=None,
-    input_type=_WATCHREQUEST,
-    output_type=_PERFORMANCEPACKET,
     serialized_options=None,
   ),
 ])

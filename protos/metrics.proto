@@ -9,13 +9,14 @@ message CumulativeMetrics {
     google.protobuf.Timestamp period_close = 2;
     float returns = 3;
     float pnl = 4;
-    float cash_flow = 5; //capital_used
+    float capital_used = 5; //capital_used
     float starting_exposure = 6;
     float ending_exposure = 7;
     float starting_value = 8;
     float ending_value = 9;
     float starting_cash = 10;
     float ending_cash = 11;
+    float portfolio_value = 20;
     int64 longs_count = 12;
     int64 shorts_count = 13;
     float long_value = 14;
@@ -26,14 +27,14 @@ message CumulativeMetrics {
     float net_leverage = 19;
 }
 
-message PeriodCommonMetrics {
+message PeriodMetrics {
     repeated Order orders = 1;
     repeated Transaction transactions = 2;
     repeated Position positions = 3;
 }
 
 message CumulativeRiskMetrics {
-    float algorithm_volatility = 1;
+    float algo_volatility = 1;
     float benchmark_period_return = 2;
     float benchmark_volatility = 3;
     float algorithm_period_return = 4;
@@ -43,4 +44,8 @@ message CumulativeRiskMetrics {
     float sortino = 8;
     float max_drawdown = 9;
     float max_leverage = 10;
+    int32 trading_days = 11;
+    string period_label = 12;
+    float excess_return = 13;
+    float treasury_period_return = 14;
 }

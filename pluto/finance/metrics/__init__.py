@@ -27,8 +27,22 @@ def pluto_metrics():
         CashFlow(),
         Orders(),
         Transactions(),
+
         SimpleLedgerField('positions'),
-        StartOfPeriodLedgerField('portfolio.positions_exposure', 'starting_exposure'),
+
+        StartOfPeriodLedgerField(
+            'portfolio.positions_exposure',
+            'starting_exposure',
+        ),
+        DailyLedgerField(
+            'portfolio.positions_exposure',
+            'ending_exposure',
+        ),
+
+        StartOfPeriodLedgerField(
+            'portfolio.positions_value',
+            'starting_value'
+        ),
         DailyLedgerField('portfolio.positions_value', 'ending_value'),
 
         StartOfPeriodLedgerField('portfolio.cash', 'starting_cash'),

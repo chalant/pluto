@@ -205,7 +205,7 @@ class Controllable(ABC):
 
         '''
 
-        #todo: where should we create the directory?
+        # todo: where should we create the directory?
         uni = universes.get_universe(universe)
         self._calendars = {cal: cal for cal in uni.calendars}
 
@@ -223,13 +223,14 @@ class Controllable(ABC):
         self._start_dt = start_dt
         end_dt = calendar.last_session
         self._end_dt = end_dt
+        self._last_session_close = calendar.session_close(end_dt)
         self._calendar = calendar
         self._universe = uni
         self._look_back = look_back
         self._data_frequency = data_frequency
 
         if data_frequency == 'minute':
-            #always set the emission_rate to a minute if the data_frequency is a minute
+            # always set the emission_rate to a minute if the data_frequency is a minute
             self._emission_rate = 'minute'
 
             def calculate_minute_capital_changes(dt, emission_rate):
@@ -272,7 +273,7 @@ class Controllable(ABC):
             last_available_session=last_session,
             last_available_minute=calendar.minutes_for_session(last_session)[-1])
 
-        #todo: we need to load benchmark returns from a file using an evironment
+        # todo: we need to load benchmark returns from a file using an environment
         # todo: create benchmark source instance based on the run mode.
         # (simulation benchmark, live benchmark)
         self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
@@ -343,7 +344,7 @@ class Controllable(ABC):
             initialize=namespace.get('initialize', noop),
             handle_data=namespace.get('handle_data', noop),
             before_trading_start=namespace.get('before_trading_start', noop),
-            analyze=namespace.get('analyze', noop))
+            analyze=noop)
 
         self._state = self._out_session
         self._run_state = self._ready
@@ -379,7 +380,7 @@ class Controllable(ABC):
             self._metrics_tracker,
             self._data_portal,
             self._calendar,
-            self._sessions)
+            self._sessions), dt == self._end_dt
 
     def session_start(self, dt):
         end_dt = self._end_dt
@@ -395,6 +396,8 @@ class Controllable(ABC):
                 start_dt,
                 dt,
                 cache=True)
+
+            self._last_session_close = calendar.session_close(dt)
 
             # fixme: this might not be correct
             self._start_dt = fs = calendar.first_session
@@ -441,7 +444,7 @@ class Controllable(ABC):
                 params.data_frequency)
 
         metrics_tracker = self._metrics_tracker
-        self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
+        capital_changes = self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
 
         algo = self._algo
 
@@ -525,7 +528,6 @@ class Controllable(ABC):
         position_assets = self._asset_finder.retrieve_all(positions)
         blotter = self._blotter
         data_portal = self._data_portal
-        calendar = self._calendar
         algo = self._algo
 
         self._cleanup_expired_assets(
@@ -536,15 +538,14 @@ class Controllable(ABC):
             position_assets)
 
         algo.validate_account_controls()
-
         return self._get_daily_message(
             dt,
             algo,
             metrics_tracker,
             data_portal,
-            calendar,
+            self._calendar,
             self._sessions
-        )
+        ), dt == self._last_session_close
 
     def get_state(self, dt):
         metrics_tracker = self._metrics_tracker
@@ -801,7 +802,7 @@ class Controllable(ABC):
         self._capital_change_deltas.update({dt: capital_change_amount})
         self._metrics_tracker.capital_change(capital_change_amount)
 
-        yield {
+        return {
             'capital_change':
                 {'date': dt,
                  'type': 'cash',

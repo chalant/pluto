@@ -40,9 +40,18 @@ class CapitalUpdate(Command):
 
 
 class ClockUpdate(Command):
-    __slots__ = ['_perf_writer', '_controllable', '_frequency_filter', '_state_store']
+    __slots__ = [
+        '_perf_writer',
+        '_controllable',
+        '_frequency_filter',
+        '_state_store']
 
-    def __init__(self, perf_writer, controllable, frequency_filter, request, state_store):
+    def __init__(self,
+                 perf_writer,
+                 controllable,
+                 frequency_filter,
+                 request,
+                 state_store):
         '''
 
         Parameters
@@ -84,17 +93,9 @@ class ClockUpdate(Command):
             elif e == BEFORE_TRADING_START:
                 controllable.before_trading_starts(dt)
             elif e == SESSION_END:
-                # todo: we need to identify the controllable (needs an id)
-                # send performance packet to controller.
-                # todo: write the performance in a file (don't sent it back to the controller)
-                # or send back performance and write to file
-                writer.performance_update(controllable.session_end(dt))
-
+                writer.performance_update(*controllable.session_end(dt))
             elif e == MINUTE_END:
-                # todo: we need to identify the controllable (needs an id)
-                # send performance packet to the controller
-                # todo: write the performance in a file (don't sent it back to the controller)
-                writer.performance_update(controllable.minute_end(dt))
+                writer.performance_update(*controllable.minute_end(dt))
             else:
                 # TRADE_END/BAR event
                 targets = self._frequency_filter.filter(exchanges)

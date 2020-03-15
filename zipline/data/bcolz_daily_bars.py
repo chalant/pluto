@@ -453,6 +453,7 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
         self._spot_cols = {}
         self.PRICE_ADJUSTMENT_FACTOR = 0.001
         self._read_all_threshold = read_all_threshold
+        self._calendar = None
 
     @lazyval
     def _table(self):
@@ -467,14 +468,7 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
             # backwards compatibility with old formats, will remove
             return DatetimeIndex(self._table.attrs['calendar'], tz='UTC')
         else:
-            cal = calendar_utils.get_calendar_in_range(
-                self._table.attrs['calendar_name'],
-                Timestamp(
-                    self._table.attrs['start_session_ns'],
-                    tz='UTC'),
-                Timestamp(
-                    self._table.attrs['end_session_ns'],
-                    tz='UTC'))
+            cal = self.trading_calendar
             return cal.all_sessions
 
     @lazyval
@@ -517,10 +511,19 @@ class BcolzDailyBarReader(CurrencyAwareSessionBarReader):
 
     @lazyval
     def trading_calendar(self):
-        if 'calendar_name' in self._table.attrs.attrs:
-            return calendar_utils.get_calendar(self._table.attrs['calendar_name'])
+        if not self._calendar:
+            if 'calendar_name' in self._table.attrs.attrs:
+                self._calendar = cal = calendar_utils.get_calendar_in_range(
+                    self._table.attrs['calendar_name'],
+                    Timestamp(
+                        self._table.attrs['start_session_ns'],
+                        tz='UTC'),
+                    Timestamp(
+                        self._table.attrs['end_session_ns'],
+                        tz='UTC'))
+                return cal
         else:
-            return None
+            return self._calendar
 
     @property
     def last_available_dt(self):

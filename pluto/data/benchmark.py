@@ -4,11 +4,11 @@ from zipline.data.loader import ensure_benchmark_data
 
 from pluto.interface.utils import paths
 
-DIR = paths.get_dir('benchmark', paths.get_dir('data'))
-
 class Benchmark(object):
     def __init__(self, ticker):
-        self._dir = paths.get_dir(ticker, root=DIR)
+        self._dir = paths.get_dir(
+            ticker,
+            root=paths.get_dir('benchmark', paths.get_dir('data')))
 
     def get_history_window(self, start_dt, end_dt, frequency, ffill=True):
         #todo: use open to calculate return on the first day if we don't have enough data

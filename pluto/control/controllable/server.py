@@ -15,14 +15,16 @@ from pluto.coms.utils import conversions
 from pluto.control.controllable import commands
 from pluto.control.controllable import simulation_controllable as sc
 from pluto.control.events_log import events_log
-
+from pluto.control.controllable.utils import io
 
 from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
-from protos import interface_pb2_grpc as itf
+from protos import interface_pb2_grpc as itf_rpc
+from protos import interface_pb2 as itf
 from protos.clock_pb2 import (
     BAR,
     TRADE_END)
+
 
 def get_controllable(mode):
     '''
@@ -42,32 +44,43 @@ def get_controllable(mode):
     else:
         return
 
+
 class _NoneObserver(object):
     def clear(self):
         pass
 
-    def update(self, performance):
+    def update(self, performance, end):
         pass
 
+
 class _Observer(object):
-    def __init__(self, monitor_stub, file_path):
+    def __init__(self, monitor_stub, file_path, session_id):
         self._stub = monitor_stub
         self._reload = True
         self._file_path = file_path
+        self._session_id = session_id
 
     def clear(self):
         self._reload = True
 
-    def update(self, performance):
+    def update(self, performance, end):
         stub = self._stub
-        #todo: must specify the session_id in the metadata
+        session_id = self._session_id
         if self._reload == True:
-            with open(self._file_path, 'rb') as f:
-                for line in f.readline():
-                    method_access.invoke(stub.PerformanceUpdate, line)
+            for packet in io.read_perf(self._file_path):
+                method_access.invoke(
+                    stub.PerformanceUpdate,
+                    itf.Packet(
+                        packet=packet,
+                        session_id=session_id))
             self._reload = False
-        else:
-            stub.PerformanceUpdate(performance)
+        method_access.invoke(
+            stub.PerformanceUpdate,
+            itf.Packet(
+                packet=performance,
+                session_id=session_id,
+                end=end))
+
 
 class _StateStorage(object):
     def __init__(self, storage_path, thread_pool):
@@ -82,12 +95,14 @@ class _StateStorage(object):
         self._thread_pool = thread_pool
 
     def _write(self, state):
-        #todo: should we append instead of over-writing?
+        # todo: should we append instead of over-writing?
         with(self._storage_path, 'wb') as f:
             f.write(state)
 
     def store(self, dt, controllable):
-        self._thread_pool.submit(partial(self._write, state=controllable.get_state(dt)))
+        self._thread_pool.submit(partial(
+            self._write,
+            state=controllable.get_state(dt)))
 
     def load_state(self):
         with open(self._storage_path, 'rb') as f:
@@ -166,7 +181,7 @@ class _PerformanceWriter(object):
     # we also have a reader (which is a writer observer)
     # the reader reads the performance in the file and waits for updates from the writer.
     # the updates are read before getting written in the filesystem.
-    def __init__(self, monitor_stub, file_path, thread_pool):
+    def __init__(self, session_id, monitor_stub, file_path, thread_pool):
         '''
 
         Parameters
@@ -178,20 +193,26 @@ class _PerformanceWriter(object):
         self._thread_pool = thread_pool
 
         self._none_observer = none = _NoneObserver()
-        self._observer = _Observer(monitor_stub, file_path)
+        self._observer = _Observer(monitor_stub, file_path, session_id)
         self._current_observer = none
 
         self._lock = threading.Lock()
 
-    def _write(self, performance, path):
-        with self._lock:
-            packet = conversions.to_proto_performance_packet(performance).SerializeToString()
-            self._current_observer.update(packet)
-            with open(path, 'ab') as f:
-                f.write(packet+'\n')
+    def _write(self, performance, end, path):
+        packet = conversions.to_proto_performance_packet(
+            performance).SerializeToString()
 
-    def performance_update(self, performance):
-        self._thread_pool.submit(partial(self._write, performance=performance, path=self._path))
+        self._current_observer.update(packet, end)
+        io.write_perf(path, packet)
+
+    def performance_update(self, performance, end):
+        #todo: we need to do a non-blocking write using queues?
+        # self._thread_pool.submit(partial(
+        #     self._write,
+        #     performance=performance,
+        #     end=end,
+        #     path=self._path))
+        self._write(performance, end, self._path)
 
     def observe(self):
         with self._lock:
@@ -202,7 +223,6 @@ class _PerformanceWriter(object):
     def stop_observing(self):
         with self._lock:
             self._current_observer = self._none_observer
-
 
 
 class ControllableService(cbl_rpc.ControllableServicer):
@@ -251,15 +271,10 @@ class ControllableService(cbl_rpc.ControllableServicer):
         return self._recovery
 
     # todo need to use an interceptor to check for tokens etc.
-    def _with_metadata(self, rpc, params):
-        '''If we're not registered, an RpcError will be raised. Registration is handled
-        externally.'''
-        return rpc(params, metadata=(('Token', self._token)))
-
     def stop(self):
         pass
 
-    @method_access.framework_method
+    @method_access.framework_only
     def Initialize(self, request_iterator, context):
         b = b''
         for chunk in request_iterator:
@@ -271,6 +286,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         id_ = params.id  # the id of the controllable => will be used in performance updates
         universe = params.universe
         capital = params.capital
+        print('INIT CAPITAL', capital)
         max_leverage = params.max_leverage
         strategy = params.strategy
         data_frequency = params.data_frequency
@@ -287,7 +303,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         controllable = get_controllable(mode)
 
-        #todo: we should have a directory for performance
+        # todo: we should have a directory for performance
 
         self._directory = dir_ = paths.get_dir(
             id_, paths.get_dir('states', self._root_dir))
@@ -295,10 +311,10 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         # todo: it would be cleaner to have an utils file for common paths
         perf_path = paths.get_file_path(
-                mode,
-                paths.get_dir(
-                    id_,
-                    paths.get_dir('strategies')))
+            mode,
+            paths.get_dir(
+                id_,
+                paths.get_dir('strategies')))
 
         if mode == 'live' or mode == 'paper':
             self._state_storage = _StateStorage(
@@ -306,12 +322,13 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 self._thread_pool)
 
         else:
-            #clear file if we're in simulation mode
+            # clear file if we're in simulation mode
             with open(perf_path, 'wb') as f:
                 f.truncate(0)
 
-        #todo: we need a monitor stub
+        # todo: we need a monitor stub
         self._perf_writer = _PerformanceWriter(
+            id_,
             self._monitor_stub,
             paths.get_file_path(perf_path),
             self._thread_pool
@@ -368,13 +385,14 @@ class ControllableService(cbl_rpc.ControllableServicer):
         controllable.restore_state(state, strategy)
         # set run_state to recovering
         controllable.run_state = controllable.recovering
-        events = events_log.read(session_id, controllable.current_dt)
+        log = events_log.get_events_log(state.mode)
+        events = log.read(session_id, controllable.current_dt)
         # play all missed events since last checkpoint (controllable is in recovery mode)
         perf_writer = self._perf_writer
         frequency_filter = self._frequency_filter
         state_storage = self._state_storage
 
-        #todo: need to handle all the event types
+        # todo: need to handle all the event types
 
         for evt_type, evt in events:
             if evt_type == 'clock':
@@ -436,11 +454,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     @method_access.framework_only
     def Watch(self, request, context):
-        self._perf_writer.observer()
+        self._perf_writer.observe()
 
     @method_access.framework_only
     def StopWatching(self, request, context):
         self._perf_writer.stop_observing()
+
 
 class Server(object):
     def __init__(self):
@@ -511,10 +530,10 @@ def start(framework_id, framework_url, session_id, root_dir, controllable_url, r
     # need reviewing
 
     with directory.StubDirectory(root_dir):
-        #set the framework_id if ran as a process
+        # set the framework_id if ran as a process
         method_access._framework_id = framework_id
         service = ControllableService(
-            itf.MonitorStub(grpc.insecure_channel(framework_url))
+            itf_rpc.MonitorStub(grpc.insecure_channel(framework_url))
         )
         if recovery:
             service.restore_state(session_id)

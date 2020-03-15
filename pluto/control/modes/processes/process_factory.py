@@ -18,6 +18,9 @@ class ProcessFactory(object):
     def _create_process(self, framework_url, session_id, root_dir):
         raise NotImplementedError
 
+    def set_monitor_service(self, monitor_service):
+        pass
+
 
 class Process(abc.ABC):
     __slots__ = ['_controllable', '_session_id']
@@ -47,6 +50,7 @@ class Process(abc.ABC):
         start = conversions.to_proto_timestamp(start)
         end = conversions.to_proto_timestamp(end)
         params = cbl.InitParams(
+            id=self._session_id,
             start=start,
             end=end,
             universe=universe,
@@ -58,26 +62,26 @@ class Process(abc.ABC):
             mode=mode
         ).SerializeToString()
         # send parameters to the controllable as a stream of bytes
-        invoke(self._controllable.Initialize, stream.chunk_bytes(params))
+        return invoke(self._controllable.Initialize, stream.chunk_bytes(params))
 
     def parameter_update(self, params):
-        invoke(self._controllable.ParameterUpdate, params)
+        return invoke(self._controllable.ParameterUpdate, params)
 
     def clock_update(self, clock_event):
-        invoke(self._controllable.ClockUpdate, clock_event)
+        return invoke(self._controllable.ClockUpdate, clock_event)
 
     def account_update(self, broker_state):
-        invoke(self._controllable.UpdateAccount, broker_state)
+        return invoke(self._controllable.UpdateAccount, broker_state)
 
     def stop(self):
         invoke(self._controllable.Stop, emp.Empty())
         self._stop()
 
-    def watch(self, request):
-        invoke(self._controllable.Watch, request)
+    def watch(self):
+        return invoke(self._controllable.Watch, emp.Empty())
 
-    def stop_watching(self, request):
-        invoke(self._controllable.StopWatching, request)
+    def stop_watching(self):
+        return invoke(self._controllable.StopWatching, emp.Empty())
 
     @abc.abstractmethod
     def _create_controllable(self, framework_id, framework_url, session_id, root_dir):

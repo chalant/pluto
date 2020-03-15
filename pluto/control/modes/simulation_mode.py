@@ -22,8 +22,8 @@ class SimulationControlMode(mode.ControlMode):
     def _create_broker(self):
         return broker.SimulationBroker(self._capital, self._max_leverage)
 
-    def _create_event_writer(self):
-        return events_log.writer()
+    def _create_events_log(self):
+        return events_log.get_events_log()
 
     def _mode_name(self):
         return 'simulation'

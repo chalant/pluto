@@ -59,7 +59,7 @@ def handle_data(context, data):
         context.invested = True
         buy = True
     elif (short_ema[-1] < long_ema[-1]) and context.invested:
-        api.order_target_percent(context.asset, -100)
+        api.order(context.asset, -100)
         context.invested = False
         sell = True
 
@@ -125,6 +125,6 @@ def _test_args():
         'end': pd.Timestamp('2014-11-01', tz='utc'),
         'capital_base': 1e7,
         'max_leverage': None,
-        'look_back': 41,
+        'look_back': 150,
         'data_frequency': 'daily'
     }

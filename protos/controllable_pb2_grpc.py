@@ -42,6 +42,16 @@ class ControllableStub(object):
         request_serializer=protos_dot_controller__pb2.StopRequest.SerializeToString,
         response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
         )
+    self.Watch = channel.unary_unary(
+        '/Controllable/Watch',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
+    self.StopWatching = channel.unary_unary(
+        '/Controllable/StopWatching',
+        request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+        response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+        )
 
 
 class ControllableServicer(object):
@@ -83,6 +93,20 @@ class ControllableServicer(object):
     context.set_details('Method not implemented!')
     raise NotImplementedError('Method not implemented!')
 
+  def Watch(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
+  def StopWatching(self, request, context):
+    # missing associated documentation comment in .proto file
+    pass
+    context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+    context.set_details('Method not implemented!')
+    raise NotImplementedError('Method not implemented!')
+
 
 def add_ControllableServicer_to_server(servicer, server):
   rpc_method_handlers = {
@@ -109,6 +133,16 @@ def add_ControllableServicer_to_server(servicer, server):
       'Stop': grpc.unary_unary_rpc_method_handler(
           servicer.Stop,
           request_deserializer=protos_dot_controller__pb2.StopRequest.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'Watch': grpc.unary_unary_rpc_method_handler(
+          servicer.Watch,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+          response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+      ),
+      'StopWatching': grpc.unary_unary_rpc_method_handler(
+          servicer.StopWatching,
+          request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
           response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
       ),
   }

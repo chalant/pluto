@@ -20,7 +20,6 @@ import logbook
 import pytz
 import pandas as pd
 from contextlib2 import ExitStack
-from pandas.tseries.tools import normalize_date
 import numpy as np
 
 from itertools import chain, repeat
@@ -34,6 +33,7 @@ from six import (
 from trading_calendars.utils.pandas_utils import days_at_time
 from trading_calendars import get_calendar
 
+from zipline.utils.pandas_utils import normalize_date
 from zipline._protocol import handle_non_market_minutes
 from zipline.errors import (
     AttachPipelineAfterInitialize,
@@ -369,8 +369,7 @@ class TradingAlgorithm(object):
             self._initialize = self.namespace.get('initialize', noop)
             self._handle_data = self.namespace.get('handle_data', noop)
             self._before_trading_start = self.namespace.get(
-                'before_trading_start',
-            )
+                'before_trading_start', noop)
             # Optional analyze function, gets called after run
             self._analyze = self.namespace.get('analyze')
         else:

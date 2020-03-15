@@ -54,6 +54,8 @@ class BenchmarkSource(abc.ABC):
         self._daily_returns_array = deque()
         self._minute_returns_array = deque()
 
+        self._benchmark = benchmark
+
         if len(sessions) == 0:
             self._precalculated_series = pd.Series()
         else:
@@ -89,7 +91,7 @@ class BenchmarkSource(abc.ABC):
                 self._precalculated_series, self._daily_returns = \
                     self._calculate_benchmark_series(
                         sessions,
-                        data_portal,
+                        self._benchmark,
                         trading_calendar,
                         'daily',
                         end)
@@ -119,7 +121,7 @@ class BenchmarkSource(abc.ABC):
                 self._precalculated_series, self._daily_returns = \
                     self._calculate_benchmark_series(
                         sessions,
-                        data_portal,
+                        self._benchmark,
                         trading_calendar,
                         'minute',
                         dt)
@@ -178,6 +180,7 @@ class BenchmarkSource(abc.ABC):
             # FIXME: the last minute will be either below or equal to end_dt...
             # simulation expects minutes above end_dt as-well... add one day in sim?
             minutes = trading_calendar.minutes_in_range(sessions[0], end_dt)
+            # FIXME
             benchmark_series = benchmark.get_history_window(
                 minutes[0],
                 minutes[-1],

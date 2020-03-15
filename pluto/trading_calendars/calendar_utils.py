@@ -383,6 +383,7 @@ def get_calendar_in_range(name, start_dt, end_dt=None, cache=False):
 
     dis = global_calendar_dispatcher
     try:
+        name = dis.resolve_alias(name)
         factory = dis._calendar_factories[name]
     except KeyError:
         # We don't have a factory registered for this name.  Barf.
@@ -397,6 +398,7 @@ def get_calendar_in_range(name, start_dt, end_dt=None, cache=False):
 
 def get_calendar(name):
     try:
+        name = global_calendar_dispatcher.resolve_alias(name)
         cal = _cache[name]
         return cal
     except KeyError:

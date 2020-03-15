@@ -161,11 +161,14 @@ class _Strategy(Scoped):
 
     def get_implementation(self, chunk_size=_STREAM_CHUNK_SIZE):
         with open(self._path, 'rb') as f:
-            while True:
-                data = f.read(chunk_size)
-                if not data:
-                    break
-                yield data
+            if chunk_size != -1:
+                while True:
+                    data = f.read(chunk_size)
+                    if not data:
+                        break
+                    yield data
+            else:
+                yield f.read()
 
     def store_implementation(self, bytes_):
         '''
@@ -251,7 +254,6 @@ class _Mode(ABC):
                 universe=universe,
                 look_back=look_back)
             session.add(sess_meta)
-            print('Done!')
 
         return _Session(sess_meta, self)
 
@@ -272,6 +274,8 @@ class _Mode(ABC):
         -------
         _Strategy
         '''
+
+        meta = self._session.query(StrategyMetadata).get(strategy_id)
         return self._get_strategy(
             self._session.query(StrategyMetadata)
                 .get(strategy_id), self)
@@ -285,10 +289,8 @@ class _Mode(ABC):
         typing.Generator[_Strategy]
         '''
 
-        print('Fetching list...')
         for m in self._session.query(StrategyMetadata):
             yield self._get_strategy(m, self)
-        print('Done')
 
     @_check_scope
     def add_strategy(self, name):
@@ -361,7 +363,6 @@ class _Write(_Mode):
         session.add(stg_meta)
 
         session.flush()
-
         with open(pth, mode='wb') as f:
             f.write(self._get_template())
 
@@ -474,7 +475,7 @@ class _TempDirectory(AbstractDirectory):
 
     def _exit(self, root_dir):
         # delete everything
-        shutil.rmtree(root_dir)
+        shutil.rmtree(root_dir, ignore_errors=True)
 
 _DIRECTORY = None
 

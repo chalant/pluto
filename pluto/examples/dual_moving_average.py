@@ -43,7 +43,6 @@ def handle_data(context, data):
     context.i += 1
     if context.i < 300:
         return
-
     # Compute averages
     # history() has to be called with the same params
     # from above and returns a pandas dataframe.
@@ -59,9 +58,9 @@ def handle_data(context, data):
         api.order_target(context.sym, 0)
 
     # Save values for later inspection
-    api.record(AAPL=data.current(context.sym, "price"),
-           short_mavg=short_mavg,
-           long_mavg=long_mavg)
+    # api.record(AAPL=data.current(context.sym, "price"),
+    #        short_mavg=short_mavg,
+    #        long_mavg=long_mavg)
 
 
 # Note: this function can be removed if running
@@ -113,7 +112,7 @@ def _test_args():
     return {
         'start': pd.Timestamp('2011', tz='utc'),
         'end': pd.Timestamp('2013', tz='utc'),
-        'capital_base': 1000000,
+        'capital_base': 1e7,
         'max_leverage': None,
         'look_back': 301,
         'data_frequency': 'daily'

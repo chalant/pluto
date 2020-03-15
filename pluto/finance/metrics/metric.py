@@ -123,7 +123,7 @@ class Returns(Metric):
         portfolio_returns = ledger.portfolio.returns
         packet[field]['returns'] = ledger.todays_returns(portfolio_returns)
         packet['cumulative_perf']['returns'] = portfolio_returns
-        packet['cumulative_risk_metrics']['algorithm_period_returns'] = portfolio_returns
+        packet['cumulative_risk_metrics']['algorithm_period_return'] = portfolio_returns
 
     def end_of_bar(self, **kwargs):
         return self._end_of_period('minute_perf', kwargs.pop('packet'), kwargs.pop('ledger'))
@@ -274,6 +274,9 @@ class AlphaBeta(Metric):
 
         ledger_returns = kwargs.pop('ledger').daily_returns
         benchmark_returns = kwargs.pop('benchmark_source').daily_returns()
+
+        print(ledger_returns)
+        print(benchmark_returns)
 
         alpha, beta = ep.alpha_beta_aligned(
             ledger_returns,

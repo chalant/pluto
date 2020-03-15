@@ -36,7 +36,7 @@ class ControlMode(abc.ABC):
 
         self._framework_url = framework_url
 
-        self._event_writer = self._create_event_writer()
+        self._events_log = self._create_events_log()
 
         self._process_factory = process_factory
 
@@ -81,13 +81,23 @@ class ControlMode(abc.ABC):
             processes[p].parameter_update(params)
             arguments.append(params)
 
-        with self._event_writer as writer:
+        with self._events_log.writer() as writer:
             run_params = controller_pb2.RunParamsList(
                 run_params=arguments,
                 timestamp=conversions.to_proto_timestamp(dt))
             writer.write_event('parameter', run_params)
 
     def get_process(self, session_id):
+        '''
+
+        Parameters
+        ----------
+        session_id: str
+
+        Returns
+        -------
+        pluto.control.modes.processes.process_factory.Process
+        '''
         return self._processes.get(session_id, None)
 
     def stop(self, params):
@@ -116,11 +126,11 @@ class ControlMode(abc.ABC):
             process.clock_update(clock_event)
 
         # todo: non-blocking!
-        with self._event_writer as writer:
+        with self._events_log.writer() as writer:
             writer.write_event('clock', clock_event)
 
     def update(self, dt, evt):
-        with events_log.writer() as writer:
+        with self._events_log.writer() as writer:
             # the first method to be called by the loop
             if evt == clock_pb2.SESSION_START:
                 writer.initialize(dt)
@@ -147,8 +157,10 @@ class ControlMode(abc.ABC):
         # if a sessions capital_ratio is 0, then liquidate it.
 
         # make sure that the total ratio doesn't exceed 1
-        if sum([param.capital_ratio for param in params]) > 1:
-            raise RuntimeError('Sum of capital ratios must be below or equal to 1')
+        ratio_sum = sum([param.capital_ratio for param in params])
+        if ratio_sum > 1:
+            raise RuntimeError(
+                'Sum of capital ratios must be below or equal to 1 but is {}'.format(ratio_sum))
 
         self._params_buffer = params_per_id = {p.session_id: p for p in params}
         running = self._processes
@@ -191,6 +203,7 @@ class ControlMode(abc.ABC):
                 # todo: should put these steps in a thread
                 session_id = p.session_id
                 process = self._create_process(session_id, framework_url)
+                print('RATIO', p.capital_ratio)
                 capital = broker.compute_capital(p.capital_ratio)
                 # adjusts the max_leverage based on available margins from the broker
                 max_leverage = broker.adjust_max_leverage(p.max_leverage)
@@ -226,7 +239,13 @@ class ControlMode(abc.ABC):
         return self._process_factory.create_process(session_id, framework_url)
 
     @abc.abstractmethod
-    def _create_event_writer(self):
+    def _create_events_log(self):
+        '''
+
+        Returns
+        -------
+        events_log.AbstractEventsLog
+        '''
         raise NotImplementedError
 
     @abc.abstractmethod
