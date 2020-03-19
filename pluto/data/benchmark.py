@@ -33,7 +33,7 @@ class Benchmark(object):
         df = pd.read_csv(path)
         df['Date'] = df['Date'].astype('datetime64[ns]')
         df = df.set_index('Date')
-        return df['Close'][df.index.slice_indexer(start_dt, end_dt)].iloc[:]
+        return df['Close'].pct_change().iloc[1:][df.index.slice_indexer(start_dt, end_dt)]
 
 class ZiplineBenchmark(object):
     def __init__(self, ticker='SPY', environ=None):

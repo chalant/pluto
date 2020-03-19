@@ -31,6 +31,15 @@ message PeriodMetrics {
     repeated Order orders = 1;
     repeated Transaction transactions = 2;
     repeated Position positions = 3;
+    google.protobuf.Timestamp period_open = 4;
+    google.protobuf.Timestamp period_close = 5;
+    float capital_used = 6;
+    float starting_exposure = 7;
+    float ending_exposure = 8;
+    float starting_value = 9;
+    float starting_cash = 10;
+    float returns = 11;
+    float pnl = 12;
 }
 
 message CumulativeRiskMetrics {

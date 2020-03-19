@@ -25,7 +25,6 @@ from protos.clock_pb2 import (
     BAR,
     TRADE_END)
 
-
 def get_controllable(mode):
     '''
 
@@ -286,7 +285,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
         id_ = params.id  # the id of the controllable => will be used in performance updates
         universe = params.universe
         capital = params.capital
-        print('INIT CAPITAL', capital)
         max_leverage = params.max_leverage
         strategy = params.strategy
         data_frequency = params.data_frequency
@@ -358,9 +356,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
         return emp.Empty()
 
     def _run(self):
-        queue = self._queue
+        q = self._queue
         while not self._stop:
-            self._state.execute(queue.get())
+            try:
+                self._state.execute(q.get())
+            except commands.StopExecution:
+                break
 
     def _load_state(self, session_id):
         with open(paths.get_file_path(session_id, self._states_dir), 'rb') as f:

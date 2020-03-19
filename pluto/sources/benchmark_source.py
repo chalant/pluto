@@ -72,7 +72,6 @@ class BenchmarkSource(abc.ABC):
             self._cumulative_returns = np.cumprod(1 + returns.values) - 1
             self._annual_volatility = (
                     returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
-
             if self._emission_rate == 'minute':
                 p_returns = self._precalculated_series
                 self._minute_cumulative_returns = np.cumprod(1 + p_returns.values) - 1
@@ -187,21 +186,19 @@ class BenchmarkSource(abc.ABC):
                 frequency="1m",
                 ffill=True)
             return (
-                benchmark_series.pct_change(),
+                benchmark_series,
                 self.downsample_minute_return_series(trading_calendar, benchmark_series))
 
         # get the window of close prices for benchmark_asset from the
         # last trading day of the simulation, going up to one day
         # before the simulation start day (so that we can get the %
         # change on day 1)
-        prev = trading_calendar.previous_session_label(sessions[0])
-        benchmark_series = benchmark.get_history_window(
-            prev,
+        returns = benchmark.get_history_window(
+            sessions[0],
             sessions[-1],
             frequency="1d")
 
         #todo: handle case where there is no data for the starting session
-        returns = benchmark_series.pct_change()[1:]
         return returns, returns
 
     # def _validate_benchmark(self, benchmark_asset, sessions, data_portal):
@@ -243,7 +240,7 @@ class BenchmarkSource(abc.ABC):
             sessions[0],
             sessions[-1],
         )
-        daily_returns = minutely_returns[closes].pct_change()
+        daily_returns = minutely_returns[closes]
         daily_returns.index = closes.index
         return daily_returns.iloc[1:]
 

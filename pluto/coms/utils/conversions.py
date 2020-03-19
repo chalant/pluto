@@ -107,7 +107,7 @@ def to_zp_position(proto_position):
         proto_position.cost_basis,
         proto_position.last_sale_price,
         to_datetime(proto_position.last_sale_date)
-    )
+    ).to_dict()
 
 
 def to_zp_portfolio(proto_portfolio):
@@ -147,8 +147,7 @@ def to_proto_position(zp_position):
         asset=to_proto_asset(zp_position['sid']),
         amount=zp_position['amount'],
         cost_basis=zp_position['cost_basis'],
-        last_sale_price=zp_position['last_sale_price'],
-        last_sale_date=to_proto_timestamp(zp_position['last_sale_date'])
+        last_sale_price=zp_position['last_sale_price']
     )
 
 
@@ -265,7 +264,16 @@ def from_proto_period_metrics(period_metrics):
     return {
         'orders': [to_zp_order(order) for order in period_metrics.orders],
         'transactions': [to_zp_transaction(trx) for trx in period_metrics.transactions],
-        'positions': [to_zp_position(pos) for pos in period_metrics.positions]
+        'positions': [to_zp_position(pos) for pos in period_metrics.positions],
+        'period_open': to_datetime(period_metrics.period_open),
+        'period_close': to_datetime(period_metrics.period_close),
+        'capital_used': period_metrics.capital_used,
+        'starting_exposure': period_metrics.starting_exposure,
+        'ending_exposure': period_metrics.ending_exposure,
+        'starting_value': period_metrics.starting_value,
+        'starting_cash': period_metrics.starting_cash,
+        'returns': period_metrics.returns,
+        'pnl': period_metrics.pnl
     }
 
 def from_proto_performance_packet(proto_perf_packet):
@@ -304,7 +312,16 @@ def to_proto_period_perf(period_perf):
     return metrics.PeriodMetrics(
         orders=[to_proto_order(order) for order in period_perf['orders']],
         transactions=[to_proto_transaction(trc) for trc in period_perf['transactions']],
-        positions=[to_proto_position(pos) for pos in period_perf['positions']]
+        positions=[to_proto_position(pos) for pos in period_perf['positions']],
+        period_open=to_proto_timestamp(period_perf['period_open']),
+        period_close=to_proto_timestamp(period_perf['period_close']),
+        capital_used=period_perf['capital_used'],
+        starting_exposure=period_perf['starting_exposure'],
+        ending_exposure=period_perf['ending_exposure'],
+        starting_value=period_perf['starting_value'],
+        starting_cash=period_perf['starting_cash'],
+        returns=period_perf['returns'],
+        pnl=period_perf['pnl']
     )
 
 def to_proto_cum_risk_metrics(cum_risk_metrics):

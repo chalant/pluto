@@ -9,6 +9,8 @@ from protos.clock_pb2 import (
 
 from pluto.coms.utils import conversions
 
+class StopExecution(Exception):
+    pass
 
 class Command(abc.ABC):
     __slots__ = ['request']
@@ -93,9 +95,15 @@ class ClockUpdate(Command):
             elif e == BEFORE_TRADING_START:
                 controllable.before_trading_starts(dt)
             elif e == SESSION_END:
-                writer.performance_update(*controllable.session_end(dt))
+                packet, end = controllable.session_end(dt)
+                writer.performance_update(packet, end)
+                if end:
+                    raise StopExecution
             elif e == MINUTE_END:
-                writer.performance_update(*controllable.minute_end(dt))
+                packet, end = controllable.minute_end(dt)
+                writer.performance_update(packet, end)
+                if end:
+                    raise StopExecution
             else:
                 # TRADE_END/BAR event
                 targets = self._frequency_filter.filter(exchanges)

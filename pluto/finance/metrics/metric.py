@@ -275,9 +275,6 @@ class AlphaBeta(Metric):
         ledger_returns = kwargs.pop('ledger').daily_returns
         benchmark_returns = kwargs.pop('benchmark_source').daily_returns()
 
-        print(ledger_returns)
-        print(benchmark_returns)
-
         alpha, beta = ep.alpha_beta_aligned(
             ledger_returns,
             benchmark_returns)
