@@ -203,7 +203,7 @@ class ControlMode(abc.ABC):
                 # todo: should put these steps in a thread
                 session_id = p.session_id
                 process = self._create_process(session_id, framework_url)
-                print('RATIO', p.capital_ratio)
+                #fixme: found a general way for rounding ratios
                 capital = broker.compute_capital(p.capital_ratio)
                 # adjusts the max_leverage based on available margins from the broker
                 max_leverage = broker.adjust_max_leverage(p.max_leverage)

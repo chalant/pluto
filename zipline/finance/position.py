@@ -221,6 +221,5 @@ last_sale_price: {last_sale_price}"
             'sid': self.asset,
             'amount': self.amount,
             'cost_basis': self.cost_basis,
-            'last_sale_price': self.last_sale_price,
-            'last_sale_date': self.last_sale_date
+            'last_sale_price': self.last_sale_price
         }
