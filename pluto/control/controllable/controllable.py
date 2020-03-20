@@ -444,7 +444,10 @@ class Controllable(ABC):
                 params.data_frequency)
 
         metrics_tracker = self._metrics_tracker
-        capital_changes = self._calculate_capital_changes(dt, self._emission_rate, is_interday=False)
+        capital_changes = self._calculate_capital_changes(
+            dt,
+            self._emission_rate,
+            is_interday=False)
 
         algo = self._algo
 
@@ -458,7 +461,9 @@ class Controllable(ABC):
             self._calendar,
             self._sessions)
 
-        # handle any splits that impact any positions or any open orders.
+
+        #todo: this part need not be done in "live"
+        #handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
                 metrics_tracker.positions.keys() |
                 algo.blotter.open_orders.keys()
@@ -492,7 +497,8 @@ class Controllable(ABC):
         # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
-        new_transactions, new_commissions, closed_orders = blotter.get_transactions(current_data)
+        new_transactions, new_commissions, closed_orders = \
+            blotter.get_transactions(current_data)
 
         blotter.prune_orders(closed_orders)
 
