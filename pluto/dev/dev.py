@@ -70,7 +70,7 @@ class Environment(development.EnvironmentServicer):
         loop = simulation_loop.SimulationLoop(mode, start, end)
 
         self._monitor = mon = monitor.Monitor(mode)
-        # set monitor incase we have an in-memory process factory
+        # set monitor in-case we have an in-memory process factory
         process_factory.set_monitor_service(mon)
 
         self._controller = sim_ctl = controllerservice.ControllerService(
