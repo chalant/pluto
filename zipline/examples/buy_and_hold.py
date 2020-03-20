@@ -15,10 +15,6 @@
 # limitations under the License.
 from zipline.api import order, symbol
 from zipline.finance import commission, slippage
-from zipline import run_algorithm
-
-from datetime import datetime
-from pytz import UTC
 
 stocks = ['AAPL', 'MSFT']
 
@@ -51,8 +47,3 @@ def _test_args():
         'start': pd.Timestamp('2008', tz='utc'),
         'end': pd.Timestamp('2013', tz='utc'),
     }
-
-if __name__ == '__main__':
-    perf = run_algorithm(initialize=initialize, handle_data=handle_data,
-						 start=datetime(2017, 1, 2, tzinfo=UTC), end=datetime(2018, 1, 2, tzinfo=UTC),
-						 capital_base=100000, bundle='NYSE_bundle')  # run the algorithm here...

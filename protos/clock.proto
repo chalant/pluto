@@ -1,0 +1,100 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+import "protos/calendar.proto";
+
+service ClockListener {
+    rpc OnClockEvent(ClockEvent) returns (google.protobuf.Empty);
+}
+
+service SimulationClockRouter {
+    rpc Register (SimulationClockParameters) returns (Attributes);
+    rpc Run (SimulationRunParameters) returns (google.protobuf.Empty);
+}
+
+service RealtimeClockRouter {
+    rpc Register (RealtimeClockParameters) returns (Attributes);
+}
+
+service RealtimeClock {
+    rpc Register (RealtimeClockParameters) returns (Attributes);
+    rpc Run (google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+service SimulationClock {
+    rpc Register (SimulationClockParameters) returns (Attributes);
+    rpc Run (google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc GetState (google.protobuf.Empty) returns (State);
+}
+
+message CalendarMetadata {
+    google.protobuf.Timestamp start = 1;
+    google.protobuf.Timestamp end = 2;
+    Calendar calendar = 3;
+}
+
+message Attributes {
+    CalendarMetadata calendar_metadata = 2;
+}
+
+
+enum EventType {
+    INITIALIZE = 0;
+    SESSION_START = 1;
+    BEFORE_TRADING_START = 2;
+    BAR = 3;
+    MINUTE_END = 4;
+    TRADE_END = 5;
+    SESSION_END = 6;
+    LIQUIDATE = 7;
+    STOP = 8;
+    CALENDAR = 9;
+}
+
+message Signal {
+    google.protobuf.Timestamp timestamp = 1;
+    EventType event = 2;
+    string exchange = 3;
+}
+
+message ClockEvent {
+    google.protobuf.Timestamp timestamp = 1;
+    EventType event = 2;
+    repeated Signal signals = 3;
+}
+
+
+enum Frequency {
+    MINUTE = 0;
+    DAILY = 1;
+}
+
+message SimulationClockParameters {
+    string url = 1;
+    string calendar_name = 2;
+    string session_id = 3;
+    google.protobuf.Timestamp start_date = 4;
+    google.protobuf.Timestamp end_date = 5;
+    Frequency emission_rate = 6;
+}
+
+message SimulationRunParameters {
+    string session_id = 1;
+}
+
+message RealtimeClockParameters {
+    string url = 1;
+    string calendar_name = 2;
+    Frequency emission_rate = 3;
+}
+
+
+message State {
+    bool alive = 1;
+}
+
+message ClockEvents {
+    repeated ClockEvent clock_events = 1;
+}

@@ -1,0 +1,27 @@
+syntax="proto3";
+
+import "google/protobuf/empty.proto";
+import "protos/data.proto";
+import "protos/controller.proto";
+import "protos/data_bundle.proto";
+import "protos/exchange.proto";
+import "protos/controller.proto";
+
+service Hub {
+    rpc UploadGraph (stream Chunk) returns (google.protobuf.Empty);
+    rpc DownloadGraph (google.protobuf.Empty) returns (stream Chunk);
+    rpc GetDataBundle (CompoundDomainDef) returns (stream Chunk);
+    rpc Deploy (DeploymentRequest) returns (DeploymentResponse);
+    rpc GetCalendars (google.protobuf.Empty) returns (stream Chunk);
+    rpc GetExchanges (google.protobuf.Empty) returns (stream Exchange);
+    rpc RunPaperMode(RunParams) returns (google.protobuf.Empty);
+    rpc RunLiveMode(RunParams) returns (google.protobuf.Empty);
+}
+
+message DeploymentRequest {
+
+}
+
+message DeploymentResponse {
+
+}

@@ -419,7 +419,7 @@ def get_open_and_closes(trading_days, early_closes, get_open_and_close):
     get_o_and_c = partial(get_open_and_close, early_closes=early_closes)
 
     open_and_closes['market_open'], open_and_closes['market_close'] = \
-        zip(*open_and_closes.index.map(get_o_and_c))
+        zip(*open_and_closes.index.join(get_o_and_c))
 
     return open_and_closes
 

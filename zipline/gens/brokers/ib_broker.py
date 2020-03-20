@@ -122,6 +122,7 @@ class TWSConnection(EClientSocket, EWrapper):
         self.executions = defaultdict(OrderedDict)
         self.commissions = defaultdict(OrderedDict)
         self._execution_to_order_id = {}
+        self._order_id_to_execution_id = {}
         self.time_skew = None
         self.unrecoverable_error = False
 
@@ -499,19 +500,20 @@ class TWSConnection(EClientSocket, EWrapper):
 
 
 class IBBroker(Broker):
-    def __init__(self, tws_uri, account_id=None):
+    def __init__(self, tws_uri, start_dt, account_id=None):
         self._tws_uri = tws_uri
         self._orders = {}
         self._transactions = {}
 
         self._tws = TWSConnection(tws_uri)
-        self.account_id = (self._tws.managed_accounts[0] if account_id is None
-                           else account_id)
+        self.account_id = (
+            self._tws.managed_accounts[0] if account_id is None else account_id
+        )
         self.currency = 'USD'
 
         self._subscribed_assets = []
 
-        super(self.__class__, self).__init__()
+        super(IBBroker, self).__init__()
 
     @property
     def subscribed_assets(self):
@@ -557,13 +559,16 @@ class IBBroker(Broker):
         ib_account = self._tws.accounts[self.account_id][self.currency]
 
         z_portfolio = zp.Portfolio()
-        z_portfolio.capital_used = None  # TODO(tibor)
+        #todo: the starting cash should be the total cash value the very first time we call
+        # the broker and should be stored permanently.
         z_portfolio.starting_cash = None  # TODO(tibor): Fill from state
         z_portfolio.portfolio_value = float(ib_account['EquityWithLoanValue'])
         z_portfolio.pnl = (float(ib_account['RealizedPnL']) +
                            float(ib_account['UnrealizedPnL']))
         z_portfolio.returns = None  # TODO(tibor): pnl / total_at_start
         z_portfolio.cash = float(ib_account['TotalCashValue'])
+        #todo: the start date is filled if we call the broker for the first time (we check this from
+        # some state file)
         z_portfolio.start_date = None  # TODO(tibor)
         z_portfolio.positions = self.positions
         z_portfolio.positions_value = float(ib_account['StockMarketValue'])
@@ -580,10 +585,12 @@ class IBBroker(Broker):
 
         z_account = zp.Account()
 
+        #todo: don't use total cash value but settled cash instead.
         z_account.settled_cash = float(ib_account['TotalCashValue-S'])
         z_account.accrued_interest = None  # TODO(tibor)
         z_account.buying_power = float(ib_account['BuyingPower'])
         z_account.equity_with_loan = float(ib_account['EquityWithLoanValue'])
+        #todo: this doesn't cover the commodities
         z_account.total_positions_value = float(ib_account['StockMarketValue'])
         z_account.total_positions_exposure = float(
             (z_account.total_positions_value /
@@ -674,6 +681,7 @@ class IBBroker(Broker):
             return None
 
     def order(self, asset, amount, style):
+        #todo: what about future contracts ?
         contract = Contract()
         contract.m_symbol = str(asset.symbol)
         contract.m_currency = self.currency
@@ -896,19 +904,17 @@ class IBBroker(Broker):
                     continue
 
                 try:
-                    commission = self._tws.commissions[ib_order_id][exec_id]\
-                        .m_commission
+                    commission = self._tws.commissions[ib_order_id][exec_id].m_commission
                 except KeyError:
-                    log.warning(
-                        "Commission not found for execution: {}".format(
-                            exec_id))
+                    log.warning("Commission not found for execution: {}".format(exec_id))
                     commission = 0
 
                 exec_detail = execution['exec_detail']
                 is_buy = order.amount > 0
                 amount = (exec_detail.m_shares if is_buy
                           else -1 * exec_detail.m_shares)
-                tx = Transaction(
+
+                self._transactions[exec_id] = Transaction(
                     asset=order.asset,
                     amount=amount,
                     dt=pd.to_datetime(exec_detail.m_time, utc=True),
@@ -916,7 +922,6 @@ class IBBroker(Broker):
                     order_id=order.id,
                     commission=commission
                 )
-                self._transactions[exec_id] = tx
 
     def cancel_order(self, zp_order_id):
         ib_order_id = self.orders[zp_order_id].broker_order_id

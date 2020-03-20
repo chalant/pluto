@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message RunParams {
+    float capital_base = 1;
+    google.protobuf.Timestamp start_session = 2;
+    google.protobuf.Timestamp end_session = 3;
+    bool live = 4; // indicates the trade behavior...
+    string metrics_set = 5; //indicates the set of metrics the strategy will use to track performance
+    enum DataFrequency {
+        MINUTE = 0;
+        DAY = 1;
+    }
+    DataFrequency data_frequency = 6;
+    string maximum_leverage = 7;
+}

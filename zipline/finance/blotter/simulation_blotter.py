@@ -174,8 +174,7 @@ class SimulationBlotter(Blotter):
                 # along with newly placed orders.
                 self.new_orders.append(cur_order)
 
-    def cancel_all_orders_for_asset(self, asset, warn=False,
-                                    relay_status=True):
+    def cancel_all_orders_for_asset(self, asset, warn=False, relay_status=True):
         """
         Cancel all open orders for a given asset.
         """

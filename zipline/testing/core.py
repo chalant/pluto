@@ -1364,7 +1364,7 @@ def write_compressed(path, content):
     Write a compressed (gzipped) file to `path`.
     """
     with gzip.open(path, 'wb') as f:
-        f.write(content)
+        f.write_event(content)
 
 
 def read_compressed(path):

@@ -166,6 +166,7 @@ class LiveTradingAlgorithm(TradingAlgorithm):
 
     @api_method
     def symbol(self, symbol_str):
+        #TODO: need to do this for all assets as-well...
         # This method works around the problem of not being able to trade
         # assets which does not have ingested data for the day of trade.
         # Normally historical data is loaded to bundle and the asset's

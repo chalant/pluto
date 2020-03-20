@@ -1,0 +1,14 @@
+syntax = 'proto3';
+
+message Graph {
+    repeated Node nodes = 1;
+}
+
+message Node {
+    string name = 1;
+    string type = 2;
+    string id = 3;
+    Node origin = 4; //indicates the origin of the node (if it is a copy of another node)
+    bool copy = 5;
+}
+

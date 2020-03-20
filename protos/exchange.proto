@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+message Exchange {
+    string name = 1;
+    string country_code = 2;
+    repeated string asset_types = 3;
+}

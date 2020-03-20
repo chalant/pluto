@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+        <link rel="stylesheet" href="./fontawesome-free-5.8.1-web/css/all.min.css">
+        <link rel="stylesheet" href="./outputwindow.css">
+    </head>
+    <body>
+        <div id="titlebar">
+            <button id='quit', type="button"><i class="fas fa-times"></i></button>
+            <button id='minimize'><i class="fas fa-minimize"></i></button>
+            <button id='stop' type="button" ><i class="fas fa-stop"></i></button>
+            <button id='start', type="button", class="btn"><i id="start-icon", class="fas fa-play"></i></button>
+        </div>
+        <div id="container"></div>
+        <script> 
+        const { ipcRenderer } = require('electron')
+
+        function replaceClass(classList, replace, replacement){
+            classList.remove(replace)
+            classList.add(replacement)
+        }
+
+        document.getElementById('start').onclick = () => {
+            const element = document.getElementById("start-icon")
+            const classList = element.classList
+            //TODO: encapsulate these as functions, so that they take arbitrary class names
+            if (element.className === 'fas fa-play'){
+                replaceClass(classList, 'fa-play', 'fa-pause')
+                ipcRenderer.send('output:play')
+            }
+            else {
+                replaceClass(classList, 'fa-pause', 'fa-play')
+                ipcRenderer.send('output:pause')
+            }
+        
+        }
+        document.getElementById('stop').onclick = () => {
+            ipcRenderer.send('output:stop')
+            const element = document.getElementById("start-icon")
+            replaceClass(element.classList, 'fa-pause', 'fa-play')
+        }
+        document.getElementById('quit').onclick = () => {
+            ipcRenderer.send('output:quit')}
+            </script>
+    </body>
+</html>

@@ -236,7 +236,7 @@ class SimplePipelineEngine(PipelineEngine):
     get_loader : callable
         A function that is given a loadable term and returns a PipelineLoader
         to use to retrieve raw data for that term.
-    asset_finder : zipline.assets.AssetFinder
+    controllable : pluto.control.controllable.controllable.Controllable
         An AssetFinder instance.  We depend on the AssetFinder to determine
         which assets are in the top-level universe at any point in time.
     populate_initial_workspace : callable, optional
@@ -254,7 +254,7 @@ class SimplePipelineEngine(PipelineEngine):
     """
     __slots__ = (
         '_get_loader',
-        '_finder',
+        '_controllable',
         '_root_mask_term',
         '_root_mask_dates_term',
         '_populate_initial_workspace',
@@ -266,13 +266,13 @@ class SimplePipelineEngine(PipelineEngine):
     )
     def __init__(self,
                  get_loader,
-                 asset_finder,
+                 controllable,
                  default_domain=GENERIC,
                  populate_initial_workspace=None,
                  default_hooks=None):
 
         self._get_loader = get_loader
-        self._finder = asset_finder
+        self._controllable = controllable
 
         self._root_mask_term = AssetExists()
         self._root_mask_dates_term = InputDates()
@@ -505,7 +505,7 @@ class SimplePipelineEngine(PipelineEngine):
         #
         # Build lifetimes matrix reaching back to `extra_rows` days before
         # `start_date.`
-        finder = self._finder
+        finder = self._controllable.asset_finder
         lifetimes = finder.lifetimes(
             sessions[start_idx - extra_rows:end_idx],
             include_start_date=False,
@@ -787,7 +787,7 @@ class SimplePipelineEngine(PipelineEngine):
             # LabelArrays into categoricals.
             final_columns[name] = terms[name].postprocess(data[name][mask])
 
-        resolved_assets = array(self._finder.retrieve_all(assets))
+        resolved_assets = array(self._controllable.asset_finder.retrieve_all(assets))
         index = _pipeline_output_index(dates, resolved_assets, mask)
 
         return DataFrame(data=final_columns, index=index)

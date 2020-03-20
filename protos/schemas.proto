@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message Exchange {
+    string asset_type = 1;
+    string country_code = 2;
+}

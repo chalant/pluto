@@ -1,0 +1,6 @@
+syntax = 'proto3';
+
+message Event {
+    string event_type = 1;
+    bytes event = 2;
+}

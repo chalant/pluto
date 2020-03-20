@@ -1,0 +1,58 @@
+syntax = 'proto3';
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+import "protos/broker.proto";
+import "protos/controller.proto";
+import "protos/clock.proto";
+import "protos/data.proto";
+
+service Controllable {
+    /*A service that is called by a controller*/
+    rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
+    rpc Initialize (stream Chunk) returns (google.protobuf.Empty);
+    rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
+    //for updating positions, transactions etc.
+    rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
+    rpc Stop (StopRequest) returns (google.protobuf.Empty);
+
+    rpc Watch(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc StopWatching(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+
+message InitParams {
+    string id = 1;
+    bytes strategy = 2;
+    float capital = 3;
+    float max_leverage = 4;
+    string data_frequency = 5;
+    string universe = 6;
+    int32 look_back = 7;
+    google.protobuf.Timestamp start = 8;
+    google.protobuf.Timestamp end = 9;
+    string mode = 10;
+}
+
+message UpdateRequest {
+    google.protobuf.Timestamp timestamp = 1;
+    EventType event = 2;
+    BrokerState broker_state = 3;
+}
+
+message UpdateReply {
+
+}
+
+message ControllableState {
+    string session_id = 1;
+    string session_state = 2;
+    string capital = 3;
+    string universe = 4;
+    int32 look_back = 5;
+    string data_frequency = 6;
+    google.protobuf.Timestamp start = 7;
+    google.protobuf.Timestamp end = 8;
+    google.protobuf.Timestamp checkpoint = 9;
+    bytes metrics_tracker_state = 10;
+}

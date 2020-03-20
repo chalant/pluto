@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+message CompoundDomainDef {
+        repeated DomainDef domains = 1;
+}
+
+message DomainDef {
+        string op = 1;
+        UnitDomainDef domain = 2;
+}
+
+
+message UnitDomainDef {
+        /*The UnitDomainDef is the smallest DomainDef*/
+        string name = 1;
+}
+
+message AssetMetadata {
+        /*an asset is mapped to a calendar*/
+        string type = 1;
+        string calendar_name = 2;
+}
+
+message BundleMetadata {
+    /* Contains information about the data contained in the bundle (column names etc.)*/
+}
+
+message Format {
+        string daily_bars = 1;
+        string minute_bars = 2;
+        string assets_metadata = 3;
+        string adjustments = 4;
+}

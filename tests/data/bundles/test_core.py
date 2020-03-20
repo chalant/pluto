@@ -173,10 +173,10 @@ class BundleCoreTestCase(WithInstanceTmpDir,
                           output_dir):
             assert_is(environ, self.environ)
 
-            asset_db_writer.write(equities=equities)
-            minute_bar_writer.write(minute_bar_data)
-            daily_bar_writer.write(daily_bar_data)
-            adjustment_writer.write(splits=splits)
+            asset_db_writer.write_event(equities=equities)
+            minute_bar_writer.write_event(minute_bar_data)
+            daily_bar_writer.write_event(daily_bar_data)
+            adjustment_writer.write_event(splits=splits)
 
             assert_is_instance(calendar, TradingCalendar)
             assert_is_instance(cache, dataframe_cache)
@@ -305,7 +305,7 @@ class BundleCoreTestCase(WithInstanceTmpDir,
                 self.START_DATE,
                 self.END_DATE,
             )
-            asset_db_writer.write(equities=equities)
+            asset_db_writer.write_event(equities=equities)
             called[0] = True
 
         # Explicitly use different timestamp; otherwise, test could run so fast
