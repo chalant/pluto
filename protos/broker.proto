@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+import "protos/protocol.proto";
+import "protos/assets.proto";
+import "protos/finance.proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+service Broker {
+    /*This is an interface that provides brokerage access to clients. It encapsulates
+    methods for accessing performing trades. Each caller passes its credentials as metadata*/
+    rpc SingleOrder (OrderParams) returns (Order);
+    rpc PortfolioState (google.protobuf.Empty) returns (Portfolio);
+    rpc PositionsState (google.protobuf.Empty) returns (stream AssetPositionPair);
+    rpc Transactions (google.protobuf.Timestamp) returns (stream Transaction);
+    rpc AccountState (google.protobuf.Empty) returns (Account);
+    rpc BatchOrder (BatchOrderParams) returns (stream Order);
+    rpc CancelOrder (Order) returns (google.protobuf.Empty);
+    rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
+}
+
+
+message BrokerState {
+    repeated Transaction transactions = 1;
+    repeated Order orders = 2;
+    Account account = 3;
+    google.protobuf.Timestamp timestamp = 4;
+}
+
+message WarningMessage {
+    string message = 1;
+}
+
+message OrderParams {
+    enum ExecutionStyle {
+        MARKET_ORDER = 0;
+        LIMIT_ORDER = 1;
+        STOP_ORDER = 2;
+        STOP_LIMIT_ORDER = 3;
+    }
+    ExecutionStyle style = 1;
+    Asset asset = 2;
+    float amount = 3;
+    float limit_price = 4;
+    float stop_price = 5;
+    float limit_order = 6;
+    float exchange = 7;
+    google.protobuf.Timestamp order_dt = 8;
+}
+
+message BatchOrderParams {
+    repeated OrderParams params = 1;
+}

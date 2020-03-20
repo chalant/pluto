@@ -108,4 +108,3 @@ after_success:
 branches:
   only:
     - master
-    - live

@@ -29,6 +29,17 @@ from setuptools import (
     find_packages,
     setup,
 )
+from setuptools.command.install import install
+
+from wheel.bdist_wheel import bdist_wheel
+
+import time
+
+import zipfile
+
+import subprocess
+
+import shlex
 
 import versioneer
 
@@ -39,10 +50,12 @@ class LazyBuildExtCommandClass(dict):
     they've actually been downloaded and installed by setup_requires.
     """
     def __contains__(self, key):
-        return (
-            key == 'build_ext'
-            or super(LazyBuildExtCommandClass, self).__contains__(key)
-        )
+        if key == 'build_ext':
+            return True
+        elif key == 'install':
+            return True
+        else:
+            return super(LazyBuildExtCommandClass,self).__contains__(key)
 
     def __setitem__(self, key, value):
         if key == 'build_ext':
@@ -50,33 +63,85 @@ class LazyBuildExtCommandClass(dict):
         super(LazyBuildExtCommandClass, self).__setitem__(key, value)
 
     def __getitem__(self, key):
-        if key != 'build_ext':
+        if key == 'build_ext':
+            from Cython.Distutils.build_ext import build_ext as cython_build_ext
+            import numpy
+
+            # Cython_build_ext isn't a new-style class in Py2.
+            class build_ext(cython_build_ext, object):
+                """
+                Custom build_ext command that lazily adds numpy's include_dir to
+                extensions.
+                """
+                def build_extensions(self):
+                    """
+                    Lazily append numpy's include directory to Extension includes.
+
+                    This is done here rather than at module scope because setup.py
+                    may be run before numpy has been installed, in which case
+                    importing numpy and calling `numpy.get_include()` will fail.
+                    """
+                    numpy_incl = numpy.get_include()
+                    for ext in self.extensions:
+                        ext.include_dirs.append(numpy_incl)
+
+                    super(build_ext, self).build_extensions()
+            return build_ext
+        # elif key == 'bdist_wheel':
+        #     class custom_sdist(bdist_wheel):
+        #         def __init__(self,dist):
+        #             self._internal = bdist_wheel(dist)
+        #             super(custom_sdist,self).__init__(dist)
+        #
+        #         def initialize_options(self):
+        #             self._internal.initialize_options()
+        #
+        #         def finalize_options(self):
+        #             self._internal.finalize_options()
+        #
+        #         def run(self):
+        #             self._internal.run()
+        #             wheel_name = self._get_bdist_wheel_name(
+        #                 self._get_dist_files(
+        #                     self._internal.distribution
+        #                 )
+        #             )
+        #
+        #             with zipfile.ZipFile(wheel_name,'a') as zip:
+        #                 dir = os.path.split(self._internal.distinfo_dir)[-1]
+        #                 zip.write('etc/requirements_blaze.txt','{0}/reqs.txt'.format(dir))
+        #
+        #         def _get_dist_files(self,distribution):
+        #             return distribution.dist_files
+        #
+        #         def _get_bdist_wheel_name(self,dist_files):
+        #             for file in dist_files:
+        #                 if file[0] == 'bdist_wheel':
+        #                     return file[2]
+        #
+        #         def get_sub_commands(self):
+        #             return self._internal.get_sub_commands()
+        #
+        #         def execute_command(self,command):
+        #
+        #             print("Running shell command: %s", command)
+        #
+        #             return_code = subprocess.call(shlex.split(command))
+        #
+        #             if return_code != 0:
+        #                 print("Error running command {0}".format(command) + "- exit code: {0}".format(return_code))
+        #                 raise IOError("Shell Commmand Failed")
+        #
+        #             return return_code
+        #     return custom_sdist
+        elif key == 'install':
+            class custom_install(install):
+                def run(self):
+                    install.run(self)
+                    subprocess.call(shlex.split("pip install -r etc/requirements_blaze.txt"))
+            return custom_install
+        else:
             return super(LazyBuildExtCommandClass, self).__getitem__(key)
-
-        from Cython.Distutils import build_ext as cython_build_ext
-        import numpy
-
-        # Cython_build_ext isn't a new-style class in Py2.
-        class build_ext(cython_build_ext, object):
-            """
-            Custom build_ext command that lazily adds numpy's include_dir to
-            extensions.
-            """
-            def build_extensions(self):
-                """
-                Lazily append numpy's include directory to Extension includes.
-
-                This is done here rather than at module scope because setup.py
-                may be run before numpy has been installed, in which case
-                importing numpy and calling `numpy.get_include()` will fail.
-                """
-                numpy_incl = numpy.get_include()
-                for ext in self.extensions:
-                    ext.include_dirs.append(numpy_incl)
-
-                super(build_ext, self).build_extensions()
-        return build_ext
-
 
 def window_specialization(typename):
     """Make an extension for an AdjustedArrayWindow specialization."""
@@ -120,6 +185,8 @@ ext_modules = [
         ['zipline/pipeline/loaders/blaze/_core.pyx'],
         depends=['zipline/lib/adjustment.pxd'],
     ),
+    Extension('pluto.control.clock.sim_engine',
+              ['pluto/control/clock/sim_engine.pyx']),
 ]
 
 
@@ -287,8 +354,8 @@ conditional_arguments = {
 }
 
 setup(
-    name='zipline-live',
-    url="http://zipline-live.io",
+    name='pluto',
+    url="https://github.com/chalant/zipline-core",
     version=versioneer.get_version(),
     cmdclass=LazyBuildExtCommandClass(versioneer.get_cmdclass()),
     description='A backtester and live trader for financial algorithms.',
@@ -297,15 +364,10 @@ setup(
             'zipline = zipline.__main__:main',
         ],
     },
-    author='zipline-live community',
-    author_email='community@zipline-live.io',
-    packages=find_packages(include=['zipline', 'zipline.*']),
+    author='chalant',
+    packages=find_packages(include=['pluto','pluto.*','zipline', 'zipline.*']),
     ext_modules=ext_modules,
     include_package_data=True,
-    package_data={root.replace(os.sep, '.'):
-                  ['*.pyi', '*.pyx', '*.pxi', '*.pxd']
-                  for root, dirnames, filenames in os.walk('zipline')
-                  if '__pycache__' not in root},
     license='Apache 2.0',
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -313,7 +375,8 @@ setup(
         'Natural Language :: English',
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.5'
+        'Programming Language :: Python :: 3.6',
         'Operating System :: OS Independent',
         'Intended Audience :: Science/Research',
         'Topic :: Office/Business :: Financial',

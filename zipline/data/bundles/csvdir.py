@@ -129,12 +129,12 @@ class CSVDIRBundle:
 			else:
 				writer = daily_bar_writer
 			if self.has_fundamentals:
-				writer.write(self._pricing_iter(ddir, symbols, metadata,
-												divs_splits,show_progress,fundamentals_writer),
-							 show_progress=show_progress)
+				writer.write_event(self._pricing_iter(ddir, symbols, metadata,
+                                                      divs_splits, show_progress, fundamentals_writer),
+                                   show_progress=show_progress)
 			else:
-				writer.write(self._pricing_iter(ddir, symbols, metadata,divs_splits,show_progress),
-							 show_progress=show_progress)
+				writer.write_event(self._pricing_iter(ddir, symbols, metadata, divs_splits, show_progress),
+                                   show_progress=show_progress)
 
 			# Hardcode the exchange to "CSVDIR" for all assets and (elsewhere)
 			# register "CSVDIR" to resolve to the NYSE calendar, because these
@@ -144,14 +144,14 @@ class CSVDIRBundle:
 			else:
 				metadata['exchange'] = self.exchange
 		if metadata is not None:
-			asset_db_writer.write(equities=metadata)
+			asset_db_writer.write_event(equities=metadata)
 
 		divs_splits['divs']['sid'] = divs_splits['divs']['sid'].astype(int)
 		divs_splits['splits']['sid'] = divs_splits['splits']['sid'].astype(int)
-		adjustment_writer.write(splits=divs_splits['splits'],
-								dividends=divs_splits['divs'])
+		adjustment_writer.write_event(splits=divs_splits['splits'],
+                                      dividends=divs_splits['divs'])
 
-	def _pricing_iter(self, csvdir, symbols, metadata, divs_splits, show_progress,fundamentals_writer=None):
+	def _pricing_iter(self, csvdir, symbols, metadata, divs_splits, show_progress, fundamentals_writer=None):
 		with tqdm(symbols, desc='Loading custom pricing data: ') as it:
 			files = os.listdir(csvdir)
 			for sid, symbol in enumerate(it):
@@ -204,7 +204,7 @@ class CSVDIRBundle:
 					if os.path.isfile(fcsvpath):
 						fd_df = read_csv(fcsvpath, parse_dates=[1], infer_datetime_format=True)
 						fd_df['sid'] = sid
-						fundamentals_writer.write(fd_df)
+						fundamentals_writer.write_event(fd_df)
 				yield sid, dfr
 
 

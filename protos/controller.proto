@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+import "protos/metrics.proto";
+
+service Controller {
+    rpc Stop(StopRequest) returns (StopResponse);
+    rpc Run(RunRequest) returns (RunResponse);
+}
+
+enum SessionStatus {
+    COMPLETED = 0;
+    INTERRUPTED = 1;
+}
+
+message Status {
+    SessionStatus session_status = 1;
+}
+
+
+message RunRequest {
+    RunMode mode = 1; //necessary in realtime mode not in backtesting
+    repeated RunParams run_params = 2;
+    google.protobuf.Timestamp end = 3;
+}
+
+message RunParams {
+    string session_id = 1;
+    float capital_ratio = 2;
+    float max_leverage = 3;
+}
+
+message RunParamsList {
+    repeated RunParams run_params = 1;
+    google.protobuf.Timestamp timestamp = 2;
+}
+
+enum RunMode {
+    PAPER = 0;
+    LIVE = 1;
+}
+
+message RunResponse {
+}
+
+message StopRequest {
+    string strategy_id = 1;
+    bool liquidate = 2;
+}
+
+message StopResponse {
+}
+
+message Performance {
+    repeated PerformancePacket packets = 1;
+}
+
+message PerformancePacket {
+    CumulativeMetrics cumulative_perf = 1;
+    PeriodMetrics period_perf = 2;
+    CumulativeRiskMetrics cumulative_risk_metrics = 4;
+    string packet_type = 5;
+}
+
+enum ControllerEvent {
+    CAPITAL_CHANGE = 0;
+    LEVERAGE_CHANGE = 1;
+    BROKER_UPDATE = 2;
+}
+
+message ParametersUpdateRequest {
+    float capital = 1;
+    float maximum_leverage = 2;
+}

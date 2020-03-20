@@ -115,8 +115,7 @@ class AlgorithmSimulator(object):
 
             # handle any transactions and commissions coming out new orders
             # placed in the last bar
-            new_transactions, new_commissions, closed_orders = \
-                blotter.get_transactions(current_data)
+            new_transactions, new_commissions, closed_orders = blotter.get_transactions(current_data)
 
             blotter.prune_orders(closed_orders)
 
@@ -229,7 +228,6 @@ class AlgorithmSimulator(object):
                     )
 
                     yield minute_msg
-
             risk_message = metrics_tracker.handle_simulation_end(
                 self.data_portal,
             )

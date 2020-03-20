@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import zipline.api
 from zipline.utils.compat import wraps
 from zipline.utils.algo_instance import get_algo_instance, set_algo_instance
 
+from pluto import api
 
 class ZiplineAPI(object):
     """
@@ -43,20 +43,20 @@ class ZiplineAPI(object):
 
 def api_method(f):
     # Decorator that adds the decorated class method as a callable
-    # function (wrapped) to zipline.api
+    # function (wrapped) to pluto.api
     @wraps(f)
     def wrapped(*args, **kwargs):
         # Get the instance and call the method
         algo_instance = get_algo_instance()
         if algo_instance is None:
             raise RuntimeError(
-                'zipline api method %s must be called during a simulation.'
+                'pluto api method %s must be called during a run.'
                 % f.__name__
             )
         return getattr(algo_instance, f.__name__)(*args, **kwargs)
-    # Add functor to zipline.api
-    setattr(zipline.api, f.__name__, wrapped)
-    zipline.api.__all__.append(f.__name__)
+    # Add functor to pluto.api
+    setattr(api, f.__name__, wrapped)
+    api.__all__.append(f.__name__)
     f.is_api_method = True
     return f
 

@@ -1,0 +1,73 @@
+syntax = 'proto3';
+
+import "google/protobuf/timestamp.proto";
+
+import "protos/data.proto";
+
+service Editor {
+    //for developing and editing strategies
+    //rpc BackTest (BackTestRequest) returns (stream PerformancePacket);
+    rpc New (NewStrategyRequest) returns (stream Chunk);
+    rpc Save (stream Chunk) returns (SaveResponse);
+    //pushes the directory into the server.
+    rpc Push (stream Chunk) returns (PushResponse);
+    rpc GetStrategy (StrategyRequest) returns (stream Chunk);
+}
+
+service Environment {
+    rpc Setup (SetupRequest) returns (SetupResponse);
+    rpc Delete (DeleteRequest) returns (DeleteResponse);
+}
+
+message NewStrategyRequest {
+    string name = 1;
+    string universe = 2;
+}
+
+message NewStrategyResponse {
+    bytes template = 1;
+    string strategy_id = 2;
+}
+
+message PushResponse {
+
+}
+
+message SaveRequest {
+    string strategy_id = 1;
+    bytes strategy = 2;
+}
+
+message SaveResponse {
+
+}
+
+message StrategyRequest {
+    string strategy_id = 1;
+}
+
+message SetupRequest {
+    //setup parameters of the strategy
+    string strategy_id = 1;
+    float capital = 7;
+    float max_leverage = 8;
+    string universe = 2;
+    int32 look_back = 5;
+    string data_frequency = 6;
+    google.protobuf.Timestamp start = 3;
+    google.protobuf.Timestamp end = 4;
+}
+
+message SetupResponse {
+    //session_id that will be used to run the strategy
+    string session_id = 1;
+}
+
+message DeleteRequest {
+    //request a session deletion
+    string session_id = 1;
+}
+
+message DeleteResponse {
+
+}

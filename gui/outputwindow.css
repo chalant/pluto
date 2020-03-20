@@ -1,0 +1,52 @@
+/* html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+} */
+
+#output {
+    background-color: #2B3037; 
+}
+
+
+/* #quit {
+    float: right;
+}
+
+#start{
+    float: right;
+}
+
+#stop{
+    float: right;
+} */
+
+/* #start:hover{
+    background-color:  #76afde;
+} */
+
+/* #stop:hover{
+    background-color:  #76afde;
+} */
+
+
+/* #quit:hover{
+    background-color: rgb(241, 52, 52);
+} */
+
+
+
+/* .fa-pause:hover{
+    color: rgb(255, 193, 77)
+} */
+
+/* .fa-play:hover{
+    color: rgb(65, 146, 65)
+}
+
+
+.fa-stop:hover{
+    color: rgb(241, 52, 52);
+} */

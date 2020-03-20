@@ -11,12 +11,13 @@ from trading_calendars import get_calendar
 from toolz import curry, complement, take
 
 from ..adjustments import SQLiteAdjustmentReader, SQLiteAdjustmentWriter
-from ..bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
-from ..minute_bars import (
+from zipline.data.bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
+
+from zipline.data.minute_bars import (
     BcolzMinuteBarReader,
     BcolzMinuteBarWriter,
 )
-from zipline.assets import AssetDBWriter, AssetFinder, ASSET_DB_VERSION
+from zipline.assets import AssetDBWriter, ASSET_DB_VERSION
 from zipline.assets.asset_db_migrations import downgrade
 from zipline.utils.cache import (
     dataframe_cache,
@@ -27,6 +28,8 @@ from zipline.utils.compat import mappingproxy
 from zipline.utils.input_validation import ensure_timestamp, optionally
 import zipline.utils.paths as pth
 from zipline.utils.preprocess import preprocess
+
+from pluto.assets import assets
 
 
 def asset_db_path(bundle_name, timestr, environ=None, db_version=None):
@@ -51,83 +54,80 @@ def daily_equity_path(bundle_name, timestr, environ=None):
 
 
 def adjustment_db_path(bundle_name, timestr, environ=None):
-	return pth.data_path(
-		adjustment_db_relative(bundle_name, timestr, environ),
-		environ=environ,
-	)
-
-
+    return pth.data_path(
+        adjustment_db_relative(bundle_name, timestr, environ),
+        environ=environ,
+    )
 
 
 def cache_path(bundle_name, environ=None):
-	return pth.data_path(
-		cache_relative(bundle_name, environ),
-		environ=environ,
+    return pth.data_path(
+        cache_relative(bundle_name, environ),
+        environ=environ,
     )
 
 
 def adjustment_db_relative(bundle_name, timestr, environ=None):
-	return bundle_name, timestr, 'adjustments.sqlite'
+    return bundle_name, timestr, 'adjustments.sqlite'
 
 
 def cache_relative(bundle_name, timestr, environ=None):
-	return bundle_name, '.cache'
+    return bundle_name, '.cache'
 
 
 def daily_equity_relative(bundle_name, timestr, environ=None):
-	return bundle_name, timestr, 'daily_equities.bcolz'
+    return bundle_name, timestr, 'daily_equities.bcolz'
 
 
 def minute_equity_relative(bundle_name, timestr, environ=None):
-	return bundle_name, timestr, 'minute_equities.bcolz'
+    return bundle_name, timestr, 'minute_equities.bcolz'
 
 
 def asset_db_relative(bundle_name, timestr, environ=None, db_version=None):
-	db_version = ASSET_DB_VERSION if db_version is None else db_version
+    db_version = ASSET_DB_VERSION if db_version is None else db_version
 
-	return bundle_name, timestr, 'assets-%d.sqlite' % db_version
-
+    return bundle_name, timestr, 'assets-%d.sqlite' % db_version
 
 def to_bundle_ingest_dirname(ts):
-	"""Convert a pandas Timestamp into the name of the directory for the
-	ingestion.
+    """Convert a pandas Timestamp into the name of the directory for the
+    ingestion.
 
-	Parameters
-	----------
-	ts : pandas.Timestamp
-		The time of the ingestions
+    Parameters
+    ----------
+    ts : pandas.Timestamp
+        The time of the ingestions
 
-	Returns
-	-------
-	name : str
-		The name of the directory for this ingestion.
-	"""
-	return ts.isoformat().replace(':', ';')
+    Returns
+    -------
+    name : str
+        The name of the directory for this ingestion.
+    """
+    return ts.isoformat().replace(':', ';')
 
 
 def from_bundle_ingest_dirname(cs):
-	"""Read a bundle ingestion directory name into a pandas Timestamp.
+    """Read a bundle ingestion directory name into a pandas Timestamp.
 
-	Parameters
-	----------
-	cs : str
-		The name of the directory.
+    Parameters
+    ----------
+    cs : str
+        The name of the directory.
 
-	Returns
-	-------
-	ts : pandas.Timestamp
-		The time when this ingestion happened.
-	"""
-	return pd.Timestamp(cs.replace(';', ':'))
+    Returns
+    -------
+    ts : pandas.Timestamp
+        The time when this ingestion happened.
+    """
+    return pd.Timestamp(cs.replace(';', ':'))
 
 
 def ingestions_for_bundle(bundle, environ=None):
-	return sorted(
-		(from_bundle_ingest_dirname(ing)
-		 for ing in os.listdir(pth.data_path([bundle], environ))
-		 if not pth.hidden(ing)),
-		reverse=True,
-	)
+    return sorted(
+        (from_bundle_ingest_dirname(ing)
+         for ing in os.listdir(pth.data_path([bundle], environ))
+         if not pth.hidden(ing)),
+        reverse=True,
+    )
 
 
 RegisteredBundle = namedtuple(
@@ -148,7 +148,7 @@ BundleData = namedtuple(
 
 BundleCore = namedtuple(
     'BundleCore',
-    'bundles register unregister ingest load clean',
+    'bundles register unregister ingest load clean'
 )
 
 
@@ -378,53 +378,52 @@ def _make_bundle_core():
         cachepath = cache_path(name, environ=environ)
         pth.ensure_directory(pth.data_path([name, timestr], environ=environ))
         pth.ensure_directory(cachepath)
-        with dataframe_cache(cachepath, clean_on_failure=False) as cache, \
-                ExitStack() as stack:
+        with dataframe_cache(cachepath, clean_on_failure=False) as cache,\
+            ExitStack() as stack:
             # we use `cleanup_on_failure=False` so that we don't purge the
             # cache directory if the load fails in the middle
             if bundle.create_writers:
-                wd = stack.enter_context(working_dir(
-                    pth.data_path([], environ=environ))
-                )
-                daily_bars_path = wd.ensure_dir(
-                    *daily_equity_relative(
+                    wd = stack.enter_context(working_dir(
+                        pth.data_path([], environ=environ))
+                    )
+                    daily_bars_path = wd.ensure_dir(
+                        *daily_equity_relative(
+                            name, timestr, environ=environ,
+                        )
+                    )
+                    daily_bar_writer = BcolzDailyBarWriter(
+                        daily_bars_path,
+                        calendar,
+                        start_session,
+                        end_session,
+                    )
+                    # Do an empty write to ensure that the daily ctables exist
+                    # when we create the SQLiteAdjustmentWriter below. The
+                    # SQLiteAdjustmentWriter needs to open the daily ctables so
+                    # that it can compute the adjustment ratios for the dividends.
+
+                    daily_bar_writer.write(())
+                    minute_bar_writer = BcolzMinuteBarWriter(
+                        wd.ensure_dir(*minute_equity_relative(
+                            name, timestr, environ=environ)
+                        ),
+                        calendar,
+                        start_session,
+                        end_session,
+                        minutes_per_day=bundle.minutes_per_day,
+                    )
+                    assets_db_path = wd.getpath(*asset_db_relative(
                         name, timestr, environ=environ,
-                    )
-                )
-                daily_bar_writer = BcolzDailyBarWriter(
-                    daily_bars_path,
-                    calendar,
-                    start_session,
-                    end_session,
-                )
-                # Do an empty write to ensure that the daily ctables exist
-                # when we create the SQLiteAdjustmentWriter below. The
-                # SQLiteAdjustmentWriter needs to open the daily ctables so
-                # that it can compute the adjustment ratios for the dividends.
+                    ))
+                    asset_db_writer = AssetDBWriter(assets_db_path)
 
-                daily_bar_writer.write(())
-                minute_bar_writer = BcolzMinuteBarWriter(
-                    wd.ensure_dir(*minute_equity_relative(
-                        name, timestr, environ=environ)
-                    ),
-                    calendar,
-                    start_session,
-                    end_session,
-                    minutes_per_day=bundle.minutes_per_day,
-                )
-                assets_db_path = wd.getpath(*asset_db_relative(
-                    name, timestr, environ=environ,
-                ))
-                asset_db_writer = AssetDBWriter(assets_db_path)
-
-                adjustment_db_writer = stack.enter_context(
-                    SQLiteAdjustmentWriter(
-                        wd.getpath(*adjustment_db_relative(
-                            name, timestr, environ=environ)),
-                        BcolzDailyBarReader(daily_bars_path),
-                        overwrite=True,
+                    adjustment_db_writer = stack.enter_context(
+                        SQLiteAdjustmentWriter(
+                            wd.getpath(*adjustment_db_relative(
+                                name, timestr, environ=environ)),
+                            BcolzDailyBarReader(daily_bars_path),
+                            overwrite=True,)
                     )
-                )
             else:
                 daily_bar_writer = None
                 minute_bar_writer = None
@@ -517,7 +516,7 @@ def _make_bundle_core():
             timestamp = pd.Timestamp.utcnow()
         timestr = most_recent_data(name, timestamp, environ=environ)
         return BundleData(
-            asset_finder=AssetFinder(
+            asset_finder=assets.AssetFinder(
                 asset_db_path(name, timestr, environ=environ),
             ),
             equity_minute_bar_reader=BcolzMinuteBarReader(
@@ -528,7 +527,7 @@ def _make_bundle_core():
             ),
             adjustment_reader=SQLiteAdjustmentReader(
                 adjustment_db_path(name, timestr, environ=environ),
-            ),
+            )
         )
 
     @preprocess(

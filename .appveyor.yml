@@ -110,4 +110,3 @@ test_script:
 branches:
   only:
     - master
-    - live

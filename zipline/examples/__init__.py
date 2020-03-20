@@ -4,7 +4,7 @@ import os
 from toolz import merge
 from trading_calendars import register_calendar, get_calendar
 
-from zipline import run_algorithm
+from zipline.utils.run_algo import run_algorithm
 
 
 # These are used by test_examples.py to discover the examples to run.

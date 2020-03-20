@@ -19,10 +19,112 @@ import pandas as pd
 from zipline.utils.memoize import remember_last
 from zipline.utils.pandas_utils import normalize_date
 
+
+from functools import partial
+
+from six import string_types
+from sqlalchemy import create_engine
+
+from zipline.assets import AssetDBWriter, AssetFinder
+from zipline.assets.continuous_futures import CHAIN_PREDICATES
+from zipline.data.loader import load_market_data
+from trading_calendars import get_calendar
+
 log = logbook.Logger('Trading')
 
 
 DEFAULT_CAPITAL_BASE = 1e5
+
+
+class TradingEnvironment(object):
+    """
+    The financial simulations in zipline depend on information
+    about the benchmark index and the risk free rates of return.
+    The benchmark index defines the benchmark returns used in
+    the calculation of performance metrics such as alpha/beta. Many
+    components, including risk, performance, transforms, and
+    batch_transforms, need access to a calendar of trading days and
+    market hours. The TradingEnvironment maintains two time keeping
+    facilities:
+      - a DatetimeIndex of trading days for calendar calculations
+      - a timezone name, which should be local to the exchange
+        hosting the benchmark index. All dates are normalized to UTC
+        for serialization and storage, and the timezone is used to
+       ensure proper rollover through daylight savings and so on.
+    User code will not normally need to use TradingEnvironment
+    directly. If you are extending zipline's core financial
+    components and need to use the environment, you must import the module and
+    build a new TradingEnvironment object, then pass that TradingEnvironment as
+    the 'env' arg to your TradingAlgorithm.
+    Parameters
+    ----------
+    load : callable, optional
+        The function that returns benchmark returns and treasury curves.
+        The treasury curves are expected to be a DataFrame with an index of
+        dates and columns of the curve names, e.g. '10year', '1month', etc.
+    bm_symbol : str, optional
+        The benchmark symbol
+    exchange_tz : tz-coercable, optional
+        The timezone of the exchange.
+    trading_calendar : TradingCalendar, optional
+        The trading calendar to work with in this environment.
+    asset_db_path : str or sa.engine.Engine, optional
+        The path to the assets db or sqlalchemy Engine object to use to
+        construct an AssetFinder.
+    """
+
+    # Token used as a substitute for pickling objects that contain a
+    # reference to a TradingEnvironment
+    PERSISTENT_TOKEN = "<TradingEnvironment>"
+
+    def __init__(
+        self,
+        load=None,
+        bm_symbol='SPY',
+        exchange_tz="US/Eastern",
+        trading_calendar=None,
+        asset_db_path=':memory:',
+        future_chain_predicates=CHAIN_PREDICATES,
+        environ=None,
+    ):
+
+        self.bm_symbol = bm_symbol
+        if not load:
+            load = partial(load_market_data, environ=environ)
+
+        if not trading_calendar:
+            trading_calendar = get_calendar("NYSE")
+
+        self.benchmark_returns, self.treasury_curves = load(
+            trading_calendar.day,
+            trading_calendar.schedule.index,
+            self.bm_symbol,
+        )
+
+        self.exchange_tz = exchange_tz
+
+        if isinstance(asset_db_path, string_types):
+            asset_db_path = 'sqlite:///' + asset_db_path
+            self.engine = engine = create_engine(asset_db_path)
+        else:
+            self.engine = engine = asset_db_path
+
+        if engine is not None:
+            AssetDBWriter(engine).init_db()
+            self.asset_finder = AssetFinder(
+                engine,
+                future_chain_predicates=future_chain_predicates)
+        else:
+            self.asset_finder = None
+
+    def write_data(self, **kwargs):
+        """Write data into the asset_db.
+        Parameters
+        ----------
+        **kwargs
+            Forwarded to AssetDBWriter.write
+        """
+        AssetDBWriter(self.engine).write(**kwargs)
 
 
 class SimulationParameters(object):
@@ -112,9 +214,17 @@ class SimulationParameters(object):
     def start_session(self):
         return self._start_session
 
+    @start_session.setter
+    def start_session(self, val):
+        self._start_session = val
+
     @property
     def end_session(self):
         return self._end_session
+
+    @end_session.setter
+    def end_session(self, val):
+        self._end_session = val
 
     @property
     def first_open(self):
