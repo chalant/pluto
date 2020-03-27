@@ -10,7 +10,7 @@ from protos import clock_pb2
 
 
 class SimulationLoop(object):
-    def __init__(self, control_mode, start_dt, end_dt, frequency='day', max_reloads=0):
+    def __init__(self, start_dt, end_dt, frequency='day', max_reloads=0):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
@@ -29,7 +29,7 @@ class SimulationLoop(object):
         self._start_flag = False
         self._bfs_flag = False
 
-        self._control_mode = control_mode
+        self._control_modes = []
 
         self._execution_lock = threading.Lock()
         self._to_execute = collections.deque()
@@ -37,7 +37,7 @@ class SimulationLoop(object):
     def start(self):
         calendar = self._calendar
 
-        control_mode = self._control_mode
+        control_modes = self._control_modes
 
         for ts, evt in get_generator(calendar, calendar.all_sessions, frequency=self._frequency):
             # acquire lock so that no further commands are executed here
@@ -47,9 +47,7 @@ class SimulationLoop(object):
                 self._process(ts)
                 #call for any update that needs to be done before
                 #anythin else
-                control_mode.update(ts, evt)
-                # process cached commands
-                control_mode.process(ts)
+                
                 signals = []
                 # aggregate the signals into a single signal.
                 for cl in self._clocks.values():
@@ -63,12 +61,22 @@ class SimulationLoop(object):
                             event=evt,
                             exchange=exchange)
                         signals.append(signal)
-                # continue execution
-                control_mode.clock_update(ts, evt, signals)
+                
+                #
+                for control_mode in control_modes:
+                    control_mode.update(ts, evt, signals)
+                    # process cached commands
+                    control_mode.process(ts)
+                    # continue execution
+                    control_mode.clock_update(ts, evt, signals)
 
     def execute(self, command):
         with self._execution_lock:
-            command(self._control_mode, self._get_clocks)
+            command(self._get_clocks)
+
+    def add_control_mode(self, mode):
+        mode.accept_loop(self)
+        self._control_modes.append(mode)
 
     def stop(self):
         pass

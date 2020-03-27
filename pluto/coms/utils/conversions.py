@@ -13,6 +13,7 @@ from protos import controller_pb2 as ctl
 from protos import finance_pb2 as fin
 from protos import metrics_pb2 as metrics
 from protos import protocol_pb2 as pr
+from protos import broker_pb2
 
 def datetime_from_bytes(bytes_):
     ts = pr_ts.Timestamp()
@@ -41,6 +42,19 @@ def to_datetime(proto_ts):
 def to_pandas_timestamp(protos_ts, tz=None):
     return Timestamp(to_datetime(protos_ts)).tz_localize(tz)
 
+def to_proto_commission(zp_commission):
+    return broker_pb2.Commission(
+        asset=to_proto_asset(zp_commission['asset']),
+        order=to_proto_order(zp_commission['order']),
+        cost=zp_commission['cost']
+    )
+
+def from_proto_commission(proto_commission):
+    return {
+        'asset':to_zp_asset(proto_commission.asset),
+        'order':to_proto_order(proto_commission.order),
+        'cost':proto_commission.cost
+    }
 
 def to_proto_asset(zp_asset):
     return pr_asset.Asset(

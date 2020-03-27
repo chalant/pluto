@@ -9,7 +9,6 @@ from pluto.interface import monitor
 from pluto.controller import controllerservice, controller
 from pluto.coms.utils import conversions
 from pluto.control.modes import simulation_mode
-from pluto.control.loop import simulation_loop
 
 from protos import development_pb2 as dev_rpc
 from protos import development_pb2_grpc as development
@@ -67,8 +66,6 @@ class Environment(development.EnvironmentServicer):
             request.max_leverage,
             process_factory)
 
-        loop = simulation_loop.SimulationLoop(mode, start, end)
-
         self._monitor = mon = monitor.Monitor(mode)
         # set monitor in-case we have an in-memory process factory
         process_factory.set_monitor_service(mon)
@@ -77,7 +74,6 @@ class Environment(development.EnvironmentServicer):
             directory,
             controller.SimulationController(
                 mode,
-                loop,
                 start,
                 end))
 

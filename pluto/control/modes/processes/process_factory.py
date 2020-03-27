@@ -9,8 +9,7 @@ from pluto.interface.utils.method_access import invoke, _framework_id
 
 from protos import controllable_pb2 as cbl
 
-#if any of the methods fail, it will raise an error.
-class ProcessFactory(object):
+class ProcessFactory(abc.ABC):
     def create_process(self, session_id, framework_url):
         return self._create_process(framework_url, session_id, paths.root())
 
@@ -20,6 +19,88 @@ class ProcessFactory(object):
 
     def set_monitor_service(self, monitor_service):
         pass
+
+class ProcessWrapper(abc.ABC):
+    def __init__(self, process):
+        '''
+
+        Parameters
+        ----------
+        process: Process
+        '''
+        self._process = process
+
+    @property
+    def session_id(self):
+        return self._process.session_id
+
+    def initialize(self,
+                   start,
+                   end,
+                   universe,
+                   strategy,
+                   capital,
+                   max_leverage,
+                   data_frequency,
+                   look_back,
+                   mode):
+        self._initialize(
+            start,
+            end,
+            universe,
+            strategy,
+            capital,
+            max_leverage,
+            data_frequency,
+            look_back,
+            mode)
+        self._process.initialize(
+            start,
+            end,
+            universe,
+            strategy,
+            capital,
+            max_leverage,
+            data_frequency,
+            look_back,
+            mode
+        )
+
+    def parameter_update(self, params):
+        self._process.parameter_update(params)
+
+    def clock_update(self, clock_event):
+        self._clock_update(clock_event)
+        self._process.clock_update(clock_event)
+
+    def account_update(self, broker_state):
+        self._process.account_update(broker_state)
+
+    def stop(self):
+        self._process.stop()
+
+    def watch(self):
+        self._process.watch()
+
+    def stop_watching(self):
+        self._process.stop()
+
+    @abc.abstractmethod
+    def _initialize(self,
+                    start,
+                    end,
+                    universe,
+                    strategy,
+                    capital,
+                    max_leverage,
+                    data_frequency,
+                    look_back,
+                    mode):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _clock_update(self, clock_event):
+        raise NotImplementedError
 
 
 class Process(abc.ABC):

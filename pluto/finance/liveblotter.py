@@ -59,17 +59,23 @@ class LiveBlotter(blotter.Blotter):
             order_id = transaction.order_id
             o = orders.get(order_id, None)
             if o:
-                order = broker_data.orders[order_id]
                 transactions.append(transaction)
-                commissions.append(
-                    {'asset':transaction.asset,
-                     'cost':transaction.commission})
-                orders[order_id] = order #update the order state
-                if not order.open:
-                    closed_orders.append(orders[order_id])
 
-    def transaction_history(self, start_dt):
-        return self._broker.get_transactions(start_dt)
+        for commission in broker_data.commissions:
+            order = commission.order
+            order_id = order.order_id
+            o = orders.get(order_id, None)
+            if o:
+                commissions.append({
+                    'asset': commission.asset,
+                    'cost': commission.cost,
+                    'order': order
+                })
+
+            orders[order_id] = order  # update the order state
+            if not order.open:
+                closed_orders.append(order)
+
 
     def prune_orders(self, closed_orders):
         orders = self._orders

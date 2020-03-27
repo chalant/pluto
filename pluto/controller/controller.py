@@ -81,13 +81,15 @@ class Controller(abc.ABC):
 class SimulationController(Controller):
     def __init__(self,
                  mode,
-                 loop,
                  start,
                  end):
+        #TODO: a simulation controller and a simulation loop
+        # can only accept a subtype of simulation mode, else, raises an error.
         self._start = start
         self._end = end
         self._mode = mode
-        self._loop = loop
+        self._loop = loop = simulation_loop.SimulationLoop(start, end)
+        loop.add_control_mode(mode)
         super(SimulationController, self).__init__()
 
     def run(self, directory, params):
@@ -100,7 +102,7 @@ class SimulationController(Controller):
 
         '''
         loop = self._loop
-        calendars = []
+        exchanges = []
         parameters = []
         start = self._start
         end = self._end
@@ -112,7 +114,7 @@ class SimulationController(Controller):
             universe = uni.get(uni_name, None)
             if not universe:
                 uni[universe] = universe = universes.get_universe(uni_name)
-            calendars.extend(universe.calendars)
+            exchanges.extend(universe.exchanges)
             parameters.append(
                 RunParameter(
                     session,
@@ -121,7 +123,7 @@ class SimulationController(Controller):
                     start,
                     end,
                     'pluto'))
-        loop.execute(commands.Run(directory, parameters, set(calendars)))
+        loop.execute(commands.Run(directory, self._mode, parameters, set(exchanges)))
         loop.start()
         #todo: if the loop is already running, raise an error? in live,
         # the run method behaves differently (can be called multiple times)

@@ -28,11 +28,12 @@ class Stop(Command):
 
 
 class Run(Command):
-    def __init__(self, directory, params, exchanges):
+    def __init__(self, directory, control_mode, params, exchanges):
         self._params = params
         self._exchanges = exchanges
         self._directory = directory
+        self._control_mode = control_mode
 
     def __call__(self, control_mode, clock_factory):
         clock_factory(self._exchanges)
-        control_mode.add_strategies(self._directory, self._params)
+        self._control_mode.add_strategies(self._directory, self._params)

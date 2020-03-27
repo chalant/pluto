@@ -16,14 +16,12 @@ class SimulationControlMode(mode.ControlMode):
             framework_url,
             process_factory)
 
-    def _broker_update(self, dt, evt, event_writer, broker, process):
-        pass
-
     def _create_broker(self):
         return broker.SimulationBroker(self._capital, self._max_leverage)
 
-    def _create_events_log(self):
-        return events_log.get_events_log()
-
-    def _mode_name(self):
+    def _mode_type(self):
         return 'simulation'
+
+    def _accept_loop(self, loop):
+        # can accept any type of loop
+        return True
