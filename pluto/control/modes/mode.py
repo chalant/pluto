@@ -23,8 +23,6 @@ class ControlMode(abc.ABC):
         framework_url: str
         '''
 
-        self._broker = self._create_broker()
-
         # maps session id to a session
         self._running = {}
         self._processes = {}
@@ -39,6 +37,8 @@ class ControlMode(abc.ABC):
         self._events_log = self._create_events_log()
 
         self._process_factory = process_factory
+
+        self._broker = self._create_broker()
 
     @property
     def running_sessions(self):
@@ -129,18 +129,23 @@ class ControlMode(abc.ABC):
         with self._events_log.writer() as writer:
             writer.write_event('clock', clock_event)
 
-    def update(self, dt, evt):
+    def update(self, dt, evt, signals):
         with self._events_log.writer() as writer:
-            # the first method to be called by the loop
+            # we initialize the events log here, since this is the
+            # first method to be called by the loop
             if evt == clock_pb2.SESSION_START:
                 writer.initialize(dt)
             writer.write_datetime(dt)
-            self._broker_update(
+
+            broker_state = self._broker.update(
                 dt,
                 evt,
-                writer,
-                self._broker,
-                self._processes.values())
+                signals)
+
+            if broker_state:
+                for process in self._processes.values():
+                    process.account_update(broker_state)
+                writer.write_event('broker', broker_state)
 
     def add_strategies(self, directory, params):
         '''
@@ -195,7 +200,7 @@ class ControlMode(abc.ABC):
                 per_str_id[stg_id] = lst = []
             lst.append(p)
 
-        mode = self._mode_name()
+        mode = self._mode_type()
 
         for key, values in per_str_id.items():
             implementation = load_implementation(strategies.pop(key))
@@ -203,27 +208,30 @@ class ControlMode(abc.ABC):
                 # todo: should put these steps in a thread
                 session_id = p.session_id
                 process = self._create_process(session_id, framework_url)
-                #fixme: found a general way for rounding ratios
+                # fixme: find a general way for rounding ratios
                 capital = broker.compute_capital(p.capital_ratio)
                 # adjusts the max_leverage based on available margins from the broker
                 max_leverage = broker.adjust_max_leverage(p.max_leverage)
                 sess = p.session
+
+                # prepare for trade simulation for live simulation case
+                universe_name = sess.universe_name
+                start, end = p.start, p.end
+
+                broker.add_market(session_id, start, end, universe_name)
+
                 process.initialize(
-                    start=p.start,
-                    end=p.end,
+                    start=start,
+                    end=end,
                     capital=capital,
                     max_leverage=max_leverage,
-                    universe=sess.universe_name,
+                    universe=universe_name,
                     look_back=sess.look_back,
                     data_frequency=sess.data_frequency,
                     strategy=implementation,
                     mode=mode)
 
                 processes[session_id] = process
-
-    @abc.abstractmethod
-    def _broker_update(self, dt, evt, event_writer, broker, processes):
-        raise NotImplementedError
 
     @abc.abstractmethod
     def _create_broker(self):
@@ -238,7 +246,6 @@ class ControlMode(abc.ABC):
         '''
         return self._process_factory.create_process(session_id, framework_url)
 
-    @abc.abstractmethod
     def _create_events_log(self):
         '''
 
@@ -246,8 +253,16 @@ class ControlMode(abc.ABC):
         -------
         events_log.AbstractEventsLog
         '''
-        raise NotImplementedError
+        return events_log.get_events_log(self._mode_type())
 
     @abc.abstractmethod
-    def _mode_name(self):
+    def _mode_type(self):
         raise NotImplementedError()
+
+    def accept_loop(self, loop):
+        if not self._accept_loop(loop):
+            raise ValueError("Cannot run {} with {}".format(type(self), type(loop)))
+
+    @abc.abstractmethod
+    def _accept_loop(self, loop):
+        raise NotImplementedError

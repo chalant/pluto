@@ -51,7 +51,7 @@ class _Ready(_State):
         algo.event_manager.handle_data(algo, current_data, dt)
 
     def before_trading_starts(self, algo, current_dt):
-        algo.before_trading_start(algo, current_dt)
+        algo.before_trading_start(current_dt)
 
 
 class Controllable(ABC):
@@ -123,11 +123,7 @@ class Controllable(ABC):
 
     @property
     def state(self):
-        return self._state
-
-    @state.setter
-    def state(self, value):
-        self._state = value
+        return self._sync_state_tracker
 
     @property
     def calendars(self):
@@ -214,7 +210,8 @@ class Controllable(ABC):
         self._in_session = ss.InSession(self)
         self._bfs = ss.Trading(self)
         self._idle = idle = ss.Idle(self)
-        self._state = idle
+
+        self._sync_state_tracker = ss.Tracker(uni.exchanges)
         calendar = uni.get_calendar(
             start_dt - pd.Timedelta(days=150),
             end_dt)
@@ -346,7 +343,8 @@ class Controllable(ABC):
             before_trading_start=namespace.get('before_trading_start', noop),
             analyze=noop)
 
-        self._state = self._out_session
+        sst = self._sync_state_tracker
+        sst.state = sst.out_session
         self._run_state = self._ready
 
         api_support.set_algo_instance(algo)
@@ -497,6 +495,7 @@ class Controllable(ABC):
         # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
+        #todo: this is where we update everything (ledger etc.)
         new_transactions, new_commissions, closed_orders = \
             blotter.get_transactions(current_data)
 
@@ -557,7 +556,7 @@ class Controllable(ABC):
         metrics_tracker = self._metrics_tracker
         return controllable_pb2.ControllableState(
             session_id=self._session_id,
-            session_state=self._state.name,
+            session_state=self._sync_state_tracker.state.name,
             capital=metrics_tracker.portfolio.cash,
             max_leverage=metrics_tracker.account.leverage,
             universe=self._universe.name,
@@ -582,7 +581,7 @@ class Controllable(ABC):
             state.mode,
             state.look_back)
 
-        self._state = ss.get_state(state.session_state, self)
+        ss.set_state(state.session_state, self._sync_state_tracker)
         self._current_dt = conversions.to_datetime(state.checkpoint)
 
     def stop(self, dt):

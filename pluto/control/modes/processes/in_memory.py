@@ -2,11 +2,6 @@ from pluto.control.modes.processes import process_factory
 from pluto.control.controllable import server
 from pluto.interface.utils.method_access import invoke
 
-def framework_method(func):
-    def wrapper(instance, request):
-        invoke(func, request)
-    return wrapper
-
 class FakeContext(object):
     __slots__ = ['_invocation_metadata']
 

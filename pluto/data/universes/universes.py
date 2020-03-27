@@ -24,7 +24,7 @@ class AssetFilter(object):
 class AbstractUniverse(abc.ABC):
     @property
     @abc.abstractmethod
-    def calendars(self):
+    def calendar_name(self):
         raise NotImplementedError(self.calendars.__name__())
 
     @property
@@ -125,6 +125,10 @@ class Universe(AbstractUniverse):
         return cu.from_proto_calendar(proto, start, end, cache)
 
     @property
+    def calendar_name(self):
+        raise NotImplementedError
+
+    @property
     def bundle_name(self):
         bundle = self._bundle_name
         if not bundle:
@@ -167,8 +171,8 @@ class ZiplineQuandlUniverse(AbstractUniverse):
         return ('AMEX', 'NASDAQ', 'NYSE')
 
     @property
-    def calendars(self):
-        return ('XNYS',)
+    def calendar_name(self):
+        return 'XNYS'
 
     @property
     def asset_filter(self):
@@ -197,8 +201,8 @@ class TestUniverse(AbstractUniverse):
         return ('AMEX', 'NYSE', 'NASDAQ')
 
     @property
-    def calendars(self):
-        return ('XNYS',)
+    def calendar_name(self):
+        return 'XNYS'
 
     def asset_filter(self):
         return

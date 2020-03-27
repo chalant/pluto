@@ -26,7 +26,7 @@ class MetricsTracker(object):
         look_back: int
         """
         self._benchmark_source = benchmark_source
-        self._ledger = ledger.LiveLedger(
+        self._ledger = ledger.Ledger(
             capital,
             data_frequency,
             start_dt,

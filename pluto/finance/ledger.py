@@ -11,7 +11,7 @@ from pluto.coms.utils import conversions as cv
 from protos import ledger_state_pb2 as acc
 
 
-class LiveLedger(object):
+class Ledger(object):
     def __init__(self, capital, data_frequency, start_date, look_back):
         self._look_back = look_back
 
@@ -258,11 +258,11 @@ class LiveLedger(object):
     def process_transaction(self, transaction):
         """Add a transaction to ledger, updating the current state as needed.
 
-                Parameters
-                ----------
-                transaction : zp.Transaction
-                    The transaction to execute.
-                """
+        Parameters
+        ----------
+        transaction : zp.Transaction
+            The transaction to execute.
+        """
         asset = transaction.asset
         if isinstance(asset, Future):
             try:
@@ -322,11 +322,11 @@ class LiveLedger(object):
     def process_order(self, order):
         """Keep track of an order that was placed.
 
-                Parameters
-                ----------
-                order : zp.Order
-                    The order to record.
-                """
+        Parameters
+        ----------
+        order : zp.Order
+            The order to record.
+        """
         try:
             dt_orders = self._orders_by_modified[order.dt]
         except KeyError:
@@ -344,11 +344,11 @@ class LiveLedger(object):
     def process_commission(self, commission):
         """Process the commission.
 
-                Parameters
-                ----------
-                commission : zp.Event
-                    The commission being paid.
-                """
+        Parameters
+        ----------
+        commission : zp.Event
+            The commission being paid.
+        """
         asset = commission['asset']
         cost = commission['cost']
 
