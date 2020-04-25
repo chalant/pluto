@@ -22,7 +22,7 @@ class LiveSimulationMode(mode.ControlMode):
             self._max_leverage,
             self._market_factory)
 
-    def _mode_type(self):
+    def mode_type(self):
         return 'live'
 
     def _accept_loop(self, loop):

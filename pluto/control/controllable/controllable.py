@@ -93,41 +93,13 @@ class Controllable(ABC):
         self._current_dt = None
         self._params = None
 
-        self._out_session = None
-        self._active = None
-        self._in_session = None
-        self._bfs = None
-        self._idle = None
-
-        self._state = None
-
         self._ready = _Ready()
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
 
     @property
-    def out_session(self):
-        return self._out_session
-
-    @property
-    def active(self):
-        return self._active
-
-    @property
-    def in_session(self):
-        return self._in_session
-
-    @property
-    def bfs(self):
-        return self._bfs
-
-    @property
     def state(self):
         return self._sync_state_tracker
-
-    @property
-    def calendars(self):
-        return self._calendars
 
     @property
     def current_dt(self):
@@ -203,17 +175,16 @@ class Controllable(ABC):
 
         # todo: where should we create the directory?
         uni = universes.get_universe(universe)
-        self._calendars = {cal: cal for cal in uni.calendars}
 
         self._out_session = ss.OutSession(self)
         self._active = ss.Active(self)
         self._in_session = ss.InSession(self)
         self._bfs = ss.Trading(self)
-        self._idle = idle = ss.Idle(self)
+        self._idle = ss.Idle(self)
 
-        self._sync_state_tracker = ss.Tracker(uni.exchanges)
+        self._sync_state_tracker = sst = ss.Tracker(uni.exchanges)
         calendar = uni.get_calendar(
-            start_dt - pd.Timedelta(days=150),
+            start_dt - pd.Timedelta(days=look_back),
             end_dt)
 
         self._session_id = session_id
@@ -230,10 +201,14 @@ class Controllable(ABC):
             # always set the emission_rate to a minute if the data_frequency is a minute
             self._emission_rate = 'minute'
 
-            def calculate_minute_capital_changes(dt, emission_rate):
-                self._calculate_capital_changes(dt, emission_rate, is_interday=False)
+            def calculate_minute_capital_changes(dt, metrics_tracker, emission_rate):
+                self._calculate_capital_changes(
+                    dt,
+                    metrics_tracker,
+                    emission_rate,
+                    is_interday=False)
         else:
-            def calculate_minute_capital_changes(dt, emission_rate):
+            def calculate_minute_capital_changes(dt, metrics_tracker, emission_rate):
                 return []
 
         self._calculate_minute_capital_changes = calculate_minute_capital_changes
@@ -287,7 +262,7 @@ class Controllable(ABC):
             start_dt,
             look_back)
 
-        self._blotter = blotter = self._create_blotter()
+        self._blotter = blotter = self._create_blotter(uni)
 
         self._restrictions = restrictions = asset_restrictions.NoRestrictions()
 
@@ -343,7 +318,6 @@ class Controllable(ABC):
             before_trading_start=namespace.get('before_trading_start', noop),
             analyze=noop)
 
-        sst = self._sync_state_tracker
         sst.state = sst.out_session
         self._run_state = self._ready
 
@@ -444,6 +418,7 @@ class Controllable(ABC):
         metrics_tracker = self._metrics_tracker
         capital_changes = self._calculate_capital_changes(
             dt,
+            metrics_tracker,
             self._emission_rate,
             is_interday=False)
 
@@ -459,9 +434,8 @@ class Controllable(ABC):
             self._calendar,
             self._sessions)
 
-
-        #todo: this part need not be done in "live"
-        #handle any splits that impact any positions or any open orders.
+        # todo: this part need not be done in "live"
+        # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
                 metrics_tracker.positions.keys() |
                 algo.blotter.open_orders.keys()
@@ -489,13 +463,16 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         blotter = self._blotter
 
-        capital_changes = self._calculate_minute_capital_changes(dt, self._emission_rate)
+        capital_changes = self._calculate_minute_capital_changes(
+            dt,
+            metrics_tracker,
+            self._emission_rate)
 
         # todo: assets must be restricted to the provided exchanges
         # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
-        #todo: this is where we update everything (ledger etc.)
+        # todo: this is where we update everything (ledger etc.)
         new_transactions, new_commissions, closed_orders = \
             blotter.get_transactions(current_data)
 
@@ -606,10 +583,16 @@ class Controllable(ABC):
         self._capital_changes = {dt: {'type': 'target', 'value': capital}}
 
     @abstractmethod
-    def _create_blotter(self, cancel_policy=None):
+    def _create_blotter(self, universe, cancel_policy=None):
         raise NotImplementedError(self._create_blotter.__name__)
 
-    def _get_daily_message(self, dt, algo, metrics_tracker, data_portal, trading_calendar, sessions):
+    def _get_daily_message(self,
+                           dt,
+                           algo,
+                           metrics_tracker,
+                           data_portal,
+                           trading_calendar,
+                           sessions):
         '''
 
         Parameters
@@ -638,7 +621,13 @@ class Controllable(ABC):
         perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
         return perf_message
 
-    def _get_minute_message(self, dt, algo, metrics_tracker, data_portal, trading_calendar, sessions):
+    def _get_minute_message(self,
+                            dt,
+                            algo,
+                            metrics_tracker,
+                            data_portal,
+                            trading_calendar,
+                            sessions):
         '''
 
         Parameters
@@ -682,7 +671,12 @@ class Controllable(ABC):
             restrictions=restrictions
         )
 
-    def _cleanup_expired_assets(self, dt, data_portal, blotter, metrics_tracker, position_assets):
+    def _cleanup_expired_assets(self,
+                                dt,
+                                data_portal,
+                                blotter,
+                                metrics_tracker,
+                                position_assets):
         '''
 
         Parameters
@@ -764,7 +758,11 @@ class Controllable(ABC):
 
             self._last_sync_time = dt
 
-    def _calculate_capital_changes(self, dt, emission_rate, is_interday,
+    def _calculate_capital_changes(self,
+                                   dt,
+                                   metrics_tracker,
+                                   emission_rate,
+                                   is_interday,
                                    portfolio_value_adjustment=0.0):
         """
         If there is a capital change for a given dt, this means that the change
@@ -785,11 +783,8 @@ class Controllable(ABC):
             target = capital_change['value']
             capital_change_amount = (
                     target -
-                    (
-                            self._metrics_tracker.portfolio.portfolio_value -
-                            portfolio_value_adjustment
-                    )
-            )
+                    (metrics_tracker.portfolio.portfolio_value -
+                     portfolio_value_adjustment))
 
             log.info('Processing capital change to target %s at %s. Capital '
                      'change delta is %s' % (target, dt,
@@ -805,12 +800,13 @@ class Controllable(ABC):
             return
 
         self._capital_change_deltas.update({dt: capital_change_amount})
-        self._metrics_tracker.capital_change(capital_change_amount)
+        metrics_tracker.capital_change(capital_change_amount)
 
         return {
             'capital_change':
                 {'date': dt,
                  'type': 'cash',
                  'target': target,
-                 'delta': capital_change_amount}
+                 'delta': capital_change_amount
+                 }
         }

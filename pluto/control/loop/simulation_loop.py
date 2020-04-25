@@ -10,13 +10,12 @@ from protos import clock_pb2
 
 
 class SimulationLoop(object):
-    def __init__(self, start_dt, end_dt, frequency='day', max_reloads=0):
+    def __init__(self, start_dt, end_dt, frequency='day'):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
 
         self._frequency = frequency
-        self._max_reloads = max_reloads
 
         self._clocks = clocks = {}
         # create fake clock
@@ -29,30 +28,41 @@ class SimulationLoop(object):
         self._start_flag = False
         self._bfs_flag = False
 
-        self._control_modes = []
+        self._control_modes = {}
 
         self._execution_lock = threading.Lock()
         self._to_execute = collections.deque()
 
+    @property
+    def start_dt(self):
+        return self._start_dt
+
+    def get_mode(self, mode_type):
+        mode = self._control_modes.get(mode_type, None)
+        if not mode:
+            raise ValueError('{} mode is not supported')
+        return mode
+
     def start(self):
         calendar = self._calendar
 
-        control_modes = self._control_modes
-
-        for ts, evt in get_generator(calendar, calendar.all_sessions, frequency=self._frequency):
+        for ts, evt in get_generator(
+                calendar,
+                calendar.all_sessions,
+                frequency=self._frequency):
             # acquire lock so that no further commands are executed here
             # while this block is being executed
             with self._execution_lock:
                 # process any cached values
                 self._process(ts)
-                #call for any update that needs to be done before
-                #anythin else
-                
+                # call for any update that needs to be done before
+                # anything else
+
                 signals = []
                 # aggregate the signals into a single signal.
                 for cl in self._clocks.values():
-                    #todo: how do we know the clock has ended?
-                    #todo:
+                    # todo: how do we know the clock has ended?
+                    # todo:
                     signal = cl.update(ts)
                     if signal:
                         sts, s_evt, exchange = signal
@@ -61,9 +71,9 @@ class SimulationLoop(object):
                             event=evt,
                             exchange=exchange)
                         signals.append(signal)
-                
+
                 #
-                for control_mode in control_modes:
+                for control_mode in self._control_modes.values():
                     control_mode.update(ts, evt, signals)
                     # process cached commands
                     control_mode.process(ts)
@@ -76,7 +86,7 @@ class SimulationLoop(object):
 
     def add_control_mode(self, mode):
         mode.accept_loop(self)
-        self._control_modes.append(mode)
+        self._control_modes[mode.mode_type] = mode
 
     def stop(self):
         pass
@@ -86,8 +96,7 @@ class SimulationLoop(object):
             exchange,
             self._start_dt,
             self._end_dt,
-            minute_emission=True,
-            max_reloads=self._max_reloads)
+            minute_emission=True)
 
     def _get_clocks(self, exchanges):
         clocks = self._clocks

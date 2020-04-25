@@ -1,0 +1,12 @@
+syntax = 'proto3';
+
+message VolatilityVolumeShare {
+    float volume_limit = 1;
+    map<string, float> eta = 2;
+
+}
+
+message FixedPointsBasis {
+    float basis_points = 1;
+    float volume_limit = 2;
+}

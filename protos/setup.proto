@@ -1,0 +1,23 @@
+syntax = 'proto3';
+
+message CommissionsSetup  {
+    message Commission {
+        string asset_type = 1;
+        string exchange = 2;
+        string broker = 3;
+        string model_type = 4;
+    }
+    repeated Commission commissions = 1;
+}
+
+message SlippageSetup {
+    message Slippage {
+        string model = 1;
+        string asset_type = 2;
+    }
+    repeated Slippage slippages = 1;
+}
+
+message Setup {
+    string commissions_setup_file_name = 1;
+}

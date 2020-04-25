@@ -7,11 +7,6 @@ from pluto.control.controllable import synchronization_states as ss
 from protos import clock_pb2
 
 class Market(abc.ABC):
-    @property
-    @abc.abstractmethod
-    def universe_name(self):
-        raise NotImplementedError
-
     @abc.abstractmethod
     def add_blotter(self, session_id):
         raise NotImplementedError
@@ -27,13 +22,10 @@ class NoopMarket(Market):
     def get_transactions(self, dt, evt, signals):
         return
 
-    def universe_name(self):
-        return ''
-
 class LiveSimulationMarket(Market):
-    def __init__(self, data_portal, exchanges, blotter_factory):
+    def __init__(self, data_portal, calendars, blotter_factory):
         self._dp = dtp = data_portal
-        self._sst = ss.Tracker(exchanges)
+        self._sst = ss.Tracker(calendars)
 
         self._blotter_factory = blotter_factory
         self._current_dt = None
@@ -49,7 +41,6 @@ class LiveSimulationMarket(Market):
 
     def get_transactions(self, dt, evt, signals):
         s = self._sst.aggregate(dt, evt, signals)
-
         if s:
             dt, evt, exchanges = s
             self._current_dt = dt
@@ -64,3 +55,17 @@ class LiveSimulationMarket(Market):
 
     def add_blotter(self, session_id):
         self._blotter_factory.add_blotter(session_id)
+
+class MarketAggregate(Market):
+    def __init__(self):
+        self._markets = []
+
+    def add_market(self, market):
+        self._markets.append(market)
+
+    def get_transactions(self, dt, evt, signals):
+        return
+
+    def add_blotter(self, session_id):
+        for market in self._markets:
+            market.add_blotter(session_id)

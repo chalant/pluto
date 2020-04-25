@@ -9,8 +9,9 @@ from protos import calendar_pb2
 
 from pluto.data import benchmark as bm
 from pluto.data.universes import writer
-from pluto.data.universes import schemas
+from pluto.data.universes import schema
 from pluto.trading_calendars import calendar_utils as cu
+
 
 class AssetFilter(object):
     def __init__(self, directory):
@@ -25,7 +26,7 @@ class AbstractUniverse(abc.ABC):
     @property
     @abc.abstractmethod
     def calendar_name(self):
-        raise NotImplementedError(self.calendars.__name__())
+        raise NotImplementedError(self.exchanges.__name__())
 
     @property
     @abc.abstractmethod
@@ -63,6 +64,12 @@ class AbstractUniverse(abc.ABC):
     def benchmark(self):
         raise NotImplementedError('benchmark')
 
+    @property
+    @abc.abstractmethod
+    def calendars(self):
+        raise NotImplementedError
+
+
 class Universe(AbstractUniverse):
     def __init__(self, name, directory):
         self._name = name
@@ -85,13 +92,13 @@ class Universe(AbstractUniverse):
         exchanges = self._exchanges
         if not exchanges:
             with self._engine.begin() as conn:
-                stm = schemas.universes
+                stm = schema.universes
                 self._exchanges = \
                     exchanges = [
                     row[0]
                     for row in conn.execute(
                         sa.select([stm.c.exchange])
-                            .join(schemas.universe_exchanges)
+                            .join(schema.universe_exchanges)
                             .where(stm.c.universe == self._name))]
         return exchanges
 
@@ -108,11 +115,11 @@ class Universe(AbstractUniverse):
         trading_calendars.TradingCalendar
         '''
         with self._engine.begin() as conn:
-            stm = schemas.calendars
+            stm = schema.calendars
             result = conn.execute(
                 sa.select([stm.c.file_path])
-                    .join(schemas.calendar_exchanges)
-                    .join(schemas.exchanges)
+                    .join(schema.calendar_exchanges)
+                    .join(schema.exchanges)
                     .where(*(stm.c.exchange == exchange
                              for exchange in self._exchanges)))
             self._calendar_path = cal_path = result.fetchone()['file_path']
@@ -133,7 +140,7 @@ class Universe(AbstractUniverse):
         bundle = self._bundle_name
         if not bundle:
             with self._engine.begin() as conn:
-                stm = schemas.universes
+                stm = schema.universes
                 result = conn.execute(
                     sa.select([stm.c.bundle])
                         .where(self._name == stm.c.universe))
@@ -171,8 +178,8 @@ class ZiplineQuandlUniverse(AbstractUniverse):
         return ('AMEX', 'NASDAQ', 'NYSE')
 
     @property
-    def calendar_name(self):
-        return 'XNYS'
+    def calendars(self):
+        return ('XNYS',)
 
     @property
     def asset_filter(self):

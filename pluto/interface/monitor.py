@@ -30,16 +30,19 @@ class _Watcher(object):
         self._queue.put(packet)
 
 class Monitor(itf.MonitorServicer):
-    def __init__(self, control_mode):
+    def __init__(self):
+        self._watch_list = {}
+
+        self._control_mode = None
+
+    def set_control_mode(self, mode):
         '''
 
         Parameters
         ----------
-        control_mode: pluto.control.modes.mode.ControlMode
+        mode: pluto.control.modes.mode.ControlMode
         '''
-        self._control_mode = control_mode
-
-        self._watch_list = {}
+        self._control_mode = mode
 
     @method_access.framework_only
     def PerformanceUpdate(self, request, context):
