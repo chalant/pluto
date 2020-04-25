@@ -20,7 +20,7 @@ message Status {
 
 
 message RunRequest {
-    RunMode mode = 1; //necessary in realtime mode not in backtesting
+    string mode = 1;
     repeated RunParams run_params = 2;
     google.protobuf.Timestamp end = 3;
 }

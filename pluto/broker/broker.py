@@ -4,11 +4,11 @@ import abc
 class Broker(abc.ABC):
     @abc.abstractmethod
     def compute_capital(self, ratio):
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def adjust_max_leverage(self, max_leverage):
-        pass
+        raise NotImplementedError
 
     def update(self, dt, evt, signals):
         return self._update(dt, evt, signals)
@@ -52,8 +52,8 @@ class LiveSimulationBroker(Broker):
 
         Parameters
         ----------
-        capital
-        max_leverage
+        capital: float
+        max_leverage: float
         market_factory: pluto.control.modes.market.factory.MarketFactory
         '''
         self._capital = capital

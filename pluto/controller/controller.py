@@ -6,7 +6,7 @@ from pluto.control import commands
 from pluto.data.universes import universes
 
 
-class RunParameter(object):
+class _RunParameter(object):
     __slots__ = [
         '_session',
         '_capital_ratio',
@@ -73,26 +73,12 @@ class RunParameter(object):
         return self._platform
 
 
-class Controller(abc.ABC):
-    def run(self, directory, params):
-        raise NotImplementedError
+class Controller(object):
+    def __init__(self, loop, end_dt):
+        self._loop = loop
+        self._end_dt = end_dt
 
-
-class SimulationController(Controller):
-    def __init__(self,
-                 mode,
-                 start,
-                 end):
-        #TODO: a simulation controller and a simulation loop
-        # can only accept a subtype of simulation mode, else, raises an error.
-        self._start = start
-        self._end = end
-        self._mode = mode
-        self._loop = loop = simulation_loop.SimulationLoop(start, end)
-        loop.add_control_mode(mode)
-        super(SimulationController, self).__init__()
-
-    def run(self, directory, params):
+    def run(self, mode_type, directory, params):
         '''
 
         Parameters
@@ -102,10 +88,11 @@ class SimulationController(Controller):
 
         '''
         loop = self._loop
-        exchanges = []
+        calendars = []
         parameters = []
-        start = self._start
-        end = self._end
+        # start is the same in both loop and controllable
+        start = loop.start_dt
+        end = self._end_dt
 
         uni = {}  # universe cache
         for p in params:
@@ -114,39 +101,23 @@ class SimulationController(Controller):
             universe = uni.get(uni_name, None)
             if not universe:
                 uni[universe] = universe = universes.get_universe(uni_name)
-            exchanges.extend(universe.exchanges)
+            calendars.extend(universe.calendars)
             parameters.append(
-                RunParameter(
+                _RunParameter(
                     session,
                     p.capital_ratio,
                     p.max_leverage,
                     start,
                     end,
                     'pluto'))
-        loop.execute(commands.Run(directory, self._mode, parameters, set(exchanges)))
+        loop.execute(commands.Run(
+            directory,
+            loop.get_mode(mode_type),
+            parameters,
+            set(calendars)))
         loop.start()
-        #todo: if the loop is already running, raise an error? in live,
+        # todo: if the loop is already running, raise an error? in live,
         # the run method behaves differently (can be called multiple times)
 
     def stop(self):
         self._loop.stop()
-
-
-class LiveController(Controller):
-    def __init__(self, framework_url):
-        super(LiveController, self).__init__()
-
-    def run(self, directory, params):
-        parameters = []
-        exchanges = []
-        for session, capital_ratio, max_leverage in params:
-            exchanges.extend(session.exchanges)
-            # todo what should be the end date? today? previous open session?
-            # the start dt should be : end_dt - session.look_back
-            parameters.append(
-                RunParameter(
-                    session,
-                    capital_ratio,
-                    max_leverage
-                )
-            )

@@ -1,6 +1,6 @@
 from collections import Iterable
 
-from pluto.data.universes import schemas
+from pluto.data.universes import schema
 from pluto.interface.utils import paths, db_utils
 
 #todo: write asset into a bcolz table where each column is a all the assets at a given
@@ -29,7 +29,7 @@ def get_engine():
     global _ENGINE
     if not _ENGINE:
         _ENGINE = db_utils.create_engine(get_metadata_file())
-        schemas.metadata.create_all(_ENGINE)
+        schema.metadata.create_all(_ENGINE)
     return _ENGINE
 
 class UniverseWriter(object):
@@ -40,7 +40,7 @@ class UniverseWriter(object):
         _FILE = paths.get_file_path('metadata', _DIRECTORY)
 
         engine = db_utils.create_engine(_FILE)
-        metadata = schemas.metadata
+        metadata = schema.metadata
         metadata.create_all(engine)
 
     def write(self, exchanges, dt_sids_mappings):

@@ -153,7 +153,7 @@ class ControlMode(abc.ABC):
         Parameters
         ----------
         directory : typing.pluto.interface.directory._Read
-        params : typing.Iterable[pluto.controller.controller.RunParameter]
+        params : typing.Iterable[pluto.controller.controller._RunParameter]
 
         '''
         processes = self._processes
@@ -200,7 +200,7 @@ class ControlMode(abc.ABC):
                 per_str_id[stg_id] = lst = []
             lst.append(p)
 
-        mode = self._mode_type()
+        mode = self.mode_type
 
         for key, values in per_str_id.items():
             implementation = load_implementation(strategies.pop(key))
@@ -233,10 +233,6 @@ class ControlMode(abc.ABC):
 
                 processes[session_id] = process
 
-    @abc.abstractmethod
-    def _create_broker(self):
-        raise NotImplementedError
-
     def _create_process(self, session_id, framework_url):
         '''
 
@@ -253,16 +249,24 @@ class ControlMode(abc.ABC):
         -------
         events_log.AbstractEventsLog
         '''
-        return events_log.get_events_log(self._mode_type())
-
-    @abc.abstractmethod
-    def _mode_type(self):
-        raise NotImplementedError()
+        return events_log.get_events_log(self.mode_type)
 
     def accept_loop(self, loop):
         if not self._accept_loop(loop):
-            raise ValueError("Cannot run {} with {}".format(type(self), type(loop)))
+            raise ValueError(
+                "Cannot run {} with {}".format(
+                    type(self),
+                    type(loop)))
 
     @abc.abstractmethod
     def _accept_loop(self, loop):
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def _create_broker(self):
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def mode_type(self):
+        raise NotImplementedError()

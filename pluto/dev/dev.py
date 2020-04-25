@@ -8,7 +8,6 @@ from pluto.explorer import explorer
 from pluto.interface import monitor
 from pluto.controller import controllerservice, controller
 from pluto.coms.utils import conversions
-from pluto.control.modes import simulation_mode
 
 from protos import development_pb2 as dev_rpc
 from protos import development_pb2_grpc as development
@@ -16,22 +15,31 @@ from protos import controller_pb2_grpc as ctl_rpc
 from protos import interface_pb2_grpc as interface
 
 
-class Environment(development.EnvironmentServicer):
-    def __init__(self, server, directory, framework_url, process_factory):
+class DevService(development.EnvironmentServicer):
+    def __init__(self,
+                 server,
+                 directory,
+                 framework_url,
+                 mode_factory,
+                 loop_factory,
+                 process_factory):
         self._directory = directory
         self._server = server
         self._controller = None
-        self._controllers = {}
-        self._monitor = None
+
         self._framework_url = framework_url
 
+        self._monitor = mon = monitor.Monitor()
         self._explorer = exp = explorer.Explorer(directory)
         self._editor = edt = editor.Editor(directory)
 
         self._process_factory = process_factory
+        self._mode_factory = mode_factory
+        self._loop_factory = loop_factory
 
         development.add_EditorServicer_to_server(edt, server)
         interface.add_ExplorerServicer_to_server(exp, server)
+        interface.add_MonitorServicer_to_server(mon, server)
 
     def LoadSession(self, request, context):
         # todo: load previously set session
@@ -60,27 +68,36 @@ class Environment(development.EnvironmentServicer):
 
         process_factory = self._process_factory
 
-        mode = simulation_mode.SimulationControlMode(
+        # mode = simulation_mode.SimulationControlMode(
+        #     self._framework_url,
+        #     request.capital,
+        #     request.max_leverage,
+        #     process_factory)
+
+        mode = self._mode_factory.get_mode(
             self._framework_url,
             request.capital,
             request.max_leverage,
             process_factory)
 
-        self._monitor = mon = monitor.Monitor(mode)
+        loop = self._loop_factory.get_loop(start, end)
+
+        # loop = simulation_loop.SimulationLoop(start, end)
+        loop.add_control_mode(mode)
+        mon = self._monitor
+        mon.set_control_mode(mode)
         # set monitor in-case we have an in-memory process factory
         process_factory.set_monitor_service(mon)
 
-        self._controller = sim_ctl = controllerservice.ControllerService(
-            directory,
-            controller.SimulationController(
-                mode,
-                start,
-                end))
+        self._controller = sim_ctl = \
+            controllerservice.ControllerService(
+                directory,
+                controller.Controller(
+                    loop,
+                    end))
 
-        server = self._server
         # enable controller service
-        ctl_rpc.add_ControllerServicer_to_server(sim_ctl, server)
-        interface.add_MonitorServicer_to_server(mon, server)
+        ctl_rpc.add_ControllerServicer_to_server(sim_ctl, self._server)
 
         return dev_rpc.SetupResponse(session_id=session.id)
 
@@ -122,7 +139,7 @@ class Server(object):
 
         server = self._server
 
-        self._environment = env = Environment(server, directory, framework_url)
+        self._environment = env = DevService(server, directory, framework_url)
         development.add_EnvironmentServicer_to_server(env, server)
 
     def serve(self):

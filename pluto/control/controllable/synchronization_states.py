@@ -29,7 +29,7 @@ class Trading(State):
     def __init__(self, tracker):
         super(Trading, self).__init__(tracker)
         self._session_end = 0
-        self._num_exchanges = len(tracker.exchanges)
+        self._num_calendars = len(tracker.exchanges)
 
     @property
     def name(self):
@@ -44,7 +44,7 @@ class Trading(State):
             if exchanges.get(exchange):
                 if c_evt == SESSION_END:
                     self._session_end += 1
-                    if self._session_end == self._num_exchanges:
+                    if self._session_end == self._num_calendars:
                         self._session_end = 0
                         tracker.state = tracker.out_session
                         target.append((c_evt, exchange))
@@ -146,10 +146,10 @@ class Idle(State):
         return
 
 class Tracker(object):
-    def __init__(self, exchanges):
+    def __init__(self, calendars):
         self._state = None
 
-        self._exchanges = {exchange:exchange for exchange in exchanges}
+        self._calendars = {calendar:calendar for calendar in calendars}
 
         self._bfs = Trading(self)
         self._out_session = OutSession(self)
@@ -178,8 +178,8 @@ class Tracker(object):
         return self._bfs
 
     @property
-    def exchanges(self):
-        return self._exchanges
+    def calendars(self):
+        return self._calendars
 
     @property
     def state(self):

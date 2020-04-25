@@ -17,7 +17,7 @@ class FakeClock(object):
 
 # a clock is responsible of filtering time events from the loop.
 class Clock(object):
-    def __init__(self, exchange, start_dt, end_dt=None, minute_emission=False, max_reloads=0):
+    def __init__(self, exchange, start_dt, end_dt=None, minute_emission=False):
 
         self._exchange = exchange
 

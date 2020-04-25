@@ -3,6 +3,7 @@ import grpc
 from protos import controller_pb2_grpc
 from protos import controller_pb2
 
+
 class ControllerService(controller_pb2_grpc.ControllerServicer):
     def __init__(self, directory, controller):
         '''
@@ -14,7 +15,6 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
         '''
         self._directory = directory
         self._controller = controller
-        self._controllers = {}
 
     def Run(self, request, context):
         with self._directory.read() as d:
@@ -26,15 +26,17 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
 
             ctl = self._controller
             try:
-                ctl.run(d, request.run_params)
+                ctl.run(request.run_mode, d, request.run_params)
             except RuntimeError as e:
-                #todo: we need a fake context object with these methods
+                # the loop might raise a runtime error if it doesn't support
+                # running additional strategies while running...
+                # todo: we need a fake context object with these methods
                 context.set_code(grpc.StatusCode.UNAVAILABLE)
+                context.set_details(str(e))
+            except KeyError as e:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
                 context.set_details(str(e))
         return controller_pb2.RunResponse()
 
     def Stop(self, request, context):
         pass
-
-    def add_controller(self, session_id, controller):
-        self._controllers[session_id] = controller

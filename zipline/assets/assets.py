@@ -55,7 +55,7 @@ from zipline.errors import (
 from . import (
     Asset, Equity, Future,
 )
-from . continuous_futures import (
+from .continuous_futures import (
     ADJUSTMENT_STYLES,
     CHAIN_PREDICATES,
     ContinuousFuture,

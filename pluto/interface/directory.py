@@ -144,10 +144,6 @@ class _Strategy(Scoped):
         return self._locked
 
     @property
-    def mode(self):
-        return self._mode
-
-    @property
     def name(self):
         return self._name
 
@@ -275,7 +271,6 @@ class _Mode(ABC):
         _Strategy
         '''
 
-        meta = self._session.query(StrategyMetadata).get(strategy_id)
         return self._get_strategy(
             self._session.query(StrategyMetadata)
                 .get(strategy_id), self)
@@ -370,7 +365,10 @@ class _Write(_Mode):
 
     def _get_template(self):
         # todo: return a basic template with the necessary functions
-        return b'Hello World!!!'
+        return b'''
+        def hello_world():
+            print('Hello World!')
+        '''
 
     def _close(self, session, exc_type, exc_val, exc_tb):
         if not exc_val:
