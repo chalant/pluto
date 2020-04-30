@@ -20,6 +20,9 @@ class ProcessFactory(abc.ABC):
     def set_monitor_service(self, monitor_service):
         pass
 
+    def set_broker_service(self, broker_service):
+        pass
+
 class ProcessWrapper(abc.ABC):
     def __init__(self, process):
         '''

@@ -10,7 +10,7 @@ from protos import broker_pb2
 
 class MarketFactory(abc.ABC):
     @abc.abstractmethod
-    def get_market(self, start, end, universe_name):
+    def get_market(self, universe_name, start, end):
         '''
 
         Parameters
@@ -62,11 +62,12 @@ class LiveSimulationMarketFactory(MarketFactory):
                 last_available_session=last_session,
                 last_available_minute=calendar.minutes_for_session(last_session)[-1]),
             universe.calendars,
+            universe,
             self._blotter_factory)
         self._markets[calendar_name] = mkt
         return mkt
 
-    def get_market(self, start, end, universe_name):
+    def get_market(self, universe_name, start, end):
         try:
             return self._markets.get(universe_name)
         except KeyError:
@@ -103,5 +104,3 @@ class LiveSimulationMarketFactory(MarketFactory):
             transactions = mkt.get_transactions(dt, evt, signals)
             if transactions:
                 yield transactions
-            else:
-                continue

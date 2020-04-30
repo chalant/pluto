@@ -19,6 +19,7 @@ from pluto.test import test
 from pluto.control.modes import utils as mode_utils
 from pluto.control.loop import utils as loop_utils
 from pluto.control.modes.market import factory
+from pluto.control.modes.market import blotter_factory
 
 
 def _build_data_frame(test_client, session_id):
@@ -72,8 +73,9 @@ def _run(client, example_name, expected_perf):
     expected_perf = expected_perf[example_name]
     daily_stats = _build_data_frame(client, session_id)
 
-    _compare_df(expected_perf[examples._cols_to_check],
-                daily_stats[examples._cols_to_check])
+    _compare_df(
+        expected_perf[examples._cols_to_check],
+        daily_stats[examples._cols_to_check])
 
 
 def _compare_df(desired, actual):
@@ -129,7 +131,7 @@ class PlutoExamplesTests(unittest.TestCase):
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path)
 
-        #load setup parameters
+        # load setup parameters
         with tarfile.open('pluto/resources/test_setup.tar.gz') as tar:
             tar.extractall(dir_.path)
 
@@ -153,32 +155,24 @@ class PlutoExamplesTests(unittest.TestCase):
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_live_simulation(self, example_name):
         framework_url = self._framework_url
-
-        #todo: the blotter factory loads setup data from the filesystem
-
         client = test.InMemoryTestClient(
             self._pluto_tempdir,
             framework_url,
             mode_utils.LiveSimulationModeFactory(
                 framework_url,
                 factory.LiveSimulationMarketFactory(
-                    #TODO: blotter factory
+                    blotter_factory.MultiSimulationBlotterFactory()
                 )
             ),
             loop_utils.SimpleSimulationLoopFactory())
-
         _run(client, example_name, self._expected_perf)
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
         framework_url = self._framework_url
-
-        #todo: the blotter loads the slippage and commission setup from filesystem
-
         client = test.InMemoryTestClient(
             self._pluto_tempdir,
             framework_url,
             mode_utils.SimulationModeFactory(framework_url),
             loop_utils.SimpleSimulationLoopFactory())
-
         _run(client, example_name, self._expected_perf)

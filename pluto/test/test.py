@@ -14,8 +14,9 @@ from protos import interface_pb2
 
 class InMemoryTestClient(object):
     def __init__(self, directory, framework_url, mode_factory, loop_factory):
+        server = grpc.server(futures.ThreadPoolExecutor(10))
         self._env = env = dev.DevService(
-            grpc.server(futures.ThreadPoolExecutor(10)),
+            server,
             directory,
             framework_url,
             mode_factory,

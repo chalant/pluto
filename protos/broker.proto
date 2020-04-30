@@ -39,13 +39,7 @@ message WarningMessage {
 }
 
 message OrderParams {
-    enum ExecutionStyle {
-        MARKET_ORDER = 0;
-        LIMIT_ORDER = 1;
-        STOP_ORDER = 2;
-        STOP_LIMIT_ORDER = 3;
-    }
-    ExecutionStyle style = 1;
+    string style = 1;
     Asset asset = 2;
     float amount = 3;
     float limit_price = 4;

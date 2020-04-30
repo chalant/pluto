@@ -1,7 +1,19 @@
 from zipline.finance.blotter import blotter
 
+from pluto.coms.utils import conversions
+
+from protos import broker_pb2
+
+
 class LiveBlotter(blotter.Blotter):
     def __init__(self, broker, cancel_policy=None):
+        '''
+
+        Parameters
+        ----------
+        broker: pluto.broker.broker_stub.BrokerStub
+        cancel_policy
+        '''
         super(LiveBlotter, self).__init__(cancel_policy)
 
         self._broker = broker
@@ -26,11 +38,19 @@ class LiveBlotter(blotter.Blotter):
         return self._orders
 
     def order(self, asset, amount, style, order_id=None):
-        order = self._broker.order(asset, amount, style, order_id)
+        #todo: create request based on the order style
+        order = conversions.to_zp_order(
+            self._broker.SingleOrder(
+                conversions.to_proto_order_params(
+                    asset,
+                    amount,
+                    style,
+                    order_id)))
         self._orders[order.id] = order
         return order.id
 
     def hold(self, order_id, reason=''):
+        #todo: we
         pass
 
     def reject(self, order_id, reason=''):

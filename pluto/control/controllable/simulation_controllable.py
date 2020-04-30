@@ -3,10 +3,10 @@ from pluto.control.controllable import controllable
 from pluto import algorithm
 from pluto import setup as stp
 
+
 class SimulationControllable(controllable.Controllable):
-    def __init__(self, cancel_policy=None):
+    def __init__(self):
         super(SimulationControllable, self).__init__()
-        self._cancel_policy = cancel_policy
 
     def _get_algorithm_class(self,
                              controllable,
@@ -42,13 +42,8 @@ class SimulationControllable(controllable.Controllable):
         pass
 
     def _create_blotter(self, universe, cancel_policy=None):
+        # todo: cancel_policy should be loaded from setup as-well
         setup = stp.load_setup(universe)
         return simulation_blotter.SimulationBlotter(
             setup.get_commission_models(),
-            setup.get_slippage_models(),
-            self._cancel_policy)
-
-
-
-
-
+            setup.get_slippage_models())

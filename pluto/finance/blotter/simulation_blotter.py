@@ -298,9 +298,11 @@ class SimulationBlotter(blotter.Blotter):
                 asset_type = type(asset)
                 slippage = self.slippage_models.get_slippage_model(asset_type)
 
-                for order, txn in \
-                        slippage.simulate(bar_data, asset, asset_orders):
-                    commission = self.commission_models._get_commission_model(
+                for order, txn in slippage.simulate(
+                        bar_data,
+                        asset,
+                        asset_orders):
+                    commission = self.commission_models.get_commission_model(
                         asset_type,
                         asset.exchange)
                     additional_commission = commission.calculate(order, txn)

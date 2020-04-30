@@ -414,6 +414,14 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             end_session
         )
 
+    def set_slippage(self, us_equities=None, us_futures=None):
+        #disable setting slippage
+        pass
+
+    def set_commission(self, us_equities=None, us_futures=None):
+        #disable setting commission
+        pass
+
 
 class LiveTradingAlgorithm(TradingAlgorithm):
     def run_pipeline(self, pipeline, end_session, chunksize):

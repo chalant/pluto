@@ -15,6 +15,20 @@ class Market(abc.ABC):
     def get_transactions(self, dt, evt, signals):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def get_blotter(self, session_id):
+        '''
+
+        Parameters
+        ----------
+        session_id
+
+        Returns
+        -------
+
+        '''
+        raise NotImplementedError
+
 class NoopMarket(Market):
     def add_blotter(self, session_id):
         pass
@@ -22,18 +36,32 @@ class NoopMarket(Market):
     def get_transactions(self, dt, evt, signals):
         return
 
+    def get_blotter(self, session_id):
+        return
+
 class LiveSimulationMarket(Market):
-    def __init__(self, data_portal, calendars, blotter_factory):
+    def __init__(self, data_portal, calendars, universe, blotter_factory):
+        '''
+
+        Parameters
+        ----------
+        data_portal
+        calendars
+        universe
+        blotter_factory: pluto.control.modes.market.blotter_factory.SimulationBlotterFactory
+        '''
         self._dp = dtp = data_portal
         self._sst = ss.Tracker(calendars)
 
         self._blotter_factory = blotter_factory
         self._current_dt = None
 
+        self._universe = universe
         self._current_data = protocol.BarData(
             data_portal=dtp,
             simulation_dt_func=self.current_dt
         )
+
         super(LiveSimulationMarket, self).__init__()
 
     def current_dt(self):
@@ -54,8 +82,14 @@ class LiveSimulationMarket(Market):
                     yield new_transactions, new_commissions
 
     def add_blotter(self, session_id):
-        self._blotter_factory.add_blotter(session_id)
+        self._blotter_factory.add_blotter(
+            session_id,
+            self._universe)
 
+    def get_blotter(self, session_id):
+        return self._blotter_factory.get_blotter(session_id)
+
+#whats this?
 class MarketAggregate(Market):
     def __init__(self):
         self._markets = []
@@ -64,7 +98,8 @@ class MarketAggregate(Market):
         self._markets.append(market)
 
     def get_transactions(self, dt, evt, signals):
-        return
+        for market in self._markets:
+            yield market.get_transactions(dt, evt, signals)
 
     def add_blotter(self, session_id):
         for market in self._markets:
