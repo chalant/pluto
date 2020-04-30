@@ -16,6 +16,7 @@ from pluto.control.controllable import commands
 from pluto.control.controllable import simulation_controllable as sc
 from pluto.control.events_log import events_log
 from pluto.control.controllable.utils import io
+from pluto.control.controllable.utils import factory
 
 from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
@@ -24,6 +25,7 @@ from protos import interface_pb2 as itf
 from protos.clock_pb2 import (
     BAR,
     TRADE_END)
+
 
 def get_controllable(mode):
     '''
@@ -39,6 +41,7 @@ def get_controllable(mode):
     if mode == 'simulation':
         return sc.SimulationControllable()
     elif mode == 'live':
+        # todo: create controllable with broker stub, using the framework url
         raise NotImplementedError('live controllable')
     else:
         return
@@ -205,7 +208,7 @@ class _PerformanceWriter(object):
         io.write_perf(path, packet)
 
     def performance_update(self, performance, end):
-        #todo: we need to do a non-blocking write using queues?
+        # todo: we need to do a non-blocking write using queues?
         # self._thread_pool.submit(partial(
         #     self._write,
         #     performance=performance,
@@ -225,7 +228,7 @@ class _PerformanceWriter(object):
 
 
 class ControllableService(cbl_rpc.ControllableServicer):
-    def __init__(self, monitor_stub):
+    def __init__(self, monitor_stub, controllable_factory):
         self._perf_writer = None
         self._stop = False
 
@@ -250,6 +253,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         self._thread_pool = futures.ThreadPoolExecutor(5)
         self._monitor_stub = monitor_stub
+        self._cbl_fty = controllable_factory
 
     @property
     def frequency_filter(self):
@@ -299,7 +303,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         mode = params.mode
 
-        controllable = get_controllable(mode)
+        controllable = self._cbl_fty.get_controllable(mode, id_)
 
         # todo: we should have a directory for performance
 
@@ -533,9 +537,10 @@ def start(framework_id, framework_url, session_id, root_dir, controllable_url, r
     with directory.StubDirectory(root_dir):
         # set the framework_id if ran as a process
         method_access._framework_id = framework_id
+        channel = grpc.insecure_channel(framework_url)
         service = ControllableService(
-            itf_rpc.MonitorStub(grpc.insecure_channel(framework_url))
-        )
+            itf_rpc.MonitorStub(channel),
+            factory.ControllableProcessFactory(channel))
         if recovery:
             service.restore_state(session_id)
         try:

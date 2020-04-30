@@ -7,12 +7,11 @@ handlers = (
     grpc.stream_stream_rpc_method_handler
 )
 
-interceptors = ['availability', 'authenticity']
+interceptors = ('availability', 'authenticity')
 
 
 def unavailable(request, context):
     context.abort(grpc.StatusCode.UNAVAILABLE)
-
 
 def unauthenticated(request, context):
     context.abort(grpc.StatusCode.UNAUTHENTICATED)

@@ -2,9 +2,7 @@
 A simple Pipeline algorithm that longs the top 3 stocks by RSI and shorts
 the bottom 3 each day.
 """
-from six import viewkeys
 from pluto.api import *
-from pluto.finance import commission, slippage
 from pluto.pipeline import Pipeline
 from pluto.pipeline.factors import RSI
 
@@ -61,8 +59,8 @@ def initialize(context):
     # rebuild example data.
     # github.com/quantopian/zipline/blob/master/tests/resources/
     # rebuild_example_data#L105
-    context.set_commission(commission.PerShare(cost=.0075, min_trade_cost=1.0))
-    context.set_slippage(slippage.VolumeShareSlippage())
+    # context.set_commission(commission.PerShare(cost=.0075, min_trade_cost=1.0))
+    # context.set_slippage(slippage.VolumeShareSlippage())
 
 
 def before_trading_start(context, data):

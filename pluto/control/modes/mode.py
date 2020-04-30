@@ -2,9 +2,11 @@ import abc
 
 from pluto.control.events_log import events_log
 from pluto.coms.utils import conversions
+from pluto.broker import broker_service
 
 from protos import controller_pb2
 from protos import clock_pb2
+from protos import broker_pb2_grpc
 
 
 def load_implementation(strategy):
@@ -15,12 +17,13 @@ def load_implementation(strategy):
 
 
 class ControlMode(abc.ABC):
-    def __init__(self, framework_url, process_factory):
+    def __init__(self, server, framework_url, process_factory):
         '''
 
         Parameters
         ----------
         framework_url: str
+        server: grpc.Server
         '''
 
         # maps session id to a session
@@ -37,8 +40,9 @@ class ControlMode(abc.ABC):
         self._events_log = self._create_events_log()
 
         self._process_factory = process_factory
-
-        self._broker = self._create_broker()
+        self._broker = brk = broker_service.BrokerService(self._create_broker())
+        broker_pb2_grpc.add_BrokerServicer_to_server(brk, server)
+        process_factory.set_broker_service(brk)
 
     @property
     def running_sessions(self):

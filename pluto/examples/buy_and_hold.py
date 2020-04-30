@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from pluto import api
-from pluto.finance import commission, slippage
 
 stocks = ['AAPL', 'MSFT']
 
@@ -27,8 +26,8 @@ def initialize(context):
     # rebuild example data.
     # github.com/quantopian/zipline/blob/master/tests/resources/
     # rebuild_example_data#L105
-    context.set_commission(commission.PerShare(cost=.0075, min_trade_cost=1.0))
-    context.set_slippage(slippage.VolumeShareSlippage())
+    # context.set_commission(commission.PerShare(cost=.0075, min_trade_cost=1.0))
+    # context.set_slippage(slippage.VolumeShareSlippage())
 
 
 def handle_data(context, data):

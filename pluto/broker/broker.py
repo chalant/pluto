@@ -17,9 +17,29 @@ class Broker(abc.ABC):
     def _update(self, dt, evt, signals):
         raise NotImplementedError
 
+    @abc.abstractmethod
     def add_market(self, session_id, start, end, universe_name):
-        pass
+        raise NotImplementedError
 
+    @abc.abstractmethod
+    def order(self, session_id, asset, amount, style, order_id=None):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def cancel(self, session_id, order_id, relay_status=True):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def cancel_all_orders_for_asset(self, session_id, asset, warn=False, relay_status=True):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def reject(self, session_id, order_id, reason=''):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def hold(self, session_id, order_id, reason=''):
+        raise NotImplementedError
 
 class SimulationBroker(Broker):
     def __init__(self, capital, max_leverage):
@@ -34,6 +54,24 @@ class SimulationBroker(Broker):
 
     def _update(self, dt, evt, signals):
         return
+
+    def add_market(self, session_id, start, end, universe_name):
+        pass
+
+    def order(self, session_id, asset, amount, style, order_id=None):
+        return
+
+    def cancel(self, session_id, relay_status=True):
+        pass
+
+    def cancel_all_orders_for_asset(self, session_id, asset, warn=False, relay_status=True):
+        pass
+
+    def reject(self, session_id, order_id, reason=''):
+        pass
+
+    def hold(self, session_id, order_id, reason=''):
+        pass
 
 
 class LiveBroker(Broker):
@@ -59,6 +97,7 @@ class LiveSimulationBroker(Broker):
         self._capital = capital
         self._max_leverage = max_leverage
         self._market_factory = market_factory
+        self._session_to_market = {}
 
     def _update(self, dt, evt, signals):
         return self._market_factory.get_transactions(dt, evt, signals)
@@ -70,5 +109,31 @@ class LiveSimulationBroker(Broker):
         pass
 
     def add_market(self, session_id, start, end, universe_name):
-        mkt = self._market_factory.get_market(start, end, universe_name)
+        mkt = self._market_factory.get_market(universe_name, start, end)
         mkt.add_blotter(session_id)
+        self._session_to_market[session_id] = mkt
+
+    def order(self, session_id, asset, amount, style, order_id=None):
+        return self._get_blotter(session_id).order(
+            asset,
+            amount,
+            style,
+            order_id)
+
+    def cancel(self, session_id, order_id, relay_status=True):
+        self._get_blotter(session_id).cancel(order_id, relay_status)
+
+    def cancel_all_orders_for_asset(self, session_id, asset, warn=False, relay_status=True):
+        self._get_blotter(session_id).cancel_all_orders_for_asset(
+            asset,
+            warn,
+            relay_status)
+
+    def reject(self, session_id, order_id, reason=''):
+        self._get_blotter(session_id).reject(order_id, reason)
+
+    def hold(self, session_id, order_id, reason=''):
+        self._get_blotter(session_id).hold(order_id, reason)
+
+    def _get_blotter(self, session_id):
+        return self._session_to_market[session_id].get_blotter(session_id)
