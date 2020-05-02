@@ -1,5 +1,6 @@
 import math
 import abc
+import uuid
 
 class Broker(abc.ABC):
     @abc.abstractmethod
@@ -22,7 +23,7 @@ class Broker(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def order(self, session_id, asset, amount, style, order_id=None):
+    def order(self, session_id, order):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -39,6 +40,10 @@ class Broker(abc.ABC):
 
     @abc.abstractmethod
     def hold(self, session_id, order_id, reason=''):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def execute_cancel_policy(self, session_id, event):
         raise NotImplementedError
 
 class SimulationBroker(Broker):
@@ -58,10 +63,10 @@ class SimulationBroker(Broker):
     def add_market(self, session_id, start, end, universe_name):
         pass
 
-    def order(self, session_id, asset, amount, style, order_id=None):
+    def order(self, session_id, order):
         return
 
-    def cancel(self, session_id, relay_status=True):
+    def cancel(self, session_id, order_id, relay_status=True):
         pass
 
     def cancel_all_orders_for_asset(self, session_id, asset, warn=False, relay_status=True):
@@ -71,6 +76,9 @@ class SimulationBroker(Broker):
         pass
 
     def hold(self, session_id, order_id, reason=''):
+        pass
+
+    def execute_cancel_policy(self, session_id, event):
         pass
 
 
@@ -113,12 +121,24 @@ class LiveSimulationBroker(Broker):
         mkt.add_blotter(session_id)
         self._session_to_market[session_id] = mkt
 
-    def order(self, session_id, asset, amount, style, order_id=None):
-        return self._get_blotter(session_id).order(
-            asset,
-            amount,
-            style,
-            order_id)
+    def order(self, session_id, order):
+        blotter = self._get_blotter(session_id)
+        amount = order.amount
+
+        ms = blotter.max_shares
+
+        if amount == 0:
+            return None
+
+        elif amount > ms:
+            raise OverflowError(
+                "Can't order more than {}".format(ms))
+
+        #generate id for the order
+        order.id = uuid.uuid4().hex
+        blotter.open_orders[order.asset].append(order)
+        blotter.orders[order.id] = order
+        blotter.new_orders.append(order)
 
     def cancel(self, session_id, order_id, relay_status=True):
         self._get_blotter(session_id).cancel(order_id, relay_status)
@@ -134,6 +154,11 @@ class LiveSimulationBroker(Broker):
 
     def hold(self, session_id, order_id, reason=''):
         self._get_blotter(session_id).hold(order_id, reason)
+
+    def execute_cancel_policy(self, session_id, event):
+        self._get_blotter(session_id).execute_cancel_policy(
+            session_id,
+            event)
 
     def _get_blotter(self, session_id):
         return self._session_to_market[session_id].get_blotter(session_id)

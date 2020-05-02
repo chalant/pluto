@@ -9,7 +9,7 @@ import grpc
 import click
 from google.protobuf import empty_pb2 as emp
 
-from pluto.interface.utils import paths, method_access
+from pluto.interface.utils import paths, service_access
 from pluto.interface import directory
 from pluto.coms.utils import conversions
 from pluto.control.controllable import commands
@@ -70,13 +70,13 @@ class _Observer(object):
         session_id = self._session_id
         if self._reload == True:
             for packet in io.read_perf(self._file_path):
-                method_access.invoke(
+                service_access.invoke(
                     stub.PerformanceUpdate,
                     itf.Packet(
                         packet=packet,
                         session_id=session_id))
             self._reload = False
-        method_access.invoke(
+        service_access.invoke(
             stub.PerformanceUpdate,
             itf.Packet(
                 packet=performance,
@@ -277,7 +277,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
     def stop(self):
         pass
 
-    @method_access.framework_only
+    @service_access.framework_only
     def Initialize(self, request_iterator, context):
         b = b''
         for chunk in request_iterator:
@@ -414,13 +414,13 @@ class ControllableService(cbl_rpc.ControllableServicer):
             else:
                 pass
 
-    @method_access.framework_only
+    @service_access.framework_only
     def Stop(self, request, context):
         # todo needs to liquidate positions and wipe the state.
         self._stop = True
         return emp.Empty()
 
-    @method_access.framework_only
+    @service_access.framework_only
     def UpdateParameters(self, request, context):
         self._queue.put(
             commands.CapitalUpdate(
@@ -430,7 +430,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         )
         return emp.Empty()
 
-    @method_access.framework_only
+    @service_access.framework_only
     def UpdateAccount(self, request_iterator, context):
         # todo
         # self._queue.put(
@@ -438,7 +438,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         # )
         return emp.Empty()
 
-    @method_access.framework_only
+    @service_access.framework_only
     def ClockUpdate(self, request, context):
         '''Note: an update call might arrive while the step is executing..., so
         we must queue the update message... => the step must be a thread that pulls data
@@ -457,11 +457,11 @@ class ControllableService(cbl_rpc.ControllableServicer):
         )
         return emp.Empty()
 
-    @method_access.framework_only
+    @service_access.framework_only
     def Watch(self, request, context):
         self._perf_writer.observe()
 
-    @method_access.framework_only
+    @service_access.framework_only
     def StopWatching(self, request, context):
         self._perf_writer.stop_observing()
 
@@ -536,7 +536,7 @@ def start(framework_id, framework_url, session_id, root_dir, controllable_url, r
 
     with directory.StubDirectory(root_dir):
         # set the framework_id if ran as a process
-        method_access._framework_id = framework_id
+        service_access._framework_id = framework_id
         channel = grpc.insecure_channel(framework_url)
         service = ControllableService(
             itf_rpc.MonitorStub(channel),

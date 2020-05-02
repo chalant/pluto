@@ -5,7 +5,7 @@ from google.protobuf import empty_pb2 as emp
 from pluto.utils import stream
 from pluto.coms.utils import conversions
 from pluto.interface.utils import paths
-from pluto.interface.utils.method_access import invoke, _framework_id
+from pluto.interface.utils.service_access import invoke, _framework_id
 
 from protos import controllable_pb2 as cbl
 

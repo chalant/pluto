@@ -1,5 +1,6 @@
 from zipline.finance.blotter import blotter
 
+from pluto.finance import order as odr
 from pluto.coms.utils import conversions
 
 from protos import broker_pb2
@@ -18,18 +19,33 @@ class LiveBlotter(blotter.Blotter):
 
         self._broker = broker
         self._orders = {}
+        self._new_orders = {}
 
         self._transactions = []
         self._closed_orders = []
         self._commissions = []
 
+        self._orders_placed = False
+
     @property
     def new_orders(self):
-        return self._broker.new_orders
+        if not self._orders_placed:
+            def generator(orders):
+                for order in orders:
+                    yield conversions.to_proto_order(order)
+
+            # send orders to broker before resetting
+            orders = self._orders
+            for order in self._broker.PlaceOrders(generator(
+                    self._new_orders.values())):
+                order = conversions.to_zp_order(order)
+                orders[order.id] = order
+            self._orders_placed = True
+        return self._new_orders.values()
 
     @new_orders.setter
     def new_orders(self, value):
-        self._broker.new_orders = value
+        self._new_orders = {}
 
     def get_transactions(self, bar_data):
         return self._transactions, self._commissions, self._closed_orders
@@ -38,38 +54,58 @@ class LiveBlotter(blotter.Blotter):
         return self._orders
 
     def order(self, asset, amount, style, order_id=None):
-        #todo: create request based on the order style
-        order = conversions.to_zp_order(
-            self._broker.SingleOrder(
-                conversions.to_proto_order_params(
-                    asset,
-                    amount,
-                    style,
-                    order_id)))
-        self._orders[order.id] = order
-        return order.id
+        if amount == 0:
+            # Don't bother placing orders for 0 shares.
+            return None
+
+        elif amount > self.max_shares:
+            # Arbitrary limit of 100 billion (US) shares will never be
+            # exceeded except by a buggy algorithm.
+            raise OverflowError("Can't order more than %d shares" %
+                                self.max_shares)
+
+        is_buy = (amount > 0)
+        order = odr.Order(
+            dt=self.current_dt,
+            asset=asset,
+            amount=amount,
+            stop=style.get_stop_price(is_buy),
+            limit=style.get_limit_price(is_buy)
+        )
+        id_ = order.id
+        self._new_orders[id_] = order
+        # mark so that the new orders can be sent to the broker
+        self._orders_placed = False
+        return id_
 
     def hold(self, order_id, reason=''):
-        #todo: we
         pass
 
     def reject(self, order_id, reason=''):
         pass
 
     def cancel(self, order_id, relay_status=True):
-        self._broker.cancel(order_id, relay_status)
+        try:
+            # attempt to cancel new orders that have not been placed yet
+            self._new_orders.pop(order_id)
+        except KeyError:
+            # send cancel request to broker
+            self._broker.CancelOrder(
+                broker_pb2.CancelRequest(order_id=order_id))
 
     def cancel_all_orders_for_asset(self, asset, warn=False, relay_status=True):
-        self._broker.cancel_all_orders_for_asset(asset, warn, relay_status)
+        self._broker.CancelAllOrdersForAsset(
+            conversions.to_proto_asset(asset))
 
     def execute_cancel_policy(self, event):
-        self._broker.execute_cancel_policy(event)
+        self._broker.ExecuteCancelPolicy(
+            broker_pb2.Event(event_type=event))
 
     def process_splits(self, splits):
         pass
 
     def update(self, dt, broker_data):
-        #called each minute
+        # called each minute
         commissions = self._commissions
         closed_orders = self._closed_orders
         transactions = self._transactions
@@ -95,7 +131,6 @@ class LiveBlotter(blotter.Blotter):
             orders[order_id] = order  # update the order state
             if not order.open:
                 closed_orders.append(order)
-
 
     def prune_orders(self, closed_orders):
         orders = self._orders

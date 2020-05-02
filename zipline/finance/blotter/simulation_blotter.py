@@ -235,8 +235,10 @@ class SimulationBlotter(Blotter):
         if self.cancel_policy.should_cancel(event):
             warn = self.cancel_policy.warn_on_cancel
             for asset in copy(self.open_orders):
-                self.cancel_all_orders_for_asset(asset, warn,
-                                                 relay_status=False)
+                self.cancel_all_orders_for_asset(
+                    asset,
+                    warn,
+                    relay_status=False)
 
     def reject(self, order_id, reason=''):
         """

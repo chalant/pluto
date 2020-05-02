@@ -3,7 +3,7 @@ import queue
 
 from google.protobuf import empty_pb2 as emp
 
-from pluto.interface.utils import method_access
+from pluto.interface.utils import service_access
 
 from protos import interface_pb2_grpc as itf
 from protos import interface_pb2 as msg
@@ -44,7 +44,7 @@ class Monitor(itf.MonitorServicer):
         '''
         self._control_mode = mode
 
-    @method_access.framework_only
+    @service_access.framework_only
     def PerformanceUpdate(self, request, context):
         watcher = self._watch_list.get(request.session_id, None)
         if watcher:
