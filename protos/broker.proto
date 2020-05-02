@@ -3,6 +3,7 @@ syntax = "proto3";
 import "protos/protocol.proto";
 import "protos/assets.proto";
 import "protos/finance.proto";
+import "protos/clock.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
@@ -10,14 +11,10 @@ import "google/protobuf/timestamp.proto";
 service Broker {
     /*This is an interface that provides brokerage access to clients. It encapsulates
     methods for accessing performing trades. Each caller passes its credentials as metadata*/
-    rpc SingleOrder (OrderParams) returns (Order);
-    rpc PortfolioState (google.protobuf.Empty) returns (Portfolio);
-    rpc PositionsState (google.protobuf.Empty) returns (stream AssetPositionPair);
-    rpc Transactions (google.protobuf.Timestamp) returns (stream Transaction);
-    rpc AccountState (google.protobuf.Empty) returns (Account);
-    rpc BatchOrder (BatchOrderParams) returns (stream Order);
-    rpc CancelOrder (Order) returns (google.protobuf.Empty);
+    rpc PlaceOrders (stream Order) returns (stream Order);
+    rpc CancelOrder (CancelRequest) returns (google.protobuf.Empty);
     rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
+    rpc ExecuteCancelPolicy(Event) returns (WarningMessage);
 }
 
 
@@ -49,6 +46,10 @@ message OrderParams {
     google.protobuf.Timestamp order_dt = 8;
 }
 
-message BatchOrderParams {
-    repeated OrderParams params = 1;
+message CancelRequest {
+    string order_id = 1;
+}
+
+message Event {
+    EventType event_type = 1;
 }

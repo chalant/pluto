@@ -92,62 +92,62 @@ def to_zp_asset(pr_asset):
         pr_asset.multiplier
     )
 
-def to_zp_execution_style(proto_order_params):
-    style = proto_order_params.style
-    asset = proto_order_params.asset
-    if style == 'stop_limit':
-        return execution.StopLimitOrder(
-            proto_order_params.limit_price,
-            proto_order_params.stop_price,
-            to_zp_asset(asset),
-            exchange=proto_order_params.exchange)
-    elif style == 'market':
-        return execution.MarketOrder(
-            exchange=proto_order_params.exchange)
-    elif style == 'limit':
-        return execution.LimitOrder(
-            proto_order_params.limit_price,
-            to_zp_asset(asset),
-            exchange=proto_order_params.exchange)
-    elif style == 'stop':
-        return execution.StopOrder(
-            proto_order_params.stop_price,
-            asset=to_zp_asset(asset)
-        )
-    else:
-        raise ValueError('Unexpected order style {}'.format(style))
+# def to_zp_execution_style(proto_order_params):
+#     style = proto_order_params.style
+#     asset = proto_order_params.asset
+#     if style == 'stop_limit':
+#         return execution.StopLimitOrder(
+#             proto_order_params.limit_price,
+#             proto_order_params.stop_price,
+#             to_zp_asset(asset),
+#             exchange=proto_order_params.exchange)
+#     elif style == 'market':
+#         return execution.MarketOrder(
+#             exchange=proto_order_params.exchange)
+#     elif style == 'limit':
+#         return execution.LimitOrder(
+#             proto_order_params.limit_price,
+#             to_zp_asset(asset),
+#             exchange=proto_order_params.exchange)
+#     elif style == 'stop':
+#         return execution.StopOrder(
+#             proto_order_params.stop_price,
+#             asset=to_zp_asset(asset)
+#         )
+#     else:
+#         raise ValueError('Unexpected order style {}'.format(style))
 
-def to_proto_order_params(asset, amount, style, order_id=None):
-    ast = to_proto_asset(asset)
-    if type(style) == execution.LimitOrder:
-        return broker_pb2.OrderParams(
-            asset=ast,
-            style='limit',
-            amount=amount,
-            limit_price=style.limit_price,
-            exchange=style.exchange)
-    elif type(style) == execution.MarketOrder:
-        return broker_pb2.OrderParams(
-            asset=ast,
-            style='market',
-            amount=amount,
-            exchange=style.exchange)
-    elif type(style) == execution.StopOrder:
-        return broker_pb2.OrderParams(
-            asset=ast,
-            style='stop',
-            amount=amount,
-            stop_price=style.stop_price,
-            exchange=style.exchange)
-    elif type(style) == execution.StopLimitOrder:
-        return broker_pb2.OrderParams(
-            asset=ast,
-            style='stop_limit',
-            amount=amount,
-            stop_price=style.stop_price,
-            limit_price=style.limit_price)
-    else:
-        raise ValueError('Unexpected order style {}'.format(type(style)))
+# def to_proto_order_params(asset, amount, style, order_id=None):
+#     ast = to_proto_asset(asset)
+#     if type(style) == execution.LimitOrder:
+#         return broker_pb2.OrderParams(
+#             asset=ast,
+#             style='limit',
+#             amount=amount,
+#             limit_price=style.limit_price,
+#             exchange=style.exchange)
+#     elif type(style) == execution.MarketOrder:
+#         return broker_pb2.OrderParams(
+#             asset=ast,
+#             style='market',
+#             amount=amount,
+#             exchange=style.exchange)
+#     elif type(style) == execution.StopOrder:
+#         return broker_pb2.OrderParams(
+#             asset=ast,
+#             style='stop',
+#             amount=amount,
+#             stop_price=style.stop_price,
+#             exchange=style.exchange)
+#     elif type(style) == execution.StopLimitOrder:
+#         return broker_pb2.OrderParams(
+#             asset=ast,
+#             style='stop_limit',
+#             amount=amount,
+#             stop_price=style.stop_price,
+#             limit_price=style.limit_price)
+#     else:
+#         raise ValueError('Unexpected order style {}'.format(type(style)))
 
 def to_zp_order(proto_order):
     return Order(

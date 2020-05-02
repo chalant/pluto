@@ -1,5 +1,5 @@
 from pluto.control.controllable import controllable
-from pluto.finance import liveblotter
+from pluto.finance import live_blotter
 from pluto import algorithm
 
 class LiveControllable(controllable.Controllable):
@@ -38,7 +38,9 @@ class LiveControllable(controllable.Controllable):
         blotter.update(broker_data)
 
     def _create_blotter(self, universe, cancel_policy=None):
-        return liveblotter.LiveBlotter(self._broker, cancel_policy)
+        return live_blotter.LiveBlotter(
+            self._broker,
+            cancel_policy)
 
     def _update_account(self, blotter, main_account):
         blotter.update_account(main_account)

@@ -5,7 +5,7 @@ from pluto.control.controllable.utils import factory
 from pluto.control.controllable import simulation_controllable
 from pluto.control.controllable import live_controllable
 from pluto.control.controllable import stub
-from pluto.interface.utils import method_access
+from pluto.interface.utils import service_access
 
 
 class FakeContext(object):
@@ -29,29 +29,25 @@ class BrokerStub(broker_stub.BrokerStub):
         self._servicer = servicer
         self._session_id = session_id
 
-    def _single_order(self, request, metadata):
-        self._servicer.SingleOrder(request, FakeContext(metadata))
+    def _execute_cancel_policy(self, request, metadata):
+        self._servicer.ExecuteCancelPolicy(
+            request,
+            FakeContext(metadata))
 
-    def _batch_order(self, request, metadata):
-        self._servicer.BatchOrder(request, FakeContext(metadata))
+    def _place_orders(self, request_iterator, metadata):
+        self._servicer.PlaceOrders(
+            request_iterator,
+            FakeContext(metadata))
 
     def _cancel_all_orders_for_asset(self, request, metadata):
-        self._servicer.CancelAllOrdersForAsset(request, FakeContext(metadata))
+        self._servicer.CancelAllOrdersForAsset(
+            request,
+            FakeContext(metadata))
 
     def _cancel_order(self, request, metadata):
-        self._servicer.CancelOrder(request, FakeContext(metadata))
-
-    def _account_state(self, request, metadata):
-        self._servicer.AccountState(request, FakeContext(metadata))
-
-    def _transactions(self, request, metadata):
-        self._servicer.Transactions(request, FakeContext(metadata))
-
-    def _portfolio_state(self, request, metadata):
-        self._servicer.PortfolioState(request, FakeContext(metadata))
-
-    def _position_state(self, request, metadata):
-        self._servicer.PositionsState(request, FakeContext(metadata))
+        self._servicer.CancelOrder(
+            request,
+            FakeContext(metadata))
 
 
 class ControllableFactory(factory.ControllableFactory):
@@ -71,40 +67,58 @@ class ControllableStub(stub.ControllableStub):
         self._servicer = servicer
 
     def _initialize(self, request, metadata=None):
-        return self._servicer.Initialize(request, FakeContext(metadata))
+        return self._servicer.Initialize(
+            request,
+            FakeContext(metadata))
 
     def _update_parameters(self, request, metadata):
-        return self._servicer.UpdateParameters(request, FakeContext(metadata))
+        return self._servicer.UpdateParameters(
+            request,
+            FakeContext(metadata))
 
     def _clock_update(self, request, metadata):
-        return self._servicer.ClockUpdate(request, FakeContext(metadata))
+        return self._servicer.ClockUpdate(
+            request,
+            FakeContext(metadata))
 
     def _stop(self, request, metadata):
-        return self._servicer.Stop(request, FakeContext(metadata))
+        return self._servicer.Stop(
+            request,
+            FakeContext(metadata))
 
     def _update_account(self, request, metadata):
-        return self._servicer.UpdateAccount(request, FakeContext(metadata))
+        return self._servicer.UpdateAccount(
+            request,
+            FakeContext(metadata))
 
     def _watch(self, request, metadata):
-        return self._servicer.Watch(request, FakeContext(metadata))
+        return self._servicer.Watch(
+            request,
+            FakeContext(metadata))
 
     def _stop_watching(self, request, metadata):
-        return self._servicer.StopWatching(request, FakeContext(metadata))
+        return self._servicer.StopWatching(
+            request,
+            FakeContext(metadata))
 
 
 class MonitorStub(object):
     def __init__(self, monitor_servicer):
         self._monitor_server = monitor_servicer
 
-    @method_access.framework_method
+    @service_access.framework_method
     def Watch(self, request):
-        return self._monitor_server.Watch(request, FakeContext())
+        return self._monitor_server.Watch(
+            request,
+            FakeContext())
 
-    @method_access.framework_method
+    @service_access.framework_method
     def StopWatching(self, request):
-        return self._monitor_server.StopWatching(request, FakeContext())
+        return self._monitor_server.StopWatching(
+            request,
+            FakeContext())
 
-    @method_access.framework_method
+    @service_access.framework_method
     def PerformanceUpdate(self, request_iterator, metadata=None):
         return self._monitor_server.PerformanceUpdate(
             request_iterator,

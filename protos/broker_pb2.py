@@ -15,6 +15,7 @@ _sym_db = _symbol_database.Default()
 from protos import protocol_pb2 as protos_dot_protocol__pb2
 from protos import assets_pb2 as protos_dot_assets__pb2
 from protos import finance_pb2 as protos_dot_finance__pb2
+from protos import clock_pb2 as protos_dot_clock__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
@@ -24,41 +25,11 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x13protos/broker.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x01\n\x0b\x42rokerState\x12\"\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x0c.Transaction\x12 \n\x0b\x63ommissions\x18\x02 \x03(\x0b\x32\x0b.Commission\x12\x19\n\x07\x61\x63\x63ount\x18\x03 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xb9\x02\n\x0bOrderParams\x12*\n\x05style\x18\x01 \x01(\x0e\x32\x1b.OrderParams.ExecutionStyle\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"Y\n\x0e\x45xecutionStyle\x12\x10\n\x0cMARKET_ORDER\x10\x00\x12\x0f\n\x0bLIMIT_ORDER\x10\x01\x12\x0e\n\nSTOP_ORDER\x10\x02\x12\x14\n\x10STOP_LIMIT_ORDER\x10\x03\"0\n\x10\x42\x61tchOrderParams\x12\x1c\n\x06params\x18\x01 \x03(\x0b\x32\x0c.OrderParams2\x9f\x03\n\x06\x42roker\x12#\n\x0bSingleOrder\x12\x0c.OrderParams\x1a\x06.Order\x12\x34\n\x0ePortfolioState\x12\x16.google.protobuf.Empty\x1a\n.Portfolio\x12>\n\x0ePositionsState\x12\x16.google.protobuf.Empty\x1a\x12.AssetPositionPair0\x01\x12:\n\x0cTransactions\x12\x1a.google.protobuf.Timestamp\x1a\x0c.Transaction0\x01\x12\x30\n\x0c\x41\x63\x63ountState\x12\x16.google.protobuf.Empty\x1a\x08.Account\x12)\n\nBatchOrder\x12\x11.BatchOrderParams\x1a\x06.Order0\x01\x12-\n\x0b\x43\x61ncelOrder\x12\x06.Order\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessageb\x06proto3')
+  serialized_pb=_b('\n\x13protos/broker.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x12protos/clock.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x01\n\x0b\x42rokerState\x12\"\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x0c.Transaction\x12 \n\x0b\x63ommissions\x18\x02 \x03(\x0b\x32\x0b.Commission\x12\x19\n\x07\x61\x63\x63ount\x18\x03 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"\'\n\x05\x45vent\x12\x1e\n\nevent_type\x18\x01 \x01(\x0e\x32\n.EventType2\xc6\x01\n\x06\x42roker\x12!\n\x0bPlaceOrders\x12\x06.Order\x1a\x06.Order(\x01\x30\x01\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12.\n\x13\x45xecuteCancelPolicy\x12\x06.Event\x1a\x0f.WarningMessageb\x06proto3')
   ,
-  dependencies=[protos_dot_protocol__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,protos_dot_finance__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
+  dependencies=[protos_dot_protocol__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,protos_dot_finance__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
 
-
-_ORDERPARAMS_EXECUTIONSTYLE = _descriptor.EnumDescriptor(
-  name='ExecutionStyle',
-  full_name='OrderParams.ExecutionStyle',
-  filename=None,
-  file=DESCRIPTOR,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='MARKET_ORDER', index=0, number=0,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='LIMIT_ORDER', index=1, number=1,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='STOP_ORDER', index=2, number=2,
-      serialized_options=None,
-      type=None),
-    _descriptor.EnumValueDescriptor(
-      name='STOP_LIMIT_ORDER', index=3, number=3,
-      serialized_options=None,
-      type=None),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=645,
-  serialized_end=734,
-)
-_sym_db.RegisterEnumDescriptor(_ORDERPARAMS_EXECUTIONSTYLE)
 
 
 _BROKERSTATE = _descriptor.Descriptor(
@@ -108,8 +79,8 @@ _BROKERSTATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=152,
-  serialized_end=309,
+  serialized_start=172,
+  serialized_end=329,
 )
 
 
@@ -153,8 +124,8 @@ _COMMISSION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=311,
-  serialized_end=383,
+  serialized_start=331,
+  serialized_end=403,
 )
 
 
@@ -184,8 +155,8 @@ _WARNINGMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=385,
-  serialized_end=418,
+  serialized_start=405,
+  serialized_end=438,
 )
 
 
@@ -198,8 +169,8 @@ _ORDERPARAMS = _descriptor.Descriptor(
   fields=[
     _descriptor.FieldDescriptor(
       name='style', full_name='OrderParams.style', index=0,
-      number=1, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -257,7 +228,6 @@ _ORDERPARAMS = _descriptor.Descriptor(
   ],
   nested_types=[],
   enum_types=[
-    _ORDERPARAMS_EXECUTIONSTYLE,
   ],
   serialized_options=None,
   is_extendable=False,
@@ -265,22 +235,22 @@ _ORDERPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=421,
-  serialized_end=734,
+  serialized_start=441,
+  serialized_end=634,
 )
 
 
-_BATCHORDERPARAMS = _descriptor.Descriptor(
-  name='BatchOrderParams',
-  full_name='BatchOrderParams',
+_CANCELREQUEST = _descriptor.Descriptor(
+  name='CancelRequest',
+  full_name='CancelRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='params', full_name='BatchOrderParams.params', index=0,
-      number=1, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
+      name='order_id', full_name='CancelRequest.order_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -296,8 +266,39 @@ _BATCHORDERPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=736,
-  serialized_end=784,
+  serialized_start=636,
+  serialized_end=669,
+)
+
+
+_EVENT = _descriptor.Descriptor(
+  name='Event',
+  full_name='Event',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='event_type', full_name='Event.event_type', index=0,
+      number=1, type=14, cpp_type=8, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=671,
+  serialized_end=710,
 )
 
 _BROKERSTATE.fields_by_name['transactions'].message_type = protos_dot_finance__pb2._TRANSACTION
@@ -306,16 +307,15 @@ _BROKERSTATE.fields_by_name['account'].message_type = protos_dot_protocol__pb2._
 _BROKERSTATE.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _COMMISSION.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _COMMISSION.fields_by_name['order'].message_type = protos_dot_protocol__pb2._ORDER
-_ORDERPARAMS.fields_by_name['style'].enum_type = _ORDERPARAMS_EXECUTIONSTYLE
 _ORDERPARAMS.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _ORDERPARAMS.fields_by_name['order_dt'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_ORDERPARAMS_EXECUTIONSTYLE.containing_type = _ORDERPARAMS
-_BATCHORDERPARAMS.fields_by_name['params'].message_type = _ORDERPARAMS
+_EVENT.fields_by_name['event_type'].enum_type = protos_dot_clock__pb2._EVENTTYPE
 DESCRIPTOR.message_types_by_name['BrokerState'] = _BROKERSTATE
 DESCRIPTOR.message_types_by_name['Commission'] = _COMMISSION
 DESCRIPTOR.message_types_by_name['WarningMessage'] = _WARNINGMESSAGE
 DESCRIPTOR.message_types_by_name['OrderParams'] = _ORDERPARAMS
-DESCRIPTOR.message_types_by_name['BatchOrderParams'] = _BATCHORDERPARAMS
+DESCRIPTOR.message_types_by_name['CancelRequest'] = _CANCELREQUEST
+DESCRIPTOR.message_types_by_name['Event'] = _EVENT
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 BrokerState = _reflection.GeneratedProtocolMessageType('BrokerState', (_message.Message,), dict(
@@ -346,12 +346,19 @@ OrderParams = _reflection.GeneratedProtocolMessageType('OrderParams', (_message.
   ))
 _sym_db.RegisterMessage(OrderParams)
 
-BatchOrderParams = _reflection.GeneratedProtocolMessageType('BatchOrderParams', (_message.Message,), dict(
-  DESCRIPTOR = _BATCHORDERPARAMS,
+CancelRequest = _reflection.GeneratedProtocolMessageType('CancelRequest', (_message.Message,), dict(
+  DESCRIPTOR = _CANCELREQUEST,
   __module__ = 'protos.broker_pb2'
-  # @@protoc_insertion_point(class_scope:BatchOrderParams)
+  # @@protoc_insertion_point(class_scope:CancelRequest)
   ))
-_sym_db.RegisterMessage(BatchOrderParams)
+_sym_db.RegisterMessage(CancelRequest)
+
+Event = _reflection.GeneratedProtocolMessageType('Event', (_message.Message,), dict(
+  DESCRIPTOR = _EVENT,
+  __module__ = 'protos.broker_pb2'
+  # @@protoc_insertion_point(class_scope:Event)
+  ))
+_sym_db.RegisterMessage(Event)
 
 
 
@@ -361,78 +368,42 @@ _BROKER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=787,
-  serialized_end=1202,
+  serialized_start=713,
+  serialized_end=911,
   methods=[
   _descriptor.MethodDescriptor(
-    name='SingleOrder',
-    full_name='Broker.SingleOrder',
+    name='PlaceOrders',
+    full_name='Broker.PlaceOrders',
     index=0,
     containing_service=None,
-    input_type=_ORDERPARAMS,
-    output_type=protos_dot_protocol__pb2._ORDER,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='PortfolioState',
-    full_name='Broker.PortfolioState',
-    index=1,
-    containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    output_type=protos_dot_protocol__pb2._PORTFOLIO,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='PositionsState',
-    full_name='Broker.PositionsState',
-    index=2,
-    containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    output_type=protos_dot_protocol__pb2._ASSETPOSITIONPAIR,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='Transactions',
-    full_name='Broker.Transactions',
-    index=3,
-    containing_service=None,
-    input_type=google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP,
-    output_type=protos_dot_finance__pb2._TRANSACTION,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='AccountState',
-    full_name='Broker.AccountState',
-    index=4,
-    containing_service=None,
-    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
-    output_type=protos_dot_protocol__pb2._ACCOUNT,
-    serialized_options=None,
-  ),
-  _descriptor.MethodDescriptor(
-    name='BatchOrder',
-    full_name='Broker.BatchOrder',
-    index=5,
-    containing_service=None,
-    input_type=_BATCHORDERPARAMS,
+    input_type=protos_dot_protocol__pb2._ORDER,
     output_type=protos_dot_protocol__pb2._ORDER,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
     name='CancelOrder',
     full_name='Broker.CancelOrder',
-    index=6,
+    index=1,
     containing_service=None,
-    input_type=protos_dot_protocol__pb2._ORDER,
+    input_type=_CANCELREQUEST,
     output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
     serialized_options=None,
   ),
   _descriptor.MethodDescriptor(
     name='CancelAllOrdersForAsset',
     full_name='Broker.CancelAllOrdersForAsset',
-    index=7,
+    index=2,
     containing_service=None,
     input_type=protos_dot_assets__pb2._ASSET,
+    output_type=_WARNINGMESSAGE,
+    serialized_options=None,
+  ),
+  _descriptor.MethodDescriptor(
+    name='ExecuteCancelPolicy',
+    full_name='Broker.ExecuteCancelPolicy',
+    index=3,
+    containing_service=None,
+    input_type=_EVENT,
     output_type=_WARNINGMESSAGE,
     serialized_options=None,
   ),

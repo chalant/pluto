@@ -262,8 +262,10 @@ class Controllable(ABC):
             start_dt,
             look_back)
 
+        #todo: the cancel policy is saved per session
         self._blotter = blotter = self._create_blotter(uni)
 
+        #todo: asset restrictions are also loaded per session
         self._restrictions = restrictions = asset_restrictions.NoRestrictions()
 
         self._current_data = self._create_bar_data(
@@ -494,6 +496,7 @@ class Controllable(ABC):
         # grab any new orders from the blotter, then clear the list.
         # this includes cancelled orders.
         new_orders = blotter.new_orders
+        #todo: send new orders to the broker here
         blotter.new_orders = []
 
         # if we have any new orders, record them so that we know
@@ -520,6 +523,7 @@ class Controllable(ABC):
             position_assets)
 
         algo.validate_account_controls()
+        #todo execute cancellation policy
         return self._get_daily_message(
             dt,
             algo,

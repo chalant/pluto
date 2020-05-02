@@ -42,8 +42,8 @@ class SimulationControllable(controllable.Controllable):
         pass
 
     def _create_blotter(self, universe, cancel_policy=None):
-        # todo: cancel_policy should be loaded from setup as-well
         setup = stp.load_setup(universe)
         return simulation_blotter.SimulationBlotter(
             setup.get_commission_models(),
-            setup.get_slippage_models())
+            setup.get_slippage_models(),
+            cancel_policy)
