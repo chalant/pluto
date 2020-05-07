@@ -1,7 +1,7 @@
 import abc
 
 from pluto.finance.blotter import simulation_blotter
-from pluto import setup
+from pluto.setup import setup
 
 class SimulationBlotterFactory(abc.ABC):
     @property

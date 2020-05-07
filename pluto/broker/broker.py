@@ -19,7 +19,7 @@ class Broker(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def add_market(self, session_id, start, end, universe_name):
+    def add_market(self, session_id, data_frequency, start, end, universe_name):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -60,7 +60,7 @@ class SimulationBroker(Broker):
     def _update(self, dt, evt, signals):
         return
 
-    def add_market(self, session_id, start, end, universe_name):
+    def add_market(self, session_id, data_frequency, start, end, universe_name):
         pass
 
     def order(self, session_id, order):
@@ -116,8 +116,8 @@ class LiveSimulationBroker(Broker):
     def adjust_max_leverage(self, max_leverage):
         pass
 
-    def add_market(self, session_id, start, end, universe_name):
-        mkt = self._market_factory.get_market(universe_name, start, end)
+    def add_market(self, session_id, data_frequency, start, end, universe_name):
+        mkt = self._market_factory.get_market(data_frequency, universe_name, start, end)
         mkt.add_blotter(session_id)
         self._session_to_market[session_id] = mkt
 

@@ -32,7 +32,6 @@ log = Logger('Trade Simulation')
 
 
 class AlgorithmSimulator(object):
-
     EMISSION_TO_PERF_KEY_MAP = {
         'minute': 'minute_perf',
         'daily': 'daily_perf'
@@ -79,6 +78,7 @@ class AlgorithmSimulator(object):
         def inject_algo_dt(record):
             if 'algo_dt' not in record.extra:
                 record.extra['algo_dt'] = self.simulation_dt
+
         self.processor = Processor(inject_algo_dt)
 
     def get_simulation_dt(self):
@@ -160,8 +160,8 @@ class AlgorithmSimulator(object):
 
             # handle any splits that impact any positions or any open orders.
             assets_we_care_about = (
-                viewkeys(metrics_tracker.positions) |
-                viewkeys(algo.blotter.open_orders)
+                    viewkeys(metrics_tracker.positions) |
+                    viewkeys(algo.blotter.open_orders)
             )
 
             if assets_we_care_about:

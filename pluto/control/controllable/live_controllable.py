@@ -37,7 +37,7 @@ class LiveControllable(controllable.Controllable):
     def _update_blotter(self, blotter, broker_data):
         blotter.update(broker_data)
 
-    def _create_blotter(self, universe, cancel_policy=None):
+    def _create_blotter(self, universe, cancel_policy):
         return live_blotter.LiveBlotter(
             self._broker,
             cancel_policy)

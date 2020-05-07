@@ -197,11 +197,6 @@ def to_zp_portfolio(proto_portfolio):
 def to_zp_account(proto_account):
     pass
 
-
-def to_proto_account(zp_account):
-    pass
-
-
 def to_proto_position(zp_position):
     """
 

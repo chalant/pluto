@@ -40,7 +40,7 @@ class SimulationLoop(object):
     def get_mode(self, mode_type):
         mode = self._control_modes.get(mode_type, None)
         if not mode:
-            raise ValueError('{} mode is not supported')
+            raise ValueError('{} mode is not supported'.format(mode))
         return mode
 
     def start(self):

@@ -11,7 +11,7 @@ import "protos/data.proto";
 service Controllable {
     /*A service that is called by a controller*/
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
-    rpc Initialize (stream Chunk) returns (google.protobuf.Empty);
+    rpc Initialize (InitParams) returns (google.protobuf.Empty);
     rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
     //for updating positions, transactions etc.
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
@@ -23,15 +23,11 @@ service Controllable {
 
 message InitParams {
     string id = 1;
-    bytes strategy = 2;
-    float capital = 3;
-    float max_leverage = 4;
-    string data_frequency = 5;
-    string universe = 6;
-    int32 look_back = 7;
-    google.protobuf.Timestamp start = 8;
-    google.protobuf.Timestamp end = 9;
-    string mode = 10;
+    float capital = 2;
+    float max_leverage = 3;
+    google.protobuf.Timestamp start = 4;
+    google.protobuf.Timestamp end = 5;
+    string mode = 6;
 }
 
 message UpdateRequest {

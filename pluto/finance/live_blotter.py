@@ -29,7 +29,14 @@ class LiveBlotter(blotter.Blotter):
 
     @property
     def new_orders(self):
+        #return a tuple so that values can't be changed
+        return tuple(self._new_orders.values())
+
+    @new_orders.setter
+    def new_orders(self, value):
+        #resets the new orders
         if not self._orders_placed:
+            #send orders buffered orders to the broker once before resetting
             def generator(orders):
                 for order in orders:
                     yield conversions.to_proto_order(order)
@@ -41,10 +48,6 @@ class LiveBlotter(blotter.Blotter):
                 order = conversions.to_zp_order(order)
                 orders[order.id] = order
             self._orders_placed = True
-        return self._new_orders.values()
-
-    @new_orders.setter
-    def new_orders(self, value):
         self._new_orders = {}
 
     def get_transactions(self, bar_data):

@@ -50,6 +50,7 @@ class DevService(development.EnvironmentServicer):
         with directory.write() as w:
             look_back = request.look_back
             data_frequency = request.data_frequency
+            cancel_policy = request.cancel_policy
             # note: if no universe is provided, use the default universe.
             # a session regroups a set of "static" parameters (aren't likely to change overtime)
 
@@ -61,7 +62,8 @@ class DevService(development.EnvironmentServicer):
                 request.strategy_id,
                 request.universe,
                 data_frequency,
-                look_back if look_back else 150)
+                look_back if look_back else 150,
+                cancel_policy if cancel_policy else 'never_cancel')
 
         start = conversions.to_datetime(request.start)
         end = conversions.to_datetime(request.end)
@@ -75,7 +77,6 @@ class DevService(development.EnvironmentServicer):
         #     process_factory)
 
         mode = self._mode_factory.get_mode(
-            self._framework_url,
             request.capital,
             request.max_leverage,
             process_factory)

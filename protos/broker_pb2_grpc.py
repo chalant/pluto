@@ -34,7 +34,7 @@ class BrokerStub(object):
         )
     self.ExecuteCancelPolicy = channel.unary_unary(
         '/Broker/ExecuteCancelPolicy',
-        request_serializer=protos_dot_broker__pb2.Event.SerializeToString,
+        request_serializer=protos_dot_broker__pb2.CancelEvent.SerializeToString,
         response_deserializer=protos_dot_broker__pb2.WarningMessage.FromString,
         )
 
@@ -92,7 +92,7 @@ def add_BrokerServicer_to_server(servicer, server):
       ),
       'ExecuteCancelPolicy': grpc.unary_unary_rpc_method_handler(
           servicer.ExecuteCancelPolicy,
-          request_deserializer=protos_dot_broker__pb2.Event.FromString,
+          request_deserializer=protos_dot_broker__pb2.CancelEvent.FromString,
           response_serializer=protos_dot_broker__pb2.WarningMessage.SerializeToString,
       ),
   }

@@ -25,7 +25,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x13protos/broker.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x12protos/clock.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x01\n\x0b\x42rokerState\x12\"\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x0c.Transaction\x12 \n\x0b\x63ommissions\x18\x02 \x03(\x0b\x32\x0b.Commission\x12\x19\n\x07\x61\x63\x63ount\x18\x03 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"\'\n\x05\x45vent\x12\x1e\n\nevent_type\x18\x01 \x01(\x0e\x32\n.EventType2\xc6\x01\n\x06\x42roker\x12!\n\x0bPlaceOrders\x12\x06.Order\x1a\x06.Order(\x01\x30\x01\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12.\n\x13\x45xecuteCancelPolicy\x12\x06.Event\x1a\x0f.WarningMessageb\x06proto3')
+  serialized_pb=_b('\n\x13protos/broker.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x12protos/clock.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x01\n\x0b\x42rokerState\x12\"\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x0c.Transaction\x12 \n\x0b\x63ommissions\x18\x02 \x03(\x0b\x32\x0b.Commission\x12\x19\n\x07\x61\x63\x63ount\x18\x03 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"-\n\x0b\x43\x61ncelEvent\x12\x1e\n\nevent_type\x18\x01 \x01(\x0e\x32\n.EventType2\xcc\x01\n\x06\x42roker\x12!\n\x0bPlaceOrders\x12\x06.Order\x1a\x06.Order(\x01\x30\x01\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12\x34\n\x13\x45xecuteCancelPolicy\x12\x0c.CancelEvent\x1a\x0f.WarningMessageb\x06proto3')
   ,
   dependencies=[protos_dot_protocol__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,protos_dot_finance__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
@@ -271,15 +271,15 @@ _CANCELREQUEST = _descriptor.Descriptor(
 )
 
 
-_EVENT = _descriptor.Descriptor(
-  name='Event',
-  full_name='Event',
+_CANCELEVENT = _descriptor.Descriptor(
+  name='CancelEvent',
+  full_name='CancelEvent',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='event_type', full_name='Event.event_type', index=0,
+      name='event_type', full_name='CancelEvent.event_type', index=0,
       number=1, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -298,7 +298,7 @@ _EVENT = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=671,
-  serialized_end=710,
+  serialized_end=716,
 )
 
 _BROKERSTATE.fields_by_name['transactions'].message_type = protos_dot_finance__pb2._TRANSACTION
@@ -309,13 +309,13 @@ _COMMISSION.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _COMMISSION.fields_by_name['order'].message_type = protos_dot_protocol__pb2._ORDER
 _ORDERPARAMS.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _ORDERPARAMS.fields_by_name['order_dt'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_EVENT.fields_by_name['event_type'].enum_type = protos_dot_clock__pb2._EVENTTYPE
+_CANCELEVENT.fields_by_name['event_type'].enum_type = protos_dot_clock__pb2._EVENTTYPE
 DESCRIPTOR.message_types_by_name['BrokerState'] = _BROKERSTATE
 DESCRIPTOR.message_types_by_name['Commission'] = _COMMISSION
 DESCRIPTOR.message_types_by_name['WarningMessage'] = _WARNINGMESSAGE
 DESCRIPTOR.message_types_by_name['OrderParams'] = _ORDERPARAMS
 DESCRIPTOR.message_types_by_name['CancelRequest'] = _CANCELREQUEST
-DESCRIPTOR.message_types_by_name['Event'] = _EVENT
+DESCRIPTOR.message_types_by_name['CancelEvent'] = _CANCELEVENT
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 BrokerState = _reflection.GeneratedProtocolMessageType('BrokerState', (_message.Message,), dict(
@@ -353,12 +353,12 @@ CancelRequest = _reflection.GeneratedProtocolMessageType('CancelRequest', (_mess
   ))
 _sym_db.RegisterMessage(CancelRequest)
 
-Event = _reflection.GeneratedProtocolMessageType('Event', (_message.Message,), dict(
-  DESCRIPTOR = _EVENT,
+CancelEvent = _reflection.GeneratedProtocolMessageType('CancelEvent', (_message.Message,), dict(
+  DESCRIPTOR = _CANCELEVENT,
   __module__ = 'protos.broker_pb2'
-  # @@protoc_insertion_point(class_scope:Event)
+  # @@protoc_insertion_point(class_scope:CancelEvent)
   ))
-_sym_db.RegisterMessage(Event)
+_sym_db.RegisterMessage(CancelEvent)
 
 
 
@@ -368,8 +368,8 @@ _BROKER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=713,
-  serialized_end=911,
+  serialized_start=719,
+  serialized_end=923,
   methods=[
   _descriptor.MethodDescriptor(
     name='PlaceOrders',
@@ -403,7 +403,7 @@ _BROKER = _descriptor.ServiceDescriptor(
     full_name='Broker.ExecuteCancelPolicy',
     index=3,
     containing_service=None,
-    input_type=_EVENT,
+    input_type=_CANCELEVENT,
     output_type=_WARNINGMESSAGE,
     serialized_options=None,
   ),

@@ -14,7 +14,7 @@ service Broker {
     rpc PlaceOrders (stream Order) returns (stream Order);
     rpc CancelOrder (CancelRequest) returns (google.protobuf.Empty);
     rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
-    rpc ExecuteCancelPolicy(Event) returns (WarningMessage);
+    rpc ExecuteCancelPolicy (CancelEvent) returns (WarningMessage);
 }
 
 
@@ -50,6 +50,6 @@ message CancelRequest {
     string order_id = 1;
 }
 
-message Event {
+message CancelEvent {
     EventType event_type = 1;
 }

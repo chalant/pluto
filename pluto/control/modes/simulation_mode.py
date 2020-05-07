@@ -20,6 +20,7 @@ class SimulationControlMode(mode.ControlMode):
             self._capital,
             self._max_leverage)
 
+    @property
     def mode_type(self):
         return 'simulation'
 

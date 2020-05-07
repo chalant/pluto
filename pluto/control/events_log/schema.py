@@ -21,7 +21,7 @@ datetimes = sa.Table(
     sa.Column(
         'datetime',
         sa.DateTime,
-        primary_key=True,
+        nullable=False
     ),
     sa.Column(
         'session',

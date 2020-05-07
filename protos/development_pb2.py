@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x18protos/development.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11protos/data.proto\"4\n\x12NewStrategyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08universe\x18\x02 \x01(\t\"<\n\x13NewStrategyResponse\x12\x10\n\x08template\x18\x01 \x01(\x0c\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\"\x0e\n\x0cPushResponse\"4\n\x0bSaveRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"\x0e\n\x0cSaveResponse\"&\n\x0fStrategyRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\xdb\x01\n\x0cSetupRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x07 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x08 \x01(\x02\x12\x10\n\x08universe\x18\x02 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"#\n\rSetupResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"#\n\rDeleteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\x10\n\x0e\x44\x65leteResponse2\x9b\x01\n\x06\x45\x64itor\x12$\n\x03New\x12\x13.NewStrategyRequest\x1a\x06.Chunk0\x01\x12\x1f\n\x04Save\x12\x06.Chunk\x1a\r.SaveResponse(\x01\x12\x1f\n\x04Push\x12\x06.Chunk\x1a\r.PushResponse(\x01\x12)\n\x0bGetStrategy\x12\x10.StrategyRequest\x1a\x06.Chunk0\x01\x32`\n\x0b\x45nvironment\x12&\n\x05Setup\x12\r.SetupRequest\x1a\x0e.SetupResponse\x12)\n\x06\x44\x65lete\x12\x0e.DeleteRequest\x1a\x0f.DeleteResponseb\x06proto3')
+  serialized_pb=_b('\n\x18protos/development.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11protos/data.proto\"4\n\x12NewStrategyRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x10\n\x08universe\x18\x02 \x01(\t\"<\n\x13NewStrategyResponse\x12\x10\n\x08template\x18\x01 \x01(\x0c\x12\x13\n\x0bstrategy_id\x18\x02 \x01(\t\"\x0e\n\x0cPushResponse\"4\n\x0bSaveRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x10\n\x08strategy\x18\x02 \x01(\x0c\"\x0e\n\x0cSaveResponse\"&\n\x0fStrategyRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\xf2\x01\n\x0cSetupRequest\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12\x10\n\x08universe\x18\x04 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x07 \x01(\t\x12\x15\n\rcancel_policy\x18\x08 \x01(\t\x12)\n\x05start\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\n \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"#\n\rSetupResponse\x12\x12\n\nsession_id\x18\x01 \x01(\t\"#\n\rDeleteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\"\x10\n\x0e\x44\x65leteResponse2\x9b\x01\n\x06\x45\x64itor\x12$\n\x03New\x12\x13.NewStrategyRequest\x1a\x06.Chunk0\x01\x12\x1f\n\x04Save\x12\x06.Chunk\x1a\r.SaveResponse(\x01\x12\x1f\n\x04Push\x12\x06.Chunk\x1a\r.PushResponse(\x01\x12)\n\x0bGetStrategy\x12\x10.StrategyRequest\x1a\x06.Chunk0\x01\x32`\n\x0b\x45nvironment\x12&\n\x05Setup\x12\r.SetupRequest\x1a\x0e.SetupResponse\x12)\n\x06\x44\x65lete\x12\x0e.DeleteRequest\x1a\x0f.DeleteResponseb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
@@ -237,21 +237,21 @@ _SETUPREQUEST = _descriptor.Descriptor(
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='capital', full_name='SetupRequest.capital', index=1,
-      number=7, type=2, cpp_type=6, label=1,
+      number=2, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='max_leverage', full_name='SetupRequest.max_leverage', index=2,
-      number=8, type=2, cpp_type=6, label=1,
+      number=3, type=2, cpp_type=6, label=1,
       has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='universe', full_name='SetupRequest.universe', index=3,
-      number=2, type=9, cpp_type=9, label=1,
+      number=4, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -265,21 +265,28 @@ _SETUPREQUEST = _descriptor.Descriptor(
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='data_frequency', full_name='SetupRequest.data_frequency', index=5,
-      number=6, type=9, cpp_type=9, label=1,
+      number=7, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=_b("").decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='start', full_name='SetupRequest.start', index=6,
-      number=3, type=11, cpp_type=10, label=1,
+      name='cancel_policy', full_name='SetupRequest.cancel_policy', index=6,
+      number=8, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='start', full_name='SetupRequest.start', index=7,
+      number=9, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='end', full_name='SetupRequest.end', index=7,
-      number=4, type=11, cpp_type=10, label=1,
+      name='end', full_name='SetupRequest.end', index=8,
+      number=10, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -297,7 +304,7 @@ _SETUPREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=323,
-  serialized_end=542,
+  serialized_end=565,
 )
 
 
@@ -327,8 +334,8 @@ _SETUPRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=544,
-  serialized_end=579,
+  serialized_start=567,
+  serialized_end=602,
 )
 
 
@@ -358,8 +365,8 @@ _DELETEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=581,
-  serialized_end=616,
+  serialized_start=604,
+  serialized_end=639,
 )
 
 
@@ -382,8 +389,8 @@ _DELETERESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=618,
-  serialized_end=634,
+  serialized_start=641,
+  serialized_end=657,
 )
 
 _SETUPREQUEST.fields_by_name['start'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
@@ -478,8 +485,8 @@ _EDITOR = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=637,
-  serialized_end=792,
+  serialized_start=660,
+  serialized_end=815,
   methods=[
   _descriptor.MethodDescriptor(
     name='New',
@@ -529,8 +536,8 @@ _ENVIRONMENT = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=1,
   serialized_options=None,
-  serialized_start=794,
-  serialized_end=890,
+  serialized_start=817,
+  serialized_end=913,
   methods=[
   _descriptor.MethodDescriptor(
     name='Setup',

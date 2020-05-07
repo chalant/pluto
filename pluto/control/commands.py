@@ -3,12 +3,11 @@ from abc import ABC, abstractmethod
 
 class Command(ABC):
     @abstractmethod
-    def __call__(self, control_mode, clock_factory):
+    def __call__(self, clock_factory):
         '''
 
         Parameters
         ----------
-        control_mode: pluto.control.modes.mode.ControlMode
         clock_factory: function
 
         Returns
@@ -19,12 +18,13 @@ class Command(ABC):
 
 
 class Stop(Command):
-    def __init__(self, params, liquidate=False):
+    def __init__(self, control_mode, params, liquidate=False):
         self._liquidate = liquidate
         self._params = params
+        self._control_mode = control_mode
 
-    def __call__(self, control_mode, clock_factory):
-        control_mode.stop(self._params)
+    def __call__(self, clock_factory):
+        self._control_mode.stop(self._params)
 
 
 class Run(Command):
@@ -34,6 +34,6 @@ class Run(Command):
         self._directory = directory
         self._control_mode = control_mode
 
-    def __call__(self, control_mode, clock_factory):
+    def __call__(self, clock_factory):
         clock_factory(self._exchanges)
         self._control_mode.add_strategies(self._directory, self._params)

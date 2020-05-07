@@ -9,13 +9,23 @@ from pluto.interface.utils import service_access
 
 
 class FakeContext(object):
-    __slots__ = ['_invocation_metadata']
+    __slots__ = ['_invocation_metadata', '_status_code']
 
     def __init__(self, metadata=None):
         self._invocation_metadata = metadata if metadata else ()
+        self._status_code = ''
 
     def invocation_metadata(self):
         return self._invocation_metadata
+
+    def set_code(self, status_code):
+        self._status_code = status_code
+
+    def set_details(self, value):
+        raise RuntimeError(
+            self._status_code,
+            value
+        )
 
 
 class BrokerStub(broker_stub.BrokerStub):
@@ -127,11 +137,13 @@ class MonitorStub(object):
 
 class InMemoryProcess(process_factory.Process):
     def __init__(self,
+                 directory,
                  monitor_service,
                  controllable_factory,
                  framework_url,
                  session_id,
                  root_dir):
+        self._directory = directory
         self._monitor_service = monitor_service
         self._controllable_fty = controllable_factory
         super(InMemoryProcess, self).__init__(
@@ -147,7 +159,8 @@ class InMemoryProcess(process_factory.Process):
         return ControllableStub(
             server.ControllableService(
                 MonitorStub(self._monitor_service),
-                self._controllable_fty
+                self._controllable_fty,
+                self._directory,
             ))
 
     def _stop(self):
@@ -155,9 +168,10 @@ class InMemoryProcess(process_factory.Process):
 
 
 class InMemoryProcessFactory(process_factory.ProcessFactory):
-    def __init__(self):
+    def __init__(self, directory):
         self._monitor_service = None
         self._controllable_fct = None
+        self._directory = directory
 
     def set_monitor_service(self, monitor_service):
         self._monitor_service = monitor_service
@@ -167,6 +181,7 @@ class InMemoryProcessFactory(process_factory.ProcessFactory):
 
     def _create_process(self, framework_url, session_id, root_dir):
         return InMemoryProcess(
+            self._directory,
             self._monitor_service,
             self._controllable_fct,
             framework_url,

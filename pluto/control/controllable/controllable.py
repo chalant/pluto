@@ -6,6 +6,7 @@ from collections import deque
 import pandas as pd
 import logbook
 
+from zipline.finance import cancel_policy
 from zipline.finance import trading
 from zipline.data import data_portal as dp
 from zipline.pipeline.data import equity_pricing
@@ -155,7 +156,8 @@ class Controllable(ABC):
                    max_leverage,
                    data_frequency,
                    arena,
-                   look_back):
+                   look_back,
+                   cancel_policy):
         '''
 
         Parameters
@@ -170,19 +172,13 @@ class Controllable(ABC):
         data_frequency: str
         arena: str
         look_back: int
-
+        cancel_policy: str
         '''
 
         # todo: where should we create the directory?
         uni = universes.get_universe(universe)
 
-        self._out_session = ss.OutSession(self)
-        self._active = ss.Active(self)
-        self._in_session = ss.InSession(self)
-        self._bfs = ss.Trading(self)
-        self._idle = ss.Idle(self)
-
-        self._sync_state_tracker = sst = ss.Tracker(uni.exchanges)
+        self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
         calendar = uni.get_calendar(
             start_dt - pd.Timedelta(days=look_back),
             end_dt)
@@ -262,10 +258,12 @@ class Controllable(ABC):
             start_dt,
             look_back)
 
-        #todo: the cancel policy is saved per session
-        self._blotter = blotter = self._create_blotter(uni)
+        self._blotter = blotter = self._create_blotter(
+            uni,
+            self._get_cancel_policy(
+                cancel_policy))
 
-        #todo: asset restrictions are also loaded per session
+        # todo: asset restrictions are also loaded per session
         self._restrictions = restrictions = asset_restrictions.NoRestrictions()
 
         self._current_data = self._create_bar_data(
@@ -347,6 +345,12 @@ class Controllable(ABC):
         '''
         raise NotImplementedError(self._get_algorithm_class.__name__)
 
+    def _get_cancel_policy(self, name):
+        if name == 'never_cancel':
+            return cancel_policy.NeverCancel()
+        elif name == 'end_of_day':
+            return cancel_policy.EODCancel()
+
     def minute_end(self, dt):
         return self._get_minute_message(
             dt,
@@ -418,6 +422,8 @@ class Controllable(ABC):
                 params.data_frequency)
 
         metrics_tracker = self._metrics_tracker
+
+        #todo: should we return capital_changes ?
         capital_changes = self._calculate_capital_changes(
             dt,
             metrics_tracker,
@@ -496,7 +502,7 @@ class Controllable(ABC):
         # grab any new orders from the blotter, then clear the list.
         # this includes cancelled orders.
         new_orders = blotter.new_orders
-        #todo: send new orders to the broker here
+        # todo: send new orders to the broker here
         blotter.new_orders = []
 
         # if we have any new orders, record them so that we know
@@ -522,8 +528,9 @@ class Controllable(ABC):
             metrics_tracker,
             position_assets)
 
+        # todo execute cancellation policy on trade end events not session end
+        # blotter.execute_cancel_policy(sim_engine.SESSION_END)
         algo.validate_account_controls()
-        #todo execute cancellation policy
         return self._get_daily_message(
             dt,
             algo,
@@ -587,7 +594,7 @@ class Controllable(ABC):
         self._capital_changes = {dt: {'type': 'target', 'value': capital}}
 
     @abstractmethod
-    def _create_blotter(self, universe, cancel_policy=None):
+    def _create_blotter(self, universe, cancel_policy):
         raise NotImplementedError(self._create_blotter.__name__)
 
     def _get_daily_message(self,

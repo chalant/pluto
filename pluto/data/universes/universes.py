@@ -5,13 +5,12 @@ import sqlalchemy as sa
 
 from zipline.data import bundles
 
-from protos import calendar_pb2
-
 from pluto.data import benchmark as bm
 from pluto.data.universes import writer
 from pluto.data.universes import schema
 from pluto.trading_calendars import calendar_utils as cu
 
+from protos import calendar_pb2
 
 class AssetFilter(object):
     def __init__(self, directory):
@@ -230,8 +229,11 @@ class TestUniverse(AbstractUniverse):
     @property
     def benchmark(self):
         return bm.ZiplineBenchmark(
-            environ=os.environ
-        )
+            environ=os.environ)
+
+    @property
+    def calendars(self):
+        return ('XNYS',)
 
 
 def get_universe(name):

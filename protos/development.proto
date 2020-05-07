@@ -49,13 +49,14 @@ message StrategyRequest {
 message SetupRequest {
     //setup parameters of the strategy
     string strategy_id = 1;
-    float capital = 7;
-    float max_leverage = 8;
-    string universe = 2;
+    float capital = 2;
+    float max_leverage = 3;
+    string universe = 4;
     int32 look_back = 5;
-    string data_frequency = 6;
-    google.protobuf.Timestamp start = 3;
-    google.protobuf.Timestamp end = 4;
+    string data_frequency = 7;
+    string cancel_policy = 8;
+    google.protobuf.Timestamp start = 9;
+    google.protobuf.Timestamp end = 10;
 }
 
 message SetupResponse {

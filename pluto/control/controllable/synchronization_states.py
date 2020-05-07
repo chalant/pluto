@@ -18,41 +18,41 @@ class State(ABC):
 
     def aggregate(self, ts, evt, signals):
         # print(self.name)
-        return self._aggregate(self._tracker, ts, evt, signals)
+        tracker = self._tracker
+        return self._aggregate(tracker, tracker.calendars, ts, evt, signals)
 
     #todo: we only need active exchanges for BAR and TRADE_END events
     @abstractmethod
-    def _aggregate(self, tracker, ts, evt, signals):
+    def _aggregate(self, tracker, calendars, ts, evt, signals):
         raise NotImplementedError
 
 class Trading(State):
-    def __init__(self, tracker):
+    def __init__(self, tracker, calendars):
         super(Trading, self).__init__(tracker)
         self._session_end = 0
-        self._num_calendars = len(tracker.exchanges)
+        self._num_calendars = len(calendars)
 
     @property
     def name(self):
         return 'trading'
 
-    def _aggregate(self, tracker, ts, evt, signals):
-        exchanges = tracker.exchanges
+    def _aggregate(self, tracker, calendars, ts, evt, signals):
         target = []
         for signal in signals:
-            exchange = signal.exchange
+            calendar = signal.exchange
             c_evt = signal.event
-            if exchanges.get(exchange):
+            if calendars.get(calendar):
                 if c_evt == SESSION_END:
                     self._session_end += 1
                     if self._session_end == self._num_calendars:
                         self._session_end = 0
                         tracker.state = tracker.out_session
-                        target.append((c_evt, exchange))
+                        target.append((c_evt, calendar))
                         ts = signal.timestamp
                         # return signal.timestamp, SESSION_END, []
                 elif c_evt == BAR or c_evt == TRADE_END:
                     ts = signal.timestamp
-                    target.append((c_evt, exchange))
+                    target.append((c_evt, calendar))
         if target:
             return ts, evt, target
         else:
@@ -64,14 +64,13 @@ class InSession(State):
     def name(self):
         return 'in_session'
 
-    def _aggregate(self, tracker, ts, evt, signals):
-        exchanges = tracker.exchanges
+    def _aggregate(self, tracker, calendars, ts, evt, signals):
         active = []
         for signal in signals:
             # filter exchanges
             exchange = signal.exchange
             c_evt = signal.event
-            if exchanges.get(exchange):
+            if calendars.get(exchange):
                 # filter active exchanges
                 if c_evt == SESSION_START:
                     ts = signal.timestamp
@@ -89,19 +88,18 @@ class Active(State):
     def name(self):
         return 'active'
 
-    def _aggregate(self, tracker, ts, evt, signals):
-        exchanges = tracker.exchanges
+    def _aggregate(self, tracker, calendars, ts, evt, signals):
         active = []
         for signal in signals:
             exchange = signal.exchange
             c_evt = signal.event
-            if exchanges.get(exchange):
+            if calendars.get(exchange):
                 #filter active exchanges
                 if c_evt == BEFORE_TRADING_START:
                     ts = signal.timestamp
                     active.append((c_evt, exchange))
         if active:
-            tracker.state = tracker.bfs
+            tracker.state = tracker.trading
             return ts, BEFORE_TRADING_START, active
         else:
             return
@@ -113,15 +111,14 @@ class OutSession(State):
     def name(self):
         return 'out_session'
 
-    def _aggregate(self, tracker, ts, evt, signals):
+    def _aggregate(self, tracker, calendars, ts, evt, signals):
         if evt == SESSION_START:
-            exchanges = tracker.exchanges
             active = []
             for signal in signals:
                 # filter exchanges
                 s_evt = signal.event
                 exchange = signal.exchange
-                if exchanges.get(signal.exchange):
+                if calendars.get(exchange):
                     # search for a session start event if it have not be done yet.
                     if s_evt == SESSION_START:
                         ts = signal.timestamp
@@ -142,7 +139,7 @@ class Idle(State):
     def name(self):
         return 'idle'
 
-    def _aggregate(self, tracker, ts, evt, signals):
+    def _aggregate(self, tracker, calendars, ts, evt, signals):
         return
 
 class Tracker(object):
@@ -151,12 +148,13 @@ class Tracker(object):
 
         self._calendars = {calendar:calendar for calendar in calendars}
 
-        self._bfs = Trading(self)
+        self._bfs = Trading(self, calendars)
         self._out_session = OutSession(self)
         self._in_session = InSession(self)
         self._active = Active(self)
         self._idle = idle = Idle(self)
         self._state = idle
+
     @property
     def out_session(self):
         return self._out_session
@@ -190,7 +188,7 @@ class Tracker(object):
         self._state = value
 
     def aggregate(self, dt, evt, signals):
-        self._state.aggregate(dt, evt, signals)
+        return self._state.aggregate(dt, evt, signals)
 
 def set_state(name, tracker):
     if name == 'bfs':

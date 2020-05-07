@@ -6,18 +6,9 @@ from pluto.broker import broker_service
 
 from protos import controller_pb2
 from protos import clock_pb2
-from protos import broker_pb2_grpc
-
-
-def load_implementation(strategy):
-    buffer = b''
-    for bytes_ in strategy.get_implementation():
-        buffer += bytes_
-    return buffer
-
 
 class ControlMode(abc.ABC):
-    def __init__(self, server, framework_url, process_factory):
+    def __init__(self, framework_url, process_factory):
         '''
 
         Parameters
@@ -30,7 +21,7 @@ class ControlMode(abc.ABC):
         self._running = {}
         self._processes = {}
 
-        self._params_buffer = None
+        self._params_buffer = {}
 
         self._to_update = set()
         self._to_stop = set()
@@ -41,7 +32,6 @@ class ControlMode(abc.ABC):
 
         self._process_factory = process_factory
         self._broker = brk = broker_service.BrokerService(self._create_broker())
-        broker_pb2_grpc.add_BrokerServicer_to_server(brk, server)
         process_factory.set_broker_service(brk)
 
     @property
@@ -189,53 +179,46 @@ class ControlMode(abc.ABC):
             for r in to_run_ids:
                 yield params_per_id.get(r)
 
-        # create and initialize process so that we can run it later.
-        per_str_id = {}
-        # strategy cache
-        strategies = {}
-
-        for p in filter_to_run():
-            stg_id = p.strategy_id
-            stg = strategies.get(stg_id, None)
-            if not stg:
-                strategies[stg_id] = directory.get_strategy(stg_id)
-            lst = per_str_id.get(stg_id, None)
-            if not lst:
-                per_str_id[stg_id] = lst = []
-            lst.append(p)
+        # # create and initialize process so that we can run it later.
+        # per_str_id = {}
+        # # strategy cache
+        # strategies = {}
+        #
+        # for p in filter_to_run():
+        #     stg_id = p.strategy_id
+        #     stg = strategies.get(stg_id, None)
+        #     if not stg:
+        #         strategies[stg_id] = directory.get_strategy(stg_id)
+        #     lst = per_str_id.get(stg_id, None)
+        #     if not lst:
+        #         per_str_id[stg_id] = lst = []
+        #     lst.append(p)
 
         mode = self.mode_type
 
-        for key, values in per_str_id.items():
-            implementation = load_implementation(strategies.pop(key))
-            for p in values:
-                # todo: should put these steps in a thread
-                session_id = p.session_id
-                process = self._create_process(session_id, framework_url)
-                # fixme: find a general way for rounding ratios
-                capital = broker.compute_capital(p.capital_ratio)
-                # adjusts the max_leverage based on available margins from the broker
-                max_leverage = broker.adjust_max_leverage(p.max_leverage)
-                sess = p.session
+        for p in filter_to_run():
+            # todo: should put these steps in a thread
+            session_id = p.session_id
+            process = self._create_process(session_id, framework_url)
+            capital = broker.compute_capital(p.capital_ratio)
+            # adjusts the max_leverage based on available margins from the broker
+            max_leverage = broker.adjust_max_leverage(p.max_leverage)
+            sess = p.session
 
-                # prepare for trade simulation for live simulation case
-                universe_name = sess.universe_name
-                start, end = p.start, p.end
+            # prepare for trade simulation for live simulation case
+            universe_name = sess.universe_name
+            start, end = p.start, p.end
 
-                broker.add_market(session_id, start, end, universe_name)
+            broker.add_market(session_id, sess.data_frequency, start, end, universe_name)
 
-                process.initialize(
-                    start=start,
-                    end=end,
-                    capital=capital,
-                    max_leverage=max_leverage,
-                    universe=universe_name,
-                    look_back=sess.look_back,
-                    data_frequency=sess.data_frequency,
-                    strategy=implementation,
-                    mode=mode)
+            process.initialize(
+                start=start,
+                end=end,
+                capital=capital,
+                max_leverage=max_leverage,
+                mode=mode)
 
-                processes[session_id] = process
+            processes[session_id] = process
 
     def _create_process(self, session_id, framework_url):
         '''
