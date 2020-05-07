@@ -4,7 +4,7 @@ from pluto.interface.utils import service_access
 
 class ControllableStub(object):
     @service_access.framework_method
-    def Initialize(self, request, metadata=()):
+    def Initialize(self, request, metadata):
         return self._initialize(request, metadata)
 
     @service_access.framework_method

@@ -11,7 +11,7 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
         Parameters
         ----------
         directory
-        loop : pluto.control.loop.loop.Loop
+        controller:
         '''
         self._directory = directory
         self._controller = controller
@@ -26,11 +26,10 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
 
             ctl = self._controller
             try:
-                ctl.run(request.run_mode, d, request.run_params)
+                ctl.run(request.mode, d, request.run_params)
             except RuntimeError as e:
                 # the loop might raise a runtime error if it doesn't support
                 # running additional strategies while running...
-                # todo: we need a fake context object with these methods
                 context.set_code(grpc.StatusCode.UNAVAILABLE)
                 context.set_details(str(e))
             except KeyError as e:

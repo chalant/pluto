@@ -414,12 +414,23 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             end_session
         )
 
-    def set_slippage(self, us_equities=None, us_futures=None):
-        #disable setting slippage
+    @api_method
+    def set_asset_restrictions(self, restrictions, on_error='fail'):
         pass
 
+    @api_method
+    def set_slippage(self, us_equities=None, us_futures=None):
+        # disable setting slippage
+        pass
+
+    @api_method
     def set_commission(self, us_equities=None, us_futures=None):
-        #disable setting commission
+        # disable setting commission
+        pass
+
+    @api_method
+    def set_cancel_policy(self, cancel_policy):
+        # disable set_cancel_policy
         pass
 
 

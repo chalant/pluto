@@ -3,13 +3,17 @@ from abc import ABC, abstractmethod
 import os
 import threading
 import shutil
+import tarfile
 
 import sqlalchemy as sa
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import orm
 
+from zipline.testing import core
+
 from pluto.interface.utils import paths
 from pluto.interface.utils import db_utils
+from pluto.setup import setup
 
 _STREAM_CHUNK_SIZE = 64 * 1024
 
@@ -56,6 +60,7 @@ class SessionMetadata(Base):
     directory = sa.Column(sa.String, nullable=False)
     universe = sa.Column(sa.String, nullable=False)
     look_back = sa.Column(sa.Integer)
+    cancel_policy = sa.Column(sa.String, nullable=False)
 
 
 class Scoped(object):
@@ -74,7 +79,7 @@ class Scoped(object):
 
 
 class _Session(Scoped):
-    __slots__ = ['_path', '_universe', '_context', '_id', '_stg_id']
+    __slots__ = ['_path', '_universe', '_context', '_id', '_stg_id', '_metadata']
 
     def __init__(self, meta, context):
         '''
@@ -92,6 +97,7 @@ class _Session(Scoped):
         self._stg_id = meta.strategy_id
         self._look_back = meta.look_back
         self._data_frequency = meta.data_frequency
+        self._metadata = meta
 
     @property
     def look_back(self):
@@ -113,13 +119,25 @@ class _Session(Scoped):
     def strategy_id(self):
         return self._stg_id
 
-    def get_strategy(self, chunk_size=_STREAM_CHUNK_SIZE):
-        with open(self._stg_id + '.py', 'rb') as f:
-            while True:
-                data = f.read(chunk_size)
-                if not data:
-                    break
-                yield data
+    @property
+    def cancel_policy(self):
+        return self._metadata.cancel_policy
+
+    def get_strategy(self, strategy):
+        '''
+
+        Parameters
+        ----------
+        strategy: _Strategy
+
+        Returns
+        -------
+        bytes
+        '''
+        b = b''
+        for bytes_ in strategy.get_implementation():
+            b += bytes_
+        return b
 
 
 class _Strategy(Scoped):
@@ -216,12 +234,22 @@ class _Mode(ABC):
         self._directory = directory
 
     def get_session(self, session_id):
+        '''
+
+        Parameters
+        ----------
+        session_id
+
+        Returns
+        -------
+        _Session
+        '''
         return _Session(
             self._session.query(
                 SessionMetadata)
                 .get(session_id), self)
 
-    def add_session(self, strategy_id, universe, data_frequency, look_back):
+    def add_session(self, strategy_id, universe, data_frequency, look_back, cancel_policy):
         '''
 
         Parameters
@@ -248,7 +276,9 @@ class _Mode(ABC):
                 directory=pth,
                 data_frequency=data_frequency,
                 universe=universe,
-                look_back=look_back)
+                look_back=look_back,
+                cancel_policy=cancel_policy
+            )
             session.add(sess_meta)
 
         return _Session(sess_meta, self)
@@ -377,17 +407,37 @@ class _Write(_Mode):
             session.rollout()
         session.close()
 
+
 class StubDirectory(object):
     def __init__(self, root_dir):
         self._root_dir = root_dir
+        self._reader = None
 
     def __enter__(self):
         if not paths.root_is_set():
             paths.setup_root(self._root_dir)
+            strategies_dir = paths.get_dir('strategies')
+            metadata_file = paths.get_file_path('metadata', strategies_dir)
+            engine = db_utils.create_engine(metadata_file)
+            self._session_factory = fct = db_utils.get_session_maker(engine)
+            self._session = sess = fct()
+            self._reader = _Read(sess, strategies_dir)
         return self
 
+    def read(self):
+        '''
+
+        Returns
+        -------
+        _Read
+        '''
+        reader = self._reader
+        if not reader:
+            raise RuntimeError('Outside of scope')
+        return reader
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+        self._reader = None
 
 
 class AbstractDirectory(ABC):
@@ -435,6 +485,16 @@ class AbstractDirectory(ABC):
         if not os.path.isdir(root_dir):
             os.mkdir(root_dir)
         paths.setup_root(root_dir)
+        setup.prepare_variables()
+        # load setup parameters
+
+        # todo: we need some values for 'default' setup. this is for testing
+        # purposes
+        with tarfile.open(os.path.join(
+                core.zipline_git_root,
+                'pluto/resources/test_setup.tar.gz')) as tar:
+            tar.extractall(root_dir)
+
         self._strategy_dir = strategies_dir = paths.get_dir('strategies')
         metadata_file = paths.get_file_path('metadata', strategies_dir)
         engine = db_utils.create_engine(metadata_file)
@@ -475,7 +535,9 @@ class _TempDirectory(AbstractDirectory):
         # delete everything
         shutil.rmtree(root_dir, ignore_errors=True)
 
+
 _DIRECTORY = None
+
 
 def get_directory(environment):
     global _DIRECTORY

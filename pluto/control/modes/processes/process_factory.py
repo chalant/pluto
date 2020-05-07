@@ -2,10 +2,9 @@ import abc
 
 from google.protobuf import empty_pb2 as emp
 
-from pluto.utils import stream
 from pluto.coms.utils import conversions
 from pluto.interface.utils import paths
-from pluto.interface.utils.service_access import invoke, _framework_id
+from pluto.interface.utils.service_access import _framework_id
 
 from protos import controllable_pb2 as cbl
 
@@ -37,37 +36,9 @@ class ProcessWrapper(abc.ABC):
     def session_id(self):
         return self._process.session_id
 
-    def initialize(self,
-                   start,
-                   end,
-                   universe,
-                   strategy,
-                   capital,
-                   max_leverage,
-                   data_frequency,
-                   look_back,
-                   mode):
-        self._initialize(
-            start,
-            end,
-            universe,
-            strategy,
-            capital,
-            max_leverage,
-            data_frequency,
-            look_back,
-            mode)
-        self._process.initialize(
-            start,
-            end,
-            universe,
-            strategy,
-            capital,
-            max_leverage,
-            data_frequency,
-            look_back,
-            mode
-        )
+    def initialize(self, start, end, capital, max_leverage, mode):
+        self._initialize(start, end, capital, max_leverage, mode)
+        self._process.initialize(start, end, capital, max_leverage, mode)
 
     def parameter_update(self, params):
         self._process.parameter_update(params)
@@ -89,16 +60,7 @@ class ProcessWrapper(abc.ABC):
         self._process.stop()
 
     @abc.abstractmethod
-    def _initialize(self,
-                    start,
-                    end,
-                    universe,
-                    strategy,
-                    capital,
-                    max_leverage,
-                    data_frequency,
-                    look_back,
-                    mode):
+    def _initialize(self, start, end, capital, max_leverage, mode):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -116,56 +78,44 @@ class Process(abc.ABC):
             session_id,
             root_dir)
         self._session_id = session_id
+        self._metadata = (('session_id', session_id),)
 
     @property
     def session_id(self):
         return self._session_id
 
-    def initialize(self,
-                   start,
-                   end,
-                   universe,
-                   strategy,
-                   capital,
-                   max_leverage,
-                   data_frequency,
-                   look_back,
-                   mode):
-        start = conversions.to_proto_timestamp(start)
-        end = conversions.to_proto_timestamp(end)
-        params = cbl.InitParams(
-            id=self._session_id,
-            start=start,
-            end=end,
-            universe=universe,
-            strategy=strategy,
-            capital=capital,
-            max_leverage=max_leverage,
-            data_frequency=data_frequency,
-            look_back=look_back,
-            mode=mode
-        ).SerializeToString()
+    def initialize(self, start, end, capital, max_leverage, mode):
         # send parameters to the controllable as a stream of bytes
-        return invoke(self._controllable.Initialize, stream.chunk_bytes(params))
+        return self._controllable.Initialize(
+            cbl.InitParams(
+                id=self._session_id,
+                start=conversions.to_proto_timestamp(start),
+                end=conversions.to_proto_timestamp(end),
+                capital=capital,
+                max_leverage=max_leverage,
+                mode=mode), ())
 
     def parameter_update(self, params):
-        return invoke(self._controllable.ParameterUpdate, params)
+        return self._controllable.ParameterUpdate(
+            params, ())
 
     def clock_update(self, clock_event):
-        return invoke(self._controllable.ClockUpdate, clock_event)
+        return self._controllable.ClockUpdate(
+            clock_event, ())
 
     def account_update(self, broker_state):
-        return invoke(self._controllable.UpdateAccount, broker_state)
+        return self._controllable.UpdateAccount(
+            broker_state, ())
 
     def stop(self):
-        invoke(self._controllable.Stop, emp.Empty())
+        self._controllable.Stop(emp.Empty, ())
         self._stop()
 
     def watch(self):
-        return invoke(self._controllable.Watch, emp.Empty())
+        return self._controllable.Watch(emp.Empty(), ())
 
     def stop_watching(self):
-        return invoke(self._controllable.StopWatching, emp.Empty())
+        return self._controllable.StopWatching(emp.Empty(), ())
 
     @abc.abstractmethod
     def _create_controllable(self, framework_id, framework_url, session_id, root_dir):

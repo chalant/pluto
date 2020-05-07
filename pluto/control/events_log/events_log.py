@@ -50,6 +50,9 @@ class EventsLog(AbstractEventsLog):
         schema.metadata.create_all(engine)
         self._writer = _EventsLogWriter(engine, dir_)
 
+    def writer(self):
+        return self._writer
+
     def read(self, session_id, datetime):
         with self._engine.begin() as connection:
             statement = sql.select(
@@ -131,7 +134,7 @@ class _EventsLogWriter(object):
         self._session = datetime
         self._connection.execute(
             schema.events.insert().values(
-                datetime=datetime,
+                session=datetime,
                 file_path=path))
 
     def write_datetime(self, datetime):

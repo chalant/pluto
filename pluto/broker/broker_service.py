@@ -3,6 +3,7 @@ from pluto.coms.utils import conversions
 
 from protos import broker_pb2_grpc as brk_rpc
 
+
 class BrokerService(brk_rpc.BrokerServicer):
     def __init__(self, broker):
         '''
@@ -22,8 +23,8 @@ class BrokerService(brk_rpc.BrokerServicer):
     def adjust_max_leverage(self, max_leverage):
         self._broker.adjust_max_leverage(max_leverage)
 
-    def add_market(self, session_id, start, end, universe_name):
-        self._broker.add_market(session_id, start, end, universe_name)
+    def add_market(self, session_id, data_frequency, start, end, universe_name):
+        self._broker.add_market(session_id, data_frequency, start, end, universe_name)
 
     def _order(self, broker, request, session_id):
         return broker.order(

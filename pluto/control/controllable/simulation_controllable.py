@@ -1,7 +1,7 @@
 from pluto.finance.blotter import simulation_blotter
 from pluto.control.controllable import controllable
 from pluto import algorithm
-from pluto import setup as stp
+from pluto.setup import setup as stp
 
 
 class SimulationControllable(controllable.Controllable):
@@ -41,7 +41,7 @@ class SimulationControllable(controllable.Controllable):
     def _update_account(self, blotter, main_account):
         pass
 
-    def _create_blotter(self, universe, cancel_policy=None):
+    def _create_blotter(self, universe, cancel_policy):
         setup = stp.load_setup(universe)
         return simulation_blotter.SimulationBlotter(
             setup.get_commission_models(),

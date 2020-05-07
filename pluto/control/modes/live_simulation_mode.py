@@ -4,7 +4,7 @@ from pluto.broker import broker
 
 class LiveSimulationMode(mode.ControlMode):
     def __init__(self,
-                 server,
+                 framework_url,
                  capital,
                  max_leverage,
                  process_factory,
@@ -14,7 +14,7 @@ class LiveSimulationMode(mode.ControlMode):
         self._market_factory = market_factory
 
         super(LiveSimulationMode, self).__init__(
-            server,
+            framework_url,
             process_factory)
 
     def _create_broker(self):
@@ -24,6 +24,7 @@ class LiveSimulationMode(mode.ControlMode):
             self._max_leverage,
             self._market_factory)
 
+    @property
     def mode_type(self):
         return 'live'
 

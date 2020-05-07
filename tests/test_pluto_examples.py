@@ -131,10 +131,6 @@ class PlutoExamplesTests(unittest.TestCase):
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path)
 
-        # load setup parameters
-        with tarfile.open('pluto/resources/test_setup.tar.gz') as tar:
-            tar.extractall(dir_.path)
-
         environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
         cls._expected_perf = cache.dataframe_cache(
@@ -153,21 +149,6 @@ class PlutoExamplesTests(unittest.TestCase):
         cls._exit_stack.close()
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
-    def test_live_simulation(self, example_name):
-        framework_url = self._framework_url
-        client = test.InMemoryTestClient(
-            self._pluto_tempdir,
-            framework_url,
-            mode_utils.LiveSimulationModeFactory(
-                framework_url,
-                factory.LiveSimulationMarketFactory(
-                    blotter_factory.MultiSimulationBlotterFactory()
-                )
-            ),
-            loop_utils.SimpleSimulationLoopFactory())
-        _run(client, example_name, self._expected_perf)
-
-    @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
         framework_url = self._framework_url
         client = test.InMemoryTestClient(
@@ -176,3 +157,16 @@ class PlutoExamplesTests(unittest.TestCase):
             mode_utils.SimulationModeFactory(framework_url),
             loop_utils.SimpleSimulationLoopFactory())
         _run(client, example_name, self._expected_perf)
+
+    # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
+    # def test_live_simulation(self, example_name):
+    #     framework_url = self._framework_url
+    #     client = test.InMemoryTestClient(
+    #         self._pluto_tempdir,
+    #         framework_url,
+    #         mode_utils.LiveSimulationModeFactory(
+    #             framework_url,
+    #             factory.LiveSimulationMarketFactory(
+    #                 blotter_factory.MultiSimulationBlotterFactory())),
+    #         loop_utils.SimpleSimulationLoopFactory())
+    #     _run(client, example_name, self._expected_perf)

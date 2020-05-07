@@ -80,7 +80,6 @@ class ClockUpdate(Command):
         controllable = self._controllable
 
         s = controllable.state.aggregate(dt, evt, signals)
-
         if s:
             writer = self._perf_writer
 
