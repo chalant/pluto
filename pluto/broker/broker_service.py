@@ -18,10 +18,10 @@ class BrokerService(brk_rpc.BrokerServicer):
         self._broker.update(dt, evt, signals)
 
     def compute_capital(self, capital_ratio):
-        self._broker.compute_capital(capital_ratio)
+        return self._broker.compute_capital(capital_ratio)
 
     def adjust_max_leverage(self, max_leverage):
-        self._broker.adjust_max_leverage(max_leverage)
+        return self._broker.adjust_max_leverage(max_leverage)
 
     def add_market(self, session_id, data_frequency, start, end, universe_name):
         self._broker.add_market(session_id, data_frequency, start, end, universe_name)

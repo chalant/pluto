@@ -428,7 +428,7 @@ class TradingAlgorithm(object):
         with ZiplineAPI(self):
             self._initialize(self, *args, **kwargs)
 
-    def before_trading_start(self, data):
+    def before_trading_start(self, algo, data):
         self.compute_eager_pipelines()
 
         if self._before_trading_start is None:
@@ -438,7 +438,7 @@ class TradingAlgorithm(object):
 
         with handle_non_market_minutes(data) if \
                 self.data_frequency == "minute" else ExitStack():
-            self._before_trading_start(self, data)
+            self._before_trading_start(algo, data)
 
         self._in_before_trading_start = False
 

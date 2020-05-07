@@ -52,7 +52,7 @@ class _Ready(_State):
         algo.event_manager.handle_data(algo, current_data, dt)
 
     def before_trading_starts(self, algo, current_dt):
-        algo.before_trading_start(current_dt)
+        algo.before_trading_start(algo, current_dt)
 
 
 class Controllable(ABC):

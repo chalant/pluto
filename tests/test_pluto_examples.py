@@ -98,8 +98,8 @@ def _compare_df(desired, actual):
         des = l[1]
         try:
             testing.assert_allclose(
-                act.values,
                 np.nan_to_num(des.values),
+                act.values,
                 rtol=0.1,
                 atol=0.2,
                 equal_nan=False)
@@ -108,7 +108,7 @@ def _compare_df(desired, actual):
             print('Name: {}\nError: {}'.format(l[0], e))
         except TypeError:
             try:
-                pd.testing.assert_series_equal(act, des, check_less_precise=3)
+                pd.testing.assert_series_equal(des, act, check_less_precise=3)
             except AssertionError as e:
                 logging.warning('Name: {}\nError: {}'.format(l[0], e))
 
