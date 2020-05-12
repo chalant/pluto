@@ -4,6 +4,7 @@ from zipline.finance import slippage
 
 from protos import slippage_pb2
 
+
 class Factory(abc.ABC):
     def __call__(self, parameters_path, universe=None):
         return self._create_model(
@@ -22,7 +23,21 @@ class FixedPointBasis(Factory):
 
 class VolumeShare(Factory):
     def _create_model(self, parameters_path, universe=None):
-        return slippage.VolumeShareSlippage()
+        try:
+            params = _PARAMS_CACHE[parameters_path]
+            return slippage.VolumeShareSlippage(
+                params.volume_limit,
+                params.price_impact)
+        except KeyError:
+            with open(parameters_path, 'rb') as f:
+                params = slippage_pb2.VolumeShare()
+                params.ParseFromString(f.read())
+                # todo: filter the eta keys using universe so that we only load what we are
+                # going to use
+                _PARAMS_CACHE[parameters_path] = params
+                return slippage.VolumeShareSlippage(
+                    params.volume_limit,
+                    params.price_impact)
 
 
 class Fixed(Factory):
@@ -42,18 +57,20 @@ class FutureShare(Factory):
 
 class VolatilityVolumeShare(Factory):
     def _create_model(self, parameters_path, universe=None):
+        # todo: filter eta based on the universe assets if the universe is provided
         try:
             params = _PARAMS_CACHE[parameters_path]
+            return slippage.VolatilityVolumeShare(
+                params.volume_limit,
+                params.eta)
         except KeyError:
-            with open(parameters_path) as f:
+            with open(parameters_path, 'rb') as f:
                 params = slippage_pb2.VolatilityVolumeShare()
                 params.ParseFromString(f.read())
                 # todo: filter the eta keys using universe so that we only load what we are
                 # going to use
                 _PARAMS_CACHE[parameters_path] = params
-        finally:
-            # todo: filter eta based on the universe assets if the universe is provided
-            return slippage.VolatilityVolumeShare(
+                return slippage.VolatilityVolumeShare(
                     params.volume_limit,
                     params.eta)
 
@@ -85,6 +102,7 @@ _FACTORIES = {
 _PARAMS_CACHE = {
 
 }
+
 
 def get_slippage_model(setup, parameters_path, universe=None):
     model = setup.model

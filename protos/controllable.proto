@@ -43,7 +43,8 @@ message UpdateReply {
 message ControllableState {
     string session_id = 1;
     string session_state = 2;
-    string capital = 3;
+    float capital = 3;
+    float max_leverage = 11;
     string universe = 4;
     int32 look_back = 5;
     string data_frequency = 6;

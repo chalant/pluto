@@ -24,7 +24,7 @@ _PARAMETERS_CACHE = {
 _ENGINE = None
 _COMMISSIONS = None
 
-def prepare_variables():
+def setup_directory():
     global _ENGINE
     global _PATH
     global _COMMISSIONS

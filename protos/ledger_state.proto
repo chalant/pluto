@@ -11,6 +11,7 @@ message LedgerState {
     repeated Order orders = 4;
     google.protobuf.Timestamp first_session = 5;
     repeated Return daily_returns = 6;
+    int32 session_count = 7;
 }
 
 message Return {

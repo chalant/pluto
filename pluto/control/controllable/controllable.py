@@ -175,7 +175,6 @@ class Controllable(ABC):
         cancel_policy: str
         '''
 
-        # todo: where should we create the directory?
         uni = universes.get_universe(universe)
 
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
@@ -259,6 +258,7 @@ class Controllable(ABC):
             look_back)
 
         self._blotter = blotter = self._create_blotter(
+            session_id,
             uni,
             self._get_cancel_policy(
                 cancel_policy))
@@ -423,7 +423,7 @@ class Controllable(ABC):
 
         metrics_tracker = self._metrics_tracker
 
-        #todo: should we return capital_changes ?
+        # todo: should we return capital_changes ?
         capital_changes = self._calculate_capital_changes(
             dt,
             metrics_tracker,
@@ -442,7 +442,6 @@ class Controllable(ABC):
             self._calendar,
             self._sessions)
 
-        # todo: this part need not be done in "live"
         # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
                 metrics_tracker.positions.keys() |
@@ -594,7 +593,7 @@ class Controllable(ABC):
         self._capital_changes = {dt: {'type': 'target', 'value': capital}}
 
     @abstractmethod
-    def _create_blotter(self, universe, cancel_policy):
+    def _create_blotter(self, session_id, universe, cancel_policy):
         raise NotImplementedError(self._create_blotter.__name__)
 
     def _get_daily_message(self,
@@ -720,8 +719,9 @@ class Controllable(ABC):
             return acd is not None and acd <= dt
 
         # Remove positions in any sids that have reached their auto_close date.
-        assets_to_clear = \
-            [asset for asset in position_assets if past_auto_close_date(asset)]
+        assets_to_clear = [
+            asset for asset in position_assets
+            if past_auto_close_date(asset)]
 
         for asset in assets_to_clear:
             metrics_tracker.process_close_position(asset, dt, data_portal)

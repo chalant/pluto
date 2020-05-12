@@ -1,5 +1,3 @@
-from concurrent import futures
-
 import grpc
 
 from pluto.coms.utils import conversions
@@ -13,7 +11,12 @@ from protos import interface_pb2
 
 
 class InMemoryTestClient(object):
-    def __init__(self, directory, framework_url, mode_factory, loop_factory):
+    def __init__(self,
+                 directory,
+                 framework_url,
+                 mode_factory,
+                 loop_factory,
+                 thread_pool):
         '''
 
         Parameters
@@ -23,7 +26,8 @@ class InMemoryTestClient(object):
         mode_factory: pluto.control.modes.utils.ModeFactory
         loop_factory
         '''
-        server = grpc.server(futures.ThreadPoolExecutor(10))
+
+        server = grpc.server(thread_pool)
         self._mode_type = mode_factory.mode_type
         self._env = env = dev.DevService(
             server,
@@ -31,7 +35,8 @@ class InMemoryTestClient(object):
             framework_url,
             mode_factory,
             loop_factory,
-            in_memory.InMemoryProcessFactory(directory))
+            in_memory.InMemoryProcessFactory(
+                directory))
 
         self._start = None
         self._end = None
@@ -114,12 +119,12 @@ class InMemoryTestClient(object):
 
     def watch(self, session_id):
         for perf in self._env._monitor.Watch(
-                interface_pb2.WatchRequest(session_id=session_id),
+                interface_pb2.WatchRequest(
+                    session_id=session_id),
                 in_memory.FakeContext(())):
             packet = controller_pb2.PerformancePacket()
             packet.ParseFromString(perf.packet)
-            p = conversions.from_proto_performance_packet(packet)
-            yield p
+            yield conversions.from_proto_performance_packet(packet)
 
     def stop_watching(self, session_id):
         self._env._monitor.StopWatching(

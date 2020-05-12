@@ -5,4 +5,5 @@ import "google/protobuf/timestamp.proto";
 message TrackerState {
     google.protobuf.Timestamp first_open_session = 1;
     bytes ledger_state = 2;
+    google.protobuf.Timestamp last_checkpoint = 3;
 }

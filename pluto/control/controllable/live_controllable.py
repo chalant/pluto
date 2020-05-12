@@ -29,16 +29,17 @@ class LiveControllable(controllable.Controllable):
             metrics_tracker,
             pipeline_loader,
             initialize,
-            before_trading_start,
             handle_data,
+            before_trading_start,
             analyze
         )
 
     def _update_blotter(self, blotter, broker_data):
         blotter.update(broker_data)
 
-    def _create_blotter(self, universe, cancel_policy):
+    def _create_blotter(self, session_id, universe, cancel_policy):
         return live_blotter.LiveBlotter(
+            session_id,
             self._broker,
             cancel_policy)
 

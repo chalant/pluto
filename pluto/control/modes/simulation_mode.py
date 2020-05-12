@@ -7,13 +7,15 @@ class SimulationControlMode(mode.ControlMode):
                  framework_url,
                  capital,
                  max_leverage,
-                 process_factory):
+                 process_factory,
+                 thread_pool):
         self._capital = capital
         self._max_leverage = max_leverage
 
         super(SimulationControlMode, self).__init__(
             framework_url,
-            process_factory)
+            process_factory,
+            thread_pool)
 
     def _create_broker(self):
         return broker.SimulationBroker(

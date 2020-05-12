@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x15protos/slippage.proto\"\x87\x01\n\x15VolatilityVolumeShare\x12\x14\n\x0cvolume_limit\x18\x01 \x01(\x02\x12,\n\x03\x65ta\x18\x02 \x03(\x0b\x32\x1f.VolatilityVolumeShare.EtaEntry\x1a*\n\x08\x45taEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\">\n\x10\x46ixedPointsBasis\x12\x14\n\x0c\x62\x61sis_points\x18\x01 \x01(\x02\x12\x14\n\x0cvolume_limit\x18\x02 \x01(\x02\x62\x06proto3')
+  serialized_pb=_b('\n\x15protos/slippage.proto\"\x87\x01\n\x15VolatilityVolumeShare\x12\x14\n\x0cvolume_limit\x18\x01 \x01(\x02\x12,\n\x03\x65ta\x18\x02 \x03(\x0b\x32\x1f.VolatilityVolumeShare.EtaEntry\x1a*\n\x08\x45taEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x02:\x02\x38\x01\">\n\x10\x46ixedPointsBasis\x12\x14\n\x0c\x62\x61sis_points\x18\x01 \x01(\x02\x12\x14\n\x0cvolume_limit\x18\x02 \x01(\x02\"9\n\x0bVolumeShare\x12\x14\n\x0cvolume_limit\x18\x01 \x01(\x02\x12\x14\n\x0cprice_impact\x18\x02 \x01(\x02\x62\x06proto3')
 )
 
 
@@ -137,10 +137,49 @@ _FIXEDPOINTSBASIS = _descriptor.Descriptor(
   serialized_end=225,
 )
 
+
+_VOLUMESHARE = _descriptor.Descriptor(
+  name='VolumeShare',
+  full_name='VolumeShare',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='volume_limit', full_name='VolumeShare.volume_limit', index=0,
+      number=1, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='price_impact', full_name='VolumeShare.price_impact', index=1,
+      number=2, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=227,
+  serialized_end=284,
+)
+
 _VOLATILITYVOLUMESHARE_ETAENTRY.containing_type = _VOLATILITYVOLUMESHARE
 _VOLATILITYVOLUMESHARE.fields_by_name['eta'].message_type = _VOLATILITYVOLUMESHARE_ETAENTRY
 DESCRIPTOR.message_types_by_name['VolatilityVolumeShare'] = _VOLATILITYVOLUMESHARE
 DESCRIPTOR.message_types_by_name['FixedPointsBasis'] = _FIXEDPOINTSBASIS
+DESCRIPTOR.message_types_by_name['VolumeShare'] = _VOLUMESHARE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 VolatilityVolumeShare = _reflection.GeneratedProtocolMessageType('VolatilityVolumeShare', (_message.Message,), dict(
@@ -164,6 +203,13 @@ FixedPointsBasis = _reflection.GeneratedProtocolMessageType('FixedPointsBasis', 
   # @@protoc_insertion_point(class_scope:FixedPointsBasis)
   ))
 _sym_db.RegisterMessage(FixedPointsBasis)
+
+VolumeShare = _reflection.GeneratedProtocolMessageType('VolumeShare', (_message.Message,), dict(
+  DESCRIPTOR = _VOLUMESHARE,
+  __module__ = 'protos.slippage_pb2'
+  # @@protoc_insertion_point(class_scope:VolumeShare)
+  ))
+_sym_db.RegisterMessage(VolumeShare)
 
 
 _VOLATILITYVOLUMESHARE_ETAENTRY._options = None

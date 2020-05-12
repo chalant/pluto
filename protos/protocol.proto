@@ -59,7 +59,7 @@ message Account {
 
 message Portfolio {
     float cash_flow = 1;
-    float stating_cash = 2;
+    float starting_cash = 2;
     float portfolio_value = 3;
     float pnl = 4;
     float returns = 5;

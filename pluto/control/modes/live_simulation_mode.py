@@ -8,17 +8,19 @@ class LiveSimulationMode(mode.ControlMode):
                  capital,
                  max_leverage,
                  process_factory,
-                 market_factory):
+                 market_factory,
+                 thread_pool):
         self._capital = capital
         self._max_leverage = max_leverage
         self._market_factory = market_factory
 
         super(LiveSimulationMode, self).__init__(
             framework_url,
-            process_factory)
+            process_factory,
+            thread_pool
+        )
 
     def _create_broker(self):
-        #todo: this object should be a BrokerServicer sub-class
         return broker.LiveSimulationBroker(
             self._capital,
             self._max_leverage,

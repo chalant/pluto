@@ -83,8 +83,9 @@ class MetricsTracker(object):
 
     def get_state(self, dt):
         return trs.TrackerState(
-            first_open_session=conversions.to_proto_timestamp(self._first_open_session),
-            account_state=self._ledger.get_state(dt),
+            first_open_session=conversions.to_proto_timestamp(
+                self._first_open_session),
+            ledger_state=self._ledger.get_state(dt),
             last_checkpoint=conversions.to_proto_timestamp(dt)
         ).SerializeToString()
 
@@ -94,7 +95,9 @@ class MetricsTracker(object):
         tr_state = trs.TrackerState()
         tr_state.ParseFromString(state)
 
-        self._first_open_session = pd.Timestamp(conversions.to_datetime(tr_state.first_open_session),tz='UTC')
+        self._first_open_session = pd.Timestamp(
+            conversions.to_datetime(tr_state.first_open_session),
+            tz='UTC')
 
         self._last_checkpoint = ledger.restore_state(tr_state.account_state)
 
@@ -169,6 +172,9 @@ class MetricsTracker(object):
         self._benchmark_source.on_session_start(sessions)
 
         self._current_session = session_label
+
+        if not self._first_open_session:
+            self._first_open_session = session_label
 
         self._market_open, self._market_close = self._execution_open_and_close(
             trading_calendar,

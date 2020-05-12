@@ -84,10 +84,10 @@ def to_zp_asset(pr_asset):
         ),
         pr_asset.symbol,
         pr_asset.asset_name,
-        pr_asset.start_date,
-        pr_asset.end_date,
-        pr_asset.first_traded,
-        pr_asset.auto_close_date,
+        to_datetime(pr_asset.start_date),
+        to_datetime(pr_asset.end_date),
+        to_datetime(pr_asset.first_traded),
+        to_datetime(pr_asset.auto_close_date),
         pr_asset.tick_size,
         pr_asset.multiplier
     )
@@ -151,7 +151,7 @@ def to_zp_asset(pr_asset):
 
 def to_zp_order(proto_order):
     return Order(
-        proto_order.dt,
+        to_datetime(proto_order.dt),
         to_zp_asset(proto_order.asset),
         proto_order.amount,
         proto_order.stop,

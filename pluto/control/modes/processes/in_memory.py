@@ -21,11 +21,15 @@ class FakeContext(object):
     def set_code(self, status_code):
         self._status_code = status_code
 
-    def set_details(self, value):
+    def set_details(self, message):
         raise RuntimeError(
             self._status_code,
-            value
-        )
+            message)
+
+    def abort(self, status_code, message):
+        raise RuntimeError(
+            status_code,
+            message)
 
 
 class BrokerStub(broker_stub.BrokerStub):
@@ -40,22 +44,22 @@ class BrokerStub(broker_stub.BrokerStub):
         self._session_id = session_id
 
     def _execute_cancel_policy(self, request, metadata):
-        self._servicer.ExecuteCancelPolicy(
+        return self._servicer.ExecuteCancelPolicy(
             request,
             FakeContext(metadata))
 
     def _place_orders(self, request_iterator, metadata):
-        self._servicer.PlaceOrders(
+        return self._servicer.PlaceOrders(
             request_iterator,
             FakeContext(metadata))
 
     def _cancel_all_orders_for_asset(self, request, metadata):
-        self._servicer.CancelAllOrdersForAsset(
+        return self._servicer.CancelAllOrdersForAsset(
             request,
             FakeContext(metadata))
 
     def _cancel_order(self, request, metadata):
-        self._servicer.CancelOrder(
+        return self._servicer.CancelOrder(
             request,
             FakeContext(metadata))
 
@@ -160,8 +164,7 @@ class InMemoryProcess(process_factory.Process):
             server.ControllableService(
                 MonitorStub(self._monitor_service),
                 self._controllable_fty,
-                self._directory,
-            ))
+                self._directory))
 
     def _stop(self):
         pass

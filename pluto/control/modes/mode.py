@@ -8,13 +8,14 @@ from protos import controller_pb2
 from protos import clock_pb2
 
 class ControlMode(abc.ABC):
-    def __init__(self, framework_url, process_factory):
+    def __init__(self, framework_url, process_factory, thread_pool):
         '''
 
         Parameters
         ----------
         framework_url: str
         server: grpc.Server
+        thread_pool: concurrent.futures.ThreadPoolExecutor
         '''
 
         # maps session id to a session
@@ -33,6 +34,8 @@ class ControlMode(abc.ABC):
         self._process_factory = process_factory
         self._broker = brk = broker_service.BrokerService(self._create_broker())
         process_factory.set_broker_service(brk)
+
+        self._thread_pool = thread_pool
 
     @property
     def running_sessions(self):
@@ -53,13 +56,23 @@ class ControlMode(abc.ABC):
         # => the capital we be assigned on the next iteration => we re-balance the
         # capital on each loop we can still attribute available capital
 
-        processes = self._processes
+        pr = self._processes
         broker = self._broker
+
+        def stop(processes, session_id):
+            processes.pop(session_id).stop()
+
+        thread_pool = self._thread_pool
 
         for p in self._to_stop:
             # remove the controllable from the dict and stop it
             # this will liquidate all the positions
-            processes.pop(p).stop()
+
+            #set the session to liquidation
+            broker.set_to_liquidation(p)
+            #submit the stop call as a thread, since it blocks until it
+            #stops
+            thread_pool.submit(stop, processes=pr, session_id=p)
 
         params = self._params_buffer
         arguments = []
@@ -72,7 +85,7 @@ class ControlMode(abc.ABC):
                 session_id=p,
                 capital=capital,
                 max_leverage=max_leverage)
-            processes[p].parameter_update(params)
+            pr[p].parameter_update(params)
             arguments.append(params)
 
         with self._events_log.writer() as writer:
@@ -175,9 +188,9 @@ class ControlMode(abc.ABC):
         broker = self._broker
         framework_url = self._framework_url
 
-        def filter_to_run():
-            for r in to_run_ids:
-                yield params_per_id.get(r)
+        def filter_to_run(ppi, ids):
+            for r in ids:
+                yield ppi.get(r)
 
         # # create and initialize process so that we can run it later.
         # per_str_id = {}
@@ -196,7 +209,7 @@ class ControlMode(abc.ABC):
 
         mode = self.mode_type
 
-        for p in filter_to_run():
+        for p in filter_to_run(params_per_id, ids):
             # todo: should put these steps in a thread
             session_id = p.session_id
             process = self._create_process(session_id, framework_url)
@@ -210,6 +223,7 @@ class ControlMode(abc.ABC):
             start, end = p.start, p.end
 
             broker.add_market(session_id, sess.data_frequency, start, end, universe_name)
+            broker.add_session_id(session_id)
 
             process.initialize(
                 start=start,
