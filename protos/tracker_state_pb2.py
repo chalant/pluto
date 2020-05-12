@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x1aprotos/tracker_state.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\\\n\x0cTrackerState\x12\x36\n\x12\x66irst_open_session\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x14\n\x0cledger_state\x18\x02 \x01(\x0c\x62\x06proto3')
+  serialized_pb=_b('\n\x1aprotos/tracker_state.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x01\n\x0cTrackerState\x12\x36\n\x12\x66irst_open_session\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x14\n\x0cledger_state\x18\x02 \x01(\x0c\x12\x33\n\x0flast_checkpoint\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestampb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
@@ -48,6 +48,13 @@ _TRACKERSTATE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='last_checkpoint', full_name='TrackerState.last_checkpoint', index=2,
+      number=3, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -60,11 +67,12 @@ _TRACKERSTATE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=63,
-  serialized_end=155,
+  serialized_start=64,
+  serialized_end=209,
 )
 
 _TRACKERSTATE.fields_by_name['first_open_session'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_TRACKERSTATE.fields_by_name['last_checkpoint'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 DESCRIPTOR.message_types_by_name['TrackerState'] = _TRACKERSTATE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 

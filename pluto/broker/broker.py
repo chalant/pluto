@@ -139,6 +139,7 @@ class LiveSimulationBroker(Broker):
         blotter.open_orders[order.asset].append(order)
         blotter.orders[order.id] = order
         blotter.new_orders.append(order)
+        return order
 
     def cancel(self, session_id, order_id, relay_status=True):
         self._get_blotter(session_id).cancel(order_id, relay_status)

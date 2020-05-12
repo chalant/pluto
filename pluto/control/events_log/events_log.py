@@ -39,8 +39,6 @@ class AbstractEventsLog(object):
         raise NotImplementedError()
 
 class EventsLog(AbstractEventsLog):
-
-
     def __init__(self):
         root = paths.get_dir('control')
         dir_ = paths.get_dir('events', root)
@@ -164,20 +162,12 @@ class _EventsLogWriter(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._connection.close()
 
-_noop_events_log = None
-_events_log = None
 
 def get_events_log(mode='simulation'):
     if mode == 'live':
-        global _events_log
-        if not _events_log:
-            _events_log = EventsLog()
-        return _events_log
+        return EventsLog()
     else:
-        global _noop_events_log
-        if not _noop_events_log:
-            _noop_events_log = NoopEventsLog()
-        return _noop_events_log
+        return NoopEventsLog()
 
 class _Events(object):
     __slots__ = ['datetime', 'file_path']

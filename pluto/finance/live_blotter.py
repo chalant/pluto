@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from zipline.finance.blotter import blotter
 
 from pluto.finance import order as odr
@@ -7,7 +9,7 @@ from protos import broker_pb2
 
 
 class LiveBlotter(blotter.Blotter):
-    def __init__(self, broker, cancel_policy=None):
+    def __init__(self, session_id, broker, cancel_policy=None):
         '''
 
         Parameters
@@ -20,35 +22,49 @@ class LiveBlotter(blotter.Blotter):
         self._broker = broker
         self._orders = {}
         self._new_orders = {}
+        self._open_orders = defaultdict(list)
 
         self._transactions = []
         self._closed_orders = []
         self._commissions = []
 
         self._orders_placed = False
+        self._max_shares = int(1e+11)
+
+        self._metadata = (('session_id', session_id),)
+
+    @property
+    def open_orders(self):
+        return self._open_orders
 
     @property
     def new_orders(self):
-        #return a tuple so that values can't be changed
+        # return a tuple so that values can't be changed
         return tuple(self._new_orders.values())
 
     @new_orders.setter
     def new_orders(self, value):
-        #resets the new orders
+        # resets the new orders
         if not self._orders_placed:
-            #send orders buffered orders to the broker once before resetting
+            # send orders buffered orders to the broker once before resetting
             def generator(orders):
                 for order in orders:
-                    yield conversions.to_proto_order(order)
+                    yield conversions.to_proto_order(order.to_dict())
 
             # send orders to broker before resetting
             orders = self._orders
-            for order in self._broker.PlaceOrders(generator(
-                    self._new_orders.values())):
-                order = conversions.to_zp_order(order)
+            for order in self._broker.PlaceOrders(
+                    generator(self._new_orders.values()),
+                    self._metadata):
                 orders[order.id] = order
+                if order.open:
+                    self._open_orders[order.asset].append(order)
             self._orders_placed = True
         self._new_orders = {}
+
+    def process_splits(self, splits):
+        # handled by the broker
+        pass
 
     def get_transactions(self, bar_data):
         return self._transactions, self._commissions, self._closed_orders
@@ -57,15 +73,17 @@ class LiveBlotter(blotter.Blotter):
         return self._orders
 
     def order(self, asset, amount, style, order_id=None):
+        max_shares = self._max_shares
         if amount == 0:
             # Don't bother placing orders for 0 shares.
             return None
 
-        elif amount > self.max_shares:
+        elif amount > max_shares:
             # Arbitrary limit of 100 billion (US) shares will never be
             # exceeded except by a buggy algorithm.
-            raise OverflowError("Can't order more than %d shares" %
-                                self.max_shares)
+            raise OverflowError(
+                "Can't order more than {}d shares".format(
+                    max_shares))
 
         is_buy = (amount > 0)
         order = odr.Order(
@@ -94,18 +112,19 @@ class LiveBlotter(blotter.Blotter):
         except KeyError:
             # send cancel request to broker
             self._broker.CancelOrder(
-                broker_pb2.CancelRequest(order_id=order_id))
+                broker_pb2.CancelRequest(order_id=order_id),
+                self._metadata)
 
     def cancel_all_orders_for_asset(self, asset, warn=False, relay_status=True):
         self._broker.CancelAllOrdersForAsset(
-            conversions.to_proto_asset(asset))
+            conversions.to_proto_asset(asset),
+            self._metadata
+        )
 
     def execute_cancel_policy(self, event):
         self._broker.ExecuteCancelPolicy(
-            broker_pb2.Event(event_type=event))
-
-    def process_splits(self, splits):
-        pass
+            broker_pb2.CancelEvent(event_type=event),
+            self._metadata)
 
     def update(self, dt, broker_data):
         # called each minute

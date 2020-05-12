@@ -41,7 +41,7 @@ class SimulationControllable(controllable.Controllable):
     def _update_account(self, blotter, main_account):
         pass
 
-    def _create_blotter(self, universe, cancel_policy):
+    def _create_blotter(self, session_id, universe, cancel_policy):
         setup = stp.load_setup(universe)
         return simulation_blotter.SimulationBlotter(
             setup.get_commission_models(),

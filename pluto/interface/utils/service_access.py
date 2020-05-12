@@ -48,6 +48,11 @@ def per_session(func):
                 grpc.StatusCode.PERMISSION_DENIED,
                 'must specify session_id')
         else:
-            return func(instance, request, session_id)
+            if not session_id in instance.session_ids:
+                context.abort(
+                    grpc.StatusCode.PERMISSION_DENIED,
+                    'access to this service is forbidden')
+            else:
+                return func(instance, request, session_id)
     return wrapper
 

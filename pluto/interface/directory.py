@@ -419,9 +419,11 @@ class StubDirectory(object):
             strategies_dir = paths.get_dir('strategies')
             metadata_file = paths.get_file_path('metadata', strategies_dir)
             engine = db_utils.create_engine(metadata_file)
+
             self._session_factory = fct = db_utils.get_session_maker(engine)
             self._session = sess = fct()
             self._reader = _Read(sess, strategies_dir)
+
         return self
 
     def read(self):
@@ -485,22 +487,19 @@ class AbstractDirectory(ABC):
         if not os.path.isdir(root_dir):
             os.mkdir(root_dir)
         paths.setup_root(root_dir)
-        setup.prepare_variables()
-        # load setup parameters
-
-        # todo: we need some values for 'default' setup. this is for testing
-        # purposes
-        with tarfile.open(os.path.join(
-                core.zipline_git_root,
-                'pluto/resources/test_setup.tar.gz')) as tar:
-            tar.extractall(root_dir)
+        setup.setup_directory()
+        # load simulation setup parameters
+        self._load_simulation_setup(root_dir)
 
         self._strategy_dir = strategies_dir = paths.get_dir('strategies')
+
         metadata_file = paths.get_file_path('metadata', strategies_dir)
         engine = db_utils.create_engine(metadata_file)
+
         self._session_factory = fct = db_utils.get_session_maker(engine)
         self._session = sess = fct()
         self._reader = _Read(sess, strategies_dir)
+
         Base.metadata.create_all(engine)
         return self
 
@@ -515,6 +514,10 @@ class AbstractDirectory(ABC):
         raise NotImplementedError('_create_root_directory')
 
     @abstractmethod
+    def _load_simulation_setup(self, root_dir):
+        raise NotImplementedError
+
+    @abstractmethod
     def _exit(self, root_dir):
         raise NotImplementedError('_exit')
 
@@ -523,13 +526,24 @@ class _Directory(AbstractDirectory):
     def _create_root_directory(self):
         return os.path.expanduser('~/.pluto')
 
+    def _load_simulation_setup(self, root_dir):
+        # todo: we need some values for 'default' setup. this is for testing
+        # purposes
+        raise NotImplementedError
+
     def _exit(self, root_dir):
         pass
 
 
-class _TempDirectory(AbstractDirectory):
+class _TestDirectory(AbstractDirectory):
     def _create_root_directory(self):
         return os.path.expanduser('~/tmp/pluto')
+
+    def _load_simulation_setup(self, root_dir):
+        with tarfile.open(os.path.join(
+                core.zipline_git_root,
+                'pluto/resources/test_setup.tar.gz')) as tar:
+            tar.extractall(root_dir)
 
     def _exit(self, root_dir):
         # delete everything
@@ -543,7 +557,7 @@ def get_directory(environment):
     global _DIRECTORY
     if not _DIRECTORY:
         if environment == 'test':
-            _DIRECTORY = _TempDirectory()
+            _DIRECTORY = _TestDirectory()
         else:
             _DIRECTORY = _Directory()
     return _DIRECTORY

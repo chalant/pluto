@@ -56,7 +56,7 @@ class BrokerServicer(broker_rpc.BrokerServicer):
 
     def Transactions(self, request, context):
         self._check_metadata(context)
-        for trx in self._get_dict_values(self._broker.transactions(cv.to_pandas_timestamp(request.dt))):
+        for trx in self._get_dict_values(self._broker.transactions(cv.to_datetime(request.dt))):
             yield cv.to_proto_transaction(trx)
 
     def SingleOrder(self, request, context):

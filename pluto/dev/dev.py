@@ -90,7 +90,7 @@ class DevService(development.EnvironmentServicer):
         # set monitor in-case we have an in-memory process factory
         process_factory.set_monitor_service(mon)
 
-        self._controller = sim_ctl = \
+        self._controller = ctl = \
             controllerservice.ControllerService(
                 directory,
                 controller.Controller(
@@ -98,7 +98,7 @@ class DevService(development.EnvironmentServicer):
                     end))
 
         # enable controller service
-        ctl_rpc.add_ControllerServicer_to_server(sim_ctl, self._server)
+        ctl_rpc.add_ControllerServicer_to_server(ctl, self._server)
 
         return dev_rpc.SetupResponse(session_id=session.id)
 

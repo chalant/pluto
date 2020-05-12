@@ -1,6 +1,7 @@
 import abc
 
 from pluto.interface.utils import service_access
+from pluto.coms.utils import conversions
 
 from protos import broker_pb2_grpc
 
@@ -13,21 +14,26 @@ class BrokerStub(abc.ABC):
     def session_id(self):
         return self._session_id
 
+    @service_access.framework_method
     @service_access.session_method
-    def PlaceOrders(self, request, metadata=None):
-        self._place_orders(request, metadata)
+    def PlaceOrders(self, request, metadata):
+        for order in self._place_orders(request, metadata):
+            yield conversions.to_zp_order(order)
 
+    @service_access.framework_method
     @service_access.session_method
-    def CancelAllOrdersForAsset(self, request, metadata=None):
-        self._cancel_all_orders_for_asset(request, metadata)
+    def CancelAllOrdersForAsset(self, request, metadata):
+        return self._cancel_all_orders_for_asset(request, metadata)
 
+    @service_access.framework_method
     @service_access.session_method
-    def CancelOrder(self, request, metadata=None):
-        self._cancel_order(request, metadata)
+    def CancelOrder(self, request, metadata):
+        return self._cancel_order(request, metadata)
 
+    @service_access.framework_method
     @service_access.session_method
-    def ExecuteCancelPolicy(self, request, metadata=None):
-        self._execute_cancel_policy(request, metadata)
+    def ExecuteCancelPolicy(self, request, metadata):
+        return self._execute_cancel_policy(request, metadata)
 
     @abc.abstractmethod
     def _execute_cancel_policy(self, request, metadata):
@@ -53,13 +59,13 @@ class ProcessBrokerStub(BrokerStub):
             channel)
 
     def _place_orders(self, request_iterator, metadata):
-        self._stub.PlaceOrders(request_iterator, metadata=metadata)
+        return self._stub.PlaceOrders(request_iterator, metadata=metadata)
 
     def _cancel_order(self, request, metadata):
-        self._stub.CancelOrder(request, metadata=metadata)
+        return self._stub.CancelOrder(request, metadata=metadata)
 
     def _cancel_all_orders_for_asset(self, request, metadata):
-        self._stub.CancelAllOrdersForAsset(request, metadata=metadata)
+        return self._stub.CancelAllOrdersForAsset(request, metadata=metadata)
 
     def _execute_cancel_policy(self, request, metadata):
-        self._stub.ExecuteCancelPolicy(request, metadata=metadata)
+        return self._stub.ExecuteCancelPolicy(request, metadata=metadata)

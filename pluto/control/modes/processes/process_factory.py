@@ -10,7 +10,10 @@ from protos import controllable_pb2 as cbl
 
 class ProcessFactory(abc.ABC):
     def create_process(self, session_id, framework_url):
-        return self._create_process(framework_url, session_id, paths.root())
+        return self._create_process(
+            framework_url,
+            session_id,
+            paths.root())
 
     @abc.abstractmethod
     def _create_process(self, framework_url, session_id, root_dir):
@@ -78,7 +81,6 @@ class Process(abc.ABC):
             session_id,
             root_dir)
         self._session_id = session_id
-        self._metadata = (('session_id', session_id),)
 
     @property
     def session_id(self):
@@ -108,6 +110,13 @@ class Process(abc.ABC):
             broker_state, ())
 
     def stop(self):
+        #upon receiving the stop message, the controllable will
+        # perform the necessary steps (liquidate positions, update its metrics
+        # with data from broker, send back performance metrics). Once all that is
+        # done, it will "unblock", then the process will be shutdown.
+        # note: the call will be released when all the orders have been processed
+        # this means that the process will still receive broker updates
+
         self._controllable.Stop(emp.Empty, ())
         self._stop()
 

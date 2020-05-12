@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x19protos/ledger_state.proto\x1a\x15protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe7\x01\n\x0bLedgerState\x12\x1d\n\tportfolio\x18\x01 \x01(\x0b\x32\n.Portfolio\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12\x33\n\x0flast_checkpoint\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x04 \x03(\x0b\x32\x06.Order\x12\x31\n\rfirst_session\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1e\n\rdaily_returns\x18\x06 \x03(\x0b\x32\x07.Return\"F\n\x06Return\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05value\x18\x02 \x01(\x02\x62\x06proto3')
+  serialized_pb=_b('\n\x19protos/ledger_state.proto\x1a\x15protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xfe\x01\n\x0bLedgerState\x12\x1d\n\tportfolio\x18\x01 \x01(\x0b\x32\n.Portfolio\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12\x33\n\x0flast_checkpoint\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x04 \x03(\x0b\x32\x06.Order\x12\x31\n\rfirst_session\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1e\n\rdaily_returns\x18\x06 \x03(\x0b\x32\x07.Return\x12\x15\n\rsession_count\x18\x07 \x01(\x05\"F\n\x06Return\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05value\x18\x02 \x01(\x02\x62\x06proto3')
   ,
   dependencies=[protos_dot_protocol__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
@@ -77,6 +77,13 @@ _LEDGERSTATE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='session_count', full_name='LedgerState.session_count', index=6,
+      number=7, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -90,7 +97,7 @@ _LEDGERSTATE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=86,
-  serialized_end=317,
+  serialized_end=340,
 )
 
 
@@ -127,8 +134,8 @@ _RETURN = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=319,
-  serialized_end=389,
+  serialized_start=342,
+  serialized_end=412,
 )
 
 _LEDGERSTATE.fields_by_name['portfolio'].message_type = protos_dot_protocol__pb2._PORTFOLIO

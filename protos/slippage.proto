@@ -10,3 +10,8 @@ message FixedPointsBasis {
     float basis_points = 1;
     float volume_limit = 2;
 }
+
+message VolumeShare {
+    float volume_limit = 1;
+    float price_impact = 2;
+}

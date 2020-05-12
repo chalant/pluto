@@ -3,6 +3,7 @@ import contextlib2 as ctx
 from os import path, environ
 import tarfile
 import logging
+from concurrent import futures
 
 from nose_parameterized import parameterized
 import pandas as pd
@@ -117,15 +118,16 @@ def _compare_df(desired, actual):
 
 
 class PlutoExamplesTests(unittest.TestCase):
-    @classmethod
-    def setUp(cls) -> None:
-        cls._exit_stack = stack = ctx.ExitStack()
-        cls._pluto_tempdir = stack.enter_context(
+    def setUp(self) -> None:
+        self._exit_stack = stack = ctx.ExitStack()
+        self._thread_pool = stack.enter_context(
+            futures.ThreadPoolExecutor(10))
+        self._pluto_tempdir = stack.enter_context(
             directory.get_directory('test'))
 
         bundles.register('test', lambda *args: None)
 
-        cls._zpl_tempdir = dir_ = stack.enter_context(
+        self._zpl_tempdir = dir_ = stack.enter_context(
             core.tmp_dir(path=path.expanduser('~/tmp/zipline')))
 
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
@@ -133,7 +135,7 @@ class PlutoExamplesTests(unittest.TestCase):
 
         environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
-        cls._expected_perf = cache.dataframe_cache(
+        self._expected_perf = cache.dataframe_cache(
             dir_.getpath(
                 'example_data/expected_perf/%s' %
                 pd.__version__.replace('.', '-'),
@@ -141,32 +143,42 @@ class PlutoExamplesTests(unittest.TestCase):
             serialization='pickle',
         )
 
-        cls._framework_url = '[::]:50051'
+        self._framework_url = '[::]:50051'
 
-    @classmethod
-    def tearDown(cls) -> None:
+    def tearDown(self) -> None:
         bundles.unregister('test')
-        cls._exit_stack.close()
+        self._exit_stack.close()
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
+        thread_pool = self._thread_pool
         framework_url = self._framework_url
+
         client = test.InMemoryTestClient(
             self._pluto_tempdir,
             framework_url,
-            mode_utils.SimulationModeFactory(framework_url),
-            loop_utils.SimpleSimulationLoopFactory())
+            mode_utils.SimulationModeFactory(
+                thread_pool,
+                framework_url),
+            loop_utils.SimpleSimulationLoopFactory(),
+            thread_pool)
+
         _run(client, example_name, self._expected_perf)
 
-    # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
-    # def test_live_simulation(self, example_name):
-    #     framework_url = self._framework_url
-    #     client = test.InMemoryTestClient(
-    #         self._pluto_tempdir,
-    #         framework_url,
-    #         mode_utils.LiveSimulationModeFactory(
-    #             framework_url,
-    #             factory.LiveSimulationMarketFactory(
-    #                 blotter_factory.MultiSimulationBlotterFactory())),
-    #         loop_utils.SimpleSimulationLoopFactory())
-    #     _run(client, example_name, self._expected_perf)
+    @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
+    def test_live_simulation(self, example_name):
+        thread_pool = self._thread_pool
+        framework_url = self._framework_url
+
+        client = test.InMemoryTestClient(
+            self._pluto_tempdir,
+            framework_url,
+            mode_utils.LiveSimulationModeFactory(
+                framework_url,
+                factory.LiveSimulationMarketFactory(
+                    blotter_factory.MultiSimulationBlotterFactory()),
+                thread_pool),
+            loop_utils.SimpleSimulationLoopFactory(),
+            thread_pool)
+
+        _run(client, example_name, self._expected_perf)

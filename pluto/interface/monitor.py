@@ -1,4 +1,3 @@
-import threading
 import queue
 
 from google.protobuf import empty_pb2 as emp
@@ -10,10 +9,7 @@ from protos import interface_pb2 as msg
 
 class _Watcher(object):
     def __init__(self, process):
-        self._event = threading.Event()
         self._process = process
-
-        self._packet = None
         self._queue = queue.Queue()
 
     def watch(self):
@@ -56,8 +52,7 @@ class Monitor(itf.MonitorServicer):
         pr = self._control_mode.get_process(session_id)
         pr.watch()
         self._watch_list[session_id] = watcher = _Watcher(pr)
-        for packet in watcher.watch():
-            yield packet
+        return watcher.watch()
 
     def StopWatching(self, request, context):
         pr = self._watch_list.pop(request.session_id, None)

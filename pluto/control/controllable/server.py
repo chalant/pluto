@@ -26,43 +26,6 @@ from protos.clock_pb2 import (
     TRADE_END)
 
 
-class _NoneObserver(object):
-    def clear(self):
-        pass
-
-    def update(self, performance, end):
-        pass
-
-
-class _Observer(object):
-    def __init__(self, monitor_stub, file_path, session_id):
-        self._stub = monitor_stub
-        self._reload = True
-        self._file_path = file_path
-        self._session_id = session_id
-
-    def clear(self):
-        self._reload = True
-
-    def update(self, performance, end):
-        stub = self._stub
-        session_id = self._session_id
-        if self._reload == True:
-            for packet in io.read_perf(self._file_path):
-                service_access.invoke(
-                    stub.PerformanceUpdate,
-                    itf.Packet(
-                        packet=packet,
-                        session_id=session_id))
-            self._reload = False
-        service_access.invoke(
-            stub.PerformanceUpdate,
-            itf.Packet(
-                packet=performance,
-                session_id=session_id,
-                end=end))
-
-
 class _StateStorage(object):
     def __init__(self, storage_path, thread_pool):
         '''
@@ -77,7 +40,7 @@ class _StateStorage(object):
 
     def _write(self, state):
         # todo: should we append instead of over-writing?
-        with(self._storage_path, 'wb') as f:
+        with open(self._storage_path, 'wb') as f:
             f.write(state)
 
     def store(self, dt, controllable):
@@ -153,6 +116,77 @@ class _Ready(_ServiceState):
     def _execute(self, service, command, controllable):
         command()
 
+class _NoneObserver(object):
+    def clear(self):
+        pass
+
+    def update(self, performance, end):
+        pass
+
+    def stream(self):
+        pass
+
+
+class _Observer(object):
+    def __init__(self, monitor_stub, file_path, session_id):
+        self._stub = monitor_stub
+        self._reload = True
+        self._file_path = file_path
+        self._session_id = session_id
+
+    def clear(self):
+        self._reload = True
+
+    def update(self, performance, end):
+        stub = self._stub
+        session_id = self._session_id
+        if self._reload == True:
+            self._stream(stub, session_id)
+            self._reload = False
+        service_access.invoke(
+            stub.PerformanceUpdate,
+            itf.Packet(
+                packet=performance,
+                session_id=session_id,
+                end=end))
+
+    def stream(self):
+        session_id = self._session_id
+        stub = self._stub
+
+        itr = iter(io.read_perf(self._file_path))
+        try:
+            n0 = next(itr)
+            while True:
+                try:
+                    n1 = next(itr)
+                    service_access.invoke(
+                        stub.PerformanceUpdate,
+                        itf.Packet(
+                            packet=n0,
+                            session_id=session_id))
+                    n0 = n1
+                except StopIteration:
+                    service_access.invoke(
+                        stub.PerformanceUpdate,
+                        itf.Packet(
+                            packet=n0,
+                            session_id=session_id,
+                            end=True))
+                    break
+        except StopIteration:
+            pass
+
+        # self._stream(self._stub, self._session_id)
+
+    def _stream(self, stub, session_id):
+        for packet in io.read_perf(self._file_path):
+            service_access.invoke(
+                stub.PerformanceUpdate,
+                itf.Packet(
+                    packet=packet,
+                    session_id=session_id))
+
 
 class _PerformanceWriter(object):
     # class for writing performance in some file...
@@ -176,6 +210,7 @@ class _PerformanceWriter(object):
         self._none_observer = none = _NoneObserver()
         self._observer = _Observer(monitor_stub, file_path, session_id)
         self._current_observer = none
+        self._ended = False
 
         self._lock = threading.Lock()
 
@@ -193,13 +228,21 @@ class _PerformanceWriter(object):
         #     performance=performance,
         #     end=end,
         #     path=self._path))
-        self._write(performance, end, self._path)
+        with self._lock:
+            self._write(performance, end, self._path)
+            self._ended = end
 
     def observe(self):
         with self._lock:
             observer = self._observer
-            observer.clear()
-            self._current_observer = observer
+            if self._ended == True:
+                self._thread_pool.submit(
+                    observer.stream)
+                # observer.stream()
+            else:
+                #clear so that we can stream from the beginning
+                observer.clear()
+                self._current_observer = observer
 
     def stop_observing(self):
         with self._lock:
@@ -394,7 +437,9 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     @service_access.framework_only
     def Stop(self, request, context):
-        # todo needs to liquidate positions and wipe the state.
+        #todo needs to liquidate positions and wipe the state.
+        # multiple steps to execute: place orders, wait for all of them
+        # to be executed, update performances, then return
         self._stop = True
         return emp.Empty()
 
@@ -435,11 +480,11 @@ class ControllableService(cbl_rpc.ControllableServicer):
         )
         return emp.Empty()
 
-    @service_access.framework_only
+    # @service_access.framework_only
     def Watch(self, request, context):
         self._perf_writer.observe()
 
-    @service_access.framework_only
+    # @service_access.framework_only
     def StopWatching(self, request, context):
         self._perf_writer.stop_observing()
 
