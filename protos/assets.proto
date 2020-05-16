@@ -2,16 +2,20 @@ syntax = "proto3";
 import "google/protobuf/timestamp.proto";
 
 message Asset {
-    int32 sid = 1;
-    string symbol = 2;
-    string asset_name = 3;
-    google.protobuf.Timestamp start_date = 4;
-    google.protobuf.Timestamp end_date = 5;
-    google.protobuf.Timestamp first_traded = 6;
-    google.protobuf.Timestamp auto_close_date = 7;
-    string exchange = 8;
-    string exchange_full = 9;
-    string country_code = 10;
-    float tick_size = 11;
-    float multiplier = 12;
+    string type = 1;
+    int32 sid = 2;
+    string symbol = 3;
+    string asset_name = 4;
+    google.protobuf.Timestamp start_date = 5;
+    google.protobuf.Timestamp end_date = 6;
+    google.protobuf.Timestamp first_traded = 7;
+    google.protobuf.Timestamp auto_close_date = 8;
+    string exchange = 9;
+    string exchange_full = 10;
+    string country_code = 11;
+    float tick_size = 12;
+    float multiplier = 13;
+    string root_symbol = 14;
+    google.protobuf.Timestamp expiration_date = 15;
+    google.protobuf.Timestamp notice_date = 16;
 }

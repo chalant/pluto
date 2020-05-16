@@ -21,7 +21,7 @@ class BrokerService(brk_rpc.BrokerServicer):
         self._session_ids = {}
 
     def update(self, dt, evt, signals):
-        self._broker.update(dt, evt, signals)
+        return self._broker.update(dt, evt, signals)
 
     def compute_capital(self, capital_ratio):
         return self._broker.compute_capital(capital_ratio)
@@ -50,8 +50,7 @@ class BrokerService(brk_rpc.BrokerServicer):
             yield conversions.to_proto_order(
                 broker.order(
                     session_id,
-                    conversions.to_zp_order(order)
-                ).to_dict())
+                    conversions.to_zp_order(order)).to_dict())
         session_ids = self._session_ids
 
         #remove the session_id from the dict after processing

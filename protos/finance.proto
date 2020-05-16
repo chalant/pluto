@@ -8,4 +8,5 @@ message Transaction {
     int64 amount = 2;
     google.protobuf.Timestamp dt = 3;
     float price = 4;
+    string order_id = 5;
 }

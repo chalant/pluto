@@ -126,7 +126,7 @@ class LiveBlotter(blotter.Blotter):
             broker_pb2.CancelEvent(event_type=event),
             self._metadata)
 
-    def update(self, dt, broker_data):
+    def update(self, broker_data):
         # called each minute
         commissions = self._commissions
         closed_orders = self._closed_orders
@@ -140,8 +140,8 @@ class LiveBlotter(blotter.Blotter):
                 transactions.append(transaction)
 
         for commission in broker_data.commissions:
-            order = commission.order
-            order_id = order.order_id
+            order = conversions.to_zp_order(commission.order)
+            order_id = order.id
             o = orders.get(order_id, None)
             if o:
                 commissions.append({

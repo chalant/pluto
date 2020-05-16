@@ -3,6 +3,7 @@ import abc
 from zipline import protocol
 from zipline.finance import asset_restrictions
 
+from pluto.coms.utils import conversions
 from pluto.control.controllable import synchronization_states as ss
 
 
@@ -53,8 +54,9 @@ class LiveSimulationMarket(Market):
         blotter_factory: pluto.control.modes.market.blotter_factory.SimulationBlotterFactory
         '''
         self._dp = dtp = data_portal
-        self._sst = ss.Tracker(universe.calendars)
+        self._sst = sst = ss.Tracker(universe.calendars)
 
+        sst.state = sst.out_session
         self._blotter_factory = blotter_factory
         self._current_dt = None
 
@@ -77,7 +79,7 @@ class LiveSimulationMarket(Market):
         s = self._sst.aggregate(dt, evt, signals)
         if s:
             dt, evt, exchanges = s
-            self._current_dt = dt
+            self._current_dt = conversions.to_datetime(dt)
             for blotter in self._blotter_factory.blotters:
                 new_transactions, new_commissions, closed_orders = \
                     blotter.get_transactions(self._current_data)

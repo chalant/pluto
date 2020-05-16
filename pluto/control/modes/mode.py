@@ -3,6 +3,7 @@ import abc
 from pluto.control.events_log import events_log
 from pluto.coms.utils import conversions
 from pluto.broker import broker_service
+from pluto.utils import stream
 
 from protos import controller_pb2
 from protos import clock_pb2
@@ -149,9 +150,12 @@ class ControlMode(abc.ABC):
                 evt,
                 signals)
 
+            # print('STATE', broker_state)
+
             if broker_state:
+                bytes_ = broker_state.SerializeToString()
                 for process in self._processes.values():
-                    process.account_update(broker_state)
+                    process.account_update(stream.chunk_bytes(bytes_))
                 writer.write_event('broker', broker_state)
 
     def add_strategies(self, directory, params):

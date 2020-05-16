@@ -32,9 +32,9 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
                 # running additional strategies while running...
                 context.set_code(grpc.StatusCode.UNAVAILABLE)
                 context.set_details(str(e))
-            except KeyError as e:
-                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                context.set_details(str(e))
+            # except KeyError as e:
+            #     context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+            #     context.set_details(str(e))
         return controller_pb2.RunResponse()
 
     def Stop(self, request, context):

@@ -278,8 +278,8 @@ def do_order(context, data):
                 style=StopLimitOrder(10, 10, asset=self.EQUITY),
             )
 
-            assert len(context.blotter.open_orders[self.EQUITY]) == 1
-            result = context.blotter.open_orders[self.EQUITY][0]
+            assert len(context.blotter._open_orders[self.EQUITY]) == 1
+            result = context.blotter._open_orders[self.EQUITY][0]
             assert result.limit == 10
             assert result.stop == 10
 

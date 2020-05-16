@@ -20,8 +20,16 @@ message Order {
         HELD = 4;
     }
     Status status = 14;
-    float stop = 9;
-    float limit = 10;
+    message Stop {
+        bool is_set = 1;
+        float value = 2;
+    }
+    message Limit {
+        bool is_set = 1;
+        float value = 2;
+    }
+    Stop stop = 9;
+    Limit limit = 10;
     bool stop_reached = 11;
     bool limit_reached = 12;
     int64 broker_order_id = 13;

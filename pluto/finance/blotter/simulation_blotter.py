@@ -18,7 +18,7 @@ class SimulationBlotter(blotter.Blotter):
         super(SimulationBlotter, self).__init__(cancel_policy)
 
         # these orders are aggregated by asset
-        self.open_orders = defaultdict(list)
+        self._open_orders = defaultdict(list)
 
         # keep a dict of orders by their own id
         self.orders = {}
@@ -43,10 +43,14 @@ class SimulationBlotter(blotter.Blotter):
     """.strip().format(class_name=self.__class__.__name__,
                        slippage_models=self.slippage_models,
                        commission_models=self.commission_models,
-                       open_orders=self.open_orders,
+                       open_orders=self._open_orders,
                        orders=self.orders,
                        new_orders=self.new_orders,
                        current_dt=self.current_dt)
+
+    @property
+    def open_orders(self):
+        return self._open_orders
 
     @expect_types(asset=Asset)
     def order(self, asset, amount, style, order_id=None):
@@ -104,7 +108,7 @@ class SimulationBlotter(blotter.Blotter):
             id=order_id
         )
 
-        self.open_orders[order.asset].append(order)
+        self._open_orders[order.asset].append(order)
         self.orders[order.id] = order
         self.new_orders.append(order)
 
@@ -117,7 +121,7 @@ class SimulationBlotter(blotter.Blotter):
         cur_order = self.orders[order_id]
 
         if cur_order.open:
-            order_list = self.open_orders[cur_order.asset]
+            order_list = self._open_orders[cur_order.asset]
             if cur_order in order_list:
                 order_list.remove(cur_order)
 
@@ -136,7 +140,7 @@ class SimulationBlotter(blotter.Blotter):
         Cancel all open orders for a given asset.
         """
         # (sadly) open_orders is a defaultdict, so this will always succeed.
-        orders = self.open_orders[asset]
+        orders = self._open_orders[asset]
 
         # We're making a copy here because `cancel` mutates the list of open
         # orders in place.  The right thing to do here would be to make
@@ -186,12 +190,12 @@ class SimulationBlotter(blotter.Blotter):
                     )
 
         assert not orders
-        del self.open_orders[asset]
+        del self._open_orders[asset]
 
     def execute_cancel_policy(self, event):
         if self.cancel_policy.should_cancel(event):
             warn = self.cancel_policy.warn_on_cancel
-            for asset in copy(self.open_orders):
+            for asset in copy(self._open_orders):
                 self.cancel_all_orders_for_asset(asset, warn,
                                                  relay_status=False)
 
@@ -207,7 +211,7 @@ class SimulationBlotter(blotter.Blotter):
 
         cur_order = self.orders[order_id]
 
-        order_list = self.open_orders[cur_order.asset]
+        order_list = self._open_orders[cur_order.asset]
         if cur_order in order_list:
             order_list.remove(cur_order)
 
@@ -252,10 +256,10 @@ class SimulationBlotter(blotter.Blotter):
         None
         """
         for asset, ratio in splits:
-            if asset not in self.open_orders:
+            if asset not in self._open_orders:
                 continue
 
-            orders_to_modify = self.open_orders[asset]
+            orders_to_modify = self._open_orders[asset]
             for order in orders_to_modify:
                 order.handle_split(ratio)
 
@@ -293,8 +297,8 @@ class SimulationBlotter(blotter.Blotter):
         transactions = []
         commissions = []
 
-        if self.open_orders:
-            for asset, asset_orders in self.open_orders.items():
+        if self._open_orders:
+            for asset, asset_orders in self._open_orders.items():
                 asset_type = type(asset)
                 slippage = self.slippage_models.get_slippage_model(asset_type)
 
@@ -310,7 +314,7 @@ class SimulationBlotter(blotter.Blotter):
                     if additional_commission > 0:
                         commissions.append({
                             "asset": order.asset,
-                            "order": order,
+                            "order": order.to_dict(),
                             "cost": additional_commission
                         })
 
@@ -341,7 +345,7 @@ class SimulationBlotter(blotter.Blotter):
         # remove all closed orders from our open_orders dict
         for order in closed_orders:
             asset = order.asset
-            asset_orders = self.open_orders[asset]
+            asset_orders = self._open_orders[asset]
             try:
                 asset_orders.remove(order)
             except ValueError:
@@ -349,6 +353,6 @@ class SimulationBlotter(blotter.Blotter):
 
         # now clear out the assets from our open_orders dict that have
         # zero open orders
-        for asset in list(self.open_orders.keys()):
-            if len(self.open_orders[asset]) == 0:
-                del self.open_orders[asset]
+        for asset in list(self._open_orders.keys()):
+            if len(self._open_orders[asset]) == 0:
+                del self._open_orders[asset]
