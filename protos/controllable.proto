@@ -13,12 +13,12 @@ service Controllable {
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
     rpc Initialize (InitParams) returns (google.protobuf.Empty);
     rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
-    //for updating positions, transactions etc.
+    //sends broker state
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
     rpc Stop (StopRequest) returns (google.protobuf.Empty);
 
-    rpc Watch(google.protobuf.Empty) returns (google.protobuf.Empty);
-    rpc StopWatching(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc Watch (google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 message InitParams {

@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x14protos/finance.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/assets.proto\"\x91\x01\n\x0bTransaction\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x02\x12&\n\x02\x64t\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05price\x18\x04 \x01(\x02\x12\x10\n\x08order_id\x18\x05 \x01(\t\x12\x12\n\ncommission\x18\x06 \x01(\x02\x62\x06proto3')
+  serialized_pb=_b('\n\x14protos/finance.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/assets.proto\"}\n\x0bTransaction\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x03\x12&\n\x02\x64t\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05price\x18\x04 \x01(\x02\x12\x10\n\x08order_id\x18\x05 \x01(\tb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,])
 
@@ -44,8 +44,8 @@ _TRANSACTION = _descriptor.Descriptor(
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='amount', full_name='Transaction.amount', index=1,
-      number=2, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
+      number=2, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -70,13 +70,6 @@ _TRANSACTION = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
-    _descriptor.FieldDescriptor(
-      name='commission', full_name='Transaction.commission', index=5,
-      number=6, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -89,8 +82,8 @@ _TRANSACTION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=79,
-  serialized_end=224,
+  serialized_start=78,
+  serialized_end=203,
 )
 
 _TRANSACTION.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET

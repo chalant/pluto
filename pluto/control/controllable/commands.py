@@ -13,33 +13,50 @@ class StopExecution(Exception):
     pass
 
 class Command(abc.ABC):
-    __slots__ = ['request']
+    __slots__ = ['_request', '_controllable']
 
-    def __init__(self, request):
+    def __init__(self, controllable, request):
+        self._controllable = controllable
         self._request = request
 
     def __call__(self):
-        self._execute(self._request)
+        self._execute(self._controllable, self._request)
 
     @property
     def dt(self):
         return self._request.dt
 
     @abc.abstractmethod
-    def _execute(self, request):
+    def _execute(self, controllable, request):
+        '''
+
+        Parameters
+        ----------
+        controllable: pluto.control.controllable.controllable.Controllable
+        request
+
+        Returns
+        -------
+
+        '''
         raise NotImplementedError('{}'.format_map(self._execute.__name__))
 
 
 class CapitalUpdate(Command):
-    __slots__ = ['_controllable']
+    __slots__ = ['_controllable', '_request']
 
     def __init__(self, controllable, request):
-        super(CapitalUpdate, self).__init__(request)
-        self._controllable = controllable
+        super(CapitalUpdate, self).__init__(controllable, request)
 
-    def _execute(self, request):
+    def _execute(self, controllable, request):
         raise NotImplementedError
 
+class AccountUpdate(Command):
+    def __init__(self, controllable, request):
+        super(AccountUpdate, self).__init__(controllable, request)
+
+    def _execute(self, controllable, request):
+        controllable.update_blotter(request)
 
 class ClockUpdate(Command):
     __slots__ = [
@@ -65,19 +82,17 @@ class ClockUpdate(Command):
         request
         state_store
         '''
-        super(ClockUpdate, self).__init__(request)
+        super(ClockUpdate, self).__init__(controllable, request)
         self._perf_writer = perf_writer
-        self._controllable = controllable
         self._frequency_filter = frequency_filter
         self._state_store = state_store
 
-    def _execute(self, request):
+    def _execute(self, controllable, request):
         # todo: what about capital updates etc? => each request is bound to a function
         # ex:
         evt = request.event
         dt = conversions.to_datetime(request.timestamp)
         signals = request.signals
-        controllable = self._controllable
 
         s = controllable.state.aggregate(dt, evt, signals)
         if s:

@@ -445,7 +445,7 @@ class Controllable(ABC):
         # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
                 metrics_tracker.positions.keys() |
-                algo.blotter.open_orders.keys()
+                algo.blotter._open_orders.keys()
         )
 
         if assets_we_care_about:
@@ -731,7 +731,7 @@ class Controllable(ABC):
         # would not be processed until the first bar of the next day.
 
         assets_to_cancel = [
-            asset for asset in blotter.open_orders
+            asset for asset in blotter._open_orders
             if past_auto_close_date(asset)
         ]
         for asset in assets_to_cancel:

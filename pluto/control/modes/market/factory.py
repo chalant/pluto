@@ -4,6 +4,7 @@ from zipline.data import data_portal as dp
 
 from pluto.control.modes.market import market
 from pluto.data.universes import universes
+from pluto.coms.utils import conversions
 
 from protos import broker_pb2
 from protos import clock_pb2
@@ -98,20 +99,20 @@ class LiveSimulationMarketFactory(MarketFactory):
         if evt == clock_pb2.BAR:
             markets = self._markets['minute'].values()
             for txn, cms in self._chain_transactions(dt, evt, markets, signals):
-                transactions.extend(txn)
-                commissions.extend(cms)
+                transactions.extend(conversions.to_proto_transaction(txn))
+                commissions.extend(conversions.to_proto_commission(cms))
             return broker_pb2.BrokerState(
                 transactions=transactions,
                 commissions=commissions)
 
-        elif evt == clock_pb2.TRADE_END:
+        else:
             markets = []
             mkt = self._markets
             markets.extend(mkt['daily'].values())
             markets.extend(mkt['minute'].values())
             for txn, cms in self._chain_transactions(dt, evt, markets, signals):
-                transactions.extend(txn)
-                commissions.extend(cms)
+                transactions.extend(conversions.to_proto_transaction(t.to_dict()) for t in txn)
+                commissions.extend(conversions.to_proto_commission(c) for c in cms)
             return broker_pb2.BrokerState(
                 transactions=transactions,
                 commissions=commissions)
@@ -119,6 +120,5 @@ class LiveSimulationMarketFactory(MarketFactory):
     def _chain_transactions(self, dt, evt, markets, signals):
         for mkt in markets:
             for transactions in mkt.get_transactions(dt, evt, signals):
-                print('TRANSACTIONS', transactions)
                 if transactions:
                     yield transactions

@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x15protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/assets.proto\"\x8b\x03\n\x05Order\x12\n\n\x02id\x18\x01 \x01(\t\x12&\n\x02\x64t\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12+\n\x07\x63reated\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x61sset\x18\x05 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x06 \x01(\x02\x12\x0e\n\x06\x66illed\x18\x07 \x01(\x05\x12\x12\n\ncommission\x18\x08 \x01(\x02\x12\x1d\n\x06status\x18\x0e \x01(\x0e\x32\r.Order.Status\x12\x0c\n\x04stop\x18\t \x01(\x02\x12\r\n\x05limit\x18\n \x01(\x02\x12\x14\n\x0cstop_reached\x18\x0b \x01(\x08\x12\x15\n\rlimit_reached\x18\x0c \x01(\x08\x12\x17\n\x0f\x62roker_order_id\x18\r \x01(\x03\"D\n\x06Status\x12\x08\n\x04OPEN\x10\x00\x12\n\n\x06\x46ILLED\x10\x01\x12\x0c\n\x08\x43\x41NCELED\x10\x02\x12\x0c\n\x08REJECTED\x10\x03\x12\x08\n\x04HELD\x10\x04\"\x92\x01\n\x08Position\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x03\x12\x12\n\ncost_basis\x18\x03 \x01(\x02\x12\x17\n\x0flast_sale_price\x18\x04 \x01(\x02\x12\x32\n\x0elast_sale_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xd0\x03\n\x07\x41\x63\x63ount\x12\x14\n\x0csettled_cash\x18\x01 \x01(\x02\x12\x18\n\x10\x61\x63\x63rued_interest\x18\x02 \x01(\x02\x12\x14\n\x0c\x62uying_power\x18\x03 \x01(\x02\x12\x18\n\x10\x65quity_with_loan\x18\x04 \x01(\x02\x12\x1d\n\x15total_positions_value\x18\x05 \x01(\x02\x12 \n\x18total_positions_exposure\x18\x06 \x01(\x02\x12\x13\n\x0bregt_equity\x18\x07 \x01(\x02\x12\x13\n\x0bregt_margin\x18\x08 \x01(\x02\x12\"\n\x1ainitial_margin_requirement\x18\t \x01(\x02\x12&\n\x1emaintenance_margin_requirement\x18\n \x01(\x02\x12\x17\n\x0f\x61vailable_funds\x18\x0b \x01(\x02\x12\x18\n\x10\x65xcess_liquidity\x18\x0c \x01(\x02\x12\x0f\n\x07\x63ushion\x18\r \x01(\x02\x12\x1c\n\x14\x64\x61y_trades_remaining\x18\x0e \x01(\x02\x12\x10\n\x08leverage\x18\x0f \x01(\x02\x12\x14\n\x0cnet_leverage\x18\x10 \x01(\x02\x12\x17\n\x0fnet_liquidation\x18\x11 \x01(\x02\x12\x0b\n\x03sma\x18\x12 \x01(\x02\"\x86\x02\n\tPortfolio\x12\x11\n\tcash_flow\x18\x01 \x01(\x02\x12\x15\n\rstarting_cash\x18\x02 \x01(\x02\x12\x17\n\x0fportfolio_value\x18\x03 \x01(\x02\x12\x0b\n\x03pnl\x18\x04 \x01(\x02\x12\x0f\n\x07returns\x18\x05 \x01(\x02\x12\x0c\n\x04\x63\x61sh\x18\x06 \x01(\x02\x12%\n\tpositions\x18\x07 \x03(\x0b\x32\x12.AssetPositionPair\x12.\n\nstart_date\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fpositions_value\x18\t \x01(\x02\x12\x1a\n\x12positions_exposure\x18\n \x01(\x02\"E\n\x11\x41ssetPositionPair\x12\x13\n\x03key\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x1b\n\x08position\x18\x02 \x01(\x0b\x32\t.Positionb\x06proto3')
+  serialized_pb=_b('\n\x15protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/assets.proto\"\xf5\x03\n\x05Order\x12\n\n\x02id\x18\x01 \x01(\t\x12&\n\x02\x64t\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12+\n\x07\x63reated\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\x05\x61sset\x18\x05 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x06 \x01(\x02\x12\x0e\n\x06\x66illed\x18\x07 \x01(\x05\x12\x12\n\ncommission\x18\x08 \x01(\x02\x12\x1d\n\x06status\x18\x0e \x01(\x0e\x32\r.Order.Status\x12\x19\n\x04stop\x18\t \x01(\x0b\x32\x0b.Order.Stop\x12\x1b\n\x05limit\x18\n \x01(\x0b\x32\x0c.Order.Limit\x12\x14\n\x0cstop_reached\x18\x0b \x01(\x08\x12\x15\n\rlimit_reached\x18\x0c \x01(\x08\x12\x17\n\x0f\x62roker_order_id\x18\r \x01(\x03\x1a%\n\x04Stop\x12\x0e\n\x06is_set\x18\x01 \x01(\x08\x12\r\n\x05value\x18\x02 \x01(\x02\x1a&\n\x05Limit\x12\x0e\n\x06is_set\x18\x01 \x01(\x08\x12\r\n\x05value\x18\x02 \x01(\x02\"D\n\x06Status\x12\x08\n\x04OPEN\x10\x00\x12\n\n\x06\x46ILLED\x10\x01\x12\x0c\n\x08\x43\x41NCELED\x10\x02\x12\x0c\n\x08REJECTED\x10\x03\x12\x08\n\x04HELD\x10\x04\"\x92\x01\n\x08Position\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x03\x12\x12\n\ncost_basis\x18\x03 \x01(\x02\x12\x17\n\x0flast_sale_price\x18\x04 \x01(\x02\x12\x32\n\x0elast_sale_date\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xd0\x03\n\x07\x41\x63\x63ount\x12\x14\n\x0csettled_cash\x18\x01 \x01(\x02\x12\x18\n\x10\x61\x63\x63rued_interest\x18\x02 \x01(\x02\x12\x14\n\x0c\x62uying_power\x18\x03 \x01(\x02\x12\x18\n\x10\x65quity_with_loan\x18\x04 \x01(\x02\x12\x1d\n\x15total_positions_value\x18\x05 \x01(\x02\x12 \n\x18total_positions_exposure\x18\x06 \x01(\x02\x12\x13\n\x0bregt_equity\x18\x07 \x01(\x02\x12\x13\n\x0bregt_margin\x18\x08 \x01(\x02\x12\"\n\x1ainitial_margin_requirement\x18\t \x01(\x02\x12&\n\x1emaintenance_margin_requirement\x18\n \x01(\x02\x12\x17\n\x0f\x61vailable_funds\x18\x0b \x01(\x02\x12\x18\n\x10\x65xcess_liquidity\x18\x0c \x01(\x02\x12\x0f\n\x07\x63ushion\x18\r \x01(\x02\x12\x1c\n\x14\x64\x61y_trades_remaining\x18\x0e \x01(\x02\x12\x10\n\x08leverage\x18\x0f \x01(\x02\x12\x14\n\x0cnet_leverage\x18\x10 \x01(\x02\x12\x17\n\x0fnet_liquidation\x18\x11 \x01(\x02\x12\x0b\n\x03sma\x18\x12 \x01(\x02\"\x86\x02\n\tPortfolio\x12\x11\n\tcash_flow\x18\x01 \x01(\x02\x12\x15\n\rstarting_cash\x18\x02 \x01(\x02\x12\x17\n\x0fportfolio_value\x18\x03 \x01(\x02\x12\x0b\n\x03pnl\x18\x04 \x01(\x02\x12\x0f\n\x07returns\x18\x05 \x01(\x02\x12\x0c\n\x04\x63\x61sh\x18\x06 \x01(\x02\x12%\n\tpositions\x18\x07 \x03(\x0b\x32\x12.AssetPositionPair\x12.\n\nstart_date\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x0fpositions_value\x18\t \x01(\x02\x12\x1a\n\x12positions_exposure\x18\n \x01(\x02\"E\n\x11\x41ssetPositionPair\x12\x13\n\x03key\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x1b\n\x08position\x18\x02 \x01(\x0b\x32\t.Positionb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,])
 
@@ -56,11 +56,85 @@ _ORDER_STATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=407,
-  serialized_end=475,
+  serialized_start=513,
+  serialized_end=581,
 )
 _sym_db.RegisterEnumDescriptor(_ORDER_STATUS)
 
+
+_ORDER_STOP = _descriptor.Descriptor(
+  name='Stop',
+  full_name='Order.Stop',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='is_set', full_name='Order.Stop.is_set', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='value', full_name='Order.Stop.value', index=1,
+      number=2, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=434,
+  serialized_end=471,
+)
+
+_ORDER_LIMIT = _descriptor.Descriptor(
+  name='Limit',
+  full_name='Order.Limit',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='is_set', full_name='Order.Limit.is_set', index=0,
+      number=1, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='value', full_name='Order.Limit.value', index=1,
+      number=2, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=473,
+  serialized_end=511,
+)
 
 _ORDER = _descriptor.Descriptor(
   name='Order',
@@ -134,15 +208,15 @@ _ORDER = _descriptor.Descriptor(
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='stop', full_name='Order.stop', index=9,
-      number=9, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
+      number=9, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
       name='limit', full_name='Order.limit', index=10,
-      number=10, type=2, cpp_type=6, label=1,
-      has_default_value=False, default_value=float(0),
+      number=10, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
@@ -170,7 +244,7 @@ _ORDER = _descriptor.Descriptor(
   ],
   extensions=[
   ],
-  nested_types=[],
+  nested_types=[_ORDER_STOP, _ORDER_LIMIT, ],
   enum_types=[
     _ORDER_STATUS,
   ],
@@ -181,7 +255,7 @@ _ORDER = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=80,
-  serialized_end=475,
+  serialized_end=581,
 )
 
 
@@ -239,8 +313,8 @@ _POSITION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=478,
-  serialized_end=624,
+  serialized_start=584,
+  serialized_end=730,
 )
 
 
@@ -389,8 +463,8 @@ _ACCOUNT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=627,
-  serialized_end=1091,
+  serialized_start=733,
+  serialized_end=1197,
 )
 
 
@@ -483,8 +557,8 @@ _PORTFOLIO = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1094,
-  serialized_end=1356,
+  serialized_start=1200,
+  serialized_end=1462,
 )
 
 
@@ -521,14 +595,18 @@ _ASSETPOSITIONPAIR = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=1358,
-  serialized_end=1427,
+  serialized_start=1464,
+  serialized_end=1533,
 )
 
+_ORDER_STOP.containing_type = _ORDER
+_ORDER_LIMIT.containing_type = _ORDER
 _ORDER.fields_by_name['dt'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _ORDER.fields_by_name['created'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _ORDER.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _ORDER.fields_by_name['status'].enum_type = _ORDER_STATUS
+_ORDER.fields_by_name['stop'].message_type = _ORDER_STOP
+_ORDER.fields_by_name['limit'].message_type = _ORDER_LIMIT
 _ORDER_STATUS.containing_type = _ORDER
 _POSITION.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _POSITION.fields_by_name['last_sale_date'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
@@ -544,11 +622,27 @@ DESCRIPTOR.message_types_by_name['AssetPositionPair'] = _ASSETPOSITIONPAIR
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 Order = _reflection.GeneratedProtocolMessageType('Order', (_message.Message,), dict(
+
+  Stop = _reflection.GeneratedProtocolMessageType('Stop', (_message.Message,), dict(
+    DESCRIPTOR = _ORDER_STOP,
+    __module__ = 'protos.protocol_pb2'
+    # @@protoc_insertion_point(class_scope:Order.Stop)
+    ))
+  ,
+
+  Limit = _reflection.GeneratedProtocolMessageType('Limit', (_message.Message,), dict(
+    DESCRIPTOR = _ORDER_LIMIT,
+    __module__ = 'protos.protocol_pb2'
+    # @@protoc_insertion_point(class_scope:Order.Limit)
+    ))
+  ,
   DESCRIPTOR = _ORDER,
   __module__ = 'protos.protocol_pb2'
   # @@protoc_insertion_point(class_scope:Order)
   ))
 _sym_db.RegisterMessage(Order)
+_sym_db.RegisterMessage(Order.Stop)
+_sym_db.RegisterMessage(Order.Limit)
 
 Position = _reflection.GeneratedProtocolMessageType('Position', (_message.Message,), dict(
   DESCRIPTOR = _POSITION,

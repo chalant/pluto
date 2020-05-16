@@ -17,6 +17,7 @@ from pluto.control.events_log import events_log
 from pluto.control.controllable.utils import io
 from pluto.control.controllable.utils import factory
 
+from protos import broker_pb2
 from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
 from protos import interface_pb2_grpc as itf_rpc
@@ -455,11 +456,22 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     @service_access.framework_only
     def UpdateAccount(self, request_iterator, context):
-        # todo
-        # self._queue.put(
-        #     commands.
-        # )
+        self._queue.put(
+            commands.AccountUpdate(
+                self._controllable,
+                self._load_broker_state(
+                    request_iterator)
+            )
+        )
         return emp.Empty()
+
+    def _load_broker_state(self, request_iterator):
+        b = b''
+        for chunk in request_iterator:
+            b += chunk.data
+        brk_state = broker_pb2.BrokerState()
+        brk_state.ParseFromString(b)
+        return brk_state
 
     @service_access.framework_only
     def ClockUpdate(self, request, context):

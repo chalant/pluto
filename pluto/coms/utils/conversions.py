@@ -2,12 +2,11 @@ from pandas import Timestamp
 
 from google.protobuf import timestamp_pb2 as pr_ts
 
-from zipline.assets import Asset, ExchangeInfo
+from zipline.assets import ExchangeInfo, Equity, Future
 from zipline.finance.order import Order
 from zipline.finance.transaction import Transaction
 from zipline.finance.position import Position
 from zipline import protocol
-from zipline.finance import execution
 
 from protos import assets_pb2 as pr_asset
 from protos import controller_pb2 as ctl
@@ -16,9 +15,11 @@ from protos import metrics_pb2 as metrics
 from protos import protocol_pb2 as pr
 from protos import broker_pb2
 
+
 def datetime_from_bytes(bytes_):
     ts = pr_ts.Timestamp()
     to_datetime(ts.ParseFromString(bytes_))
+
 
 def to_proto_timestamp(dt):
     """
@@ -43,6 +44,7 @@ def to_datetime(proto_ts):
 def to_pandas_timestamp(protos_ts, tz=None):
     return Timestamp(to_datetime(protos_ts)).tz_localize(tz)
 
+
 def to_proto_commission(zp_commission):
     return broker_pb2.Commission(
         asset=to_proto_asset(zp_commission['asset']),
@@ -50,47 +52,84 @@ def to_proto_commission(zp_commission):
         cost=zp_commission['cost']
     )
 
+
 def from_proto_commission(proto_commission):
     return {
-        'asset':to_zp_asset(proto_commission.asset),
-        'order':to_proto_order(proto_commission.order),
-        'cost':proto_commission.cost
+        'asset': to_zp_asset(proto_commission.asset),
+        'order': to_proto_order(proto_commission.order),
+        'cost': proto_commission.cost
     }
 
+
+_proto_asset_types = {
+    Equity: 'equity',
+    Future: 'future'
+}
+
+_zp_asset_types = {
+    'equity': Equity,
+    'future': Future
+}
+
+
 def to_proto_asset(zp_asset):
-    return pr_asset.Asset(
-        sid=zp_asset.sid,
-        symbol=zp_asset.symbol,
-        asset_name=zp_asset.asset_name,
-        start_date=to_proto_timestamp(zp_asset.start_date),
-        end_date=to_proto_timestamp(zp_asset.end_date),
-        first_traded=to_proto_timestamp(zp_asset.start_date),
-        auto_close_date=to_proto_timestamp(zp_asset.auto_close_date),
-        exchange=zp_asset.exchange,
-        exchange_full=zp_asset.exchange_full,
-        country_code=zp_asset.country_code,
-        tick_size=zp_asset.tick_size,
-        multiplier=zp_asset.price_multiplier
-    )
+    asset_type = type(zp_asset)
+    kwargs = {
+        'type': _proto_asset_types[type(zp_asset)],
+        'sid': zp_asset.sid,
+        'symbol': zp_asset.symbol,
+        'asset_name': zp_asset.asset_name,
+        'start_date': to_proto_timestamp(zp_asset.start_date),
+        'end_date': to_proto_timestamp(zp_asset.end_date),
+        'first_traded': to_proto_timestamp(zp_asset.start_date),
+        'auto_close_date': to_proto_timestamp(zp_asset.auto_close_date),
+        'exchange': zp_asset.exchange,
+        'exchange_full': zp_asset.exchange_full,
+        'country_code': zp_asset.country_code,
+        'tick_size': zp_asset.tick_size,
+        'multiplier': zp_asset.price_multiplier
+    }
+
+    if asset_type == Future:
+        kwargs.update({
+            'root_symbol': zp_asset.root_symbol,
+            'expiration_date': to_proto_timestamp(zp_asset.expiration_date),
+            'notice_date': to_proto_timestamp(zp_asset.notice_date)
+        })
+
+    return pr_asset.Asset(**kwargs)
 
 
 def to_zp_asset(pr_asset):
-    return Asset(
-        pr_asset.sid,
-        ExchangeInfo(
+    kwargs = {
+        'sid': pr_asset.sid,
+        'exchange_info': ExchangeInfo(
             pr_asset.exchange_full,
             pr_asset.exchange,
             pr_asset.country_code
         ),
-        pr_asset.symbol,
-        pr_asset.asset_name,
-        to_datetime(pr_asset.start_date),
-        to_datetime(pr_asset.end_date),
-        to_datetime(pr_asset.first_traded),
-        to_datetime(pr_asset.auto_close_date),
-        pr_asset.tick_size,
-        pr_asset.multiplier
-    )
+        'symbol': pr_asset.symbol,
+        'asset_name': pr_asset.asset_name,
+        'start_date': to_datetime(pr_asset.start_date),
+        'end_date': to_datetime(pr_asset.end_date),
+        'first_traded': to_datetime(pr_asset.first_traded),
+        'auto_close_date': to_datetime(pr_asset.auto_close_date),
+        'tick_size': pr_asset.tick_size,
+        'multiplier': pr_asset.multiplier
+    }
+
+    asset_type = pr_asset.type
+    if asset_type == 'future':
+        kwargs.update(
+            {
+                'root_symbol': pr_asset.root_symbol,
+                'expiration_date': pr_asset.expiration_date,
+                'notice_date': pr_asset.notice_date
+            }
+        )
+
+    return _zp_asset_types[asset_type](**kwargs)
+
 
 # def to_zp_execution_style(proto_order_params):
 #     style = proto_order_params.style
@@ -150,14 +189,17 @@ def to_zp_asset(pr_asset):
 #         raise ValueError('Unexpected order style {}'.format(type(style)))
 
 def to_zp_order(proto_order):
+    stop = proto_order.stop
+    limit = proto_order.limit
     return Order(
-        to_datetime(proto_order.dt),
-        to_zp_asset(proto_order.asset),
-        proto_order.amount,
-        proto_order.stop,
-        proto_order.limit,
-        proto_order.filled,
-        proto_order.commission
+        dt=to_datetime(proto_order.dt),
+        asset=to_zp_asset(proto_order.asset),
+        amount=proto_order.amount,
+        stop=stop.value if stop.is_set else None,
+        limit=limit.value if limit.is_set else None,
+        filled=proto_order.filled,
+        commission=proto_order.commission,
+        id=proto_order.id
     )
 
 
@@ -167,8 +209,7 @@ def to_zp_transaction(proto_transaction):
         proto_transaction.amount,
         to_datetime(proto_transaction.dt),
         proto_transaction.price,
-        proto_transaction.order_id
-    )
+        proto_transaction.order_id)
 
 
 def to_zp_position(proto_position):
@@ -196,6 +237,7 @@ def to_zp_portfolio(proto_portfolio):
 
 def to_zp_account(proto_account):
     pass
+
 
 def to_proto_position(zp_position):
     """
@@ -263,12 +305,21 @@ def to_proto_account(zp_account):
 
 
 def to_proto_order(zp_order):
+    limit = zp_order['limit']
+    stop = zp_order['stop']
+
     return pr.Order(
         dt=to_proto_timestamp(zp_order['dt']),
         asset=to_proto_asset(zp_order['sid']),
         amount=zp_order['amount'],
-        stop=zp_order['stop'],
-        limit=zp_order['limit'],
+        stop=pr.Order.Stop(
+            is_set=stop != None,
+            value=stop
+        ),
+        limit = pr.Order.Limit(
+            is_set=limit != None,
+            value=limit
+        ),
         filled=zp_order['filled'],
         commission=zp_order['commission']
     )
@@ -280,8 +331,8 @@ def to_proto_transaction(zp_transaction):
         amount=zp_transaction['amount'],
         dt=to_proto_timestamp(zp_transaction['dt']),
         price=zp_transaction['price'],
-        order_id=zp_transaction['order_id']
-    )
+        order_id=zp_transaction['order_id'])
+
 
 def from_proto_cum_metrics(cum_metrics):
     return {
@@ -308,6 +359,7 @@ def from_proto_cum_metrics(cum_metrics):
         'net_leverage': cum_metrics.net_leverage
     }
 
+
 def from_proto_cum_risk_metrics(cum_risk_metrics):
     return {
         'algo_volatility': cum_risk_metrics.algo_volatility,
@@ -326,6 +378,7 @@ def from_proto_cum_risk_metrics(cum_risk_metrics):
         'treasury_period_return': cum_risk_metrics.treasury_period_return
     }
 
+
 def from_proto_period_metrics(period_metrics):
     return {
         'orders': [to_zp_order(order) for order in period_metrics.orders],
@@ -342,6 +395,7 @@ def from_proto_period_metrics(period_metrics):
         'pnl': period_metrics.pnl
     }
 
+
 def from_proto_performance_packet(proto_perf_packet):
     return {
         'cumulative_perf': from_proto_cum_metrics(proto_perf_packet.cumulative_perf),
@@ -349,13 +403,14 @@ def from_proto_performance_packet(proto_perf_packet):
         'cumulative_risk_metrics': from_proto_cum_risk_metrics(proto_perf_packet.cumulative_risk_metrics)
     }
 
+
 def to_proto_cum_metrics(cum_perf):
     return metrics.CumulativeMetrics(
         period_open=to_proto_timestamp(cum_perf['period_open']),
         period_close=to_proto_timestamp(cum_perf['period_close']),
         returns=cum_perf['returns'],
         pnl=cum_perf['pnl'],
-        capital_used = cum_perf['capital_used'],
+        capital_used=cum_perf['capital_used'],
         # cash_flow=cum_perf['cash_flow'],
         starting_exposure=cum_perf['starting_exposure'],
         ending_exposure=cum_perf['ending_exposure'],
@@ -363,7 +418,7 @@ def to_proto_cum_metrics(cum_perf):
         ending_value=cum_perf['ending_value'],
         starting_cash=cum_perf['starting_cash'],
         ending_cash=cum_perf['ending_cash'],
-        portfolio_value = cum_perf['portfolio_value'],
+        portfolio_value=cum_perf['portfolio_value'],
         longs_count=cum_perf['longs_count'],
         shorts_count=cum_perf['shorts_count'],
         long_value=cum_perf['long_value'],
@@ -373,6 +428,7 @@ def to_proto_cum_metrics(cum_perf):
         gross_leverage=cum_perf['gross_leverage'],
         net_leverage=cum_perf['net_leverage']
     )
+
 
 def to_proto_period_perf(period_perf):
     return metrics.PeriodMetrics(
@@ -389,6 +445,7 @@ def to_proto_period_perf(period_perf):
         returns=period_perf['returns'],
         pnl=period_perf['pnl']
     )
+
 
 def to_proto_cum_risk_metrics(cum_risk_metrics):
     return metrics.CumulativeRiskMetrics(
@@ -407,6 +464,7 @@ def to_proto_cum_risk_metrics(cum_risk_metrics):
         excess_return=cum_risk_metrics['excess_return'],
         treasury_period_return=cum_risk_metrics['treasury_period_return']
     )
+
 
 def to_proto_performance_packet(perf_packet):
     period_perf = perf_packet.get('daily_perf', None)
