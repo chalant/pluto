@@ -528,10 +528,13 @@ class Ledger(object):
             portfolio=cv.to_proto_portfolio(self._immutable_portfolio),
             account=cv.to_proto_account(self._immutable_account),
             last_checkpoint=cv.to_proto_timestamp(dt),
-            orders=[cv.to_proto_order(order.to_dict()) for order in self._orders_by_id.values()],
+            orders=[cv.to_proto_order(order.to_dict())
+                    for order in self._orders_by_id.values()],
             first_session=cv.to_proto_timestamp(self._start_dt.to_pydatetime()),
-            daily_returns=[acc.Return(timestamp=cv.to_proto_timestamp(ts), value=val) for ts, val in
-                           zip(self._sessions, self.daily_returns_array)])
+            daily_returns=[
+                acc.Return(timestamp=cv.to_proto_timestamp(ts), value=val)
+                for ts, val in zip(self._sessions, self.daily_returns_array)
+            ])
         self._last_checkpoint = dt
         return state.SerializeToString()
 

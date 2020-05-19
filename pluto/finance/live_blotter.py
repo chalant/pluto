@@ -21,7 +21,7 @@ class LiveBlotter(blotter.Blotter):
 
         self._broker = broker
         self._orders = {}
-        self._new_orders = {}
+        self._new_orders = []
         self._open_orders = defaultdict(list)
 
         self._transactions = []
@@ -40,10 +40,6 @@ class LiveBlotter(blotter.Blotter):
     @property
     def new_orders(self):
         # return a tuple so that values can't be changed
-        return tuple(self._new_orders.values())
-
-    @new_orders.setter
-    def new_orders(self, value):
         # resets the new orders
         if not self._orders_placed:
             # send orders buffered orders to the broker once before resetting
@@ -54,13 +50,17 @@ class LiveBlotter(blotter.Blotter):
             # send orders to broker before resetting
             orders = self._orders
             for order in self._broker.PlaceOrders(
-                    generator(self._new_orders.values()),
+                    generator(self._new_orders),
                     self._metadata):
                 orders[order.id] = order
                 if order.open:
                     self._open_orders[order.asset].append(order)
             self._orders_placed = True
-        self._new_orders = {}
+        return tuple(self._new_orders)
+
+    @new_orders.setter
+    def new_orders(self, value):
+        self._new_orders = value
 
     def process_splits(self, splits):
         # handled by the broker
@@ -69,6 +69,7 @@ class LiveBlotter(blotter.Blotter):
     def get_transactions(self, bar_data):
         return self._transactions, self._commissions, self._closed_orders
 
+    @property
     def orders(self):
         return self._orders
 
@@ -86,18 +87,17 @@ class LiveBlotter(blotter.Blotter):
                     max_shares))
 
         is_buy = (amount > 0)
-        order = odr.Order(
-            dt=self.current_dt,
-            asset=asset,
-            amount=amount,
-            stop=style.get_stop_price(is_buy),
+        self._new_orders.append(
+            odr.Order(
+                dt=self.current_dt,
+                asset=asset,
+                amount=amount,
+                stop=style.get_stop_price(is_buy),
             limit=style.get_limit_price(is_buy)
+            )
         )
-        id_ = order.id
-        self._new_orders[id_] = order
         # mark so that the new orders can be sent to the broker
         self._orders_placed = False
-        return id_
 
     def hold(self, order_id, reason=''):
         pass
@@ -108,8 +108,8 @@ class LiveBlotter(blotter.Blotter):
     def cancel(self, order_id, relay_status=True):
         try:
             # attempt to cancel new orders that have not been placed yet
-            self._new_orders.pop(order_id)
-        except KeyError:
+            self._new_orders.remove(order_id)
+        except ValueError:
             # send cancel request to broker
             self._broker.CancelOrder(
                 broker_pb2.CancelRequest(order_id=order_id),
@@ -137,7 +137,8 @@ class LiveBlotter(blotter.Blotter):
             order_id = transaction.order_id
             o = orders.get(order_id, None)
             if o:
-                transactions.append(transaction)
+                transactions.append(
+                    conversions.to_zp_transaction(transaction))
 
         for commission in broker_data.commissions:
             order = conversions.to_zp_order(commission.order)
@@ -145,7 +146,7 @@ class LiveBlotter(blotter.Blotter):
             o = orders.get(order_id, None)
             if o:
                 commissions.append({
-                    'asset': commission.asset,
+                    'asset': conversions.to_zp_asset(commission.asset),
                     'cost': commission.cost,
                     'order': order
                 })
@@ -155,12 +156,24 @@ class LiveBlotter(blotter.Blotter):
                 closed_orders.append(order)
 
     def prune_orders(self, closed_orders):
-        orders = self._orders
         for order in closed_orders:
+            asset = order.asset
+            asset_orders = self._open_orders[asset]
             try:
-                del orders[order.order_id]
+                asset_orders.remove(order)
+            except ValueError:
+                pass
+
+            try:
+                self._orders.pop(order.id)
             except KeyError:
                 pass
+
+        # now clear out the assets from our open_orders dict that have
+        # zero open orders
+        for asset in list(self.open_orders.keys()):
+            if len(self.open_orders[asset]) == 0:
+                del self.open_orders[asset]
 
         self._transactions.clear()
         self._commissions.clear()

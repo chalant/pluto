@@ -278,13 +278,13 @@ def to_proto_portfolio(zp_portfolio):
         returns=zp_portfolio.returns,
         cash=zp_portfolio.cash,
         positions=[
-            pr.AssetPositionPair(key=asset, position=position)
-            for asset, position in zp_portfolio.positions.items()
-        ],
+            pr.AssetPositionPair(
+                key=to_proto_asset(asset),
+                position=to_proto_position(position))
+            for asset, position in zp_portfolio.positions.items()],
         start_date=to_proto_timestamp(zp_portfolio.start_date),
         positions_value=zp_portfolio.positions_value,
-        positions_exposure=zp_portfolio.positions_exposure
-    )
+        positions_exposure=zp_portfolio.positions_exposure)
 
 
 def to_proto_account(zp_account):
@@ -321,7 +321,8 @@ def to_proto_order(zp_order):
             value=limit
         ),
         filled=zp_order['filled'],
-        commission=zp_order['commission']
+        commission=zp_order['commission'],
+        id=zp_order['id']
     )
 
 

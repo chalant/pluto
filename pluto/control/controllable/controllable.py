@@ -272,7 +272,7 @@ class Controllable(ABC):
             restrictions,
             data_frequency)
 
-        # todo: we need a more domains
+        # todo: we need more domains
 
         self._domain = dom = domain.Domain(self)
 
@@ -445,7 +445,7 @@ class Controllable(ABC):
         # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
                 metrics_tracker.positions.keys() |
-                algo.blotter._open_orders.keys()
+                algo.blotter.open_orders.keys()
         )
 
         if assets_we_care_about:
@@ -483,8 +483,6 @@ class Controllable(ABC):
         new_transactions, new_commissions, closed_orders = \
             blotter.get_transactions(current_data)
 
-        blotter.prune_orders(closed_orders)
-
         for transaction in new_transactions:
             metrics_tracker.process_transaction(transaction)
 
@@ -494,20 +492,21 @@ class Controllable(ABC):
         for commission in new_commissions:
             metrics_tracker.process_commission(commission)
 
+        blotter.prune_orders(closed_orders)
+
         # handle_data is not called while in recovery
         self._run_state.handle_data(algo, current_data, dt)
         self._sync_last_sale_prices(metrics_tracker, dt)
 
         # grab any new orders from the blotter, then clear the list.
         # this includes cancelled orders.
-        new_orders = blotter.new_orders
-        # todo: send new orders to the broker here
-        blotter.new_orders = []
 
         # if we have any new orders, record them so that we know
         # in what perf period they were placed.
-        for new_order in new_orders:
+        for new_order in blotter.new_orders:
             metrics_tracker.process_order(new_order)
+
+        blotter.new_orders = []
 
         return capital_changes
 
