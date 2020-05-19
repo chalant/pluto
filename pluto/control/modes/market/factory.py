@@ -95,27 +95,28 @@ class LiveSimulationMarketFactory(MarketFactory):
     def get_transactions(self, dt, evt, signals):
         transactions = []
         commissions = []
+        
+        #todo we need to pass the signal to update
 
-        if evt == clock_pb2.BAR:
-            markets = self._markets['minute'].values()
-            for txn, cms in self._chain_transactions(dt, evt, markets, signals):
-                transactions.extend(conversions.to_proto_transaction(txn))
-                commissions.extend(conversions.to_proto_commission(cms))
-            return broker_pb2.BrokerState(
-                transactions=transactions,
-                commissions=commissions)
-
-        else:
-            markets = []
-            mkt = self._markets
-            markets.extend(mkt['daily'].values())
-            markets.extend(mkt['minute'].values())
-            for txn, cms in self._chain_transactions(dt, evt, markets, signals):
-                transactions.extend(conversions.to_proto_transaction(t.to_dict()) for t in txn)
-                commissions.extend(conversions.to_proto_commission(c) for c in cms)
-            return broker_pb2.BrokerState(
-                transactions=transactions,
-                commissions=commissions)
+        markets = []
+        mkt = self._markets
+        markets.extend(mkt['daily'].values())
+        markets.extend(mkt['minute'].values())
+        for txn, cms in self._chain_transactions(
+                dt,
+                evt,
+                markets,
+                signals):
+            transactions.extend(
+                conversions.to_proto_transaction(
+                    t.to_dict())
+                for t in txn)
+            commissions.extend(
+                conversions.to_proto_commission(c)
+                for c in cms)
+        return broker_pb2.BrokerState(
+            transactions=transactions,
+            commissions=commissions)
 
     def _chain_transactions(self, dt, evt, markets, signals):
         for mkt in markets:

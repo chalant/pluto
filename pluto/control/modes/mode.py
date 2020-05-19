@@ -226,7 +226,12 @@ class ControlMode(abc.ABC):
             universe_name = sess.universe_name
             start, end = p.start, p.end
 
-            broker.add_market(session_id, sess.data_frequency, start, end, universe_name)
+            broker.add_market(
+                session_id,
+                sess.data_frequency,
+                start,
+                end,
+                universe_name)
             broker.add_session_id(session_id)
 
             process.initialize(

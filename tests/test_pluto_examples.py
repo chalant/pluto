@@ -102,7 +102,7 @@ def _compare_df(desired, actual):
                 np.nan_to_num(des.values),
                 act.values,
                 rtol=0.1,
-                atol=0.2,
+                atol=0.5,
                 equal_nan=False)
         except AssertionError as e:
             errors += 1
@@ -111,7 +111,7 @@ def _compare_df(desired, actual):
             try:
                 pd.testing.assert_series_equal(des, act, check_less_precise=3)
             except AssertionError as e:
-                logging.warning('Name: {}\nError: {}'.format(l[0], e))
+                logging.warning('\nName: {}\nError: {}'.format(l[0], e))
 
     if errors > 0:
         raise AssertionError('failed {} out of {}'.format(errors, tests))

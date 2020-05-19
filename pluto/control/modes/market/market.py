@@ -6,6 +6,8 @@ from zipline.finance import asset_restrictions
 from pluto.coms.utils import conversions
 from pluto.control.controllable import synchronization_states as ss
 
+from protos import clock_pb2
+
 
 class Market(abc.ABC):
     @abc.abstractmethod
@@ -70,6 +72,7 @@ class LiveSimulationMarket(Market):
             restrictions=asset_restrictions.NoRestrictions()
         )
 
+        self._data_frequency = data_frequency
         super(LiveSimulationMarket, self).__init__()
 
     def current_dt(self):
@@ -78,13 +81,21 @@ class LiveSimulationMarket(Market):
     def get_transactions(self, dt, evt, signals):
         s = self._sst.aggregate(dt, evt, signals)
         if s:
-            dt, evt, exchanges = s
+            dt, e, exchanges = s
             self._current_dt = conversions.to_datetime(dt)
-            for blotter in self._blotter_factory.blotters:
-                new_transactions, new_commissions, closed_orders = \
-                    blotter.get_transactions(self._current_data)
-                blotter.prune_orders(closed_orders)
-                yield new_transactions, new_commissions
+
+            if e == clock_pb2.TRADE_END:
+                for blotter in self._blotter_factory.blotters:
+                    new_transactions, new_commissions, closed_orders = \
+                        blotter.get_transactions(self._current_data)
+                    blotter.prune_orders(closed_orders)
+                    yield new_transactions, new_commissions
+            elif e == clock_pb2.BAR and self._data_frequency == 'minute':
+                for blotter in self._blotter_factory.blotters:
+                    new_transactions, new_commissions, closed_orders = \
+                        blotter.get_transactions(self._current_data)
+                    blotter.prune_orders(closed_orders)
+                    yield new_transactions, new_commissions
 
     def add_blotter(self, session_id):
         self._blotter_factory.add_blotter(
