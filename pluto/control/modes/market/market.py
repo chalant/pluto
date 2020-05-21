@@ -68,7 +68,7 @@ class LiveSimulationMarket(Market):
             simulation_dt_func=self.current_dt,
             data_frequency=data_frequency,
             trading_calendar=calendar,
-            #restrictions are assumed to be included in the universe
+            # restrictions are assumed to be included in the universe
             restrictions=asset_restrictions.NoRestrictions()
         )
 
@@ -82,7 +82,7 @@ class LiveSimulationMarket(Market):
         s = self._sst.aggregate(dt, evt, signals)
         if s:
             dt, e, exchanges = s
-            self._current_dt = conversions.to_datetime(dt)
+            self._current_dt = t = conversions.to_datetime(dt)
 
             if e == clock_pb2.TRADE_END:
                 for blotter in self._blotter_factory.blotters:
@@ -96,6 +96,16 @@ class LiveSimulationMarket(Market):
                         blotter.get_transactions(self._current_data)
                     blotter.prune_orders(closed_orders)
                     yield new_transactions, new_commissions
+            elif e == clock_pb2.SESSION_START:
+                assets = []
+                blotters = self._blotter_factory.blotters
+                for blotter in self._blotter_factory.blotters:
+                    assets.extend(blotter.open_orders.keys())
+                if assets:
+                    splits = self._dp.get_splits(assets, t)
+                    if splits:
+                        for blotter in blotters:
+                            blotter.process_splits(splits)
 
     def add_blotter(self, session_id):
         self._blotter_factory.add_blotter(

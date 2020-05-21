@@ -1,3 +1,10 @@
+from itertools import chain, repeat
+from collections import Iterable, namedtuple
+
+from six import (
+    string_types
+)
+
 import logbook
 import warnings
 
@@ -17,8 +24,12 @@ from zipline.utils.math_utils import (
 )
 
 from zipline.errors import (
-    CannotOrderDelistedAsset
+    CannotOrderDelistedAsset,
+    DuplicatePipelineName,
+    AttachPipelineAfterInitialize
 )
+
+from zipline.pipeline import Pipeline
 
 from zipline.pipeline.engine import (
     ExplodingPipelineEngine,
@@ -27,15 +38,19 @@ from zipline.pipeline.engine import (
 
 from zipline.utils.api_support import (
     api_method,
+    require_not_initialized,
 )
 
 from zipline.utils.preprocess import preprocess
 from zipline.utils.input_validation import (
-    ensure_upper_case
+    ensure_upper_case,
+    expect_types
 )
 
 log = logbook.Logger("TradingAlgorithm")
 
+# For creating and storing pipeline instances
+AttachedPipeline = namedtuple('AttachedPipeline', 'pipe chunks eager')
 
 # TODO: we need to store the algorithm state as-well=> store its dictionary variable etc.
 class TradingAlgorithm(algorithm.TradingAlgorithm):
@@ -145,6 +160,60 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             )
         else:
             self.engine = ExplodingPipelineEngine()
+
+    ##############
+    # Pipeline API
+    ##############
+    @api_method
+    @require_not_initialized(AttachPipelineAfterInitialize())
+    @expect_types(
+        pipeline=Pipeline,
+        name=string_types,
+        chunks=(int, Iterable, type(None)),
+    )
+    def attach_pipeline(self, pipeline, name, chunks=None, eager=True):
+        """Register a pipeline to be computed at the start of each day.
+
+                Parameters
+                ----------
+                pipeline : Pipeline
+                    The pipeline to have computed.
+                name : str
+                    The name of the pipeline.
+                chunks : int or iterator, optional
+                    The number of days to compute pipeline results for. Increasing
+                    this number will make it longer to get the first results but
+                    may improve the total runtime of the simulation. If an iterator
+                    is passed, we will run in chunks based on values of the iterator.
+                    Default is True.
+                eager : bool, optional
+                    Whether or not to compute this pipeline prior to
+                    before_trading_start.
+
+                Returns
+                -------
+                pipeline : Pipeline
+                    Returns the pipeline that was attached unchanged.
+
+                See Also
+                --------
+                :func:`zipline.api.pipeline_output`
+                """
+        # Make the first chunk smaller to get more immediate results:
+        # (one week, then every half year)
+        chunks = repeat(5)
+
+        if name in self._pipelines:
+            raise DuplicatePipelineName(name=name)
+
+        self._pipelines[name] = AttachedPipeline(pipeline, iter(chunks), eager)
+
+        # Return the pipeline to allow expressions like
+        # p = attach_pipeline(Pipeline(), 'name')
+        return pipeline
+
+    def _get_chunk_size(self, sessions):
+        return sessions.get_loc(normalize_date(self.get_datetime()))
 
     @api_method
     def schedule_function(self,
@@ -456,11 +525,11 @@ class LiveTradingAlgorithm(TradingAlgorithm):
         sessions = self._controllable.trading_calendar.all_sessions
 
         # Load data until the day before end session...
-        end_date_loc = sessions.get_loc(end_session)
-
-        # todo: chunk size = end_dt - start_dt
-        start_loc = end_date_loc - chunksize
+        start_loc = sessions.get_loc(end_session) - chunksize
 
         start_session = sessions[start_loc]
 
-        return self.engine.run_pipeline(pipeline, start_session, end_session), end_session
+        return self.engine.run_pipeline(
+            pipeline,
+            start_session,
+            end_session), end_session
