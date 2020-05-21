@@ -47,6 +47,7 @@ class LiveSimulationMarketFactory(MarketFactory):
     def __init__(self, blotter_factory):
         self._calendars_cache = {}
         self._markets = {'daily': {}, 'minute': {}}
+        self._all_markets = []
         self._blotter_factory = blotter_factory
 
     def _create_market(self, data_frequency, universe, calendar_name, start, end):
@@ -68,6 +69,7 @@ class LiveSimulationMarketFactory(MarketFactory):
             calendar,
             self._blotter_factory)
         self._markets[data_frequency][calendar_name] = mkt
+        self._all_markets.append(mkt)
         return mkt
 
     def get_market(self, data_frequency, universe_name, start, end):
@@ -97,15 +99,10 @@ class LiveSimulationMarketFactory(MarketFactory):
         commissions = []
         
         #todo we need to pass the signal to update
-
-        markets = []
-        mkt = self._markets
-        markets.extend(mkt['daily'].values())
-        markets.extend(mkt['minute'].values())
         for txn, cms in self._chain_transactions(
                 dt,
                 evt,
-                markets,
+                self._all_markets,
                 signals):
             transactions.extend(
                 conversions.to_proto_transaction(

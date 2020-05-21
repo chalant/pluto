@@ -64,6 +64,7 @@ class LiveBlotter(blotter.Blotter):
 
     def process_splits(self, splits):
         # handled by the broker
+        #todo: need to process splits!!!
         pass
 
     def get_transactions(self, bar_data):

@@ -322,7 +322,7 @@ class Controllable(ABC):
         self._run_state = self._ready
 
         api_support.set_algo_instance(algo)
-
+        algo.on_dt_changed(start_dt)
         # initialize the algo (called only once per lifetime)
         algo.initialize(**{})  # todo: kwargs?
         algo.initialized = True
@@ -453,6 +453,7 @@ class Controllable(ABC):
             if splits:
                 algo.blotter.process_splits(splits)
                 metrics_tracker.handle_splits(splits)
+        return capital_changes
 
     def before_trading_starts(self, dt):
         algo = self._algo
@@ -817,6 +818,5 @@ class Controllable(ABC):
                 {'date': dt,
                  'type': 'cash',
                  'target': target,
-                 'delta': capital_change_amount
-                 }
+                 'delta': capital_change_amount}
         }

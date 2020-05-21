@@ -102,7 +102,7 @@ def _compare_df(desired, actual):
                 np.nan_to_num(des.values),
                 act.values,
                 rtol=0.1,
-                atol=0.5,
+                atol=0.2,
                 equal_nan=False)
         except AssertionError as e:
             errors += 1

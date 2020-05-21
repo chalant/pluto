@@ -62,7 +62,7 @@ class BrokerService(brk_rpc.BrokerServicer):
     def CancelAllOrdersForAsset(self, request, session_id):
         self._broker.cancel_all_orders_for_asset(
             session_id,
-            conversions.to_zp_asset(request.asset))
+            conversions.to_zp_asset(request))
 
     @service_access.framework_only
     @service_access.per_session
