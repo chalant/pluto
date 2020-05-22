@@ -305,8 +305,6 @@ class Controllable(ABC):
         # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
 
-        # todo: the algo should call the data portal of the controllable, since it might be
-        # re-assigned
         self._algo = algo = self._get_algorithm_class(
             controllable=self,
             params=params,
@@ -423,7 +421,6 @@ class Controllable(ABC):
 
         metrics_tracker = self._metrics_tracker
 
-        # todo: should we return capital_changes ?
         capital_changes = self._calculate_capital_changes(
             dt,
             metrics_tracker,
