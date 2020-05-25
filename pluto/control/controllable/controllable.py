@@ -34,7 +34,7 @@ class _State(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def before_trading_starts(self, current_data, dt):
+    def before_trading_starts(self, algo, dt):
         raise NotImplementedError
 
 
@@ -43,9 +43,33 @@ class _Recovering(_State):
         # does nothing
         pass
 
-    def before_trading_starts(self, algo, current_data):
+    def before_trading_starts(self, algo, dt):
         pass
 
+# This state is made to make sure that functions are "activated in the right order
+class _Transitioning(_State):
+
+    def __init__(self, controllable):
+        '''
+
+        Parameters
+        ----------
+        controllable: Controllable
+        '''
+        self._bfs_flag = False
+        self._controllable = controllable
+
+    def handle_data(self, algo, current_data, dt):
+        if not self._bfs_flag:
+            pass
+        else:
+            controllable = self._controllable
+            controllable.run_state = controllable.ready
+            algo.event_manager.handle_data(algo, current_data, dt)
+
+    def before_trading_starts(self, algo, dt):
+        algo.before_trading_start(algo, dt)
+        self._bfs_flag = True
 
 class _Ready(_State):
     def handle_data(self, algo, current_data, dt):
@@ -92,9 +116,11 @@ class Controllable(ABC):
         self._end_dt = None
         self._look_back = None
         self._current_dt = None
+        self._real_dt = None
         self._params = None
 
         self._ready = _Ready()
+        self._transitioning = _Transitioning(self)
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
 
@@ -107,6 +133,14 @@ class Controllable(ABC):
         return self._current_dt
 
     @property
+    def real_dt(self):
+        return self._real_dt
+
+    @real_dt.setter
+    def real_dt(self, dt):
+        self._real_dt = dt
+
+    @property
     def run_state(self):
         return self._run_state
 
@@ -117,6 +151,10 @@ class Controllable(ABC):
     @property
     def recovering(self):
         return self._recovering
+
+    @property
+    def transitioning(self):
+        return self._transitioning
 
     @property
     def ready(self):
@@ -563,7 +601,8 @@ class Controllable(ABC):
             state.max_leverage,
             state.data_frequency,
             state.mode,
-            state.look_back)
+            state.look_back,
+            '')
 
         ss.set_state(state.session_state, self._sync_state_tracker)
         self._current_dt = conversions.to_datetime(state.checkpoint)

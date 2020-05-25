@@ -25,7 +25,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x13protos/broker.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x12protos/clock.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9d\x01\n\x0b\x42rokerState\x12\"\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x0c.Transaction\x12 \n\x0b\x63ommissions\x18\x02 \x03(\x0b\x32\x0b.Commission\x12\x19\n\x07\x61\x63\x63ount\x18\x03 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"-\n\x0b\x43\x61ncelEvent\x12\x1e\n\nevent_type\x18\x01 \x01(\x0e\x32\n.EventType2\xcc\x01\n\x06\x42roker\x12!\n\x0bPlaceOrders\x12\x06.Order\x1a\x06.Order(\x01\x30\x01\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12\x34\n\x13\x45xecuteCancelPolicy\x12\x0c.CancelEvent\x1a\x0f.WarningMessageb\x06proto3')
+  serialized_pb=_b('\n\x13protos/broker.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x12protos/clock.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xca\x01\n\x0b\x42rokerState\x12\"\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x0c.Transaction\x12 \n\x0b\x63ommissions\x18\x02 \x03(\x0b\x32\x0b.Commission\x12\x19\n\x07\x61\x63\x63ount\x18\x03 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12+\n\x07real_ts\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"-\n\x0b\x43\x61ncelEvent\x12\x1e\n\nevent_type\x18\x01 \x01(\x0e\x32\n.EventType2\xcc\x01\n\x06\x42roker\x12!\n\x0bPlaceOrders\x12\x06.Order\x1a\x06.Order(\x01\x30\x01\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x0f.WarningMessage\x12\x34\n\x13\x45xecuteCancelPolicy\x12\x0c.CancelEvent\x1a\x0f.WarningMessageb\x06proto3')
   ,
   dependencies=[protos_dot_protocol__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,protos_dot_finance__pb2.DESCRIPTOR,protos_dot_clock__pb2.DESCRIPTOR,google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
@@ -67,6 +67,13 @@ _BROKERSTATE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='real_ts', full_name='BrokerState.real_ts', index=4,
+      number=5, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
   ],
   extensions=[
   ],
@@ -80,7 +87,7 @@ _BROKERSTATE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=172,
-  serialized_end=329,
+  serialized_end=374,
 )
 
 
@@ -124,8 +131,8 @@ _COMMISSION = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=331,
-  serialized_end=403,
+  serialized_start=376,
+  serialized_end=448,
 )
 
 
@@ -155,8 +162,8 @@ _WARNINGMESSAGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=405,
-  serialized_end=438,
+  serialized_start=450,
+  serialized_end=483,
 )
 
 
@@ -235,8 +242,8 @@ _ORDERPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=441,
-  serialized_end=634,
+  serialized_start=486,
+  serialized_end=679,
 )
 
 
@@ -266,8 +273,8 @@ _CANCELREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=636,
-  serialized_end=669,
+  serialized_start=681,
+  serialized_end=714,
 )
 
 
@@ -297,14 +304,15 @@ _CANCELEVENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=671,
-  serialized_end=716,
+  serialized_start=716,
+  serialized_end=761,
 )
 
 _BROKERSTATE.fields_by_name['transactions'].message_type = protos_dot_finance__pb2._TRANSACTION
 _BROKERSTATE.fields_by_name['commissions'].message_type = _COMMISSION
 _BROKERSTATE.fields_by_name['account'].message_type = protos_dot_protocol__pb2._ACCOUNT
 _BROKERSTATE.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_BROKERSTATE.fields_by_name['real_ts'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _COMMISSION.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
 _COMMISSION.fields_by_name['order'].message_type = protos_dot_protocol__pb2._ORDER
 _ORDERPARAMS.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
@@ -368,8 +376,8 @@ _BROKER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=719,
-  serialized_end=923,
+  serialized_start=764,
+  serialized_end=968,
   methods=[
   _descriptor.MethodDescriptor(
     name='PlaceOrders',

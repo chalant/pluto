@@ -29,6 +29,7 @@ message RunParams {
     string session_id = 1;
     float capital_ratio = 2;
     float max_leverage = 3;
+    google.protobuf.Timestamp real_ts = 4;
 }
 
 message RunParamsList {
@@ -45,8 +46,13 @@ message RunResponse {
 }
 
 message StopRequest {
-    string strategy_id = 1;
+    string session_id = 1;
     bool liquidate = 2;
+    google.protobuf.Timestamp real_ts = 3;
+}
+
+message StopRequests {
+    repeated StopRequest requests = 1;
 }
 
 message StopResponse {

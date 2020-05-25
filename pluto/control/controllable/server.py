@@ -100,9 +100,11 @@ class _ServiceState(abc.ABC):
 
 class _Recovering(_ServiceState):
     def _execute(self, service, command, controllable):
-        if command.dt <= controllable.current_dt:
+        #compare
+        if command.dt <= controllable.real_dt:
             # don't do anything if the signal has "expired" this might happen
-            # if the service receives signals while restoring state...
+            # if the service receives signals while restoring state and it means
+            # that the event has already been processed
             pass
         else:
             # set state to running since we're synchronized
@@ -251,7 +253,11 @@ class _PerformanceWriter(object):
 
 
 class ControllableService(cbl_rpc.ControllableServicer):
-    def __init__(self, monitor_stub, controllable_factory, sessions_interface):
+    def __init__(self,
+                 monitor_stub,
+                 controllable_factory,
+                 sessions_interface,
+                 recover=False):
         '''
 
         Parameters
@@ -397,12 +403,9 @@ class ControllableService(cbl_rpc.ControllableServicer):
             return state
 
     def restore_state(self, session_id):
-        # 1)create controllable, (PROBLEM: need mode (from controllable?))
+        # 1)create controllable,
         # 2)call restore state on it => this will restore its session_state
-        # 4)load events from the events log and push them in the queue
-        #    PROBLEM: we need the datetime (from controllable? => current_dt)
-        # 5)start thread => this will start executing events in the queue
-        # 6)the controllable must ignore "expired" events : events that have already been processed
+        # 4)load events from the events log and execute them in order
         state = self._load_state(session_id)
         self._controllable = controllable = self._cbl_fty.get_controllable(state.mode)
 
@@ -419,7 +422,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         frequency_filter = self._frequency_filter
         state_storage = self._state_storage
 
-        # todo: need to handle all the event types
+        # todo: need to handle all the event types (broker etc.)
 
         for evt_type, evt in events:
             if evt_type == 'clock':
@@ -433,8 +436,17 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 commands.CapitalUpdate(controllable, evt)()
             elif evt_type == 'broker':
                 pass  # todo
-            else:
-                pass
+            elif evt_type == 'stop':
+                pass #todo
+        controllable.run_state = controllable.transitioning
+
+        #create and start a thread to execute queued events
+        self._thread = thread = threading.Thread(target=self._run)
+        thread.start()
+
+    #todo: store the last update request and compare it to the current
+    # request, if it is identical, ignore it. (This might happen if the
+    # controller is recovering from failure)
 
     @service_access.framework_only
     def Stop(self, request, context):
@@ -479,7 +491,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
         we must queue the update message... => the step must be a thread that pulls data
         from the queue...
         '''
-        # NOTE: use FixedBasisPointsSlippage for slippage simulation.
 
         self._queue.put(
             commands.ClockUpdate(
@@ -504,7 +515,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
 class Server(object):
     def __init__(self):
         self._event = threading.Event()
-        self._server = grpc.server(futures.ThreadPoolExecutor(10))
+        self._server = grpc.server(
+            futures.ThreadPoolExecutor(10)
+            # options=(
+            #     ('grpc.keepalive_time_ms', 10000),
+            #     ())
+        )
 
     def start(self, controllable, url=None):
         server = self._server
@@ -549,7 +565,8 @@ def cli():
 @click.argument('session_id')
 @click.argument('root_dir')
 @click.option('-cu', '--controllable-url')
-@click.option('--recovery', is_flag=True)
+@click.option('-re', '--recovery', is_flag=True)
+@click.option('-ee', '--execute-events', is_flag=True)
 def start(framework_id, framework_url, session_id, root_dir, controllable_url, recovery):
     '''
 
@@ -577,12 +594,19 @@ def start(framework_id, framework_url, session_id, root_dir, controllable_url, r
             itf_rpc.MonitorStub(channel),
             factory.ControllableProcessFactory(channel),
             d)
-        if recovery:
-            service.restore_state(session_id)
+
+        #todo: we must start the server
+
         try:
             _SERVER.start(
                 service,
                 controllable_url)
+
+            if recovery:
+                #note: when the controller calls recovery, it wont call "recovery"
+                # todo: add an execute_events flag in parameters
+                service.restore_state(session_id)
+
         except Exception as e:
             # todo: write to log?, send report to controller?
             raise RuntimeError('Unexpected error', e)

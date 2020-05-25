@@ -1,4 +1,5 @@
 from pluto.control.modes import mode
+from pluto.control.modes.processes import process_manager
 from pluto.broker import broker
 
 
@@ -17,8 +18,11 @@ class LiveSimulationMode(mode.ControlMode):
         super(LiveSimulationMode, self).__init__(
             framework_url,
             process_factory,
-            thread_pool
-        )
+            thread_pool)
+
+    @property
+    def mode_type(self):
+        return 'live'
 
     def _create_broker(self):
         return broker.LiveSimulationBroker(
@@ -26,9 +30,8 @@ class LiveSimulationMode(mode.ControlMode):
             self._max_leverage,
             self._market_factory)
 
-    @property
-    def mode_type(self):
-        return 'live'
+    def _create_process_manager(self):
+        return process_manager.LiveProcessManager()
 
     def _accept_loop(self, loop):
         # can take any type of loop

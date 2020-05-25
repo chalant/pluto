@@ -1,5 +1,6 @@
 import abc
 
+from grpc import RpcError
 from google.protobuf import empty_pb2 as emp
 
 from pluto.coms.utils import conversions
@@ -24,6 +25,7 @@ class ProcessFactory(abc.ABC):
 
     def set_broker_service(self, broker_service):
         pass
+
 
 class ProcessWrapper(abc.ABC):
     def __init__(self, process):
@@ -70,17 +72,28 @@ class ProcessWrapper(abc.ABC):
     def _clock_update(self, clock_event):
         raise NotImplementedError
 
-
+#todo: add loggin for all process failures
+#todo: should there be a limit for recovery attempts?
+#todo: recovery must not block
 class Process(abc.ABC):
     __slots__ = ['_controllable', '_session_id']
 
-    def __init__(self, framework_url, session_id, root_dir):
+    def __init__(self,
+                 framework_url,
+                 session_id,
+                 root_dir,
+                 execute_events=False):
+
+        self._framework_url = framework_url
+        self._root_dir = root_dir
+        self._session_id = session_id
+        self._execute_events = execute_events
+
         self._controllable = self._create_controllable(
             _framework_id,
             framework_url,
             session_id,
             root_dir)
-        self._session_id = session_id
 
     @property
     def session_id(self):
@@ -98,8 +111,7 @@ class Process(abc.ABC):
                 mode=mode), ())
 
     def parameter_update(self, params):
-        return self._controllable.ParameterUpdate(
-            params, ())
+        return self._controllable.ParameterUpdate(params, ())
 
     def clock_update(self, clock_event):
         return self._controllable.ClockUpdate(
@@ -110,13 +122,12 @@ class Process(abc.ABC):
             broker_state, ())
 
     def stop(self):
-        #upon receiving the stop message, the controllable will
+        # upon receiving the stop message, the controllable will
         # perform the necessary steps (liquidate positions, update its metrics
         # with data from broker, send back performance metrics). Once all that is
         # done, it will "unblock", then the process will be shutdown.
         # note: the call will be released when all the orders have been processed
         # this means that the process will still receive broker updates
-
         self._controllable.Stop(emp.Empty, ())
         self._stop()
 
@@ -126,10 +137,26 @@ class Process(abc.ABC):
     def stop_watching(self):
         return self._controllable.StopWatching(emp.Empty(), ())
 
+    def recover(self):
+        self._controllable = self._create_controllable(
+            _framework_id,
+            self._framework_url,
+            self._session_id,
+            self._root_dir,
+            True,
+            self._execute_events)
+
     @abc.abstractmethod
-    def _create_controllable(self, framework_id, framework_url, session_id, root_dir):
+    def _create_controllable(self,
+                             framework_id,
+                             framework_url,
+                             session_id,
+                             root_dir,
+                             recover=False,
+                             execute_events=False):
         raise NotImplementedError
 
     @abc.abstractmethod
     def _stop(self):
         raise NotImplementedError
+

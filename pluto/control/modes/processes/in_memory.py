@@ -1,3 +1,6 @@
+import threading
+import signal
+
 from pluto.broker import broker_stub
 from pluto.control.modes.processes import process_factory
 from pluto.control.controllable import server
@@ -146,20 +149,24 @@ class InMemoryProcess(process_factory.Process):
                  controllable_factory,
                  framework_url,
                  session_id,
-                 root_dir):
+                 root_dir,
+                 execute_events=False):
         self._directory = directory
         self._monitor_service = monitor_service
         self._controllable_fty = controllable_factory
         super(InMemoryProcess, self).__init__(
             framework_url,
             session_id,
-            root_dir)
+            root_dir,
+            execute_events)
 
     def _create_controllable(self,
                              framework_id,
                              framework_url,
                              session_id,
-                             root_dir):
+                             root_dir,
+                             recover=False,
+                             execute_events=False):
         return ControllableStub(
             server.ControllableService(
                 MonitorStub(self._monitor_service),
@@ -189,4 +196,5 @@ class InMemoryProcessFactory(process_factory.ProcessFactory):
             self._controllable_fct,
             framework_url,
             session_id,
-            root_dir)
+            root_dir,
+            execute_events=True)

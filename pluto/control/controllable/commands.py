@@ -18,13 +18,17 @@ class Command(abc.ABC):
     def __init__(self, controllable, request):
         self._controllable = controllable
         self._request = request
+        self._dt = conversions.to_datetime(request.real_ts)
 
     def __call__(self):
-        self._execute(self._controllable, self._request)
+        controllable = self._controllable
+        request = self._request
+        controllable.real_dt = self._dt
+        self._execute(controllable, request)
 
     @property
     def dt(self):
-        return self._request.dt
+        return self._dt
 
     @abc.abstractmethod
     def _execute(self, controllable, request):
@@ -125,6 +129,8 @@ class ClockUpdate(Command):
                     # note: in daily mode, this can still be called more than once (if it is
                     # a different exchange)
                     controllable.bar(dt)
+
+                #store state at each bar event, since it only changes on bar/trade_end events
 
                 # todo: non-blocking!
                 # todo: PROBLEM: we might have some conflicts in state, since we could have
