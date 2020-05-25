@@ -1,4 +1,5 @@
 from pluto.control.modes import mode
+from pluto.control.modes.processes import process_manager
 from pluto.broker import broker
 
 
@@ -17,14 +18,17 @@ class SimulationControlMode(mode.ControlMode):
             process_factory,
             thread_pool)
 
+    @property
+    def mode_type(self):
+        return 'simulation'
+
     def _create_broker(self):
         return broker.SimulationBroker(
             self._capital,
             self._max_leverage)
 
-    @property
-    def mode_type(self):
-        return 'simulation'
+    def _create_process_manager(self):
+        return process_manager.ProcessManager()
 
     def _accept_loop(self, loop):
         # can accept any type of loop

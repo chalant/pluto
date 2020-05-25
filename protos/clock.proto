@@ -61,6 +61,7 @@ message Signal {
 
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
+    google.protobuf.Timestamp real_ts = 4;
     EventType event = 2;
     repeated Signal signals = 3;
 }
