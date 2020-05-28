@@ -1,13 +1,9 @@
-import threading
-from concurrent import futures
-
-import grpc
-
 from pluto.dev import editor
 from pluto.explorer import explorer
 from pluto.interface import monitor
 from pluto.controller import controllerservice, controller
 from pluto.coms.utils import conversions
+from pluto.server import service
 
 from protos import development_pb2 as dev_rpc
 from protos import development_pb2_grpc as development
@@ -15,31 +11,31 @@ from protos import controller_pb2_grpc as ctl_rpc
 from protos import interface_pb2_grpc as interface
 
 
-class DevService(development.EnvironmentServicer):
+class DevService(development.EnvironmentServicer, service.Service):
     def __init__(self,
-                 server,
                  directory,
                  framework_url,
                  mode_factory,
                  loop_factory,
                  process_factory):
         self._directory = directory
-        self._server = server
-        self._controller = None
 
         self._framework_url = framework_url
 
-        self._monitor = mon = monitor.Monitor()
-        self._explorer = exp = explorer.Explorer(directory)
-        self._editor = edt = editor.Editor(directory)
+        self._monitor = monitor.Monitor()
+        self._explorer = explorer.Explorer(directory)
+        self._editor = editor.Editor(directory)
+        self._controller = controllerservice.ControllerService(directory)
 
         self._process_factory = process_factory
         self._mode_factory = mode_factory
         self._loop_factory = loop_factory
 
-        development.add_EditorServicer_to_server(edt, server)
-        interface.add_ExplorerServicer_to_server(exp, server)
-        interface.add_MonitorServicer_to_server(mon, server)
+    def set_server(self, server):
+        development.add_EditorServicer_to_server(self._editor, server)
+        interface.add_ExplorerServicer_to_server(self._explorer, server)
+        interface.add_MonitorServicer_to_server(self._monitor, server)
+        ctl_rpc.add_ControllerServicer_to_server(self._controller, server)
 
     def LoadSession(self, request, context):
         # todo: load previously set session
@@ -90,15 +86,10 @@ class DevService(development.EnvironmentServicer):
         # set monitor in-case we have an in-memory process factory
         process_factory.set_monitor_service(mon)
 
-        self._controller = ctl = \
-            controllerservice.ControllerService(
-                directory,
-                controller.Controller(
-                    loop,
-                    end))
-
-        # enable controller service
-        ctl_rpc.add_ControllerServicer_to_server(ctl, self._server)
+        self._controller.set_controller(
+            controller.Controller(
+                loop,
+                end))
 
         return dev_rpc.SetupResponse(session_id=session.id)
 
@@ -121,40 +112,7 @@ class DevService(development.EnvironmentServicer):
         ast = compile(script, path, 'exec')
 
     def stop(self):
-        ctrl = self._controller
-        if ctrl:
-            ctrl.Stop()
+        pass
 
-
-class Server(object):
-    def __init__(self):
-        self._event = threading.Event()
-        self._server = grpc.server(futures.ThreadPoolExecutor())
-
-        self._environment = None
-        self._framework_url = None
-
-    def initialize(self, directory, framework_url):
-        self._directory = directory
-        self._framework_url = framework_url
-
-        server = self._server
-
-        self._environment = env = DevService(server, directory, framework_url)
-        development.add_EnvironmentServicer_to_server(env, server)
-
-    def serve(self):
-        server = self._server
-        server.add_insecure_port(self._framework_url)
-
-        server.start()
-        event = self._event
-        event.clear()
-        event.wait()
-        env = self._environment
-        if env:
-            env.stop()
-        server.stop(0)
-
-    def stop(self):
-        self._event.set()
+    def get_interceptors(self):
+        return ()

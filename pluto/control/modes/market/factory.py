@@ -11,6 +11,16 @@ from protos import clock_pb2
 
 
 class MarketFactory(abc.ABC):
+    @property
+    def calendars(self):
+        '''
+
+        Returns
+        -------
+        set
+        '''
+        return self._get_calendars()
+
     @abc.abstractmethod
     def get_market(self, data_frequency, universe_name, start, end):
         '''
@@ -31,21 +41,31 @@ class MarketFactory(abc.ABC):
     def get_transactions(self, dt, evt, signals):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def _get_calendars(self):
+        raise NotImplementedError
+
 
 class NoopMarketFactory(MarketFactory):
     def __init__(self):
         self._market = market.NoopMarket()
+        self._calendars = set()
 
     def get_market(self, data_frequency, universe_name, start, end):
+        uni = universes.get_universe(universe_name)
+        self._calendars = self._calendars | uni.calendars
         return self._market
 
     def get_transactions(self, dt, evt, signals):
         return
 
+    def _get_calendars(self):
+        return self._calendars
+
 
 class LiveSimulationMarketFactory(MarketFactory):
     def __init__(self, blotter_factory):
-        self._calendars_cache = {}
+        self._calendars_cache = set()
         self._markets = {'daily': {}, 'minute': {}}
         self._all_markets = []
         self._blotter_factory = blotter_factory
@@ -78,12 +98,18 @@ class LiveSimulationMarketFactory(MarketFactory):
         except KeyError:
             uni = universes.get_universe(universe_name)
             calendars = uni.calendars
+            self._calendars_cache = self._calendars_cache | calendars
             if len(calendars) > 1:
                 agg_mkt = market.MarketAggregate()
                 for name in calendars:
                     mkt = self._markets[data_frequency].get(name, None)
                     if not mkt:
-                        mkt = self._create_market(data_frequency, uni, name, start, end)
+                        mkt = self._create_market(
+                            data_frequency,
+                            uni,
+                            name,
+                            start,
+                            end)
                         agg_mkt.add_market(mkt)
                 self._markets[data_frequency][universe_name] = agg_mkt
                 return agg_mkt
@@ -92,13 +118,17 @@ class LiveSimulationMarketFactory(MarketFactory):
                 try:
                     return self._markets[calendar]
                 except KeyError:
-                    return self._create_market(data_frequency, uni, calendar, start, end)
+                    return self._create_market(
+                        data_frequency,
+                        uni,
+                        calendar,
+                        start,
+                        end)
 
     def get_transactions(self, dt, evt, signals):
         transactions = []
         commissions = []
-        
-        #todo we need to pass the signal to update
+
         for txn, cms in self._chain_transactions(
                 dt,
                 evt,
@@ -120,3 +150,6 @@ class LiveSimulationMarketFactory(MarketFactory):
             for transactions in mkt.get_transactions(dt, evt, signals):
                 if transactions:
                     yield transactions
+
+    def _get_calendars(self):
+        return self._calendars_cache

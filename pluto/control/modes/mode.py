@@ -3,8 +3,6 @@ import threading
 
 from pandas import Timestamp
 
-from grpc import RpcError
-
 from pluto.control.events_log import events_log
 from pluto.coms.utils import conversions
 from pluto.broker import broker_service
@@ -43,7 +41,10 @@ class ControlMode(abc.ABC):
         self._events_log = self._create_events_log()
 
         self._process_factory = process_factory
-        self._broker = brk = broker_service.BrokerService(self._create_broker())
+        self._broker = brk = \
+            broker_service.BrokerService(
+                self._create_broker())
+
         process_factory.set_broker_service(brk)
 
         self._thread_pool = thread_pool
@@ -51,9 +52,11 @@ class ControlMode(abc.ABC):
 
         self._process_manager = self._create_process_manager()
 
-    @property
-    def running_sessions(self):
-        return self._process_manager.active_session_ids
+    def recover(self):
+        #todo: load state
+        events = events_log.get_events_log(
+            self.mode_type)
+
 
     def process(self, dt):
         # todo: we need to make sure that all the positions have been liquidated before adding new
@@ -76,29 +79,19 @@ class ControlMode(abc.ABC):
             Timestamp.utcnow())
 
         manager = self._process_manager
+
+        buffer = self._params_buffer
         to_stop = self._to_stop
 
         for p in to_stop:
-            # remove the controllable from the dict and stop it
-            # this will liquidate all the positions
+            param = buffer[p]
+            broker.set_to_liquidation(p, param)
+            manager.stop(p, param)
 
-            # set the session to liquidation
-            # todo: first check if stopping is followed by a liquidation flag
-            broker.set_to_liquidation(p)
-            # submit the stop call as a thread, since it blocks until it
-            # stops
-            try:
-                manager.stop(p)  # todo: need liquidate parameter
-            except KeyError:
-                # process is in recovery, and the signal will be executed
-                # at a later time.
-                pass
-
-        params = self._params_buffer
         arguments = []
 
         for p in self._to_update:
-            param = params[p]
+            param = buffer[p]
             capital = broker.compute_capital(param.capital_ratio)
             max_leverage = broker.adjust_max_leverage(param.max_leverage)
             params = controller_pb2.RunParams(
@@ -106,19 +99,16 @@ class ControlMode(abc.ABC):
                 capital=capital,
                 max_leverage=max_leverage,
                 real_ts=real_dt)
-            try:
-                manager.get_process(p).parameter_update(params)
-            except KeyError:
-                # process is recovering, request will be executed after
-                # recovery from the log
-                pass
+            manager.parameter_update(p, params)
             arguments.append(params)
 
         with self._events_log.writer() as writer:
-            run_params = controller_pb2.RunParamsList(
-                run_params=arguments,
-                timestamp=conversions.to_proto_timestamp(dt))
-            writer.write_event('parameter', run_params)
+            writer.write_event(
+                'parameter',
+                controller_pb2.RunParamsList(
+                    requests=arguments,
+                    timestamp=conversions.to_proto_timestamp(dt)))
+
             writer.write_event(
                 'stop',
                 controller_pb2.StopRequests(
@@ -162,13 +152,7 @@ class ControlMode(abc.ABC):
             signals=signals
         )
 
-        manager = self._process_manager
-
-        for process in manager.active_processes:
-            try:
-                process.clock_update(clock_event)
-            except RpcError:
-                manager.recover(process)
+        self._process_manager.clock_update(clock_event)
 
         # todo: non-blocking!
         with self._events_log.writer() as writer:
@@ -188,23 +172,19 @@ class ControlMode(abc.ABC):
                 signals)
 
             if broker_state:
-                manager = self._process_manager
                 broker_state.real_dt = conversions.to_proto_timestamp(
                     Timestamp.utcnow())
 
                 bytes_ = broker_state.SerializeToString()
 
-                for process in manager.active_processes:
-                    # todo this whole instruction should run in a thread
-                    try:
-                        # todo: we need to launch each call in its own thread
-                        # each controllable can queue calls from the controller
-                        process.account_update(stream.chunk_bytes(bytes_))
-                    except RpcError:
-                        manager.recover(process)
+                # todo this whole instruction should run in a thread
+                # todo: we need to launch each call in its own thread
+                # each controllable can queue calls from the controller
+
+                self._process_manager.account_update(stream.chunk_bytes(bytes_))
                 writer.write_event('broker', broker_state)
 
-    def add_strategies(self, directory, params):
+    def add_strategies(self, directory, params, start, end):
         '''
 
         Parameters
@@ -230,9 +210,14 @@ class ControlMode(abc.ABC):
 
         running_ids = manager.all_session_ids
 
-        self._to_update = ids & running_ids
+        self._to_update = [
+            params_per_id[id_] for id_ in ids & running_ids]
         # stop any process that is running and is not in the request
-        self._to_stop = running_ids - ids
+        self._to_stop = [
+            controller_pb2.StopRequest(
+                session_id=id_,
+                liquidate=params_per_id[id_].liquidate)
+            for id_ in running_ids - ids]
 
         broker = self._broker
         framework_url = self._framework_url
@@ -260,19 +245,19 @@ class ControlMode(abc.ABC):
 
         # todo: should put this step in a thread
         # only initialize processes that aren't already running
+        calendars = set()
         for p in filter_to_run(params_per_id, ids - running_ids):
             session_id = p.session_id
             process = self._create_process(session_id, framework_url)
             capital = broker.compute_capital(p.capital_ratio)
             # adjusts the max_leverage based on available margins from the broker
             max_leverage = broker.adjust_max_leverage(p.max_leverage)
-            sess = p.session
+            sess = directory.get_session(session_id)
 
             # prepare for trade simulation for live simulation case
             universe_name = sess.universe_name
-            start, end = p.start, p.end
 
-            broker.add_market(
+            calendars = calendars | broker.add_market(
                 session_id,
                 sess.data_frequency,
                 start,
@@ -288,6 +273,9 @@ class ControlMode(abc.ABC):
                 mode=mode)
 
             manager.add_process(process)
+
+        return calendars
+
 
     def _create_process(self, session_id, framework_url):
         '''

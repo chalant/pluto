@@ -16,6 +16,7 @@ from pluto.control.controllable import commands
 from pluto.control.events_log import events_log
 from pluto.control.controllable.utils import io
 from pluto.control.controllable.utils import factory
+from pluto.server import server, service
 
 from protos import broker_pb2
 from protos import controllable_pb2
@@ -100,7 +101,7 @@ class _ServiceState(abc.ABC):
 
 class _Recovering(_ServiceState):
     def _execute(self, service, command, controllable):
-        #compare
+        # compare
         if command.dt <= controllable.real_dt:
             # don't do anything if the signal has "expired" this might happen
             # if the service receives signals while restoring state and it means
@@ -118,6 +119,7 @@ class _Recovering(_ServiceState):
 class _Ready(_ServiceState):
     def _execute(self, service, command, controllable):
         command()
+
 
 class _NoneObserver(object):
     def clear(self):
@@ -243,7 +245,7 @@ class _PerformanceWriter(object):
                     observer.stream)
                 # observer.stream()
             else:
-                #clear so that we can stream from the beginning
+                # clear so that we can stream from the beginning
                 observer.clear()
                 self._current_observer = observer
 
@@ -252,12 +254,12 @@ class _PerformanceWriter(object):
             self._current_observer = self._none_observer
 
 
-class ControllableService(cbl_rpc.ControllableServicer):
+class ControllableService(cbl_rpc.ControllableServicer, service.Service):
     def __init__(self,
+                 session_id,
                  monitor_stub,
                  controllable_factory,
-                 sessions_interface,
-                 recover=False):
+                 sessions_interface):
         '''
 
         Parameters
@@ -266,6 +268,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         controllable_factory
         sessions_interface: pluto.interface.directory.StubDirectory
         '''
+        self._session_id = session_id
         self._perf_writer = None
         self._stop = False
 
@@ -402,12 +405,14 @@ class ControllableService(cbl_rpc.ControllableServicer):
             state.ParseFromString(params)
             return state
 
-    def restore_state(self, session_id):
+    def recover(self):
         # 1)create controllable,
         # 2)call restore state on it => this will restore its session_state
         # 4)load events from the events log and execute them in order
+        session_id = self._session_id
         state = self._load_state(session_id)
-        self._controllable = controllable = self._cbl_fty.get_controllable(state.mode)
+        self._controllable = controllable = \
+            self._cbl_fty.get_controllable(state.mode)
 
         with open('strategy', self._states_dir) as f:
             strategy = f.read()
@@ -416,13 +421,11 @@ class ControllableService(cbl_rpc.ControllableServicer):
         # set run_state to recovering
         controllable.run_state = controllable.recovering
         log = events_log.get_events_log(state.mode)
-        events = log.read(session_id, controllable.current_dt)
+        events = log.read(controllable.current_dt)
         # play all missed events since last checkpoint (controllable is in recovery mode)
         perf_writer = self._perf_writer
         frequency_filter = self._frequency_filter
         state_storage = self._state_storage
-
-        # todo: need to handle all the event types (broker etc.)
 
         for evt_type, evt in events:
             if evt_type == 'clock':
@@ -433,24 +436,38 @@ class ControllableService(cbl_rpc.ControllableServicer):
                     evt,
                     state_storage)()
             elif evt_type == 'parameter':
-                commands.CapitalUpdate(controllable, evt)()
+                for request in evt.requests:
+                    if request.session_id == session_id:
+                        commands.CapitalUpdate(
+                            controllable,
+                            evt)()
+                        break
             elif evt_type == 'broker':
-                pass  # todo
+                commands.AccountUpdate(
+                    controllable,
+                    evt)()
             elif evt_type == 'stop':
-                pass #todo
+                for request in evt.requests:
+                    if request.session_id == session_id:
+                        commands.Stop(
+                            controllable,
+                            evt)()
+                        break
+
+        # set run state to transitioning
         controllable.run_state = controllable.transitioning
 
-        #create and start a thread to execute queued events
+        # create and start a thread to execute queued events
         self._thread = thread = threading.Thread(target=self._run)
         thread.start()
 
-    #todo: store the last update request and compare it to the current
-    # request, if it is identical, ignore it. (This might happen if the
-    # controller is recovering from failure)
+        # todo: store the last update request and compare it to the current
+        # request, if it is identical, ignore it. (This might happen if the
+        # controller is recovering from failure)
 
     @service_access.framework_only
     def Stop(self, request, context):
-        #todo needs to liquidate positions and wipe the state.
+        # todo needs to liquidate positions and wipe the state.
         # multiple steps to execute: place orders, wait for all of them
         # to be executed, update performances, then return
         self._stop = True
@@ -511,49 +528,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
     def StopWatching(self, request, context):
         self._perf_writer.stop_observing()
 
-
-class Server(object):
-    def __init__(self):
-        self._event = threading.Event()
-        self._server = grpc.server(
-            futures.ThreadPoolExecutor(10)
-            # options=(
-            #     ('grpc.keepalive_time_ms', 10000),
-            #     ())
-        )
-
-    def start(self, controllable, url=None):
-        server = self._server
-        if not url:
-            port = server.add_insecure_port('localhost:0')
-        else:
-            port = server.add_insecure_port(url)
-        cbl_rpc.add_ControllableServicer_to_server(controllable, server)
-        print(port)
-        server.start()
-        self._event.wait()
-        controllable.stop()
-        server.stop()
-
-    def stop(self):
-        self._event.set()
-
-
-_SERVER = Server()
-
-
-def termination_handler(signum, frame):
-    _SERVER.stop()
-
-
-def interruption_handler(signum, frame):
-    _SERVER.stop()
-
-
-signal.signal(signal.SIGINT, interruption_handler)
-signal.signal(signal.SIGTERM, termination_handler)
-
-
 @click.group()
 def cli():
     pass
@@ -567,7 +541,13 @@ def cli():
 @click.option('-cu', '--controllable-url')
 @click.option('-re', '--recovery', is_flag=True)
 @click.option('-ee', '--execute-events', is_flag=True)
-def start(framework_id, framework_url, session_id, root_dir, controllable_url, recovery):
+def start(
+        framework_id,
+        framework_url,
+        session_id,
+        root_dir,
+        controllable_url,
+        recovery):
     '''
 
     Parameters
@@ -591,22 +571,16 @@ def start(framework_id, framework_url, session_id, root_dir, controllable_url, r
         service_access._framework_id = framework_id
         channel = grpc.insecure_channel(framework_url)
         service = ControllableService(
+            session_id,
             itf_rpc.MonitorStub(channel),
             factory.ControllableProcessFactory(channel),
             d)
-
-        #todo: we must start the server
-
         try:
-            _SERVER.start(
+            svr = server.get_server(service)
+            svr.serve(
                 service,
-                controllable_url)
-
-            if recovery:
-                #note: when the controller calls recovery, it wont call "recovery"
-                # todo: add an execute_events flag in parameters
-                service.restore_state(session_id)
-
+                controllable_url,
+                recovery)
         except Exception as e:
             # todo: write to log?, send report to controller?
             raise RuntimeError('Unexpected error', e)

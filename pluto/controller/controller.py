@@ -84,33 +84,17 @@ class Controller(object):
 
         '''
         loop = self._loop
-        calendars = []
-        parameters = []
         # start is the same in both loop and controllable
         start = loop.start_dt
         end = self._end_dt
 
-        uni = {}  # universe cache
-        for p in params:
-            session = directory.get_session(p.session_id)
-            uni_name = session.universe_name
-            universe = uni.get(uni_name, None)
-            if not universe:
-                uni[universe] = universe = universes.get_universe(uni_name)
-            calendars.extend(universe.calendars)
-            parameters.append(
-                _RunParameter(
-                    session,
-                    p.capital_ratio,
-                    p.max_leverage,
-                    start,
-                    end,
-                    'pluto'))
         loop.execute(commands.Run(
             directory,
             loop.get_mode(mode_type),
-            parameters,
-            set(calendars)))
+            params,
+            start,
+            end))
+
         loop.start()
         # todo: if the loop is already running, raise an error? in live,
         # the run method behaves differently (can be called multiple times)

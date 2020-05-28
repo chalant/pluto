@@ -1,5 +1,3 @@
-import grpc
-
 from pluto.coms.utils import conversions
 from pluto.dev import dev
 from pluto.utils import stream
@@ -15,8 +13,7 @@ class InMemoryTestClient(object):
                  directory,
                  framework_url,
                  mode_factory,
-                 loop_factory,
-                 thread_pool):
+                 loop_factory):
         '''
 
         Parameters
@@ -27,10 +24,8 @@ class InMemoryTestClient(object):
         loop_factory
         '''
 
-        server = grpc.server(thread_pool)
         self._mode_type = mode_factory.mode_type
         self._env = env = dev.DevService(
-            server,
             directory,
             framework_url,
             mode_factory,

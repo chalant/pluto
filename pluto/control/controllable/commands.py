@@ -13,7 +13,7 @@ class StopExecution(Exception):
     pass
 
 class Command(abc.ABC):
-    __slots__ = ['_request', '_controllable']
+    __slots__ = ['_request', '_controllable', '_dt']
 
     def __init__(self, controllable, request):
         self._controllable = controllable
@@ -45,10 +45,11 @@ class Command(abc.ABC):
         '''
         raise NotImplementedError('{}'.format_map(self._execute.__name__))
 
+class Stop(Command):
+    def _execute(self, controllable, request):
+        pass
 
 class CapitalUpdate(Command):
-    __slots__ = ['_controllable', '_request']
-
     def __init__(self, controllable, request):
         super(CapitalUpdate, self).__init__(controllable, request)
 
@@ -92,8 +93,6 @@ class ClockUpdate(Command):
         self._state_store = state_store
 
     def _execute(self, controllable, request):
-        # todo: what about capital updates etc? => each request is bound to a function
-        # ex:
         evt = request.event
         dt = conversions.to_datetime(request.timestamp)
         signals = request.signals
