@@ -204,7 +204,7 @@ class TestUniverse(AbstractUniverse):
 
     @property
     def exchanges(self):
-        return ('AMEX', 'NYSE', 'NASDAQ')
+        return {'AMEX', 'NYSE', 'NASDAQ'}
 
     @property
     def calendar_name(self):

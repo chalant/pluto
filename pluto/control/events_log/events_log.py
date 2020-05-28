@@ -24,7 +24,7 @@ class AbstractEventsLog(object):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def read(self, session_id, datetime):
+    def read(self, datetime):
         '''
 
         Parameters
@@ -51,7 +51,7 @@ class EventsLog(AbstractEventsLog):
     def writer(self):
         return self._writer
 
-    def read(self, session_id, datetime):
+    def read(self, datetime):
         with self._engine.begin() as connection:
             statement = sql.select(
                 [schema.datetimes.datetime,
@@ -72,12 +72,7 @@ class EventsLog(AbstractEventsLog):
                         evt_type = event.event_type
                         dt, evt = _create_event(evt_type, event.event)
                         if dt > datetime:
-                            if evt_type == 'parameter':
-                                # filter session id
-                                if evt.session_id == session_id:
-                                    yield evt
-                            else:
-                                yield evt_type, evt
+                            yield evt_type, evt
 
 class NoopEventsLog(object):
     def __init__(self):
@@ -243,5 +238,9 @@ def _create_event(event_type, bytes_):
         return conversions.to_datetime(event.timestamp), event
     elif event_type == 'broker':
         event = broker_pb2.BrokerState()
+        event.ParseFromString(bytes_)
+        return conversions.to_datetime(event.timestamp), event
+    elif event_type == 'stop':
+        event = controller_pb2.StopRequests()
         event.ParseFromString(bytes_)
         return conversions.to_datetime(event.timestamp), event

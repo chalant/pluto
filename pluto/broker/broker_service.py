@@ -30,13 +30,16 @@ class BrokerService(brk_rpc.BrokerServicer):
         return self._broker.adjust_max_leverage(max_leverage)
 
     def add_market(self, session_id, data_frequency, start, end, universe_name):
-        self._broker.add_market(session_id, data_frequency, start, end, universe_name)
+        broker = self._broker
+        broker.add_market(session_id, data_frequency, start, end, universe_name)
+        return broker.calendars
 
     def add_session_id(self, session_id):
         self._session_ids[session_id] = _States.ACTIVE
 
-    def set_to_liquidation(self, session_id):
-        self._session_ids[session_id] = _States.LIQUIDATION
+    def set_to_liquidation(self, session_id, param):
+        if param.liquidation:
+            self._session_ids[session_id] = _States.LIQUIDATION
 
     @property
     def session_ids(self):

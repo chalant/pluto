@@ -22,7 +22,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   package='',
   syntax='proto3',
   serialized_options=None,
-  serialized_pb=_b('\n\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/metrics.proto\"0\n\x06Status\x12&\n\x0esession_status\x18\x01 \x01(\x0e\x32\x0e.SessionStatus\"c\n\nRunRequest\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x1e\n\nrun_params\x18\x02 \x03(\x0b\x32\n.RunParams\x12\'\n\x03\x65nd\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"y\n\tRunParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rcapital_ratio\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12+\n\x07real_ts\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"^\n\rRunParamsList\x12\x1e\n\nrun_params\x18\x01 \x03(\x0b\x32\n.RunParams\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\r\n\x0bRunResponse\"a\n\x0bStopRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\x12+\n\x07real_ts\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\".\n\x0cStopRequests\x12\x1e\n\x08requests\x18\x01 \x03(\x0b\x32\x0c.StopRequest\"\x0e\n\x0cStopResponse\"2\n\x0bPerformance\x12#\n\x07packets\x18\x01 \x03(\x0b\x32\x12.PerformancePacket\"\xb3\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12#\n\x0bperiod_perf\x18\x02 \x01(\x0b\x32\x0e.PeriodMetrics\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\x13\n\x0bpacket_type\x18\x05 \x01(\t\"D\n\x17ParametersUpdateRequest\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x02 \x01(\x02*/\n\rSessionStatus\x12\r\n\tCOMPLETED\x10\x00\x12\x0f\n\x0bINTERRUPTED\x10\x01*\x1e\n\x07RunMode\x12\t\n\x05PAPER\x10\x00\x12\x08\n\x04LIVE\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32S\n\nController\x12#\n\x04Stop\x12\x0c.StopRequest\x1a\r.StopResponse\x12 \n\x03Run\x12\x0b.RunRequest\x1a\x0c.RunResponseb\x06proto3')
+  serialized_pb=_b('\n\x17protos/controller.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14protos/metrics.proto\"0\n\x06Status\x12&\n\x0esession_status\x18\x01 \x01(\x0e\x32\x0e.SessionStatus\"c\n\nRunRequest\x12\x0c\n\x04mode\x18\x01 \x01(\t\x12\x1e\n\nrun_params\x18\x02 \x03(\x0b\x32\n.RunParams\x12\'\n\x03\x65nd\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\x8c\x01\n\tRunParams\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rcapital_ratio\x18\x02 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x03 \x01(\x02\x12\x11\n\tliquidate\x18\x04 \x01(\x08\x12+\n\x07real_ts\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\\\n\rRunParamsList\x12\x1c\n\x08requests\x18\x01 \x03(\x0b\x32\n.RunParams\x12-\n\ttimestamp\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\r\n\x0bRunResponse\"a\n\x0bStopRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\x12+\n\x07real_ts\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\".\n\x0cStopRequests\x12\x1e\n\x08requests\x18\x01 \x03(\x0b\x32\x0c.StopRequest\"\x0e\n\x0cStopResponse\"2\n\x0bPerformance\x12#\n\x07packets\x18\x01 \x03(\x0b\x32\x12.PerformancePacket\"\xb3\x01\n\x11PerformancePacket\x12+\n\x0f\x63umulative_perf\x18\x01 \x01(\x0b\x32\x12.CumulativeMetrics\x12#\n\x0bperiod_perf\x18\x02 \x01(\x0b\x32\x0e.PeriodMetrics\x12\x37\n\x17\x63umulative_risk_metrics\x18\x04 \x01(\x0b\x32\x16.CumulativeRiskMetrics\x12\x13\n\x0bpacket_type\x18\x05 \x01(\t\"D\n\x17ParametersUpdateRequest\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x02 \x01(\x02\"X\n\x0f\x43ontrollerState\x12.\n\ncheckpoint\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\rlast_function\x18\x02 \x01(\t*/\n\rSessionStatus\x12\r\n\tCOMPLETED\x10\x00\x12\x0f\n\x0bINTERRUPTED\x10\x01*\x1e\n\x07RunMode\x12\t\n\x05PAPER\x10\x00\x12\x08\n\x04LIVE\x10\x01*M\n\x0f\x43ontrollerEvent\x12\x12\n\x0e\x43\x41PITAL_CHANGE\x10\x00\x12\x13\n\x0fLEVERAGE_CHANGE\x10\x01\x12\x11\n\rBROKER_UPDATE\x10\x02\x32S\n\nController\x12#\n\x04Stop\x12\x0c.StopRequest\x1a\r.StopResponse\x12 \n\x03Run\x12\x0b.RunRequest\x1a\x0c.RunResponseb\x06proto3')
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_metrics__pb2.DESCRIPTOR,])
 
@@ -43,8 +43,8 @@ _SESSIONSTATUS = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=934,
-  serialized_end=981,
+  serialized_start=1042,
+  serialized_end=1089,
 )
 _sym_db.RegisterEnumDescriptor(_SESSIONSTATUS)
 
@@ -66,8 +66,8 @@ _RUNMODE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=983,
-  serialized_end=1013,
+  serialized_start=1091,
+  serialized_end=1121,
 )
 _sym_db.RegisterEnumDescriptor(_RUNMODE)
 
@@ -93,8 +93,8 @@ _CONTROLLEREVENT = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=1015,
-  serialized_end=1092,
+  serialized_start=1123,
+  serialized_end=1200,
 )
 _sym_db.RegisterEnumDescriptor(_CONTROLLEREVENT)
 
@@ -214,8 +214,15 @@ _RUNPARAMS = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR),
     _descriptor.FieldDescriptor(
-      name='real_ts', full_name='RunParams.real_ts', index=3,
-      number=4, type=11, cpp_type=10, label=1,
+      name='liquidate', full_name='RunParams.liquidate', index=3,
+      number=4, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='real_ts', full_name='RunParams.real_ts', index=4,
+      number=5, type=11, cpp_type=10, label=1,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -232,8 +239,8 @@ _RUNPARAMS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=233,
-  serialized_end=354,
+  serialized_start=234,
+  serialized_end=374,
 )
 
 
@@ -245,7 +252,7 @@ _RUNPARAMSLIST = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='run_params', full_name='RunParamsList.run_params', index=0,
+      name='requests', full_name='RunParamsList.requests', index=0,
       number=1, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -270,8 +277,8 @@ _RUNPARAMSLIST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=356,
-  serialized_end=450,
+  serialized_start=376,
+  serialized_end=468,
 )
 
 
@@ -294,8 +301,8 @@ _RUNRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=452,
-  serialized_end=465,
+  serialized_start=470,
+  serialized_end=483,
 )
 
 
@@ -339,8 +346,8 @@ _STOPREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=467,
-  serialized_end=564,
+  serialized_start=485,
+  serialized_end=582,
 )
 
 
@@ -370,8 +377,8 @@ _STOPREQUESTS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=566,
-  serialized_end=612,
+  serialized_start=584,
+  serialized_end=630,
 )
 
 
@@ -394,8 +401,8 @@ _STOPRESPONSE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=614,
-  serialized_end=628,
+  serialized_start=632,
+  serialized_end=646,
 )
 
 
@@ -425,8 +432,8 @@ _PERFORMANCE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=630,
-  serialized_end=680,
+  serialized_start=648,
+  serialized_end=698,
 )
 
 
@@ -477,8 +484,8 @@ _PERFORMANCEPACKET = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=683,
-  serialized_end=862,
+  serialized_start=701,
+  serialized_end=880,
 )
 
 
@@ -515,15 +522,53 @@ _PARAMETERSUPDATEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=864,
-  serialized_end=932,
+  serialized_start=882,
+  serialized_end=950,
+)
+
+
+_CONTROLLERSTATE = _descriptor.Descriptor(
+  name='ControllerState',
+  full_name='ControllerState',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='checkpoint', full_name='ControllerState.checkpoint', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+    _descriptor.FieldDescriptor(
+      name='last_function', full_name='ControllerState.last_function', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=952,
+  serialized_end=1040,
 )
 
 _STATUS.fields_by_name['session_status'].enum_type = _SESSIONSTATUS
 _RUNREQUEST.fields_by_name['run_params'].message_type = _RUNPARAMS
 _RUNREQUEST.fields_by_name['end'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _RUNPARAMS.fields_by_name['real_ts'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
-_RUNPARAMSLIST.fields_by_name['run_params'].message_type = _RUNPARAMS
+_RUNPARAMSLIST.fields_by_name['requests'].message_type = _RUNPARAMS
 _RUNPARAMSLIST.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _STOPREQUEST.fields_by_name['real_ts'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _STOPREQUESTS.fields_by_name['requests'].message_type = _STOPREQUEST
@@ -531,6 +576,7 @@ _PERFORMANCE.fields_by_name['packets'].message_type = _PERFORMANCEPACKET
 _PERFORMANCEPACKET.fields_by_name['cumulative_perf'].message_type = protos_dot_metrics__pb2._CUMULATIVEMETRICS
 _PERFORMANCEPACKET.fields_by_name['period_perf'].message_type = protos_dot_metrics__pb2._PERIODMETRICS
 _PERFORMANCEPACKET.fields_by_name['cumulative_risk_metrics'].message_type = protos_dot_metrics__pb2._CUMULATIVERISKMETRICS
+_CONTROLLERSTATE.fields_by_name['checkpoint'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 DESCRIPTOR.message_types_by_name['Status'] = _STATUS
 DESCRIPTOR.message_types_by_name['RunRequest'] = _RUNREQUEST
 DESCRIPTOR.message_types_by_name['RunParams'] = _RUNPARAMS
@@ -542,6 +588,7 @@ DESCRIPTOR.message_types_by_name['StopResponse'] = _STOPRESPONSE
 DESCRIPTOR.message_types_by_name['Performance'] = _PERFORMANCE
 DESCRIPTOR.message_types_by_name['PerformancePacket'] = _PERFORMANCEPACKET
 DESCRIPTOR.message_types_by_name['ParametersUpdateRequest'] = _PARAMETERSUPDATEREQUEST
+DESCRIPTOR.message_types_by_name['ControllerState'] = _CONTROLLERSTATE
 DESCRIPTOR.enum_types_by_name['SessionStatus'] = _SESSIONSTATUS
 DESCRIPTOR.enum_types_by_name['RunMode'] = _RUNMODE
 DESCRIPTOR.enum_types_by_name['ControllerEvent'] = _CONTROLLEREVENT
@@ -624,6 +671,13 @@ ParametersUpdateRequest = _reflection.GeneratedProtocolMessageType('ParametersUp
   ))
 _sym_db.RegisterMessage(ParametersUpdateRequest)
 
+ControllerState = _reflection.GeneratedProtocolMessageType('ControllerState', (_message.Message,), dict(
+  DESCRIPTOR = _CONTROLLERSTATE,
+  __module__ = 'protos.controller_pb2'
+  # @@protoc_insertion_point(class_scope:ControllerState)
+  ))
+_sym_db.RegisterMessage(ControllerState)
+
 
 
 _CONTROLLER = _descriptor.ServiceDescriptor(
@@ -632,8 +686,8 @@ _CONTROLLER = _descriptor.ServiceDescriptor(
   file=DESCRIPTOR,
   index=0,
   serialized_options=None,
-  serialized_start=1094,
-  serialized_end=1177,
+  serialized_start=1202,
+  serialized_end=1285,
   methods=[
   _descriptor.MethodDescriptor(
     name='Stop',

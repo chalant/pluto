@@ -1,22 +1,8 @@
-import signal
 import click
 
 from pluto.interface import directory
+from pluto.server import server
 from pluto.dev import dev
-
-_SERVER = dev.Server()
-
-
-def termination_handler(signum, frame):
-    _SERVER.stop()
-
-
-def interruption_handler(signum, frame):
-    _SERVER.stop()
-
-
-signal.signal(signal.SIGINT, interruption_handler)
-signal.signal(signal.SIGTERM, termination_handler)
 
 
 @click.group()
@@ -26,10 +12,20 @@ def cli():
 
 @cli.command()
 @click.option('--address', default='[::]:50051')
-def start(address):
-    with directory._Directory() as d:
-        _SERVER.initialize(d, address)
-        _SERVER.serve()
+@click.option('--test', is_flag=True)
+@click.option('-re', '--recovery', is_flag=True)
+def start(address, test):
+    env = 'test' if test else 'pluto'
+    #todo: recovery
+    with directory.get_directory(env) as d:
+        srv = server.get_server(
+            dev.DevService(
+                d,
+                address,
+
+            ))
+        srv.serve(address)
+
 
 if __name__ == '__main__':
     cli()

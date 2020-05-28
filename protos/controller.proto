@@ -29,11 +29,12 @@ message RunParams {
     string session_id = 1;
     float capital_ratio = 2;
     float max_leverage = 3;
-    google.protobuf.Timestamp real_ts = 4;
+    bool liquidate = 4;
+    google.protobuf.Timestamp real_ts = 5;
 }
 
 message RunParamsList {
-    repeated RunParams run_params = 1;
+    repeated RunParams requests = 1;
     google.protobuf.Timestamp timestamp = 2;
 }
 
@@ -78,4 +79,9 @@ enum ControllerEvent {
 message ParametersUpdateRequest {
     float capital = 1;
     float maximum_leverage = 2;
+}
+
+message ControllerState {
+    google.protobuf.Timestamp checkpoint = 1;
+    string last_function = 2;
 }

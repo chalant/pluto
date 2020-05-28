@@ -160,8 +160,7 @@ class PlutoExamplesTests(unittest.TestCase):
             mode_utils.SimulationModeFactory(
                 thread_pool,
                 framework_url),
-            loop_utils.SimpleSimulationLoopFactory(),
-            thread_pool)
+            loop_utils.SimpleSimulationLoopFactory())
 
         _run(client, example_name, self._expected_perf)
 
@@ -178,7 +177,6 @@ class PlutoExamplesTests(unittest.TestCase):
                 factory.LiveSimulationMarketFactory(
                     blotter_factory.MultiSimulationBlotterFactory()),
                 thread_pool),
-            loop_utils.SimpleSimulationLoopFactory(),
-            thread_pool)
+            loop_utils.SimpleSimulationLoopFactory())
 
         _run(client, example_name, self._expected_perf)

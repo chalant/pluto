@@ -18,6 +18,8 @@ class Command(ABC):
 
 
 class Stop(Command):
+    __slots__ = ['_control_mode', '_params', '_liquidate']
+
     def __init__(self, control_mode, params, liquidate=False):
         self._liquidate = liquidate
         self._params = params
@@ -28,12 +30,29 @@ class Stop(Command):
 
 
 class Run(Command):
-    def __init__(self, directory, control_mode, params, exchanges):
+    __slots__ = [
+        '_directory',
+        '_control_mode',
+        '_params',
+        '_start',
+        '_end']
+
+    def __init__(self,
+                 directory,
+                 control_mode,
+                 params,
+                 start,
+                 end):
         self._params = params
-        self._exchanges = exchanges
         self._directory = directory
         self._control_mode = control_mode
 
+        self._start = start
+        self._end = end
+
     def __call__(self, clock_factory):
-        clock_factory(self._exchanges)
-        self._control_mode.add_strategies(self._directory, self._params)
+        exchanges = \
+            self._control_mode.add_strategies(
+                self._directory,
+                self._params)
+        clock_factory(exchanges)
