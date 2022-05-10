@@ -51,8 +51,8 @@ class Run(Command):
         self._end = end
 
     def __call__(self, clock_factory):
-        exchanges = \
-            self._control_mode.add_strategies(
-                self._directory,
-                self._params)
+        exchanges = self._control_mode.add_strategies(
+            self._directory,
+            self._params)
+
         clock_factory(exchanges)

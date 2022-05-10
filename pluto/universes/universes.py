@@ -5,10 +5,16 @@ import sqlalchemy as sa
 
 from zipline.data import bundles
 
+from zipline.pipeline.loaders import USEquityPricingLoader
+from zipline.pipeline.data import equity_pricing
+
 from pluto.data import benchmark as bm
-from pluto.data.universes import writer
-from pluto.data.universes import schema
+from pluto.universes import writer
+from pluto.universes import schema
+
 from pluto.trading_calendars import calendar_utils as cu
+
+from pluto.pipeline import domain
 
 from protos import calendar_pb2
 
@@ -67,6 +73,10 @@ class AbstractUniverse(abc.ABC):
     @abc.abstractmethod
     def calendars(self):
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def pipeline_loader(self, columns):
+        raise NotImplementedError('pipeline_loader')
 
 
 class Universe(AbstractUniverse):
@@ -234,6 +244,29 @@ class TestUniverse(AbstractUniverse):
     @property
     def calendars(self):
         return ('XNYS',)
+
+    def pipeline_loader(self, bundle):
+        dom = domain.Domain(self)
+
+        loader = USEquityPricingLoader.without_fx(
+            bundle.equity_daily_bar_reader,
+            bundle.adjustment_reader
+        )
+
+        eq = equity_pricing.EquityPricing.specialize(dom)
+
+        # for a single pipeline, we can't have multiple domains...
+
+        def choose_loader(column):
+            # todo: data_sets should can have "overlapping" columns
+            # todo: we need more pipeline loaders (fundamentals etc.)
+            # as-well as associated data-sets and domains
+            if column in eq.columns:
+                return loader
+            raise ValueError(
+                "No PipelineLoader registered for column %s." % column)
+
+        return choose_loader
 
 
 def get_universe(name):

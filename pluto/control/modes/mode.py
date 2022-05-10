@@ -17,11 +17,13 @@ from protos import clock_pb2
 # only times this is used is for either reading the process dict or transferring
 # process between recovery and process dict
 # => create an abstract class that encapsulates this behavior
-class ControlMode(abc.ABC):
+class ControlCommandHandler(object):
     def __init__(self,
                  framework_url,
                  process_factory,
-                 thread_pool):
+                 thread_pool,
+                 process_manager,
+                 broker):
         '''
 
         Parameters
@@ -43,20 +45,19 @@ class ControlMode(abc.ABC):
         self._process_factory = process_factory
         self._broker = brk = \
             broker_service.BrokerService(
-                self._create_broker())
+                broker)
 
         process_factory.set_broker_service(brk)
 
         self._thread_pool = thread_pool
         self._lock = threading.Lock()
 
-        self._process_manager = self._create_process_manager()
+        self._process_manager = process_manager
 
     def recover(self):
         #todo: load state
         events = events_log.get_events_log(
             self.mode_type)
-
 
     def process(self, dt):
         # todo: we need to make sure that all the positions have been liquidated before adding new
@@ -144,6 +145,12 @@ class ControlMode(abc.ABC):
 
         '''
         # self._broker.update(dt, evt, signals)
+
+        self.update(dt, evt, signals)
+        # process cached commands
+        self.process(dt)
+
+        # continue execution
 
         clock_event = clock_pb2.ClockEvent(
             timestamp=conversions.to_proto_timestamp(dt),
@@ -246,6 +253,7 @@ class ControlMode(abc.ABC):
         # todo: should put this step in a thread
         # only initialize processes that aren't already running
         calendars = set()
+
         for p in filter_to_run(params_per_id, ids - running_ids):
             session_id = p.session_id
             process = self._create_process(session_id, framework_url)
@@ -275,7 +283,6 @@ class ControlMode(abc.ABC):
             manager.add_process(process)
 
         return calendars
-
 
     def _create_process(self, session_id, framework_url):
         '''

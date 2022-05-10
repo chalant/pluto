@@ -1,12 +1,12 @@
 from collections import Iterable
 
-from pluto.data.universes import schema
+from pluto.universes import schema
 from pluto.interface.utils import paths, db_utils
 
-#todo: write asset into a bcolz table where each column is a all the assets at a given
-# timestamp.
-# we should be able to append new data to the table etc.
-# we should be able to store metadata about the universe, like exchanges etc.
+# todo: write asset into a bcolz table where each column is a all the assets at a given
+#  timestamp.
+#  we should be able to append new data to the table etc.
+#  we should be able to store metadata about the universe, like exchanges etc.
 
 _DIRECTORY = None
 _FILE = None
@@ -62,8 +62,10 @@ class UniverseWriter(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
+
 def get_directory(universe_name):
     return paths.get_dir(universe_name, _DIRECTORY)
+
 
 def get_writer(universe_name):
     #todo: insert the universe_name in the metadata

@@ -9,8 +9,10 @@ from protos.clock_pb2 import (
 
 from pluto.coms.utils import conversions
 
+
 class StopExecution(Exception):
     pass
+
 
 class Command(abc.ABC):
     __slots__ = ['_request', '_controllable', '_dt']
@@ -45,9 +47,11 @@ class Command(abc.ABC):
         '''
         raise NotImplementedError('{}'.format_map(self._execute.__name__))
 
+
 class Stop(Command):
     def _execute(self, controllable, request):
         pass
+
 
 class CapitalUpdate(Command):
     def __init__(self, controllable, request):
@@ -56,12 +60,14 @@ class CapitalUpdate(Command):
     def _execute(self, controllable, request):
         raise NotImplementedError
 
+
 class AccountUpdate(Command):
     def __init__(self, controllable, request):
         super(AccountUpdate, self).__init__(controllable, request)
 
     def _execute(self, controllable, request):
         controllable.update_blotter(request)
+
 
 class ClockUpdate(Command):
     __slots__ = [

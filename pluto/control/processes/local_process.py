@@ -4,7 +4,7 @@ import grpc
 
 from protos import controllable_pb2_grpc as cbl
 
-from pluto.control.modes.processes import process_factory
+from pluto.control.processes import processes
 
 
 class LocalProcess(process_factory.Process):

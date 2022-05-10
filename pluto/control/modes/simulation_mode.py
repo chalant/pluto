@@ -1,15 +1,16 @@
 from pluto.control.modes import mode
-from pluto.control.modes.processes import process_manager
+from pluto.control.processes import process_manager
 from pluto.broker import broker
 
 
-class SimulationControlMode(mode.ControlMode):
+class SimulationControlMode(mode.ControlCommandHandler):
     def __init__(self,
                  framework_url,
                  capital,
                  max_leverage,
                  process_factory,
                  thread_pool):
+
         self._capital = capital
         self._max_leverage = max_leverage
 

@@ -7,6 +7,7 @@ from pluto.interface.utils import service_access
 from protos import interface_pb2_grpc as itf
 from protos import interface_pb2 as msg
 
+
 class _Watcher(object):
     def __init__(self, process):
         self._process = process
@@ -25,6 +26,7 @@ class _Watcher(object):
     def performance_update(self, packet):
         self._queue.put(packet)
 
+
 class Monitor(itf.MonitorServicer):
     def __init__(self):
         self._watch_list = {}
@@ -36,7 +38,7 @@ class Monitor(itf.MonitorServicer):
 
         Parameters
         ----------
-        mode: pluto.control.modes.mode.ControlMode
+        mode: pluto.control.modes.mode.ControlCommandHandler
         '''
         self._control_mode = mode
 

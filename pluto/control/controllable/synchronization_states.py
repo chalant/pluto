@@ -8,6 +8,7 @@ from protos.clock_pb2 import (
     TRADE_END
 )
 
+
 class State(ABC):
     def __init__(self, tracker):
         self._tracker = tracker
@@ -25,6 +26,7 @@ class State(ABC):
     @abstractmethod
     def _aggregate(self, tracker, calendars, ts, evt, signals):
         raise NotImplementedError
+
 
 class Trading(State):
     def __init__(self, tracker, calendars):
@@ -58,6 +60,7 @@ class Trading(State):
         else:
             return
 
+
 class InSession(State):
     #waits for the first session start event
     @property
@@ -82,6 +85,7 @@ class InSession(State):
         else:
             return
 
+
 class Active(State):
     #waits for the first bfs event
     @property
@@ -103,6 +107,7 @@ class Active(State):
             return ts, BEFORE_TRADING_START, active
         else:
             return
+
 
 class OutSession(State):
     #waits for the first session start event, or moves to in session state if no session start event
@@ -134,6 +139,7 @@ class OutSession(State):
         else:
             return
 
+
 class Idle(State):
     @property
     def name(self):
@@ -141,6 +147,7 @@ class Idle(State):
 
     def _aggregate(self, tracker, calendars, ts, evt, signals):
         return
+
 
 class Tracker(object):
     def __init__(self, calendars):
@@ -189,6 +196,7 @@ class Tracker(object):
 
     def aggregate(self, dt, evt, signals):
         return self._state.aggregate(dt, evt, signals)
+
 
 def set_state(name, tracker):
     if name == 'bfs':
