@@ -1,7 +1,7 @@
 from pluto.coms.utils import conversions
 from pluto.dev import dev
 from pluto.utils import stream
-from pluto.control.modes.processes import in_memory
+from pluto.control.processes import in_memory
 
 from protos import controller_pb2
 from protos import development_pb2

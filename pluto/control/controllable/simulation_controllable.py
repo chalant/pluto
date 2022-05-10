@@ -23,6 +23,7 @@ class SimulationControllable(controllable.Controllable):
         -------
         pluto.algorithm.TradingAlgorithm
         '''
+
         return algorithm.TradingAlgorithm(
             controllable,
             params,
@@ -43,6 +44,7 @@ class SimulationControllable(controllable.Controllable):
 
     def _create_blotter(self, session_id, universe, cancel_policy):
         setup = stp.load_setup(universe)
+
         return simulation_blotter.SimulationBlotter(
             setup.get_commission_models(),
             setup.get_slippage_models(),

@@ -1,4 +1,5 @@
 import abc
+import hashlib
 
 from grpc import RpcError
 from google.protobuf import empty_pb2 as emp
@@ -8,6 +9,7 @@ from pluto.interface.utils import paths
 from pluto.interface.utils.service_access import _framework_id
 
 from protos import controllable_pb2 as cbl
+
 
 class ProcessFactory(abc.ABC):
     def create_process(self, session_id, framework_url):
@@ -72,43 +74,59 @@ class ProcessWrapper(abc.ABC):
     def _clock_update(self, clock_event):
         raise NotImplementedError
 
-#todo: add loggin for all process failures
-#todo: should there be a limit for recovery attempts?
-#todo: recovery must not block
-class Process(abc.ABC):
-    __slots__ = ['_controllable', '_session_id']
+# todo: add logging for all process failures
+# todo: should there be a limit for recovery attempts?
+# todo: recovery must not block
 
-    def __init__(self,
-                 framework_url,
-                 session_id,
-                 root_dir,
-                 execute_events=False):
 
-        self._framework_url = framework_url
-        self._root_dir = root_dir
-        self._session_id = session_id
-        self._execute_events = execute_events
+class Process(object):
+    __slots__ = ['_controllable', '_strategy_id', '_session_id']
 
-        self._controllable = self._create_controllable(
-            _framework_id,
-            framework_url,
-            session_id,
-            root_dir)
+    def __init__(self, strategy_id):
+        self._strategy_id = strategy_id
+        self._session_id = None
+        # self._execute_events = execute_events
+
+        self._controllable = None
+
+        self._process_id = None
+
+    def set_controllable(self, controllable):
+        self._controllable = controllable
+
+    @property
+    def process_id(self):
+        return self._process_id
 
     @property
     def session_id(self):
         return self._session_id
 
-    def initialize(self, start, end, capital, max_leverage, mode):
+    @property
+    def strategy_id(self):
+        return self._strategy_id
+
+    def initialize(self, setup):
         # send parameters to the controllable as a stream of bytes
         return self._controllable.Initialize(
-            cbl.InitParams(
-                id=self._session_id,
-                start=conversions.to_proto_timestamp(start),
-                end=conversions.to_proto_timestamp(end),
-                capital=capital,
-                max_leverage=max_leverage,
-                mode=mode), ())
+            cbl.RunSetup(
+                strategy_id=self._strategy_id),
+            ())
+
+    def start(self, setup):
+        self._session_id = session_id = setup.session_id
+
+        self._process_id = process_id = hashlib.md5(str(self._strategy_id + session_id).encode()).hexdigest()
+
+        self._controllable.Run(
+            cbl.RunSetup(
+                id=process_id,
+                session_id=session_id,
+                start=conversions.to_proto_timestamp(setup.start),
+                end=conversions.to_proto_timestamp(setup.end)),
+            ())
+
+        return process_id
 
     def parameter_update(self, params):
         return self._controllable.ParameterUpdate(params, ())
@@ -129,7 +147,7 @@ class Process(abc.ABC):
         # note: the call will be released when all the orders have been processed
         # this means that the process will still receive broker updates
         self._controllable.Stop(emp.Empty, ())
-        self._stop()
+        # self._stop()
 
     def watch(self):
         return self._controllable.Watch(emp.Empty(), ())
@@ -137,26 +155,29 @@ class Process(abc.ABC):
     def stop_watching(self):
         return self._controllable.StopWatching(emp.Empty(), ())
 
-    def recover(self):
-        self._controllable = self._create_controllable(
-            _framework_id,
-            self._framework_url,
-            self._session_id,
-            self._root_dir,
-            True,
-            self._execute_events)
+    def __hash__(self):
+        return hash((self._strategy_id, self._session_id))
 
-    @abc.abstractmethod
-    def _create_controllable(self,
-                             framework_id,
-                             framework_url,
-                             session_id,
-                             root_dir,
-                             recover=False,
-                             execute_events=False):
-        raise NotImplementedError
+    # def recover(self):
+    #     self._controllable = self._create_controllable(
+    #         _framework_id,
+    #         self._framework_url,
+    #         self._session_id,
+    #         self._root_dir,
+    #         True,
+    #         self._execute_events)
 
-    @abc.abstractmethod
-    def _stop(self):
-        raise NotImplementedError
+    # @abc.abstractmethod
+    # def _create_controllable(self,
+    #                          framework_id,
+    #                          framework_url,
+    #                          session_id,
+    #                          root_dir,
+    #                          recover=False,
+    #                          execute_events=False):
+    #     raise NotImplementedError
+    #
+    # @abc.abstractmethod
+    # def _stop(self):
+    #     raise NotImplementedError
 

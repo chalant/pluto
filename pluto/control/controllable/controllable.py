@@ -4,24 +4,23 @@ from copy import copy
 from collections import deque
 
 import pandas as pd
+
 import logbook
 
 from zipline.finance import cancel_policy
 from zipline.finance import trading
-from zipline.data import data_portal as dp
-from zipline.pipeline.data import equity_pricing
-from zipline.protocol import BarData
 from zipline.finance import asset_restrictions
+from zipline.data import data_portal as dp
+from zipline.protocol import BarData
+
 from zipline.finance.order import ORDER_STATUS
-from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.utils import api_support
 
 from pluto.coms.utils import conversions
 from pluto.control.controllable import synchronization_states as ss
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
-from pluto.data.universes import universes
-from pluto.pipeline import domain
+from pluto.universes import universes
 
 from protos import controllable_pb2
 
@@ -45,6 +44,7 @@ class _Recovering(_State):
 
     def before_trading_starts(self, algo, dt):
         pass
+
 
 # This state is made to make sure that functions are "activated in the right order
 class _Transitioning(_State):
@@ -70,6 +70,7 @@ class _Transitioning(_State):
     def before_trading_starts(self, algo, dt):
         algo.before_trading_start(algo, dt)
         self._bfs_flag = True
+
 
 class _Ready(_State):
     def handle_data(self, algo, current_data, dt):
@@ -107,6 +108,7 @@ class Controllable(ABC):
         self._calendars = None
         self._benchmark = None
         self._benchmark_source = None
+        self._last_session_close = None
 
         self._sessions = pd.Series()
         self._sessions_array = deque()
@@ -123,6 +125,12 @@ class Controllable(ABC):
         self._transitioning = _Transitioning(self)
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
+
+        self._sync_state_tracker = None
+        # todo: asset restrictions are also loaded per session
+        self._restrictions = asset_restrictions.NoRestrictions()
+
+        self._mode = None
 
     @property
     def state(self):
@@ -177,60 +185,94 @@ class Controllable(ABC):
         return self._params
 
     @property
-    def domain(self):
-        return self._domain
-
-    @property
     def current_data(self):
         return self._current_data
 
     def initialize(self,
-                   session_id,
-                   start_dt,
-                   end_dt,
-                   universe,
+                   strategy_setup,
                    strategy,
-                   capital,
-                   max_leverage,
-                   data_frequency,
-                   arena,
-                   look_back,
-                   cancel_policy):
+                   arena):
         '''
 
         Parameters
         ----------
-        session_id: str
-        start_dt: pandas.Timestamp
-        end_dt: pandas.Timestamp
-        universe: str
+        strategy_setup: pluto.strategies.setup.StrategySetup
         strategy: bytes
-        capital: float
-        max_leverage: float
-        data_frequency: str
         arena: str
-        look_back: int
-        cancel_policy: str
         '''
 
-        uni = universes.get_universe(universe)
+        def noop(*args, **kwargs):
+            pass
+
+        namespace = self._namespace
+
+        code = compile(strategy, '', 'exec')
+        exec(code, namespace)
+
+        # execute setup function first
+        namespace.get('setup', noop)(strategy_setup)
+
+        # load parameters from database
+        self._look_back = strategy_setup.look_back
+        self._mode = arena
+
+    def run(self,
+            process_id,
+            strategy_setup,
+            strategy_session,
+            start_dt,
+            end_dt,
+            capital):
+
+        """
+
+        Parameters
+        ----------
+        process_id: str
+        strategy_setup
+        strategy_session
+        start_dt: pandas.Timestamp
+        end_dt: pandas.Timestamp
+        capital: float
+
+        Returns
+        -------
+
+        """
+
+        def noop(*args, **kwargs):
+            pass
+
+        self._session_id = process_id
+
+        namespace = self._namespace
+        look_back = self._look_back
+        data_frequency = strategy_setup.data_frequency
+
+        sess = strategy_session.session
+
+        uni = universes.get_universe(sess.universe_name)
 
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
+
         calendar = uni.get_calendar(
             start_dt - pd.Timedelta(days=look_back),
             end_dt)
 
-        self._session_id = session_id
         self._start_dt = start_dt
+
         end_dt = calendar.last_session
+
+        # load parameters from database
+
         self._end_dt = end_dt
         self._last_session_close = calendar.session_close(end_dt)
         self._calendar = calendar
         self._universe = uni
-        self._look_back = look_back
-        self._data_frequency = data_frequency
+        self._look_back = strategy_setup.look_back
+        self._data_frequency = sess.data_frequency
 
-        if data_frequency == 'minute':
+        if strategy_setup.data_frequency == 'minute':
             # always set the emission_rate to a minute if the data_frequency is a minute
             self._emission_rate = 'minute'
 
@@ -246,6 +288,7 @@ class Controllable(ABC):
 
         self._calculate_minute_capital_changes = calculate_minute_capital_changes
 
+        # todo: this could be loaded from files and acount parameters (capital etc.)
         self._params = params = trading.SimulationParameters(
             start_dt,
             end_dt,
@@ -253,7 +296,7 @@ class Controllable(ABC):
             capital,
             emission_rate=data_frequency,
             data_frequency=data_frequency,
-            arena=arena)
+            arena=self._mode)
 
         self._sessions = sessions = params.sessions
 
@@ -261,12 +304,18 @@ class Controllable(ABC):
 
         # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
-        self._bundle = bundle = uni.load_bundle()
+
+        bundle = uni.load_bundle()
+
         self._asset_finder = asset_finder = bundle.asset_finder
+
         # todo: first trading day should be the start_dt?
         first_trading_day = calendar.first_session
 
         last_session = calendar.last_session
+
+        # todo: we should raise an error if the there is no data for the look back
+        #  period...
 
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
@@ -293,52 +342,21 @@ class Controllable(ABC):
             capital,
             data_frequency,
             start_dt,
-            look_back)
+            strategy_setup.look_back)
+
+        # todo: we should set up the cancel policy externally.
 
         self._blotter = blotter = self._create_blotter(
-            session_id,
+            self._process_id,
             uni,
             self._get_cancel_policy(
-                cancel_policy))
-
-        # todo: asset restrictions are also loaded per session
-        self._restrictions = restrictions = asset_restrictions.NoRestrictions()
+                strategy_setup.cancel_policy))
 
         self._current_data = self._create_bar_data(
             data_portal,
             calendar,
-            restrictions,
+            self._restrictions,
             data_frequency)
-
-        # todo: we need more domains
-
-        self._domain = dom = domain.Domain(self)
-
-        loader = USEquityPricingLoader.without_fx(
-            bundle.equity_daily_bar_reader,
-            bundle.adjustment_reader
-        )
-
-        eq = equity_pricing.EquityPricing.specialize(dom)
-
-        # for a single pipeline, we can't have multiple domains...
-
-        def choose_loader(column):
-            # todo: data_sets should can have "overlapping" columns
-            # todo: we need more pipeline loaders (fundamentals etc.)
-            # as-well as associated data-sets and domains
-            if column in eq.columns:
-                return loader
-            raise ValueError(
-                "No PipelineLoader registered for column %s." % column)
-
-        def noop(*args, **kwargs):
-            pass
-
-        namespace = self._namespace
-
-        code = compile(strategy, '', 'exec')
-        exec(code, namespace)
 
         # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
@@ -348,7 +366,7 @@ class Controllable(ABC):
             params=params,
             blotter=blotter,
             metrics_tracker=metrics_tracker,
-            pipeline_loader=choose_loader,
+            pipeline_loader=uni.pipeline_loader,
             initialize=namespace.get('initialize', noop),
             handle_data=namespace.get('handle_data', noop),
             before_trading_start=namespace.get('before_trading_start', noop),
@@ -382,9 +400,9 @@ class Controllable(ABC):
         raise NotImplementedError(self._get_algorithm_class.__name__)
 
     def _get_cancel_policy(self, name):
-        if name == 'never_cancel':
+        if name == 'never cancel':
             return cancel_policy.NeverCancel()
-        elif name == 'end_of_day':
+        elif name == 'end of day':
             return cancel_policy.EODCancel()
 
     def minute_end(self, dt):

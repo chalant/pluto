@@ -1,3 +1,4 @@
+import hashlib
 import threading
 import signal
 from concurrent import futures
@@ -6,17 +7,27 @@ import abc
 from functools import partial
 
 import grpc
+
 import click
+
 from google.protobuf import empty_pb2 as emp
 
 from pluto.interface.utils import paths, service_access
 from pluto.interface import directory
+
 from pluto.coms.utils import conversions
-from pluto.control.controllable import commands
+
 from pluto.control.events_log import events_log
+from pluto.control.controllable import commands
 from pluto.control.controllable.utils import io
 from pluto.control.controllable.utils import factory
+
 from pluto.server import server, service
+
+from pluto.strategies import setup as stg_stp
+from pluto.strategies import strategies
+
+from pluto.broker import broker_stub
 
 from protos import broker_pb2
 from protos import controllable_pb2
@@ -145,9 +156,11 @@ class _Observer(object):
     def update(self, performance, end):
         stub = self._stub
         session_id = self._session_id
-        if self._reload == True:
+
+        if self._reload:
             self._stream(stub, session_id)
             self._reload = False
+
         service_access.invoke(
             stub.PerformanceUpdate,
             itf.Packet(
@@ -256,10 +269,11 @@ class _PerformanceWriter(object):
 
 class ControllableService(cbl_rpc.ControllableServicer, service.Service):
     def __init__(self,
-                 session_id,
+                 engine,
                  monitor_stub,
                  controllable_factory,
-                 sessions_interface):
+                 sessions_interface,
+                 mode):
         '''
 
         Parameters
@@ -268,7 +282,9 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
         controllable_factory
         sessions_interface: pluto.interface.directory.StubDirectory
         '''
-        self._session_id = session_id
+
+        self._engine = engine
+
         self._perf_writer = None
         self._stop = False
 
@@ -295,6 +311,10 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
         self._monitor_stub = monitor_stub
         self._cbl_fty = controllable_factory
 
+        self._strategy_setup = None
+
+        self._mode = mode
+
     @property
     def frequency_filter(self):
         return self._frequency_filter
@@ -319,21 +339,70 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
 
     @service_access.framework_only
     def Initialize(self, request, context):
-        with self._session_interface.read() as r:
+        # todo: get engine from files module data...
+
+        with self._engine.connect() as connection:
+            id_ = request.strategy_id  # the id of the controllable => will be used in performance updates
+
+            self._strategy_setup = strategy_setup = stg_stp.StrategySetup()
+
+            mode = self._mode
+
+            controllable = self._cbl_fty.get_controllable(factory.ControllableParams(
+                mode,
+                id_))
+
+            if controllable:
+                self._controllable = controllable
+
+                controllable.initialize(
+                    id_,
+                    strategy_setup,
+                    mode)
+
+                data_frequency = strategy_setup.data_frequency
+
+                if data_frequency == 'daily':
+                    self._frequency_filter = DayFilter()
+                elif data_frequency == 'minute':
+                    self._frequency_filter = MinuteFilter()
+
+                # run the thread
+                self._state = self._ready
+
+                # save/overwrite strategy setup
+                stg_stp.save_strategy_setup(
+                    connection,
+                    strategy_setup)
+            else:
+                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+                context.set_details("Mode {} doesn't exist".format(mode))
+
+            return controllable_pb2.InitializeResponse(
+                data_frequency=strategy_setup.data_frequency,
+                leverage=strategy_setup.leverage,
+                shorting=strategy_setup.shorting,
+                asset_classes=strategy_setup.asset_classes
+            )
+
+    def Run(self, request, context):
+
+        with self._engine.connect() as connection:
             id_ = request.id  # the id of the controllable => will be used in performance updates
-            session = r.get_session(id_)
-            data_frequency = session.data_frequency
 
-            if data_frequency == 'daily':
-                self._frequency_filter = DayFilter()
-            elif data_frequency == 'minute':
-                self._frequency_filter = MinuteFilter()
+            session_id = request.session_id
+            strategy_id = self._strategy_id
 
-            mode = request.mode
+            strategy_session = strategies.get_strategy_session(
+                connection,
+                strategy_id,
+                session_id)
 
-            controllable = self._cbl_fty.get_controllable(mode, id_)
+            strategy_setup = self._strategy_setup
 
-            # todo: we should have a directory for performance
+            mode = self._mode
+
+            # todo: we should have a directory for storing performance
 
             # activate state storage if we're in live mode
 
@@ -366,28 +435,32 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
                 self._thread_pool
             )
 
+            controllable = self._controllable
+
             if controllable:
-                self._controllable = controllable
-                controllable.initialize(
+
+                controllable.run(
                     id_,
+                    strategy_setup,
+                    strategy_session,
                     conversions.to_datetime(request.start),
                     conversions.to_datetime(request.end),
-                    session.universe_name,
-                    session.get_strategy(r.get_strategy(session.strategy_id)),
-                    request.capital,
-                    request.max_leverage,
-                    data_frequency,
-                    mode,
-                    session.look_back,
-                    session.cancel_policy)
+                    request.capital)
+
                 # run the thread
                 self._state = self._ready
+
+                # save/overwrite strategy setup
+                stg_stp.save_strategy_setup(
+                    connection,
+                    strategy_setup)
 
                 self._thread = thread = threading.Thread(target=self._run)
                 thread.start()
             else:
-                context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-                context.set_details("Mode {} doesn't exist".format(mode))
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details("Strategy was not initialized".format(mode))
+
             return emp.Empty()
 
     def _run(self):
@@ -405,11 +478,12 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
             state.ParseFromString(params)
             return state
 
-    def recover(self):
+    def recover(self, strategy_session):
         # 1)create controllable,
         # 2)call restore state on it => this will restore its session_state
         # 4)load events from the events log and execute them in order
         session_id = self._session_id
+
         state = self._load_state(session_id)
         self._controllable = controllable = \
             self._cbl_fty.get_controllable(state.mode)
@@ -528,15 +602,19 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
     def StopWatching(self, request, context):
         self._perf_writer.stop_observing()
 
+
 @click.group()
 def cli():
     pass
+
+# todo: when we launch the server, we can fetch parameters from some
+#  file...
 
 
 @cli.command()
 @click.argument('framework_id')
 @click.argument('framework_url')
-@click.argument('session_id')
+@click.argument('mode')
 @click.argument('root_dir')
 @click.option('-cu', '--controllable-url')
 @click.option('-re', '--recovery', is_flag=True)
@@ -544,18 +622,24 @@ def cli():
 def start(
         framework_id,
         framework_url,
-        session_id,
+        mode,
         root_dir,
         controllable_url,
         recovery):
-    '''
+
+    #todo: load parameters from setup files
+    # framework id, framework url etc.
+    # note: the framework url must be generated on the fly
+    # so we pass it as argument.
+
+    """
 
     Parameters
     ----------
     framework_url : str
         url for callbacks
     controllable_url: str
-    '''
+    """
 
     # If the controllable fails, it will be relaunched by the controller.
 
@@ -567,18 +651,18 @@ def start(
     # need reviewing
 
     with directory.StubDirectory(root_dir) as d:
+
         # set the framework_id if ran as a process
         service_access._framework_id = framework_id
         channel = grpc.insecure_channel(framework_url)
-        service = ControllableService(
-            session_id,
+
+        controllable_service = ControllableService(
             itf_rpc.MonitorStub(channel),
-            factory.ControllableProcessFactory(channel),
-            d)
+            factory.RemoteControllableFactory(channel), d)
         try:
-            svr = server.get_server(service)
+            svr = server.get_server(controllable_service)
             svr.serve(
-                service,
+                controllable_service,
                 controllable_url,
                 recovery)
         except Exception as e:

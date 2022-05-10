@@ -5,6 +5,7 @@ import ntplib
 import pandas as pd
 import threading
 import itertools
+import queue
 
 from collections import deque
 
@@ -326,7 +327,7 @@ class MinuteLiveLoop(object):
                 except IndexError:
                     # we've reached the last minute of the current last session.
                     # reset minute_idx
-                    minutes = _get_minute(master_clock, 10)
+                    minutes = _get_minutes(master_clock, 10)
                     minute_idx = 0
                     cur_exp_dt = minutes[minute_idx]
             else:

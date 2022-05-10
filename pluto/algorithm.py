@@ -52,6 +52,7 @@ log = logbook.Logger("TradingAlgorithm")
 # For creating and storing pipeline instances
 AttachedPipeline = namedtuple('AttachedPipeline', 'pipe chunks eager')
 
+
 # TODO: we need to store the algorithm state as-well=> store its dictionary variable etc.
 class TradingAlgorithm(algorithm.TradingAlgorithm):
     def __init__(self,
@@ -489,17 +490,12 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
     @api_method
     def set_slippage(self, us_equities=None, us_futures=None):
-        # disable setting slippage
+        # disable setting slippage this will be set externally
         pass
 
     @api_method
     def set_commission(self, us_equities=None, us_futures=None):
-        # disable setting commission
-        pass
-
-    @api_method
-    def set_cancel_policy(self, cancel_policy):
-        # disable set_cancel_policy
+        # disable setting commission this will be set externally
         pass
 
 

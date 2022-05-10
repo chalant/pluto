@@ -1,4 +1,4 @@
-from pluto.control.modes.processes import process_factory
+from pluto.control.processes import processes
 
 class PodProcess(process_factory.Process):
     pass

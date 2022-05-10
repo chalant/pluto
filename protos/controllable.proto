@@ -11,7 +11,8 @@ import "protos/data.proto";
 service Controllable {
     /*A service that is called by a controller*/
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
-    rpc Initialize (InitParams) returns (google.protobuf.Empty);
+    rpc Initialize (RunSetup) returns (InitializeResponse);
+    rpc Run (RunRequest) returns (google.protobuf.Empty);
     rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
     //sends broker state
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
@@ -21,13 +22,24 @@ service Controllable {
     rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-message InitParams {
+message RunSetup {
+    string strategy_id = 1;
+}
+
+message InitializeResponse {
+    string data_frequency = 1;
+    string leverage = 2;
+    string shorting = 3;
+    string asset_classes = 4;
+}
+
+message RunRequest {
     string id = 1;
-    float capital = 2;
-    float max_leverage = 3;
-    google.protobuf.Timestamp start = 4;
-    google.protobuf.Timestamp end = 5;
-    string mode = 6;
+    string session_id = 2;
+
+    google.protobuf.Timestamp start = 3;
+    google.protobuf.Timestamp end = 4;
+
 }
 
 message UpdateRequest {

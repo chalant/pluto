@@ -3,7 +3,7 @@ from pluto.control.modes.processes import process_manager
 from pluto.broker import broker
 
 
-class LiveSimulationMode(mode.ControlMode):
+class LiveSimulationMode(mode.ControlCommandHandler):
     def __init__(self,
                  framework_url,
                  capital,

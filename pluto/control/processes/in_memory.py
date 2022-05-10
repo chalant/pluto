@@ -1,8 +1,5 @@
-import threading
-import signal
-
 from pluto.broker import broker_stub
-from pluto.control.modes.processes import process_factory
+from pluto.control.processes import processes
 from pluto.control.controllable import server
 from pluto.control.controllable.utils import factory
 from pluto.control.controllable import simulation_controllable
@@ -67,19 +64,19 @@ class BrokerStub(broker_stub.BrokerStub):
             FakeContext(metadata))
 
 
-class ControllableFactory(factory.ControllableFactory):
+class InMemoryControllableFactory(factory.ControllableFactory):
     def __init__(self, broker_service):
         self._broker_service = broker_service
 
-    def _create_controllable(self, mode, session_id):
-        if mode == 'simulation':
+    def _create_controllable(self, params):
+        if params.mode == 'simulation':
             return simulation_controllable.SimulationControllable()
-        elif mode == 'live':
+        elif params.mode == 'live':
             return live_controllable.LiveControllable(
-                BrokerStub(self._broker_service, session_id))
+                BrokerStub(self._broker_service, params.session_id))
 
 
-class ControllableStub(stub.ControllableStub):
+class InMemoryControllableStub(stub.ControllableStub):
     def __init__(self, servicer):
         self._servicer = servicer
 
@@ -119,7 +116,7 @@ class ControllableStub(stub.ControllableStub):
             FakeContext(metadata))
 
 
-class MonitorStub(object):
+class InMemoryMonitorStub(object):
     def __init__(self, monitor_servicer):
         self._monitor_server = monitor_servicer
 
@@ -142,7 +139,7 @@ class MonitorStub(object):
             FakeContext(metadata))
 
 
-class InMemoryProcess(process_factory.Process):
+class InMemoryProcess(processes.Process):
     def __init__(self,
                  directory,
                  monitor_service,
@@ -167,9 +164,9 @@ class InMemoryProcess(process_factory.Process):
                              root_dir,
                              recover=False,
                              execute_events=False):
-        return ControllableStub(
+        return InMemoryControllableStub(
             server.ControllableService(
-                MonitorStub(self._monitor_service),
+                InMemoryMonitorStub(self._monitor_service),
                 self._controllable_fty,
                 self._directory))
 
@@ -177,7 +174,7 @@ class InMemoryProcess(process_factory.Process):
         pass
 
 
-class InMemoryProcessFactory(process_factory.ProcessFactory):
+class InMemoryProcessFactory(processes.ProcessFactory):
     def __init__(self, directory):
         self._monitor_service = None
         self._controllable_fct = None
@@ -187,7 +184,7 @@ class InMemoryProcessFactory(process_factory.ProcessFactory):
         self._monitor_service = monitor_service
 
     def set_broker_service(self, broker_service):
-        self._controllable_fct = ControllableFactory(broker_service)
+        self._controllable_fct = InMemoryControllableFactory(broker_service)
 
     def _create_process(self, framework_url, session_id, root_dir):
         return InMemoryProcess(

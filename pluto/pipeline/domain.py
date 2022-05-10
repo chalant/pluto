@@ -28,6 +28,7 @@ class Domain(domain.Domain):
 
     @property
     def country_code(self):
+        #todo
         return ''
 
     def data_query_cutoff_for_sessions(self, sessions):

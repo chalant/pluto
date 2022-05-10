@@ -43,6 +43,7 @@ class DevService(development.EnvironmentServicer, service.Service):
 
     def Setup(self, request, context):
         directory = self._directory
+
         with directory.write() as w:
             look_back = request.look_back
             data_frequency = request.data_frequency
