@@ -65,13 +65,17 @@ class BrokerStub(broker_stub.BrokerStub):
 
 
 class InMemoryControllableFactory(factory.ControllableFactory):
-    def __init__(self, broker_service):
+    def __init__(self, broker_service=None):
         self._broker_service = broker_service
 
     def _create_controllable(self, params):
-        if params.mode == 'simulation':
+        if params.mode == 'backtesting':
             return simulation_controllable.SimulationControllable()
         elif params.mode == 'live':
+            # todo: this is temporary and ugly!
+            if not self._broker_service:
+                raise ValueError("Broker service not set for live mode")
+
             return live_controllable.LiveControllable(
                 BrokerStub(self._broker_service, params.session_id))
 

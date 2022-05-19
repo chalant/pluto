@@ -10,10 +10,11 @@ import logbook
 from zipline.finance import cancel_policy
 from zipline.finance import trading
 from zipline.finance import asset_restrictions
+from zipline.finance.order import ORDER_STATUS
+
 from zipline.data import data_portal as dp
 from zipline.protocol import BarData
 
-from zipline.finance.order import ORDER_STATUS
 from zipline.utils import api_support
 
 from pluto.coms.utils import conversions
@@ -210,7 +211,7 @@ class Controllable(ABC):
         exec(code, namespace)
 
         # execute setup function first
-        namespace.get('setup', noop)(strategy_setup)
+        namespace.get('requirement', noop)(strategy_setup)
 
         # load parameters from database
         self._look_back = strategy_setup.look_back
@@ -219,10 +220,9 @@ class Controllable(ABC):
     def run(self,
             process_id,
             strategy_setup,
-            strategy_session,
+            run_setup,
             start_dt,
-            end_dt,
-            capital):
+            end_dt):
 
         """
 
@@ -230,10 +230,9 @@ class Controllable(ABC):
         ----------
         process_id: str
         strategy_setup
-        strategy_session
+        run_setup
         start_dt: pandas.Timestamp
         end_dt: pandas.Timestamp
-        capital: float
 
         Returns
         -------
@@ -249,9 +248,7 @@ class Controllable(ABC):
         look_back = self._look_back
         data_frequency = strategy_setup.data_frequency
 
-        sess = strategy_session.session
-
-        uni = universes.get_universe(sess.universe_name)
+        uni = run_setup.trading_universe
 
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
 
@@ -270,7 +267,7 @@ class Controllable(ABC):
         self._calendar = calendar
         self._universe = uni
         self._look_back = strategy_setup.look_back
-        self._data_frequency = sess.data_frequency
+        self._data_frequency = run_setup.data_frequency
 
         if strategy_setup.data_frequency == 'minute':
             # always set the emission_rate to a minute if the data_frequency is a minute
@@ -288,12 +285,12 @@ class Controllable(ABC):
 
         self._calculate_minute_capital_changes = calculate_minute_capital_changes
 
-        # todo: this could be loaded from files and acount parameters (capital etc.)
+        # todo: this could be loaded from files and account parameters (capital etc.)
         self._params = params = trading.SimulationParameters(
             start_dt,
             end_dt,
             calendar,
-            capital,
+            run_setup.capital,
             emission_rate=data_frequency,
             data_frequency=data_frequency,
             arena=self._mode)
@@ -339,7 +336,7 @@ class Controllable(ABC):
 
         self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(
             benchmark_source,
-            capital,
+            run_setup.capital,
             data_frequency,
             start_dt,
             strategy_setup.look_back)
@@ -366,7 +363,7 @@ class Controllable(ABC):
             params=params,
             blotter=blotter,
             metrics_tracker=metrics_tracker,
-            pipeline_loader=uni.pipeline_loader,
+            pipeline_loader=uni.pipeline_loader(bundle),
             initialize=namespace.get('initialize', noop),
             handle_data=namespace.get('handle_data', noop),
             before_trading_start=namespace.get('before_trading_start', noop),

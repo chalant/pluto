@@ -9,14 +9,15 @@ from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.pipeline.data import equity_pricing
 
 from pluto.data import benchmark as bm
+
 from pluto.universes import writer
-from pluto.universes import schema
 
 from pluto.trading_calendars import calendar_utils as cu
 
 from pluto.pipeline import domain
 
 from protos import calendar_pb2
+
 
 class AssetFilter(object):
     def __init__(self, directory):
@@ -75,7 +76,7 @@ class AbstractUniverse(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def pipeline_loader(self, columns):
+    def pipeline_loader(self, bundle):
         raise NotImplementedError('pipeline_loader')
 
 
@@ -141,6 +142,10 @@ class Universe(AbstractUniverse):
         return cu.from_proto_calendar(proto, start, end, cache)
 
     @property
+    def calendars(self):
+        raise NotImplementedError
+
+    @property
     def calendar_name(self):
         raise NotImplementedError
 
@@ -168,6 +173,9 @@ class Universe(AbstractUniverse):
     @property
     def platform(self):
         return 'pluto'
+
+    def pipeline_loader(self, bundle):
+        raise NotImplementedError
 
     def benchmark(self):
         if not self._benchmark:
@@ -206,6 +214,9 @@ class ZiplineQuandlUniverse(AbstractUniverse):
     def benchmark(self):
         return bm.ZiplineBenchmark()
 
+    def pipeline_loader(self, bundle):
+        raise NotImplementedError
+
 
 class TestUniverse(AbstractUniverse):
     @property
@@ -243,7 +254,7 @@ class TestUniverse(AbstractUniverse):
 
     @property
     def calendars(self):
-        return ('XNYS',)
+        return 'XNYS',
 
     def pipeline_loader(self, bundle):
         dom = domain.Domain(self)

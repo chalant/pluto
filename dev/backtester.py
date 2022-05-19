@@ -1,104 +1,72 @@
-from dev import editor
-from pluto.explorer import explorer
+import yaml
+
+
 from pluto.interface import monitor
-from pluto.controller import controllerservice, controller
-from pluto.coms.utils import conversions
-from pluto.server import service
 
 from pluto.control.controllable import server
-
-from pluto.control.modes import mode
-from pluto.broker import broker
-from pluto.control.controllable.utils import factory
-
 from pluto.control.loop import simulation_loop
-
-from pluto.universes import universes
 from pluto.control.processes import in_memory
 from pluto.control.processes import processes
 
-from pluto.control import commands
+from pluto.universes import universes
 
-from protos import development_pb2 as dev_rpc
-from protos import development_pb2_grpc as development
-from protos import controller_pb2_grpc as ctl_rpc
-from protos import interface_pb2_grpc as interface
+from pluto.setup import run_setup
+from pluto.setup import directory_setup as drp
 
 
-class BacktestingBroker(broker.Broker):
-    pass
-
-
-# todo: this is a process?
-class BackTestingSignalHandler(object):
-    def __init__(self, backtesting_setup, process):
-        self._setup = backtesting_setup
-        self._broker = broker.SimulationBroker(
-            self._capital,
-            self._mac
-        )
-
-    def initialize(self, ):
-        pass
-
-    def clock_update(self, ts, evt, signals):
-        pass
-
-    def _create_broker(self):
-        return broker.SimulationBroker(
-            self._capital,
-            self._max_leverage)
+def load_backtest_setup():
+    with open(drp.setup_dir.get_file("setup", "yaml").path) as f:
+        stp = yaml.load(f, Loader=yaml.FullLoader)
 
 
 class BackTester(object):
-    def __init__(self, directory):
-        self._controller = controllerservice.ControllerService(directory)
-
+    def __init__(self):
         # note end date is always the most recent data point
-        self._directory = directory
 
         self._stg_stp = None
         self._process = None
 
-    def initialize(self, setup):
-        # todo: create broker stub ?
-        # todo: start a controllable process...
-
-        # get calendar of the universe
-
-        self._process = process = processes.Process(setup.strategy_id)
-
-        process.set_controllable(
+    def _setup(self, setup, mon):
+        pi = processes.ProcessInitializer(
             in_memory.InMemoryControllableStub(
                 server.ControllableService(
-                    in_memory.InMemoryMonitorStub(),
+                    drp.strategies_db_engine,
+                    in_memory.InMemoryMonitorStub(mon),
                     in_memory.InMemoryControllableFactory(),
-                    self._directory
-                )
-            )
-        )
+                    'backtesting')))
 
-        # loop = simulation_loop.SimulationLoop(start, end)
-        mon = self._monitor
-        mon.set_control_mode(mode)
+        strategy_setup = pi.initialize(setup)
 
-        return process.initialize(setup)
+        r_stp = run_setup.load_run_setup()
 
-    def run(self, setup):
+        # todo: normally, we should use the strategy setup to match with
+        #  with the available universes, if the requested setup does not exist,
+        #  raise an error!
 
-        uni = universes.get_universe(setup.trading_universe)
+        # todo: create RunSetup message... (we use the setup file...)
+
+        # todo: raise an error when the universe doesn't match the strategy setup requirements
+
+        # todo: save the setups into the data-base, could be useful for deployment etc.
+
+        uni = universes.get_universe(r_stp.trading_universe)
+
+        return pi.start(r_stp), uni
+
+    def run(self, setup, watcher):
+        # get calendar of the universe
+
+        mon = monitor.Monitor()
+
+        process, uni = self._setup(setup, mon)
+
+        # subscribe watcher to monitor...
+        mon.watch(watcher)
 
         loop = simulation_loop.SimulationLoop(
             setup.start,
             setup.end,
-            self._process,
+            process,
             setup.frequency)
 
-        loop.add_clock(uni.exchanges)
-
-        loop.start()
-
-        # self._controller.set_controller(controller.Controller(
-        #     loop,
-        #     setup.end))
-
+        loop.start(uni.exchanges)

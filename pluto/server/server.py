@@ -4,6 +4,7 @@ from concurrent import futures
 
 import grpc
 
+
 class _Server(object):
     def __init__(self, service):
         self._event = threading.Event()
@@ -13,17 +14,19 @@ class _Server(object):
         self._service = service
         service.set_server(server)
 
-    def serve(self, framework_url=None, recover=False):
+    def serve(self, framework_url=None):
         server = self._server
         if framework_url:
             port = server.add_insecure_port(framework_url)
         else:
             port = server.add_insecure_port('localhost:0')
+
+        # todo: should pipe this...
         print(port)
+
         service = self._service
         server.start()
-        if recover:
-            service.recover()
+
         event = self._event
         event.clear()
         event.wait()
@@ -33,18 +36,23 @@ class _Server(object):
     def stop(self):
         self._event.set()
 
+
 _SERVERS = []
+
 
 def termination_handler(signum, frame):
     for srv in _SERVERS:
         srv.stop()
 
+
 def interruption_handler(signum, frame):
     for srv in _SERVERS:
         srv.stop()
 
+
 signal.signal(signal.SIGINT, interruption_handler)
 signal.signal(signal.SIGTERM, termination_handler)
+
 
 def get_server(service):
     srv = _Server(service)

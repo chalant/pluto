@@ -2,6 +2,7 @@ from pluto.control.controllable import controllable
 from pluto.finance import live_blotter
 from pluto import algorithm
 
+
 class LiveControllable(controllable.Controllable):
     def __init__(self, broker_stub):
         super(LiveControllable, self).__init__()
