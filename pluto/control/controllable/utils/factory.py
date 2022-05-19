@@ -54,5 +54,5 @@ class RemoteControllableFactory(ControllableFactory):
                 broker_stub.ProcessBrokerStub(
                     self._channel,
                     params.session_id))
-        elif params.mode == 'simulation':
+        elif params.mode == 'backtesting':
             return simulation_controllable.SimulationControllable()

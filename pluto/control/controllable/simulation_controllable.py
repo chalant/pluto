@@ -1,7 +1,7 @@
 from pluto.finance.blotter import simulation_blotter
 from pluto.control.controllable import controllable
 from pluto import algorithm
-from pluto.setup import setup as stp
+from pluto.setup import run_setup as stp
 
 
 class SimulationControllable(controllable.Controllable):

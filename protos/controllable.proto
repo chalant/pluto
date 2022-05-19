@@ -31,14 +31,35 @@ message InitializeResponse {
     string leverage = 2;
     string shorting = 3;
     string asset_classes = 4;
+    bool fractional = 5;
+}
+
+message CommissionModels {
+    string equity = 1;
+    string futures = 2;
+}
+
+message TaxModels {
+    string equity = 1;
+    string futures = 2;
 }
 
 message RunRequest {
     string id = 1;
     string session_id = 2;
 
-    google.protobuf.Timestamp start = 3;
-    google.protobuf.Timestamp end = 4;
+    float capital = 3;
+    float leverage = 4;
+
+    google.protobuf.Timestamp start = 5;
+    google.protobuf.Timestamp end = 6;
+
+    CommissionModels commission_models = 7;
+    TaxModels tax_models = 8;
+
+    string universe_name = 9;
+
+    bool clear_perf = 10; // clear performance log file
 
 }
 

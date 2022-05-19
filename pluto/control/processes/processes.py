@@ -2,6 +2,7 @@ import abc
 import hashlib
 
 from grpc import RpcError
+
 from google.protobuf import empty_pb2 as emp
 
 from pluto.coms.utils import conversions
@@ -74,59 +75,22 @@ class ProcessWrapper(abc.ABC):
     def _clock_update(self, clock_event):
         raise NotImplementedError
 
+
 # todo: add logging for all process failures
 # todo: should there be a limit for recovery attempts?
 # todo: recovery must not block
 
 
 class Process(object):
-    __slots__ = ['_controllable', '_strategy_id', '_session_id']
+    __slots__ = ['_process_id', '_controllable']
 
-    def __init__(self, strategy_id):
-        self._strategy_id = strategy_id
-        self._session_id = None
-        # self._execute_events = execute_events
-
-        self._controllable = None
-
-        self._process_id = None
-
-    def set_controllable(self, controllable):
+    def __init__(self, process_id, controllable):
+        self._process_id = process_id
         self._controllable = controllable
 
     @property
     def process_id(self):
         return self._process_id
-
-    @property
-    def session_id(self):
-        return self._session_id
-
-    @property
-    def strategy_id(self):
-        return self._strategy_id
-
-    def initialize(self, setup):
-        # send parameters to the controllable as a stream of bytes
-        return self._controllable.Initialize(
-            cbl.RunSetup(
-                strategy_id=self._strategy_id),
-            ())
-
-    def start(self, setup):
-        self._session_id = session_id = setup.session_id
-
-        self._process_id = process_id = hashlib.md5(str(self._strategy_id + session_id).encode()).hexdigest()
-
-        self._controllable.Run(
-            cbl.RunSetup(
-                id=process_id,
-                session_id=session_id,
-                start=conversions.to_proto_timestamp(setup.start),
-                end=conversions.to_proto_timestamp(setup.end)),
-            ())
-
-        return process_id
 
     def parameter_update(self, params):
         return self._controllable.ParameterUpdate(params, ())
@@ -150,13 +114,53 @@ class Process(object):
         # self._stop()
 
     def watch(self):
-        return self._controllable.Watch(emp.Empty(), ())
+        self._controllable.Watch(emp.Empty(), ())
 
     def stop_watching(self):
         return self._controllable.StopWatching(emp.Empty(), ())
 
     def __hash__(self):
-        return hash((self._strategy_id, self._session_id))
+        return self._process_id
+
+
+class ProcessInitializer(object):
+    def __init__(self, controllable):
+        # self._execute_events = execute_events
+
+        self._controllable = controllable
+
+    def initialize(self, setup):
+        # send parameters to the controllable as a stream of bytes
+        return self._controllable.Initialize(
+            cbl.RunSetup(
+                strategy_id=setup.strategy_id),
+            ())
+
+    def start(self, setup):
+
+        session_id = setup.session_id
+
+        process_id = hashlib.md5(str(self._strategy_id + session_id).encode()).hexdigest()
+
+        self._controllable.Run(
+            cbl.RunSetup(
+                id=process_id,
+                session_id=session_id,
+                capital=setup.capital,
+                leverage=setup.leverage,
+                start=conversions.to_proto_timestamp(setup.start),
+                end=conversions.to_proto_timestamp(setup.end),
+                commission_models=cbl.CommissionModels(
+                    equity=setup.equity_commission_model,
+                    futures=setup.futures_commission_model),
+                tax_models=cbl.TaxModels(
+                    equity=setup.equity_tax_model,
+                    futures=setup.futures_tax_model),
+                universe_name=setup.trading_universe,
+                clear_perf=setup.clear_perf),
+            ())
+
+        return Process(process_id, self._controllable)
 
     # def recover(self):
     #     self._controllable = self._create_controllable(
@@ -180,4 +184,3 @@ class Process(object):
     # @abc.abstractmethod
     # def _stop(self):
     #     raise NotImplementedError
-

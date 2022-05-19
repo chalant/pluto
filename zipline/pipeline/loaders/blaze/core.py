@@ -183,6 +183,7 @@ from zipline.lib.adjusted_array import can_represent_dtype
 from zipline.utils.input_validation import expect_element
 from zipline.utils.pandas_utils import ignore_pandas_nan_categorical_warning
 from zipline.utils.pool import SequentialPool
+
 try:
     from ._core import (  # noqa
         adjusted_arrays_from_rows_with_assets,

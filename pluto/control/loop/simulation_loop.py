@@ -41,7 +41,10 @@ class SimulationLoop(object):
     def get_mode(self):
         return self._signal_handler
 
-    def start(self):
+    def start(self, exchanges):
+
+        self._add_clock(exchanges)
+
         calendar = self._calendar
         signal_handler = self._signal_handler
 
@@ -91,7 +94,7 @@ class SimulationLoop(object):
         with self._execution_lock:
             command(self._get_clocks)
 
-    def add_clock(self, exchanges):
+    def _add_clock(self, exchanges):
         with self._execution_lock:
             self._get_clocks(exchanges)
 

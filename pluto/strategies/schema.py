@@ -39,6 +39,12 @@ strategy_setup = Table(
     meta,
     Column('strategy_id', String, ForeignKey('strategies.strategy_id'), primary_key=True),
     Column('look_back', Integer, nullable=False),
-    Column('leverage', Boolean, nullable=False),
     Column('shorting', Boolean, nullable=False)
+)
+
+strategy_assets = Table(
+    'strategy_asset_classes',
+    meta,
+    Column('asset_class', String, nullable=False),
+    Column('strategy_id', String, ForeignKey('strategies.strategy_id'))
 )
