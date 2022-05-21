@@ -10,10 +10,18 @@ from protos import clock_pb2
 
 
 class SimulationLoop(object):
-    def __init__(self, start_dt, end_dt, signal_handler, frequency='day'):
+    def __init__(
+            self,
+            start_dt,
+            end_dt,
+            signal_handler,
+            monitor=None,
+            frequency='daily'):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
+
+        self._monitor = monitor
 
         self._signal_handler = signal_handler
         self._frequency = frequency
@@ -23,6 +31,7 @@ class SimulationLoop(object):
         clocks['fake'] = clock.FakeClock()
 
         self._calendar = cu.get_calendar_in_range('24/7', start_dt, end_dt)
+
         self._num_clocks = len(clocks)
 
         self._init_flag = False
@@ -41,12 +50,15 @@ class SimulationLoop(object):
     def get_mode(self):
         return self._signal_handler
 
-    def start(self, exchanges):
+    def start(self, exchanges, watcher):
 
         self._add_clock(exchanges)
 
         calendar = self._calendar
+
         signal_handler = self._signal_handler
+
+        self._process.watch(watcher)
 
         for ts, evt in get_generator(
                 calendar,

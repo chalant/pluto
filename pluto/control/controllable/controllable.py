@@ -246,6 +246,7 @@ class Controllable(ABC):
 
         namespace = self._namespace
         look_back = self._look_back
+
         data_frequency = strategy_setup.data_frequency
 
         uni = run_setup.trading_universe
@@ -389,11 +390,12 @@ class Controllable(ABC):
                              before_trading_start,
                              handle_data,
                              analyze):
-        '''
+        """
         Returns
         -------
         pluto.algorithm.TradingAlgorithm
-        '''
+        """
+
         raise NotImplementedError(self._get_algorithm_class.__name__)
 
     def _get_cancel_policy(self, name):
@@ -606,21 +608,23 @@ class Controllable(ABC):
         ).SerializeToString()
 
     def restore_state(self, state, strategy):
-        self.initialize(
-            state.session_id,
-            conversions.to_datetime(state.start_dt),
-            conversions.to_datetime(state.end_dt),
-            state.universe,
-            strategy,
-            state.capital,
-            state.max_leverage,
-            state.data_frequency,
-            state.mode,
-            state.look_back,
-            '')
+        raise NotImplementedError('restore_state')
 
-        ss.set_state(state.session_state, self._sync_state_tracker)
-        self._current_dt = conversions.to_datetime(state.checkpoint)
+        # self.initialize(
+        #     state.session_id,
+        #     conversions.to_datetime(state.start_dt),
+        #     conversions.to_datetime(state.end_dt),
+        #     state.universe,
+        #     strategy,
+        #     state.capital,
+        #     state.max_leverage,
+        #     state.data_frequency,
+        #     state.mode,
+        #     state.look_back,
+        #     '')
+
+        # ss.set_state(state.session_state, self._sync_state_tracker)
+        # self._current_dt = conversions.to_datetime(state.checkpoint)
 
     def stop(self, dt):
         # todo: liquidate all positions

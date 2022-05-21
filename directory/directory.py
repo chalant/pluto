@@ -1,9 +1,10 @@
 import os
 
 from os import path
+from os import rmdir
 
 
-class _Directory(object):
+class Directory(object):
     def __init__(self, path_, name, parent=None):
         self.path_ = path_
         self.name = name
@@ -22,6 +23,12 @@ class _Directory(object):
     def is_root(self):
         return self._parent is None
 
+    def delete(self):
+        rmdir(self.path)
+
+        self._children.clear()
+        self._files.clear()
+
     def add_file(self, name, extension):
         """
 
@@ -32,10 +39,10 @@ class _Directory(object):
 
         Returns
         -------
-        _File
+        File
         """
 
-        fl = _File(name, extension, self)
+        fl = File(name, extension, self)
 
         with open(fl.path, 'a'):
             pass
@@ -53,16 +60,16 @@ class _Directory(object):
 
         Returns
         -------
-        _Directory
+        Directory
         """
         p = path.join(self.path_, name)
 
-        d = _Directory(p, self)
+        d = Directory(p, self)
 
         try:
             os.mkdir(p)
 
-            self._children['name'] = d
+            self._children[name] = d
 
         except FileExistsError as e:
             pass
@@ -70,6 +77,17 @@ class _Directory(object):
         return d
 
     def get_directory(self, name):
+        """
+
+        Parameters
+        ----------
+        name
+
+        Returns
+        -------
+        Directory
+        """
+
         if name in self._children:
             return self._children[name]
         elif self._children:
@@ -91,8 +109,9 @@ class _Directory(object):
 
         Returns
         -------
-        _File
+        File
         """
+
         id_ = name + extension
 
         if id_ in self._files:
@@ -116,12 +135,12 @@ class _Directory(object):
 
         Returns
         -------
-        _Directory
+        Directory
         """
         return self._parent
 
 
-class _File(object):
+class File(object):
     def __init__(self, name, extension, dir_):
         self.name = name
         self.extension = extension
@@ -138,4 +157,4 @@ def create_directory(path_, name, parent=None):
     except FileExistsError as e:
         pass
 
-    return _Directory(path_, name, parent)
+    return Directory(path_, name, parent)

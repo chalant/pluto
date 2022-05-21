@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
-import "protos/assets.proto";
+import "assets.proto";
 
 message Transaction {
     Asset asset = 1;

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+service Monitor {
+    rpc Watch(WatchRequest) returns (stream WatchResponse);
+    rpc StopWatching(StopWatchingRequest) returns (StopWatchingResponse);
+    //the monitor can receive performance data through this method
+    rpc PerformanceUpdate(Packet) returns (google.protobuf.Empty);
+}
+
+message Packet {
+    bytes packet = 1;
+    string session_id = 2;
+    bool end = 3;
+}
+
+message WatchRequest {
+    string session_id = 1;
+}
+
+message WatchResponse {
+    bytes packet = 1;
+}
+
+message StopWatchingRequest {
+    string session_id = 1;
+}
+
+message StopWatchingResponse {
+
+}

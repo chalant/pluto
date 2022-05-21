@@ -113,11 +113,15 @@ class Process(object):
         self._controllable.Stop(emp.Empty, ())
         # self._stop()
 
-    def watch(self):
+    def watch(self, watcher):
+        # subscribe the watcher...
+        self._controllable.monitor.watch(watcher)
+
+        # make a watch request...
         self._controllable.Watch(emp.Empty(), ())
 
     def stop_watching(self):
-        return self._controllable.StopWatching(emp.Empty(), ())
+        self._controllable.StopWatching(emp.Empty(), ())
 
     def __hash__(self):
         return self._process_id
@@ -143,7 +147,7 @@ class ProcessInitializer(object):
         process_id = hashlib.md5(str(self._strategy_id + session_id).encode()).hexdigest()
 
         self._controllable.Run(
-            cbl.RunSetup(
+            cbl.RunRequest(
                 id=process_id,
                 session_id=session_id,
                 capital=setup.capital,

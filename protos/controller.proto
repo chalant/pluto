@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
-import "protos/metrics.proto";
+import "metrics.proto";
 
 service Controller {
     rpc Stop(StopRequest) returns (StopResponse);

@@ -1,10 +1,13 @@
 from pluto.broker import broker_stub
-from pluto.control.processes import processes
+
 from pluto.control.controllable import server
 from pluto.control.controllable.utils import factory
 from pluto.control.controllable import simulation_controllable
 from pluto.control.controllable import live_controllable
 from pluto.control.controllable import stub
+
+from pluto.interface import monitor
+
 from pluto.interface.utils import service_access
 
 
@@ -81,8 +84,20 @@ class InMemoryControllableFactory(factory.ControllableFactory):
 
 
 class InMemoryControllableStub(stub.ControllableStub):
-    def __init__(self, servicer):
-        self._servicer = servicer
+    def __init__(self, directory, mode):
+        # creator monitor service
+        mon = monitor.Monitor()
+
+        self._monitor = mon
+
+        self._servicer = server.ControllableService(
+            directory,
+            InMemoryMonitorStub(mon),
+            InMemoryControllableFactory(),
+            mode)
+
+    def watch(self, watcher):
+        self._monitor.watch(watcher)
 
     def _initialize(self, request, metadata=None):
         return self._servicer.Initialize(
@@ -141,61 +156,3 @@ class InMemoryMonitorStub(object):
         return self._monitor_server.PerformanceUpdate(
             request_iterator,
             FakeContext(metadata))
-
-
-class InMemoryProcess(processes.Process):
-    def __init__(self,
-                 directory,
-                 monitor_service,
-                 controllable_factory,
-                 framework_url,
-                 session_id,
-                 root_dir,
-                 execute_events=False):
-        self._directory = directory
-        self._monitor_service = monitor_service
-        self._controllable_fty = controllable_factory
-        super(InMemoryProcess, self).__init__(
-            framework_url,
-            session_id,
-            root_dir,
-            execute_events)
-
-    def _create_controllable(self,
-                             framework_id,
-                             framework_url,
-                             session_id,
-                             root_dir,
-                             recover=False,
-                             execute_events=False):
-        return InMemoryControllableStub(
-            server.ControllableService(
-                InMemoryMonitorStub(self._monitor_service),
-                self._controllable_fty,
-                self._directory))
-
-    def _stop(self):
-        pass
-
-
-class InMemoryProcessFactory(processes.ProcessFactory):
-    def __init__(self, directory):
-        self._monitor_service = None
-        self._controllable_fct = None
-        self._directory = directory
-
-    def set_monitor_service(self, monitor_service):
-        self._monitor_service = monitor_service
-
-    def set_broker_service(self, broker_service):
-        self._controllable_fct = InMemoryControllableFactory(broker_service)
-
-    def _create_process(self, framework_url, session_id, root_dir):
-        return InMemoryProcess(
-            self._directory,
-            self._monitor_service,
-            self._controllable_fct,
-            framework_url,
-            session_id,
-            root_dir,
-            execute_events=True)
