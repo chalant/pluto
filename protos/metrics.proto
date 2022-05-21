@@ -1,8 +1,9 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
-import "protos/finance.proto";
-import "protos/protocol.proto";
+
+import "finance.proto";
+import "protocol.proto";
 
 message CumulativeMetrics {
     google.protobuf.Timestamp period_open = 1;

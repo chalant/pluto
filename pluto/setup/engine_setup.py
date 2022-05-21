@@ -12,6 +12,7 @@ class EngineSetup(object):
 
 
 def load_engine_setup(
+        dir_,
         commission_models,
         tax_models,
         universe_name,
@@ -21,13 +22,15 @@ def load_engine_setup(
     commission_models.equity
     tax_models.equity
 
-    with open(ds.universes_dir.get_file("universes", "yaml").path) as f:
+    with open(dir_.get_directory('universes').get_file("universes", "yaml").path) as f:
         uni = yaml.load(f, Loader=yaml.FullLoader)
 
-    with open(ds.setup_dir.get_file("tax_models", "yaml").path) as f:
+    setup_dir = dir_.get_directory('setup')
+
+    with open(setup_dir.get_file("tax_models", "yaml").path) as f:
         tm = yaml.load(f, Loader=yaml.FullLoader)
 
-    with open(ds.setup_dir.get_file("commission_models", "yaml").path) as f:
+    with open(setup_dir.get_file("commission_models", "yaml").path) as f:
         # todo: load and create commission models
         cm = yaml.load(f, Loader=yaml.FullLoader)
 

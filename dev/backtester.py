@@ -1,5 +1,7 @@
 import yaml
 
+from directory import directory as drt
+from directory import utils as du
 
 from pluto.interface import monitor
 
@@ -14,26 +16,20 @@ from pluto.setup import run_setup
 from pluto.setup import directory_setup as drp
 
 
-def load_backtest_setup():
-    with open(drp.setup_dir.get_file("setup", "yaml").path) as f:
-        stp = yaml.load(f, Loader=yaml.FullLoader)
+# def load_backtest_setup():
+#     with open(drp.setup_dir.get_file("setup", "yaml").path) as f:
+#         stp = yaml.load(f, Loader=yaml.FullLoader)
 
 
 class BackTester(object):
-    def __init__(self):
+    def __init__(self, controllable):
         # note end date is always the most recent data point
 
         self._stg_stp = None
         self._process = None
 
-    def _setup(self, setup, mon):
-        pi = processes.ProcessInitializer(
-            in_memory.InMemoryControllableStub(
-                server.ControllableService(
-                    drp.strategies_db_engine,
-                    in_memory.InMemoryMonitorStub(mon),
-                    in_memory.InMemoryControllableFactory(),
-                    'backtesting')))
+    def _setup(self, setup, controllable):
+        pi = processes.ProcessInitializer(controllable)
 
         strategy_setup = pi.initialize(setup)
 
@@ -53,12 +49,12 @@ class BackTester(object):
 
         return pi.start(r_stp), uni
 
-    def run(self, setup, watcher):
+    def run(self, setup, watcher, directory):
         # get calendar of the universe
 
         mon = monitor.Monitor()
 
-        process, uni = self._setup(setup, mon)
+        process, uni = self._setup(setup, mon, directory)
 
         # subscribe watcher to monitor...
         mon.watch(watcher)

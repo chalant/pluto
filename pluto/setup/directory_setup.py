@@ -3,67 +3,54 @@ from os import path
 from sqlalchemy import create_engine
 
 from directory import directory as dr
+from directory import utils as du
 
-root_dir = dr.create_directory(path.expanduser('~./pluto'), 'root')
-root_dir.add_file('setup', 'json')
-
-setup_dir = root_dir.add_directory('setup')
-setup_dir.add_file('run_setup', 'json')
-setup_dir.add_file('metadata', 'sqlite')
-
-universes_dir = root_dir.add_directory('universes')
-universes_dir.add_file('metadata', 'sqlite')
-
-# universe_engine = create_engine('sqlite://' + universes_dir.get_file('metadata', 'sqlite').path)
-
-strategies_dir = root_dir.add_directory('strategies')
-strategy_states_dir = strategies_dir.add_directory('states')
-strategy_performance_dir = strategies_dir.add_directory('performance')
-
-root_dir.add_file('metadata', 'sqlite')
-
-strategies_db_engine = create_engine(
-    'sqlite://' + strategies_dir.get_file('metadata', 'sqlite').path)
-
-
-def get_directory(name):
-    """
-
-    Parameters
-    ----------
-    name
-
-    Returns
-    -------
-    dr._Directory
-    """
-    res = root_dir.get_directory(name)
-
-    if res:
-        return res
-    else:
-        raise FileNotFoundError('No directory named ', name)
+# root_dir = dr.create_directory(path.expanduser('~./pluto'), 'root')
+# root_dir.add_file('setup', 'yaml')
+#
+# setup_dir = root_dir.add_directory('setup')
+# setup_dir.add_file('run_setup', 'yaml')
+# setup_dir.add_file('metadata', 'sqlite')
+#
+# universes_dir = root_dir.add_directory('universes')
+# universes_dir.add_file('metadata', 'sqlite')
+#
+# # universe_engine = create_engine('sqlite://' + universes_dir.get_file('metadata', 'sqlite').path)
+#
+# strategies_dir = root_dir.add_directory('strategies')
+# strategy_states_dir = strategies_dir.add_directory('states')
+# strategy_performance_dir = strategies_dir.add_directory('performance')
+#
+# root_dir.add_file('metadata', 'sqlite')
+#
+# strategies_db_engine = create_engine(
+#     'sqlite://' + strategies_dir.get_file('metadata', 'sqlite').path)
 
 
-def get_file_in_directory(file_name, extension, dir_):
-    """
+def create_directory(root_path):
+    root_dir = dr.create_directory(root_path, 'root')
+    root_dir.add_file('setup', 'yaml')
 
-    Parameters
-    ----------
-    file_name
-    extension
-    dir_
+    setup_dir = root_dir.add_directory('setup')
+    setup_dir.add_file('run_setup', 'yaml')
+    setup_dir.add_file('metadata', 'sqlite')
 
-    Returns
-    -------
-    dr._File
+    universes_dir = root_dir.add_directory('universes')
+    universes_dir.add_file('metadata', 'sqlite')
 
-    """
-    res = dir_.get_file(file_name, extension)
+    # universe_engine = create_engine('sqlite://' + universes_dir.get_file('metadata', 'sqlite').path)
 
-    if res:
-        return res.pop()
+    strategies_dir = root_dir.add_directory('strategies')
+    strategy_states_dir = strategies_dir.add_directory('states')
+    strategy_performance_dir = strategies_dir.add_directory('performance')
 
-    raise FileNotFoundError('Directory {} does not contain file {} of type {}'.format(dir_name, file_name, extension))
+    root_dir.add_file('metadata', 'sqlite')
+
+    strategies_db_engine = create_engine(
+        'sqlite://' + strategies_dir.get_file('metadata', 'sqlite').path)
+
+    return root_dir
+
+
 
 

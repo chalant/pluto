@@ -3,11 +3,16 @@ from concurrent import futures
 import queue
 import abc
 
+from os import path
+
 import grpc
 
 import click
 
 from google.protobuf import empty_pb2 as emp
+
+from directory import directory as drt
+from directory import utils as du
 
 from pluto.interface.utils import paths, service_access
 
@@ -24,7 +29,7 @@ from pluto.server import server, service
 from pluto.strategies import setup as stg_stp
 
 from pluto.setup import engine_setup as m_stp
-from pluto.setup import directory_setup as drt
+from pluto.setup import directory_setup as drs
 
 from protos import broker_pb2
 from protos import controllable_pb2
@@ -98,19 +103,20 @@ class _Ready(_ServiceState):
 
 class ControllableService(cbl_rpc.ControllableServicer, service.Service):
     def __init__(self,
-                 engine,
+                 directory,
                  monitor,
                  controllable_factory,
                  mode):
-        '''
+        """
 
         Parameters
         ----------
+        directory: directory.directory.Directory
         monitor
         controllable_factory
-        '''
+        """
 
-        self._engine = engine
+        self._directory = directory
 
         self._log_performance = False
         self._perf_writer = pl.NullPerformanceWriter()
@@ -135,8 +141,8 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
         self._store_state = False
         self._state_storage = st.NoStateStorage()
 
-        self._root_dir = root = paths.get_dir('controllable')
-        self._states_dir = paths.get_dir('states', root)
+        self._strategies_dir = stg_dir = directory.get_directory('strategies')
+        self._states_dir = stg_dir.get_directory('states')
 
         self._thread_pool = futures.ThreadPoolExecutor(5)
 
@@ -196,8 +202,6 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
 
     @service_access.framework_only
     def Initialize(self, request, context):
-        # todo: get engine from files module data...
-
         id_ = request.strategy_id  # the id of the controllable => will be used in performance updates
 
         self._strategy_setup = strategy_setup = stg_stp.StrategySetup()
@@ -211,10 +215,11 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
         if controllable:
             self._controllable = controllable
 
-            controllable.initialize(
-                id_,
-                strategy_setup,
-                mode)
+            with open(self._strategies_dir.get_file(id_, 'py').path, 'r') as f:
+                controllable.initialize(
+                    id_,
+                    f.read(),
+                    mode)
 
             data_frequency = strategy_setup.data_frequency
 
@@ -318,6 +323,8 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
             return state
 
     def _start_recovery(self, process_id, state_path):
+        raise NotImplementedError('Recovery')
+
         # 1)create controllable,
         # 2)call restore state on it => this will restore its session_state
         # 4)load events from the events log and execute them in order
@@ -455,7 +462,7 @@ def cli():
 @click.argument('framework_id')
 @click.argument('framework_url')
 @click.argument('mode')
-@click.option('-d', '--root-dir')
+@click.option('-d', '--root-dir', default=path.expanduser("~/.pluto"))
 @click.option('-cu', '--controllable-url')
 @click.option('-lp', '--log-performance')
 @click.option('-ss', '--store-state', is_flag=True)
@@ -507,7 +514,7 @@ def start(
     channel = grpc.insecure_channel(framework_url)
 
     controllable_service = ControllableService(
-        drt.strategies_db_engine,
+        du.DirectoryInterface(drs.create_directory(root_dir)),
         itf_rpc.MonitorStub(channel),
         factory.RemoteControllableFactory(channel))
 

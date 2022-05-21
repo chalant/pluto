@@ -1,3 +1,5 @@
+import queue
+import threading
 from abc import abstractmethod, ABC
 
 from google.protobuf import empty_pb2 as emp
@@ -9,27 +11,55 @@ from protos import interface_pb2 as msg
 
 
 class AbstractWatcher(ABC):
-    def __init__(self, process):
-        self._process = process
-        # self._queue = queue.Queue()
+    def __init__(self, process_id):
+        self._monitor = None
+        self._process_id = process_id
 
     @property
     def process_id(self):
-        return self._process.process_id
+        return self._process_id
 
-    # def watch(self):
-    #     while True:
-    #         packet = self._queue.get()
-    #         yield packet
-    #         if packet.end:
-    #             break
-    #
-    # def stop_watching(self):
-    #     self._process.stop_watching()
+    @property
+    def monitor(self):
+        return self._monitor
+
+    @monitor.setter
+    def monitor(self, value):
+        self._monitor = value
 
     @abstractmethod
     def performance_update(self, packet):
         pass
+
+
+class GeneratorWatcher(object):
+    def __init__(self):
+        self._event = threading.Event()
+        self._queue = queue.Queue()
+        self._monitor = None
+
+    @property
+    def monitor(self, ):
+        return self._monitor
+
+    @monitor.setter
+    def monitor(self, value):
+        self._monitor = value
+
+    def performance_update(self, packet):
+        self._queue.put(packet)
+
+    def watch(self):
+        if self._monitor:
+            while True:
+                packet = self._queue.get()
+                yield packet
+
+                if packet.end:
+                    break
+
+    def stop_watching(self):
+        self._monitor.stop_watching()
 
 
 class Monitor(itf.MonitorServicer):
@@ -57,7 +87,13 @@ class Monitor(itf.MonitorServicer):
     #     return watcher
 
     def watch(self, watcher):
+        watcher.set_monitor(self)
+
         self._watch_list[watcher.process_id] = watcher
+
+    def stop_watching(self, watcher):
+        watcher = self._watch_list.pop(watcher.process_id)
+        watcher.monitor = None
 
     # def StopWatching(self, request, context):
     #     pr = self._watch_list.pop(request.session_id, None)
