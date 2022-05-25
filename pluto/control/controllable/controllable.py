@@ -13,6 +13,7 @@ from zipline.finance import asset_restrictions
 from zipline.finance.order import ORDER_STATUS
 
 from zipline.data import data_portal as dp
+
 from zipline.protocol import BarData
 
 from zipline.utils import api_support
@@ -211,7 +212,7 @@ class Controllable(ABC):
         exec(code, namespace)
 
         # execute setup function first
-        namespace.get('requirement', noop)(strategy_setup)
+        namespace.get('requirement', noop)
 
         # load parameters from database
         self._look_back = strategy_setup.look_back
@@ -249,11 +250,11 @@ class Controllable(ABC):
 
         data_frequency = strategy_setup.data_frequency
 
-        uni = run_setup.trading_universe
+        uni = universes.get_universe(run_setup.trading_universe)
 
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
 
-        calendar = uni.get_calendar(
+        calendar = uni.load_calendar(
             start_dt - pd.Timedelta(days=look_back),
             end_dt)
 
@@ -268,7 +269,7 @@ class Controllable(ABC):
         self._calendar = calendar
         self._universe = uni
         self._look_back = strategy_setup.look_back
-        self._data_frequency = run_setup.data_frequency
+        self._data_frequency = strategy_setup.data_frequency
 
         if strategy_setup.data_frequency == 'minute':
             # always set the emission_rate to a minute if the data_frequency is a minute
@@ -345,10 +346,9 @@ class Controllable(ABC):
         # todo: we should set up the cancel policy externally.
 
         self._blotter = blotter = self._create_blotter(
-            self._process_id,
-            uni,
-            self._get_cancel_policy(
-                strategy_setup.cancel_policy))
+            process_id,
+            run_setup,
+            strategy_setup.cancel_policy)
 
         self._current_data = self._create_bar_data(
             data_portal,
@@ -361,6 +361,7 @@ class Controllable(ABC):
 
         self._algo = algo = self._get_algorithm_class(
             controllable=self,
+            universe=uni,
             params=params,
             blotter=blotter,
             metrics_tracker=metrics_tracker,
@@ -382,6 +383,7 @@ class Controllable(ABC):
     @abstractmethod
     def _get_algorithm_class(self,
                              controllable,
+                             universe,
                              params,
                              blotter,
                              metrics_tracker,
@@ -397,12 +399,6 @@ class Controllable(ABC):
         """
 
         raise NotImplementedError(self._get_algorithm_class.__name__)
-
-    def _get_cancel_policy(self, name):
-        if name == 'never cancel':
-            return cancel_policy.NeverCancel()
-        elif name == 'end of day':
-            return cancel_policy.EODCancel()
 
     def minute_end(self, dt):
         return self._get_minute_message(
@@ -423,7 +419,7 @@ class Controllable(ABC):
 
             # todo: reload equity minute bar reader etc (reload bundle)
 
-            self._calendar = calendar = self._universe.get_calendar(
+            self._calendar = calendar = self._universe.load_calendar(
                 start_dt,
                 dt,
                 cache=True)
@@ -438,7 +434,7 @@ class Controllable(ABC):
             # reload calendar if it is not the full look-back period
             if look_back < self._look_back:
                 self._end_dt = end = fs + pd.Timedelta(days=150)
-                self._calendar = calendar = self._universe.get_calendar(fs, end)
+                self._calendar = calendar = self._universe.load_calendar(fs, end)
                 dt = end
 
             sessions.popleft()
@@ -541,6 +537,8 @@ class Controllable(ABC):
 
             order = blotter.orders[transaction.order_id]
             metrics_tracker.process_order(order)
+
+            # todo: add tax handling here!
 
         for commission in new_commissions:
             metrics_tracker.process_commission(commission)
@@ -648,7 +646,7 @@ class Controllable(ABC):
         self._capital_changes = {dt: {'type': 'target', 'value': capital}}
 
     @abstractmethod
-    def _create_blotter(self, session_id, universe, cancel_policy):
+    def _create_blotter(self, session_id, engine_setup, cancel_policy):
         raise NotImplementedError(self._create_blotter.__name__)
 
     def _get_daily_message(self,

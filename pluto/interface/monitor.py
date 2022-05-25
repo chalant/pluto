@@ -87,7 +87,7 @@ class Monitor(itf.MonitorServicer):
     #     return watcher
 
     def watch(self, watcher):
-        watcher.set_monitor(self)
+        watcher.monitor = self
 
         self._watch_list[watcher.process_id] = watcher
 

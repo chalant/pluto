@@ -3,9 +3,11 @@ syntax = 'proto3';
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
-import "broker.proto";
-import "clock.proto";
-import "data.proto";
+import "protos/broker.proto";
+import "protos/clock.proto";
+import "protos/data.proto";
+import "protos/structs.proto";
+
 
 service Controllable {
     /*A service that is called by a controller*/
@@ -23,25 +25,22 @@ service Controllable {
 
 message RunSetup {
     string strategy_id = 1;
+
 }
 
 message InitializeResponse {
     string data_frequency = 1;
-    string leverage = 2;
-    string shorting = 3;
+    bool shorting = 3;
     string asset_classes = 4;
     bool fractional = 5;
 }
 
-message CommissionModels {
-    string equity = 1;
-    string futures = 2;
+message EngineSetup{
+    map<string, Data> commission_models = 1;
+    map<string, Data> slippage_models = 2;
+    map<string, Data> tax_models = 3;
 }
 
-message TaxModels {
-    string equity = 1;
-    string futures = 2;
-}
 
 message RunRequest {
     string id = 1;
@@ -53,12 +52,11 @@ message RunRequest {
     google.protobuf.Timestamp start = 5;
     google.protobuf.Timestamp end = 6;
 
-    CommissionModels commission_models = 7;
-    TaxModels tax_models = 8;
+    EngineSetup engine_setup = 7;
 
-    string universe_name = 9;
+    string universe_name = 8;
 
-    bool clear_perf = 10; // clear performance log file
+    bool clear_perf = 9; // clear performance log file
 
 }
 

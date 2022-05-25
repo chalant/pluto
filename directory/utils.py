@@ -18,7 +18,7 @@ class TempDirectory(object):
         res = self._dir.get_file(name, extension)
 
         if res:
-            return res.pop()
+            return res
 
         dir_ = self._dir
 
@@ -58,7 +58,7 @@ class DirectoryInterface(object):
         res = self._dir.get_file(name, extension)
 
         if res:
-            return res.pop()
+            return res
 
         dir_ = self._dir
 

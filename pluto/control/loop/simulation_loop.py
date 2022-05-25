@@ -58,7 +58,7 @@ class SimulationLoop(object):
 
         signal_handler = self._signal_handler
 
-        self._process.watch(watcher)
+        signal_handler.watch(watcher)
 
         for ts, evt in get_generator(
                 calendar,

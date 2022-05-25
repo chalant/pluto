@@ -101,7 +101,7 @@ class _Ready(_ServiceState):
         command()
 
 
-class ControllableService(cbl_rpc.ControllableServicer, service.Service):
+class ControllableService(cbl_rpc.ControllableServicer):
     def __init__(self,
                  directory,
                  monitor,
@@ -143,6 +143,7 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
 
         self._strategies_dir = stg_dir = directory.get_directory('strategies')
         self._states_dir = stg_dir.get_directory('states')
+        self._strategy_performance_dir = stg_dir.get_directory('performance')
 
         self._thread_pool = futures.ThreadPoolExecutor(5)
 
@@ -156,7 +157,7 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
 
     @property
     def log_performance(self):
-        self._log_performance = True
+        return self._log_performance
 
     @log_performance.setter
     def log_performance(self, value):
@@ -204,7 +205,7 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
     def Initialize(self, request, context):
         id_ = request.strategy_id  # the id of the controllable => will be used in performance updates
 
-        self._strategy_setup = strategy_setup = stg_stp.StrategySetup()
+        self._strategy_setup = strategy_setup = stg_stp.StrategySetup(id_)
 
         mode = self._mode
 
@@ -215,9 +216,11 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
         if controllable:
             self._controllable = controllable
 
+            print("loading at:", self._strategies_dir.get_file(id_, 'py').path)
+
             with open(self._strategies_dir.get_file(id_, 'py').path, 'r') as f:
                 controllable.initialize(
-                    id_,
+                    strategy_setup,
                     f.read(),
                     mode)
 
@@ -237,27 +240,28 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
 
         return controllable_pb2.InitializeResponse(
             data_frequency=strategy_setup.data_frequency,
-            leverage=strategy_setup.leverage,
             shorting=strategy_setup.shorting,
             asset_classes=strategy_setup.asset_classes,
             fractional=strategy_setup.fractional
         )
 
+    @service_access.framework_only
     def Run(self, request, context):
         id_ = request.id  # the id of the controllable => will be used in performance updates
 
-        run_setup = m_stp.load_engine_setup(
-            request.commission_models,
-            request.tax_models,
+        engine_setup = m_stp.load_engine_setup(
+            self._directory,
             request.universe_name,
-            request.capital)
+            request.capital,
+            request.engine_setup
+        )
 
         mode = self._mode
 
         # todo: we should have a directory for storing performance
 
         # activate state storage if we're in live mode
-        state_path = drt.strategy_states_dir.add_file(id_, 'bin').path
+        state_path = self._strategies_dir.add_file(id_, 'bin').path
 
         if self._recover:
             self._start_recovery(id_, state_path)
@@ -272,7 +276,7 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
                 state_path,
                 self._thread_pool)
 
-        perf_path = drt.strategy_performance_dir.add_file(id_, 'bin').path
+        perf_path = self._strategy_performance_dir.add_file(id_, 'bin').path
 
         if self._log_performance:
             self._perf_writer = pl.PerformanceWriter(
@@ -292,7 +296,7 @@ class ControllableService(cbl_rpc.ControllableServicer, service.Service):
             controllable.run(
                 id_,
                 self._strategy_setup,
-                run_setup,
+                engine_setup,
                 conversions.to_datetime(request.start),
                 conversions.to_datetime(request.end))
 

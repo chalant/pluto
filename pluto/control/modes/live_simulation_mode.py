@@ -1,5 +1,5 @@
 from pluto.control.modes import mode
-from pluto.control.modes.processes import process_manager
+from pluto.control.processes import process_manager
 from pluto.broker import broker
 
 

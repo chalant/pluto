@@ -15,10 +15,14 @@ from pluto.utils import stream
 
 from pluto.control.processes import in_memory
 from pluto.control.loop import simulation_loop
+from pluto.control.processes import processes
 
 from pluto.strategies import strategies
+from pluto.strategies import schema
 
 from pluto.interface import monitor
+
+from pluto.universes import universes
 
 from protos import controller_pb2
 
@@ -108,10 +112,11 @@ class TestWatcher(monitor.AbstractWatcher):
 
 
 class StrategyTester(object):
-    def __init__(self, process):
+    def __init__(self, process, universe):
         self._process = process
+        self._universe = universe
 
-    def run(self, stp, universe, expected_perf):
+    def run(self, stp, expected_perf):
         loop = simulation_loop.SimulationLoop(
             stp.start,
             stp.end,
@@ -119,38 +124,42 @@ class StrategyTester(object):
             stp.data_frequency)
 
         loop.start(
-            universe.exchanges,
+            self._universe.exchanges,
             TestWatcher(
                 self._process.process_id,
                 expected_perf))
 
 
 class TestClient(object):
-    def __init__(self,
-                 directory,
-                 process):
+    def __init__(self, directory, controllable):
         """
 
         Parameters
         ----------
         directory: directory.directory.Directory
-        process: pluto.control.processes.processes.Process
 
         """
 
         self._strategy_dir = dir_ = directory.get_directory('strategies')
-        self._strategy_db_engine = create_engine(
-            'sqlite://' + dir_.get_file('metadata', 'sqlite').path)
+        self._strategy_db_engine = engine = create_engine(
+            'sqlite:///' + dir_.get_file('metadata', 'sqlite').path)
 
-        self._process = process
+        self._controllable = controllable
 
-    def add_strategy(self, name, source_path):
+        schema.meta.create_all(engine)
+
+    def add_strategy(self, stp, name, source_path):
         with self._strategy_db_engine.connect() as connection:
             strategies.create_strategy(
                 connection,
                 strategies.StrategyCreator(
-                    self._strategy_dir.path,
+                    self._strategy_dir,
                     source_path),
                 name)
 
-        return StrategyTester(self._process)
+        pi = processes.ProcessInitializer(self._controllable)
+        pi.initialize(stp, name)
+
+        uni = universes.get_universe(stp.trading_universe)
+
+        return StrategyTester(pi.start(stp), uni)

@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "protos/protocol.proto";
+import "protocol.proto";
 import "google/protobuf/timestamp.proto";
 
 

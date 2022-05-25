@@ -11,6 +11,7 @@ from zipline.api import (
     record,
     schedule_function,
 )
+
 from zipline.finance import commission, slippage
 from zipline.pipeline import Pipeline
 from zipline.pipeline.factors import RSI
