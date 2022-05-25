@@ -1,5 +1,7 @@
 from sqlalchemy import text
 
+from zipline.finance import cancel_policy
+
 _GET_STRATEGY_SETUP = text(
     """
     SELECT * FROM strategy_setup
@@ -30,6 +32,7 @@ class StrategySetup(object):
         self.asset_classes = 'equity'
         self.data_frequency = 'daily'
         self.fractional = False
+        self.cancel_policy = cancel_policy.NeverCancel()
 
     @property
     def strategy_id(self):

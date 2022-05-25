@@ -99,6 +99,9 @@ class InMemoryControllableStub(stub.ControllableStub):
     def watch(self, watcher):
         self._monitor.watch(watcher)
 
+    def _run(self, request, metadata):
+        return self._servicer.Run(request, FakeContext(metadata))
+
     def _initialize(self, request, metadata=None):
         return self._servicer.Initialize(
             request,

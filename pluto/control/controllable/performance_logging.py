@@ -112,7 +112,7 @@ class Observer(object):
 
 
 class NullPerformanceWriter(object):
-    def performance_update(self, performance, end, file_path):
+    def performance_update(self, performance, end):
         pass
 
     def observe(self, observer):

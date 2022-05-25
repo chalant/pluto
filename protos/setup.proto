@@ -1,5 +1,9 @@
 syntax = 'proto3';
 
+message CommissionModel {
+
+}
+
 message CommissionsSetup  {
     message Commission {
         string asset_type = 1;

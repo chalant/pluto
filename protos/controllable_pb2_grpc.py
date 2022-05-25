@@ -2,10 +2,10 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import clock_pb2 as clock__pb2
-import controllable_pb2 as controllable__pb2
-import data_pb2 as data__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from protos import clock_pb2 as protos_dot_clock__pb2
+from protos import controllable_pb2 as protos_dot_controllable__pb2
+from protos import data_pb2 as protos_dot_data__pb2
 
 
 class ControllableStub(object):
@@ -19,32 +19,32 @@ class ControllableStub(object):
         """
         self.UpdateParameters = channel.unary_unary(
                 '/Controllable/UpdateParameters',
-                request_serializer=controllable__pb2.ParametersUpdateRequest.SerializeToString,
+                request_serializer=protos_dot_controllable__pb2.ParametersUpdateRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
         self.Initialize = channel.unary_unary(
                 '/Controllable/Initialize',
-                request_serializer=controllable__pb2.RunSetup.SerializeToString,
-                response_deserializer=controllable__pb2.InitializeResponse.FromString,
+                request_serializer=protos_dot_controllable__pb2.RunSetup.SerializeToString,
+                response_deserializer=protos_dot_controllable__pb2.InitializeResponse.FromString,
                 )
         self.Run = channel.unary_unary(
                 '/Controllable/Run',
-                request_serializer=controllable__pb2.RunRequest.SerializeToString,
+                request_serializer=protos_dot_controllable__pb2.RunRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
         self.ClockUpdate = channel.unary_unary(
                 '/Controllable/ClockUpdate',
-                request_serializer=clock__pb2.ClockEvent.SerializeToString,
+                request_serializer=protos_dot_clock__pb2.ClockEvent.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
         self.UpdateAccount = channel.stream_unary(
                 '/Controllable/UpdateAccount',
-                request_serializer=data__pb2.Chunk.SerializeToString,
+                request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
         self.Stop = channel.unary_unary(
                 '/Controllable/Stop',
-                request_serializer=controllable__pb2.StopRequest.SerializeToString,
+                request_serializer=protos_dot_controllable__pb2.StopRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
         self.Watch = channel.unary_unary(
@@ -117,32 +117,32 @@ def add_ControllableServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'UpdateParameters': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateParameters,
-                    request_deserializer=controllable__pb2.ParametersUpdateRequest.FromString,
+                    request_deserializer=protos_dot_controllable__pb2.ParametersUpdateRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Initialize': grpc.unary_unary_rpc_method_handler(
                     servicer.Initialize,
-                    request_deserializer=controllable__pb2.RunSetup.FromString,
-                    response_serializer=controllable__pb2.InitializeResponse.SerializeToString,
+                    request_deserializer=protos_dot_controllable__pb2.RunSetup.FromString,
+                    response_serializer=protos_dot_controllable__pb2.InitializeResponse.SerializeToString,
             ),
             'Run': grpc.unary_unary_rpc_method_handler(
                     servicer.Run,
-                    request_deserializer=controllable__pb2.RunRequest.FromString,
+                    request_deserializer=protos_dot_controllable__pb2.RunRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'ClockUpdate': grpc.unary_unary_rpc_method_handler(
                     servicer.ClockUpdate,
-                    request_deserializer=clock__pb2.ClockEvent.FromString,
+                    request_deserializer=protos_dot_clock__pb2.ClockEvent.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'UpdateAccount': grpc.stream_unary_rpc_method_handler(
                     servicer.UpdateAccount,
-                    request_deserializer=data__pb2.Chunk.FromString,
+                    request_deserializer=protos_dot_data__pb2.Chunk.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Stop': grpc.unary_unary_rpc_method_handler(
                     servicer.Stop,
-                    request_deserializer=controllable__pb2.StopRequest.FromString,
+                    request_deserializer=protos_dot_controllable__pb2.StopRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Watch': grpc.unary_unary_rpc_method_handler(
@@ -177,7 +177,7 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/UpdateParameters',
-            controllable__pb2.ParametersUpdateRequest.SerializeToString,
+            protos_dot_controllable__pb2.ParametersUpdateRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -194,8 +194,8 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/Initialize',
-            controllable__pb2.RunSetup.SerializeToString,
-            controllable__pb2.InitializeResponse.FromString,
+            protos_dot_controllable__pb2.RunSetup.SerializeToString,
+            protos_dot_controllable__pb2.InitializeResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -211,7 +211,7 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/Run',
-            controllable__pb2.RunRequest.SerializeToString,
+            protos_dot_controllable__pb2.RunRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -228,7 +228,7 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/ClockUpdate',
-            clock__pb2.ClockEvent.SerializeToString,
+            protos_dot_clock__pb2.ClockEvent.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -245,7 +245,7 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_unary(request_iterator, target, '/Controllable/UpdateAccount',
-            data__pb2.Chunk.SerializeToString,
+            protos_dot_data__pb2.Chunk.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -262,7 +262,7 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/Stop',
-            controllable__pb2.StopRequest.SerializeToString,
+            protos_dot_controllable__pb2.StopRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

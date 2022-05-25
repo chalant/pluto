@@ -12,7 +12,6 @@ import pandas as pd
 from numpy import testing
 import numpy as np
 
-from directory import directory as dry
 from directory import utils as tdr
 
 from zipline.testing import test_resource_path, core
@@ -37,47 +36,13 @@ from pluto.universes import universes
 from pluto.interface import monitor
 
 from pluto.setup import run_setup
+from pluto.setup import directory_setup as ds
 
 
 class TestSetup(object):
     def __init__(self, strategy_id, session_id):
         self.session_id = session_id
         self.strategy_id = strategy_id
-
-
-_STP = run_setup.RunSetup("test")
-
-_STP.capital = 1e7
-_STP.broker = "test"
-_STP.leverage = 1.0
-_STP.data_frequency = "daily"
-_STP.trading_universe = "test"
-_STP.equity_commission_model = "no-commission"
-_STP.futures_commission_model = "none"
-_STP.equity_tax_model = "none"
-_STP.futures_tax_model = "none"
-
-
-def _create_process(setup, controllable):
-    pi = processes.ProcessInitializer(controllable)
-
-    strategy_setup = pi.initialize(setup)
-
-    # r_stp = run_setup.load_run_setup()
-
-    # todo: normally, we should use the strategy setup to match with
-    #  with the available universes, if the requested setup does not exist,
-    #  raise an error!
-
-    # todo: create RunSetup message... (we use the setup file...)
-
-    # todo: raise an error when the universe doesn't match the strategy setup requirements
-
-    # todo: save the setups into the data-base, could be useful for deployment etc.
-
-    uni = universes.get_universe(_STP.trading_universe)
-
-    return pi.start(_STP), uni
 
 
 def _build_data_frame(mon, process_id):
@@ -107,23 +72,37 @@ def _build_data_frame(mon, process_id):
     return daily_stats
 
 
-def _run(client, example_name, universe, expected_perf):
-
-    response = client.add_strategy(example_name)
-
-    # todo: have to create a strategy with the name, and copy that
-    #  strategy into the pluto temporary directory folder.
-
+def _run(client, example_name, expected_perf):
     args, path_ = examples.EXAMPLE_MODULES[example_name]
 
-    # with open(path_, 'r') as f:
-    #     # save the strategy as byte in the file system
-    #     client.save(response.strategy_id, f.read().encode('utf-8'))
+    # setup strategy...
 
-    # add strategy and run it.
+    stp = run_setup.RunSetup('test')
+    stp.broker = 'none'
+    stp.trading_universe = 'test'
+    stp.capital = args['capital_base']
+    stp.leverage = args['max_leverage']
+    stp.look_back = args['look_back']
+    stp.data_frequency = args['data_frequency']
+    stp.start = args['start']
+    stp.end = args['end']
+
+    stp.clear_perf = True
+
+    if 'commission_models' in args:
+        stp.commission_models = args['commission_models']
+
+    if 'slippage_models' in args:
+        stp.slippage_models = args['slippage_models']
+
+    stp.tax_models = {}
+
     client.add_strategy(
+        stp,
         example_name,
-        path_).run(_STP, universe, expected_perf)
+        path_).run(
+        stp,
+        expected_perf)
 
     # capital = 1e7
 
@@ -137,7 +116,6 @@ def _run(client, example_name, universe, expected_perf):
     #     args['look_back'])
 
     # client.run(session_id, ratio, max_leverage)
-
 
     # expected_perf = expected_perf[example_name]
     # daily_stats = _build_data_frame(mon, session_id)
@@ -194,10 +172,9 @@ class PlutoExamplesTests(unittest.TestCase):
         self._thread_pool = stack.enter_context(
             futures.ThreadPoolExecutor(10))
 
-        root_dir = dry.create_directory(path.expanduser('~/tmp/pluto'))
+        root_dir = tdr.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp')))
 
-        self._pluto_tempdir = stack.enter_context(
-            tdr.TempDirectory(root_dir))
+        self._pluto_tempdir = stack.enter_context(root_dir)
 
         bundles.register('test', lambda *args: None)
 
@@ -232,15 +209,16 @@ class PlutoExamplesTests(unittest.TestCase):
 
         # monitor for performance callbacks...
 
-        process, uni = _create_process(
-            _STP,
-            in_memory.InMemoryControllableStub(dir_, 'backtesting'))
+        # process, uni = _create_process(
+        #     _STP,
+        #     example_name,
+        #     in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
         client = test.TestClient(
             dir_,
-            process)
+            in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
-        _run(client, example_name, uni, self._expected_perf)
+        _run(client, example_name, self._expected_perf[example_name])
 
     # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     # def test_live_simulation(self, example_name):

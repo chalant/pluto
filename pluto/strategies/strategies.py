@@ -1,7 +1,7 @@
 import hashlib
 import os
 
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 from pluto.strategies import sessions
 
@@ -9,15 +9,15 @@ from pluto.universes import universes
 
 _ADD_STRATEGY = text(
     """
-    INSERT INTO strategies
-    VALUES ()
+    INSERT INTO strategies (strategy_id, strategy_name, status)
+    VALUES (:strategy_id, :strategy_name, :status)
     """
 )
 
 _ADD_STRATEGY_SESSION = text(
     """
-    INSERT OR IGNORE INTO strategy_sessions
-    VALUES ()
+    INSERT OR IGNORE INTO strategy_sessions (ssid, strategy_id, session_id, status)
+    VALUES (:ssid, :strategy_id, :session_id, :status)
     """
 )
 
@@ -55,12 +55,22 @@ _SET_STRATEGY_STATUS = text(
 
 
 class StrategyCreator(object):
-    def __init__(self, root, template_path):
-        self._root = root
+    def __init__(self, root_dir, template_path):
+        """
+
+        Parameters
+        ----------
+        root_dir: directory.directory.Directory
+        template_path
+        """
+        self._root = root_dir
         self._template_path = template_path
 
     def create_strategy_file(self, strategy_name):
-        with open(os.path.join(self._root, strategy_name) + ".py", 'w+') as f:
+
+        fl = self._root.add_file(strategy_name, "py")
+
+        with open(fl.path, 'w+') as f:
 
             # copy template into the new file...
 
@@ -129,12 +139,14 @@ def create_strategy(connection, strategy_creator, strategy_name):
 
     strategy = Strategy(strategy_name, 'development')
 
-    if connection.execute(_GET_STRATEGY, strategy_name=strategy.strategy_name).count() == 0:
+    if connection.execute(
+            text("SELECT COUNT (*) FROM strategies WHERE strategy_name=:strategy_name"),
+            strategy_name=strategy.strategy_name).scalar() == 0:
 
         connection.execute(
             _ADD_STRATEGY,
-            strategy_id=strategy.strategy_id,
-            strategy_name=strategy.strategy_name,
+            strategy_id=strategy_name,
+            strategy_name=strategy_name,
             status=strategy.status)
 
         strategy_creator.create_strategy_file(strategy_name)

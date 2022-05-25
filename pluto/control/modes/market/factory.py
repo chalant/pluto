@@ -3,7 +3,7 @@ import abc
 from zipline.data import data_portal as dp
 
 from pluto.control.modes.market import market
-from pluto.data.universes import universes
+from pluto.universes import universes
 from pluto.coms.utils import conversions
 
 from protos import broker_pb2

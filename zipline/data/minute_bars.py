@@ -12,21 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABCMeta, abstractmethod
+
 import json
+
 import os
+
 from glob import glob
+
 from os.path import join
+
 from textwrap import dedent
 
 from lru import LRU
+
 import bcolz
 from bcolz import ctable
+
 from intervaltree import IntervalTree
+
 import logbook
+
 import numpy as np
+
 import pandas as pd
 from pandas import HDFStore
+
 import tables
+
 from six import with_metaclass
 from toolz import keymap, valmap
 
@@ -37,8 +49,10 @@ from zipline.data._minute_bar_internal import (
 )
 
 from zipline.gens.sim_engine import NANOS_IN_MINUTE
+
 from zipline.data.bar_reader import BarReader, NoDataForSid, NoDataOnDate
 from zipline.data.bcolz_daily_bars import check_uint32_safe
+
 from zipline.utils.cli import maybe_show_progress
 from zipline.utils.compat import mappingproxy
 from zipline.utils.memoize import lazyval

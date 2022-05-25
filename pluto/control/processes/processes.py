@@ -1,15 +1,21 @@
 import abc
 import hashlib
 
+from pandas import Timestamp
+
 from grpc import RpcError
+
+import structs
 
 from google.protobuf import empty_pb2 as emp
 
 from pluto.coms.utils import conversions
+
 from pluto.interface.utils import paths
 from pluto.interface.utils.service_access import _framework_id
 
 from protos import controllable_pb2 as cbl
+from protos import clock_pb2
 
 
 class ProcessFactory(abc.ABC):
@@ -80,7 +86,6 @@ class ProcessWrapper(abc.ABC):
 # todo: should there be a limit for recovery attempts?
 # todo: recovery must not block
 
-
 class Process(object):
     __slots__ = ['_process_id', '_controllable']
 
@@ -95,9 +100,13 @@ class Process(object):
     def parameter_update(self, params):
         return self._controllable.ParameterUpdate(params, ())
 
-    def clock_update(self, clock_event):
+    def clock_update(self, dt, evt, signals):
         return self._controllable.ClockUpdate(
-            clock_event, ())
+            clock_pb2.ClockEvent(
+                timestamp=conversions.to_proto_timestamp(dt),
+                real_ts=conversions.to_proto_timestamp(Timestamp.utcnow()),
+                event=evt,
+                signals=signals), ())
 
     def account_update(self, broker_state):
         return self._controllable.UpdateAccount(
@@ -115,7 +124,7 @@ class Process(object):
 
     def watch(self, watcher):
         # subscribe the watcher...
-        self._controllable.monitor.watch(watcher)
+        self._controllable.watch(watcher)
 
         # make a watch request...
         self._controllable.Watch(emp.Empty(), ())
@@ -132,12 +141,15 @@ class ProcessInitializer(object):
         # self._execute_events = execute_events
 
         self._controllable = controllable
+        self._strategy_id = None
 
-    def initialize(self, setup):
+    def initialize(self, setup, strategy_id):
         # send parameters to the controllable as a stream of bytes
+        self._strategy_id = strategy_id
+
         return self._controllable.Initialize(
             cbl.RunSetup(
-                strategy_id=setup.strategy_id),
+                strategy_id=strategy_id),
             ())
 
     def start(self, setup):
@@ -145,6 +157,27 @@ class ProcessInitializer(object):
         session_id = setup.session_id
 
         process_id = hashlib.md5(str(self._strategy_id + session_id).encode()).hexdigest()
+
+        # convert python objects into protobuf messages
+
+        print(setup.commission_models['futures'])
+
+        commission_models = {
+            'equity': structs.create_data(setup.commission_models['equity']),
+            'futures': structs.create_data(setup.commission_models['futures'])}
+
+        slippage_models = {
+            'equity': structs.create_data(setup.slippage_models['equity']),
+            'futures': structs.create_data(setup.slippage_models['futures'])
+        }
+
+        if setup.tax_models:
+            tax_models = {
+                'equity': structs.create_data(setup.tax_models['equity']),
+                'futures': structs.create_data(setup.tax_models['futures'])
+            }
+        else:
+            tax_models = {}
 
         self._controllable.Run(
             cbl.RunRequest(
@@ -154,12 +187,10 @@ class ProcessInitializer(object):
                 leverage=setup.leverage,
                 start=conversions.to_proto_timestamp(setup.start),
                 end=conversions.to_proto_timestamp(setup.end),
-                commission_models=cbl.CommissionModels(
-                    equity=setup.equity_commission_model,
-                    futures=setup.futures_commission_model),
-                tax_models=cbl.TaxModels(
-                    equity=setup.equity_tax_model,
-                    futures=setup.futures_tax_model),
+                engine_setup=cbl.EngineSetup(
+                    commission_models=commission_models,
+                    slippage_models=slippage_models,
+                    tax_models=tax_models),
                 universe_name=setup.trading_universe,
                 clear_perf=setup.clear_perf),
             ())

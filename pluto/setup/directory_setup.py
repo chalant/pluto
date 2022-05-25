@@ -43,11 +43,12 @@ def create_directory(root_path):
     strategies_dir = root_dir.add_directory('strategies')
     strategy_states_dir = strategies_dir.add_directory('states')
     strategy_performance_dir = strategies_dir.add_directory('performance')
+    strategy_metadata = strategies_dir.add_file('metadata', 'sqlite')
 
     root_dir.add_file('metadata', 'sqlite')
 
     strategies_db_engine = create_engine(
-        'sqlite://' + strategies_dir.get_file('metadata', 'sqlite').path)
+        'sqlite://' + strategy_metadata.path)
 
     return root_dir
 

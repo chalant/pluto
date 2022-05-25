@@ -15,6 +15,9 @@
 # limitations under the License.
 from pluto import api
 
+from zipline.finance import commission
+from zipline.finance import slippage
+
 stocks = ['AAPL', 'MSFT']
 
 
@@ -48,5 +51,13 @@ def _test_args():
         'capital_base': 1e7,
         'max_leverage': 1.0,
         'look_back': None,
-        'data_frequency': 'daily'
+        'data_frequency': 'daily',
+        'commission_models': {
+            'equity': commission.PerShare(cost=.0075, min_trade_cost=1.0),
+            'futures': commission.NoCommission()
+        },
+        'slippage_models': {
+            'equity': slippage.VolumeShareSlippage(),
+            'futures': slippage.NoSlippage()
+        }
     }

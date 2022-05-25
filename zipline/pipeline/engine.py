@@ -506,6 +506,7 @@ class SimplePipelineEngine(PipelineEngine):
         # Build lifetimes matrix reaching back to `extra_rows` days before
         # `start_date.`
         finder = self._controllable.asset_finder
+
         lifetimes = finder.lifetimes(
             sessions[start_idx - extra_rows:end_idx],
             include_start_date=False,

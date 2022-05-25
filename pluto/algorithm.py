@@ -57,6 +57,7 @@ AttachedPipeline = namedtuple('AttachedPipeline', 'pipe chunks eager')
 class TradingAlgorithm(algorithm.TradingAlgorithm):
     def __init__(self,
                  controllable,
+                 universe,
                  sim_params,
                  blotter,
                  metrics_tracker,
@@ -65,7 +66,11 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                  handle_data,
                  before_trading_start,
                  analyze=None):
+
         self._controllable = controllable
+        self.engine = None
+
+        self._universe = universe
 
         self._metrics_tracker = metrics_tracker
         # List of trading controls to be used to validate orders.
@@ -149,15 +154,13 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         If get_loader is None, constructs an ExplodingPipelineEngine
         """
 
-        controllable = self._controllable
-
         loader = pipeline_loader
 
         if loader is not None:
             self.engine = SimplePipelineEngine(
                 loader,
-                controllable,
-                controllable.domain
+                self._controllable,
+                self._universe.domain
             )
         else:
             self.engine = ExplodingPipelineEngine()
@@ -239,7 +242,8 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                      # If we are in daily mode the time_rule is ignored.
                      events.time_rules.every_minute())
 
-        cal = self._controllable.trading_calendar
+        cal = self._universe.trading_calendar
+
         self.add_event(
             events.make_eventrule(date_rule, time_rule, cal, half_days),
             func)

@@ -1,20 +1,25 @@
 import os
 
 from os import path
-from os import rmdir
+
+from shutil import rmtree
+
+
+def _file_id(name, extension):
+    return name + extension
 
 
 class Directory(object):
     def __init__(self, path_, name, parent=None):
-        self.path_ = path_
-        self.name = name
+        self._path_ = path_
+        self._name = name
         self._parent = parent
         self._children = {}
         self._files = {}
 
     @property
     def path(self):
-        return self.path_
+        return self._path_
 
     @property
     def name(self):
@@ -24,7 +29,7 @@ class Directory(object):
         return self._parent is None
 
     def delete(self):
-        rmdir(self.path)
+        rmtree(self.path)
 
         self._children.clear()
         self._files.clear()
@@ -42,14 +47,19 @@ class Directory(object):
         File
         """
 
-        fl = File(name, extension, self)
+        id_ = _file_id(name, extension)
 
-        with open(fl.path, 'a'):
-            pass
+        if id_ not in self._files:
+            fl = File(name, extension, self)
 
-        self._files[name] = fl
+            with open(fl.path, 'a'):
+                pass
 
-        return fl
+            self._files[id_] = fl
+
+            return fl
+
+        return self._files[id_]
 
     def add_directory(self, name):
         """
@@ -62,7 +72,7 @@ class Directory(object):
         -------
         Directory
         """
-        p = path.join(self.path_, name)
+        p = path.join(self.path, name)
 
         d = Directory(p, self)
 
@@ -90,14 +100,17 @@ class Directory(object):
 
         if name in self._children:
             return self._children[name]
-        elif self._children:
-            for child in self._children:
-                dir_ = child.get_directory(name)
-
-                if dir_:
-                    return dir_
         else:
             return
+
+        # elif self._children:
+        #     for child in self._children:
+        #         dir_ = child.get_directory(name)
+        #
+        #         if dir_:
+        #             return dir_
+        # else:
+        #     return
 
     def get_file(self, name, extension):
         """
@@ -112,23 +125,25 @@ class Directory(object):
         File
         """
 
-        id_ = name + extension
+        id_ = _file_id(name, extension)
 
         if id_ in self._files:
-            return [self._files[id_]]
-
-        elif self._children:
-            results = []
-
-            for child in self._children:
-                fl = child.get_file(name, extension)
-
-                if fl:
-                    results.append(fl)
-
-            return results
+            return self._files[id_]
         else:
             return
+
+        # elif self._children:
+        #     results = []
+        #
+        #     for child in self._children:
+        #         fl = child.get_file(name, extension)
+        #
+        #         if fl:
+        #             results.append(fl)
+        #
+        #     return results
+        # else:
+        #     return
 
     def get_parent(self):
         """
@@ -148,7 +163,7 @@ class File(object):
 
     @property
     def path(self):
-        path.join(self.dir_.path_, self.name + ".", self.extension)
+        return path.join(self.dir_.path, self.name + "." + self.extension)
 
 
 def create_directory(path_, name, parent=None):

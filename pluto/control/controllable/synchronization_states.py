@@ -22,7 +22,7 @@ class State(ABC):
         tracker = self._tracker
         return self._aggregate(tracker, tracker.calendars, ts, evt, signals)
 
-    #todo: we only need active exchanges for BAR and TRADE_END events
+    # todo: we only need active exchanges for BAR and TRADE_END events
     @abstractmethod
     def _aggregate(self, tracker, calendars, ts, evt, signals):
         raise NotImplementedError
@@ -62,7 +62,7 @@ class Trading(State):
 
 
 class InSession(State):
-    #waits for the first session start event
+    # waits for the first session start event
     @property
     def name(self):
         return 'in_session'
@@ -79,7 +79,7 @@ class InSession(State):
                     ts = signal.timestamp
                     active.append((c_evt, exchange))
         if active:
-            #move to active state, the strategy is ready to start executing
+            # move to active state, the strategy is ready to start executing
             tracker.state = tracker.active
             return ts, SESSION_START, active
         else:
@@ -87,7 +87,7 @@ class InSession(State):
 
 
 class Active(State):
-    #waits for the first bfs event
+    # waits for the first bfs event
     @property
     def name(self):
         return 'active'
@@ -98,7 +98,7 @@ class Active(State):
             exchange = signal.exchange
             c_evt = signal.event
             if calendars.get(exchange):
-                #filter active exchanges
+                # filter active exchanges
                 if c_evt == BEFORE_TRADING_START:
                     ts = signal.timestamp
                     active.append((c_evt, exchange))
@@ -110,7 +110,7 @@ class Active(State):
 
 
 class OutSession(State):
-    #waits for the first session start event, or moves to in session state if no session start event
+    # waits for the first session start event, or moves to in session state if no session start event
     # occurs
     @property
     def name(self):
@@ -133,7 +133,7 @@ class OutSession(State):
                 tracker.state = tracker.active
                 return ts, SESSION_START, active
             else:
-                #no session_start event in signals
+                # no session_start event in signals
                 tracker.state = tracker.in_session
                 return
         else:
@@ -153,7 +153,7 @@ class Tracker(object):
     def __init__(self, calendars):
         self._state = None
 
-        self._calendars = {calendar:calendar for calendar in calendars}
+        self._calendars = {calendar: calendar for calendar in calendars}
 
         self._bfs = Trading(self, calendars)
         self._out_session = OutSession(self)

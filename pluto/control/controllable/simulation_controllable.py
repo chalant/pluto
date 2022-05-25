@@ -1,15 +1,15 @@
 from pluto.finance.blotter import simulation_blotter
-from pluto.control.controllable import controllable
+from pluto.control.controllable import controllable as cbl
 from pluto import algorithm
-from pluto.setup import run_setup as stp
 
 
-class SimulationControllable(controllable.Controllable):
+class SimulationControllable(cbl.Controllable):
     def __init__(self):
         super(SimulationControllable, self).__init__()
 
     def _get_algorithm_class(self,
                              controllable,
+                             universe,
                              params,
                              blotter,
                              metrics_tracker,
@@ -26,6 +26,7 @@ class SimulationControllable(controllable.Controllable):
 
         return algorithm.TradingAlgorithm(
             controllable,
+            universe,
             params,
             blotter,
             metrics_tracker,
@@ -42,10 +43,8 @@ class SimulationControllable(controllable.Controllable):
     def _update_account(self, blotter, main_account):
         pass
 
-    def _create_blotter(self, session_id, universe, cancel_policy):
-        setup = stp.load_setup(universe)
+    def _create_blotter(self, session_id, engine_setup, cancel_policy):
 
         return simulation_blotter.SimulationBlotter(
-            setup.get_commission_models(),
-            setup.get_slippage_models(),
+            engine_setup,
             cancel_policy)

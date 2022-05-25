@@ -1,9 +1,9 @@
 syntax = "proto3";
 
+import "protos/calendar.proto";
+
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-
-import "calendar.proto";
 
 service ClockListener {
     rpc OnClockEvent(ClockEvent) returns (google.protobuf.Empty);
