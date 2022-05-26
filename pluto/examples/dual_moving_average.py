@@ -24,6 +24,9 @@ momentum).
 
 from pluto import api
 
+from zipline.finance import commission
+from zipline.finance import slippage
+
 
 def initialize(context):
     context.sym = api.symbol('AAPL')
@@ -114,5 +117,13 @@ def _test_args():
         'capital_base': 1e7,
         'max_leverage': None,
         'look_back': 301,
-        'data_frequency': 'daily'
+        'data_frequency': 'daily',
+        'commission_models': {
+            'equity': commission.PerShare(cost=.0075, min_trade_cost=1.0),
+            'futures': commission.NoCommission()
+        },
+        'slippage_models': {
+            'equity': slippage.VolumeShareSlippage(),
+            'futures': slippage.NoSlippage()
+        }
     }

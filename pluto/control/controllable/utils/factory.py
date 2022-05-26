@@ -1,13 +1,32 @@
 import abc
 
 from pluto.broker import broker_stub
+
 from pluto.control.controllable import live_controllable
 from pluto.control.controllable import simulation_controllable
 
 
+class ControllableParams(object):
+    __slots__ = ['mode', 'session_id']
+
+    def __init__(self, mode, session_id):
+        self.mode = mode
+        self.session_id = session_id
+
+
 class ControllableFactory(abc.ABC):
-    def get_controllable(self, mode, session_id):
-        controllable = self._create_controllable(mode, session_id)
+    def get_controllable(self, params):
+        """
+
+        Parameters
+        ----------
+        params: ControllableParams
+
+        Returns
+        -------
+
+        """
+        controllable = self._create_controllable(params)
         if not controllable:
             raise ValueError(
                 '{} mode is not supported possible modes are: [simulation, live]'
@@ -15,11 +34,11 @@ class ControllableFactory(abc.ABC):
         return controllable
 
     @abc.abstractmethod
-    def _create_controllable(self, mode, session_id):
+    def _create_controllable(self, params):
         raise NotImplementedError
 
 
-class ControllableProcessFactory(object):
+class RemoteControllableFactory(ControllableFactory):
     def __init__(self, channel):
         '''
 
@@ -29,11 +48,11 @@ class ControllableProcessFactory(object):
         '''
         self._channel = channel
 
-    def _create_controllable(self, mode, session_id):
-        if mode == 'live':
+    def _create_controllable(self, params):
+        if params.mode == 'live':
             return live_controllable.LiveControllable(
                 broker_stub.ProcessBrokerStub(
                     self._channel,
-                    session_id))
-        elif mode == 'simulation':
+                    params.session_id))
+        elif params.mode == 'backtesting':
             return simulation_controllable.SimulationControllable()

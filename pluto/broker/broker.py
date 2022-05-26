@@ -2,7 +2,14 @@ import math
 import abc
 import uuid
 
+from pluto.control.modes.market import factory
+
+
 class Broker(abc.ABC):
+    @property
+    def calendars(self):
+        raise NotImplementedError
+
     @abc.abstractmethod
     def compute_capital(self, ratio):
         raise NotImplementedError
@@ -46,10 +53,15 @@ class Broker(abc.ABC):
     def execute_cancel_policy(self, session_id, event):
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def _get_calendars(self):
+        raise NotImplementedError
+
 class SimulationBroker(Broker):
     def __init__(self, capital, max_leverage):
         self._capital = capital
         self._max_leverage = max_leverage
+        self._mkt_factory = factory.NoopMarketFactory()
 
     def compute_capital(self, ratio):
         return math.floor(self._capital * ratio)
@@ -61,7 +73,7 @@ class SimulationBroker(Broker):
         return
 
     def add_market(self, session_id, data_frequency, start, end, universe_name):
-        pass
+        self._mkt_factory.get_market(data_frequency, universe_name, start, end)
 
     def order(self, session_id, order):
         return
@@ -80,6 +92,9 @@ class SimulationBroker(Broker):
 
     def execute_cancel_policy(self, session_id, event):
         pass
+
+    def _get_calendars(self):
+        return self._mkt_factory.calendars
 
 
 class LiveBroker(Broker):
@@ -117,7 +132,11 @@ class LiveSimulationBroker(Broker):
         pass
 
     def add_market(self, session_id, data_frequency, start, end, universe_name):
-        mkt = self._market_factory.get_market(data_frequency, universe_name, start, end)
+        mkt = self._market_factory.get_market(
+            data_frequency,
+            universe_name,
+            start,
+            end)
         mkt.add_blotter(session_id)
         self._session_to_market[session_id] = mkt
 
@@ -163,3 +182,6 @@ class LiveSimulationBroker(Broker):
 
     def _get_blotter(self, session_id):
         return self._session_to_market[session_id].get_blotter(session_id)
+
+    def _get_calendars(self):
+        return self._market_factory.calendars

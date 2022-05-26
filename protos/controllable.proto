@@ -4,14 +4,16 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 import "protos/broker.proto";
-import "protos/controller.proto";
 import "protos/clock.proto";
 import "protos/data.proto";
+import "protos/structs.proto";
+
 
 service Controllable {
     /*A service that is called by a controller*/
     rpc UpdateParameters (ParametersUpdateRequest) returns (google.protobuf.Empty);
-    rpc Initialize (InitParams) returns (google.protobuf.Empty);
+    rpc Initialize (RunSetup) returns (InitializeResponse);
+    rpc Run (RunRequest) returns (google.protobuf.Empty);
     rpc ClockUpdate (ClockEvent) returns (google.protobuf.Empty);
     //sends broker state
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
@@ -21,13 +23,47 @@ service Controllable {
     rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-message InitParams {
+message RunSetup {
+    string strategy_id = 1;
+
+}
+
+message InitializeResponse {
+    string data_frequency = 1;
+    bool shorting = 3;
+    string asset_classes = 4;
+    bool fractional = 5;
+}
+
+message EngineSetup{
+    map<string, Data> commission_models = 1;
+    map<string, Data> slippage_models = 2;
+    map<string, Data> tax_models = 3;
+}
+
+
+message RunRequest {
     string id = 1;
-    float capital = 2;
-    float max_leverage = 3;
-    google.protobuf.Timestamp start = 4;
-    google.protobuf.Timestamp end = 5;
-    string mode = 6;
+    string session_id = 2;
+
+    float capital = 3;
+    float leverage = 4;
+
+    google.protobuf.Timestamp start = 5;
+    google.protobuf.Timestamp end = 6;
+
+    EngineSetup engine_setup = 7;
+
+    string universe_name = 8;
+
+    bool clear_perf = 9; // clear performance log file
+
+}
+
+message StopRequest {
+    string session_id = 1;
+    bool liquidate = 2;
+    google.protobuf.Timestamp real_ts = 3;
 }
 
 message UpdateRequest {
@@ -52,4 +88,9 @@ message ControllableState {
     google.protobuf.Timestamp end = 8;
     google.protobuf.Timestamp checkpoint = 9;
     bytes metrics_tracker_state = 10;
+}
+
+message ParametersUpdateRequest {
+    float capital = 1;
+    float maximum_leverage = 2;
 }

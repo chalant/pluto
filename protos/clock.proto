@@ -1,9 +1,9 @@
 syntax = "proto3";
 
+import "protos/calendar.proto";
+
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
-
-import "protos/calendar.proto";
 
 service ClockListener {
     rpc OnClockEvent(ClockEvent) returns (google.protobuf.Empty);
@@ -61,6 +61,7 @@ message Signal {
 
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
+    google.protobuf.Timestamp real_ts = 4;
     EventType event = 2;
     repeated Signal signals = 3;
 }

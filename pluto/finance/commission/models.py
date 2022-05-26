@@ -10,3 +10,11 @@ class CommissionModels(object):
 
     def __str__(self):
         return str(self._models)
+
+
+def get_commission_model(model_type, asset_class):
+    # todo: we load parameters from yaml files...
+    #  parameters can be filled by the user, and overwrites the
+    #  previous ones. There are default parameters as-well.
+
+    pass

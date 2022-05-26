@@ -8,6 +8,10 @@ class ControllableStub(object):
         return self._initialize(request, metadata)
 
     @service_access.framework_method
+    def Run(self, request, metadata):
+        return self._run(request, metadata)
+
+    @service_access.framework_method
     def UpdateParameters(self, request, metadata=()):
         return self._update_parameters(request, metadata)
 
@@ -33,6 +37,10 @@ class ControllableStub(object):
 
     @abc.abstractmethod
     def _initialize(self, request, metadata):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _run(self, request, metadata):
         raise NotImplementedError
 
     @abc.abstractmethod

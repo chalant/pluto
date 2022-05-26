@@ -16,6 +16,9 @@
 
 from pluto import api
 
+from zipline.finance import commission
+from zipline.finance import slippage
+
 
 def initialize(context):
     context.asset = api.symbol('AAPL')
@@ -24,6 +27,7 @@ def initialize(context):
     # rebuild example data.
     # github.com/quantopian/zipline/blob/master/tests/resources/
     # rebuild_example_data#L105
+
     # context.set_commission(commission.PerShare(cost=.0075, min_trade_cost=1.0))
     # context.set_slippage(slippage.VolumeShareSlippage())
 
@@ -44,5 +48,13 @@ def _test_args():
         'capital_base': 1e7,
         'max_leverage': 1.0,
         'look_back': None,
-        'data_frequency': 'daily'
+        'data_frequency': 'daily',
+        'commission_models': {
+            'equity': commission.PerShare(cost=.0075, min_trade_cost=1.0),
+            'futures': commission.NoCommission()
+        },
+        'slippage_models': {
+            'equity': slippage.VolumeShareSlippage(),
+            'futures': slippage.NoSlippage()
+        }
     }

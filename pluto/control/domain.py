@@ -157,11 +157,13 @@ def load_domain_struct(unit_domain_def, exchange_per_country_code, sessions_per_
     country_code = unit_domain_def.name
     exchanges = exchange_per_country_code[country_code]
     sessions = None
+
     for exchange in exchanges:
         if not sessions:
             sessions = sessions_per_exchange[exchange]
         else:
             sessions = sessions.union(sessions)
+
     return DomainStruct(exchanges=exchanges, sessions=sessions)
 
 
