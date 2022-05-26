@@ -97,5 +97,5 @@ def _test_args():
         # it went private on 2013-10-29.
         'start': pd.Timestamp('2013-10-07', tz='utc'),
         'end': pd.Timestamp('2013-11-30', tz='utc'),
-        'capital_base': 100000,
+        'capital_base': 100000
     }

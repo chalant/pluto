@@ -31,7 +31,7 @@ from protos import controller_pb2
 
 
 class TestWatcher(monitor.AbstractWatcher):
-    def __init__(self, process_id, expected_df):
+    def __init__(self, process_id, expected_df, name):
         super(TestWatcher, self).__init__(process_id)
 
         self._expected_df = expected_df[examples._cols_to_check]
@@ -42,46 +42,45 @@ class TestWatcher(monitor.AbstractWatcher):
         self._i = 0
 
         self._daily_perfs = []
+        self._name = name
 
     def performance_update(self, packet):
+        daily_perfs = self._daily_perfs
         # append until end...
-        if not packet.end:
-            daily_perfs = self._daily_perfs
 
-            perf = controller_pb2.PerformancePacket()
-            perf.ParseFromString(packet.packet)
+        perf = controller_pb2.PerformancePacket()
+        perf.ParseFromString(packet.packet)
 
-            perf = conversions.from_proto_performance_packet(perf)
+        perf = conversions.from_proto_performance_packet(perf)
 
-            daily_perf = perf.get('daily_perf', None)
-            daily_perf.update(perf['cumulative_risk_metrics']),
+        daily_perf = perf.get('daily_perf', None)
+        daily_perf.update(perf['cumulative_risk_metrics']),
 
-            cum_perf = perf['cumulative_perf']
-            cum_perf.pop('period_close')
-            cum_perf.pop('period_open')
-            cum_perf.pop('capital_used')
-            cum_perf.pop('starting_exposure')
-            cum_perf.pop('ending_exposure')
-            cum_perf.pop('starting_value')
-            cum_perf.pop('starting_cash')
-            cum_perf.pop('returns')
-            cum_perf.pop('pnl')
+        cum_perf = perf['cumulative_perf']
+        cum_perf.pop('period_close')
+        cum_perf.pop('period_open')
+        cum_perf.pop('capital_used')
+        cum_perf.pop('starting_exposure')
+        cum_perf.pop('ending_exposure')
+        cum_perf.pop('starting_value')
+        cum_perf.pop('starting_cash')
+        cum_perf.pop('returns')
+        cum_perf.pop('pnl')
 
-            daily_perf.update(cum_perf)
+        daily_perf.update(cum_perf)
 
-            daily_perfs.append(daily_perf)
+        daily_perfs.append(daily_perf)
 
-        else:
+        if packet.end:
+
             # compare values to expected values.
-
-            daily_perfs = self._daily_perfs
             expected_perf = self._expected_df
 
             daily_dts = pd.DatetimeIndex(
                 [p['period_close'] for p in daily_perfs], tz='UTC'
             )
 
-            daily_stats = pd.DataFrame(daily_perfs, index=daily_dts)
+            daily_stats = pd.DataFrame(daily_perfs, index=daily_dts)[examples._cols_to_check]
 
             errors = 0
             tests = 0
@@ -107,19 +106,21 @@ class TestWatcher(monitor.AbstractWatcher):
                     print('Name: {}\nError: {}'.format(l[0], e))
 
                 except TypeError:
-                    try:
-                        pd.testing.assert_series_equal(act, des, check_less_precise=3)
-                    except AssertionError as e:
-                        logging.warning('\nName: {}\nError: {}'.format(l[0], e))
+                    # try:
+                    #     pd.testing.assert_series_equal(act, des, check_less_precise=3)
+                    # except AssertionError as e:
+                    #     logging.warning('\nName: {}\nError: {}'.format(l[0], e))
+                    pass
 
             if errors > 0:
-                raise AssertionError('failed {} out of {}'.format(errors, tests))
+                raise AssertionError('{} failed {} out of {}'.format(self._name, errors, tests))
 
 
 class StrategyTester(object):
-    def __init__(self, process, universe):
+    def __init__(self, process, universe, name):
         self._process = process
         self._universe = universe
+        self._name = name
 
     def run(self, stp, expected_perf):
         loop = simulation_loop.SimulationLoop(
@@ -132,7 +133,8 @@ class StrategyTester(object):
             self._universe.exchanges,
             TestWatcher(
                 self._process.process_id,
-                expected_perf))
+                expected_perf,
+                self._name))
 
 
 class TestClient(object):
@@ -167,4 +169,4 @@ class TestClient(object):
 
         uni = universes.get_universe(stp.trading_universe)
 
-        return StrategyTester(pi.start(stp), uni)
+        return StrategyTester(pi.start(stp), uni, name)

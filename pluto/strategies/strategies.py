@@ -75,7 +75,7 @@ class StrategyCreator(object):
             # copy template into the new file...
 
             with open(self._template_path) as tp:
-                f.writelines(tp.readline())
+                f.writelines(tp.readlines())
 
 
 class Strategy(object):

@@ -123,7 +123,7 @@ class Controllable(ABC):
         self._real_dt = None
         self._params = None
 
-        self._ready = _Ready()
+        self._ready = ready = _Ready()
         self._transitioning = _Transitioning(self)
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
@@ -250,7 +250,7 @@ class Controllable(ABC):
 
         data_frequency = strategy_setup.data_frequency
 
-        uni = universes.get_universe(run_setup.trading_universe)
+        uni = universes.get_universe(run_setup.trading_universe, True)
 
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
 
@@ -413,6 +413,7 @@ class Controllable(ABC):
         end_dt = self._end_dt
 
         if dt > end_dt:
+
             # reload a new calendar
             start_dt = dt - pd.Timedelta(days=self._look_back)
             self._end_dt = dt
@@ -421,8 +422,7 @@ class Controllable(ABC):
 
             self._calendar = calendar = self._universe.load_calendar(
                 start_dt,
-                dt,
-                cache=True)
+                dt)
 
             self._last_session_close = calendar.session_close(dt)
 

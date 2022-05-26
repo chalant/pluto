@@ -8,6 +8,9 @@ from pluto.api import *
 from pluto.pipeline import Pipeline
 from pluto.pipeline.factors import RSI
 
+from zipline.finance import commission
+from zipline.finance import slippage
+
 
 def make_pipeline():
     rsi = RSI()
@@ -92,5 +95,13 @@ def _test_args():
         'capital_base': 100000,
         'max_leverage': 2.0,
         'look_back': 150,
-        'data_frequency': 'daily'
+        'data_frequency': 'daily',
+        'commission_models': {
+            'equity': commission.PerShare(cost=.0075, min_trade_cost=1.0),
+            'futures': commission.NoCommission()
+        },
+        'slippage_models': {
+            'equity': slippage.VolumeShareSlippage(),
+            'futures': slippage.NoSlippage()
+        }
     }

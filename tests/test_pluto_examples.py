@@ -81,6 +81,7 @@ def _run(client, example_name, expected_perf):
     stp.broker = 'none'
     stp.trading_universe = 'test'
     stp.capital = args['capital_base']
+
     stp.leverage = args['max_leverage']
     stp.look_back = args['look_back']
     stp.data_frequency = args['data_frequency']
@@ -167,18 +168,19 @@ def _compare_df(desired, actual):
 
 
 class PlutoExamplesTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self._exit_stack = stack = ctx.ExitStack()
-        self._thread_pool = stack.enter_context(
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls._exit_stack = stack = ctx.ExitStack()
+        cls._thread_pool = stack.enter_context(
             futures.ThreadPoolExecutor(10))
 
         root_dir = tdr.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp')))
 
-        self._pluto_tempdir = stack.enter_context(root_dir)
+        cls._pluto_tempdir = stack.enter_context(root_dir)
 
         bundles.register('test', lambda *args: None)
 
-        self._zpl_tempdir = dir_ = stack.enter_context(
+        cls._zpl_tempdir = dir_ = stack.enter_context(
             core.tmp_dir(path=path.expanduser('~/tmp/zipline')))
 
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
@@ -186,7 +188,7 @@ class PlutoExamplesTests(unittest.TestCase):
 
         environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
-        self._expected_perf = cache.dataframe_cache(
+        cls._expected_perf = cache.dataframe_cache(
             dir_.getpath(
                 'example_data/expected_perf/%s' %
                 pd.__version__.replace('.', '-'),
@@ -194,11 +196,12 @@ class PlutoExamplesTests(unittest.TestCase):
             serialization='pickle',
         )
 
-        self._framework_url = '[::]:50051'
+        cls._framework_url = '[::]:50051'
 
-    def tearDown(self) -> None:
+    @classmethod
+    def tearDownClass(cls) -> None:
         bundles.unregister('test')
-        self._exit_stack.close()
+        cls._exit_stack.close()
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
@@ -217,6 +220,8 @@ class PlutoExamplesTests(unittest.TestCase):
         client = test.TestClient(
             dir_,
             in_memory.InMemoryControllableStub(dir_, 'backtesting'))
+
+        print("Example ", example_name)
 
         _run(client, example_name, self._expected_perf[example_name])
 

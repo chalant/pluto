@@ -45,6 +45,7 @@ class ExamplesTests(WithTmpDir, ZiplineTestCase):
         super(ExamplesTests, cls).init_class_fixtures()
 
         register('test', lambda *args: None)
+
         cls.add_class_callback(partial(unregister, 'test'))
 
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
