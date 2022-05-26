@@ -78,11 +78,10 @@ class Directory(object):
 
         try:
             os.mkdir(p)
-
-            self._children[name] = d
-
         except FileExistsError as e:
             pass
+
+        self._children[name] = d
 
         return d
 

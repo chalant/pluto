@@ -18,6 +18,7 @@ from .metric import (
 
 import empyrical
 
+
 def pluto_metrics():
     return {
         Returns(),

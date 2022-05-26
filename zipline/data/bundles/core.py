@@ -88,6 +88,7 @@ def asset_db_relative(bundle_name, timestr, environ=None, db_version=None):
 
     return bundle_name, timestr, 'assets-%d.sqlite' % db_version
 
+
 def to_bundle_ingest_dirname(ts):
     """Convert a pandas Timestamp into the name of the directory for the
     ingestion.

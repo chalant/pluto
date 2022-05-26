@@ -245,7 +245,7 @@ class TestUniverse(AbstractUniverse):
 
     def load_bundle(self):
         return bundles.load(
-            self.name,
+            self.bundle_name,
             environ=os.environ)
 
     @property
@@ -292,19 +292,20 @@ class TestUniverse(AbstractUniverse):
         return choose_loader
 
 
-def get_universe(name):
+def get_universe(name, cache=False):
     '''
 
     Parameters
     ----------
     name: str
+    cache:
 
     Returns
     -------
     AbstractUniverse
     '''
     if name == 'test':
-        return TestUniverse()
+        return TestUniverse(cache)
     elif name == 'quandl':
         return ZiplineQuandlUniverse()
     else:

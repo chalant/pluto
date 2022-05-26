@@ -29,9 +29,11 @@ from directory import utils as du
 
 def create_directory(root_path):
     root_dir = dr.create_directory(root_path, 'root')
+
     root_dir.add_file('setup', 'yaml')
 
     setup_dir = root_dir.add_directory('setup')
+
     setup_dir.add_file('run_setup', 'yaml')
     setup_dir.add_file('metadata', 'sqlite')
 
