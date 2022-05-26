@@ -1,133 +1,170 @@
-import grpc
+import logging
+
+from sqlalchemy import create_engine
+
+import pandas as pd
+
+from numpy import testing
+import numpy as np
+
+from pluto import examples
 
 from pluto.coms.utils import conversions
-from pluto.dev import dev
+
 from pluto.utils import stream
-from pluto.control.modes.processes import in_memory
+
+from pluto.control.loop import simulation_loop
+
+from pluto.control.processes import processes
+from pluto.control.processes import in_memory
+
+from pluto.coms.utils import conversions
+
+from pluto.strategies import strategies
+from pluto.strategies import schema
+
+from pluto.interface import monitor
+
+from pluto.universes import universes
 
 from protos import controller_pb2
-from protos import development_pb2
-from protos import interface_pb2
 
 
-class InMemoryTestClient(object):
-    def __init__(self,
-                 directory,
-                 framework_url,
-                 mode_factory,
-                 loop_factory,
-                 thread_pool):
-        '''
+class TestWatcher(monitor.AbstractWatcher):
+    def __init__(self, process_id, expected_df):
+        super(TestWatcher, self).__init__(process_id)
+
+        self._expected_df = expected_df[examples._cols_to_check]
+
+        self._errors = 0
+        self._tests = 0
+
+        self._i = 0
+
+        self._daily_perfs = []
+
+    def performance_update(self, packet):
+        # append until end...
+        if not packet.end:
+            daily_perfs = self._daily_perfs
+
+            perf = controller_pb2.PerformancePacket()
+            perf.ParseFromString(packet.packet)
+
+            perf = conversions.from_proto_performance_packet(perf)
+
+            daily_perf = perf.get('daily_perf', None)
+            daily_perf.update(perf['cumulative_risk_metrics']),
+
+            cum_perf = perf['cumulative_perf']
+            cum_perf.pop('period_close')
+            cum_perf.pop('period_open')
+            cum_perf.pop('capital_used')
+            cum_perf.pop('starting_exposure')
+            cum_perf.pop('ending_exposure')
+            cum_perf.pop('starting_value')
+            cum_perf.pop('starting_cash')
+            cum_perf.pop('returns')
+            cum_perf.pop('pnl')
+
+            daily_perf.update(cum_perf)
+
+            daily_perfs.append(daily_perf)
+
+        else:
+            # compare values to expected values.
+
+            daily_perfs = self._daily_perfs
+            expected_perf = self._expected_df
+
+            daily_dts = pd.DatetimeIndex(
+                [p['period_close'] for p in daily_perfs], tz='UTC'
+            )
+
+            daily_stats = pd.DataFrame(daily_perfs, index=daily_dts)
+
+            errors = 0
+            tests = 0
+
+            for l, r in zip(expected_perf.iteritems(), daily_stats.iteritems()):
+
+                tests += 1
+
+                des = l[1]
+                act = r[1]
+
+                try:
+                    testing.assert_allclose(
+                        np.nan_to_num(des.values),
+                        act.values,
+                        rtol=0.1,
+                        atol=0.2,
+                        equal_nan=False)
+
+                except AssertionError as e:
+                    errors += 1
+
+                    print('Name: {}\nError: {}'.format(l[0], e))
+
+                except TypeError:
+                    try:
+                        pd.testing.assert_series_equal(act, des, check_less_precise=3)
+                    except AssertionError as e:
+                        logging.warning('\nName: {}\nError: {}'.format(l[0], e))
+
+            if errors > 0:
+                raise AssertionError('failed {} out of {}'.format(errors, tests))
+
+
+class StrategyTester(object):
+    def __init__(self, process, universe):
+        self._process = process
+        self._universe = universe
+
+    def run(self, stp, expected_perf):
+        loop = simulation_loop.SimulationLoop(
+            stp.start,
+            stp.end,
+            self._process,
+            stp.data_frequency)
+
+        loop.start(
+            self._universe.exchanges,
+            TestWatcher(
+                self._process.process_id,
+                expected_perf))
+
+
+class TestClient(object):
+    def __init__(self, directory, controllable):
+        """
 
         Parameters
         ----------
-        directory
-        framework_url
-        mode_factory: pluto.control.modes.utils.ModeFactory
-        loop_factory
-        '''
+        directory: directory.directory.Directory
 
-        server = grpc.server(thread_pool)
-        self._mode_type = mode_factory.mode_type
-        self._env = env = dev.DevService(
-            server,
-            directory,
-            framework_url,
-            mode_factory,
-            loop_factory,
-            in_memory.InMemoryProcessFactory(
-                directory))
+        """
 
-        self._start = None
-        self._end = None
-        self._session_id = None
+        self._strategy_dir = dir_ = directory.get_directory('strategies')
+        self._strategy_db_engine = engine = create_engine(
+            'sqlite:///' + dir_.get_file('metadata', 'sqlite').path)
 
-        self._edt = env._editor
-        self._ctl = env._controller
-        self._exp = env._explorer
+        self._controllable = controllable
 
-    def setup(self,
-              strategy_id,
-              start,
-              end,
-              capital,
-              max_leverage,
-              look_back):
+        schema.meta.create_all(engine)
 
-        self._start = start
-        self._end = end
-        response = self._env.Setup(
-            development_pb2.SetupRequest(
-                strategy_id=strategy_id,
-                capital=capital,
-                max_leverage=max_leverage,
-                start=conversions.to_proto_timestamp(start),
-                end=conversions.to_proto_timestamp(end),
-                universe='test',
-                data_frequency='daily',
-                look_back=look_back),
-            in_memory.FakeContext(()))
+    def add_strategy(self, stp, name, source_path):
+        with self._strategy_db_engine.connect() as connection:
+            strategies.create_strategy(
+                connection,
+                strategies.StrategyCreator(
+                    self._strategy_dir,
+                    source_path),
+                name)
 
-        self._session_id = sess_id = response.session_id
-        return sess_id
+        pi = processes.ProcessInitializer(self._controllable)
+        pi.initialize(stp, name)
 
-    def run(self, session_id, capital_ratio, max_leverage):
-        self._env._controller.Run(
-            controller_pb2.RunRequest(
-                mode=self._mode_type,
-                run_params=[
-                    controller_pb2.RunParams(
-                        session_id=session_id,
-                        capital_ratio=capital_ratio,
-                        max_leverage=max_leverage)],
-                end=conversions.to_proto_timestamp(self._end)),
-            in_memory.FakeContext(()))
+        uni = universes.get_universe(stp.trading_universe)
 
-    def strategy_list(self):
-        return self._exp.StrategyList(
-            interface_pb2.StrategyFilter(),
-            in_memory.FakeContext(()))
-
-    def get_strategy(self, strategy_id):
-        b = b''
-        for chunk in self._edt.GetStrategy(
-                development_pb2.StrategyRequest(
-                    strategy_id=strategy_id),
-                in_memory.FakeContext(())):
-            b += chunk.data
-        return b
-
-    def add_strategy(self, name):
-        b = b''
-        for chunk in self._edt.New(
-                development_pb2.NewStrategyRequest(
-                    name=name),
-                in_memory.FakeContext(())):
-            b += chunk.data
-        response = development_pb2.NewStrategyResponse()
-        response.ParseFromString(b)
-        return response
-
-    def save(self, strategy_id, implementation):
-        request = development_pb2.SaveRequest(
-            strategy_id=strategy_id,
-            strategy=implementation
-        ).SerializeToString()
-        self._edt.Save(
-            stream.chunk_bytes(request),
-            in_memory.FakeContext(()))
-
-    def watch(self, session_id):
-        for perf in self._env._monitor.Watch(
-                interface_pb2.WatchRequest(
-                    session_id=session_id),
-                in_memory.FakeContext(())):
-            packet = controller_pb2.PerformancePacket()
-            packet.ParseFromString(perf.packet)
-            yield conversions.from_proto_performance_packet(packet)
-
-    def stop_watching(self, session_id):
-        self._env._monitor.StopWatching(
-            interface_pb2.StopWatchingRequest(
-                session_id=session_id),
-            in_memory.FakeContext(()))
+        return StrategyTester(pi.start(stp), uni)

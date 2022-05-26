@@ -7,14 +7,17 @@ _framework_id = hashlib.sha3_512().hexdigest()
 
 _metadata = (('framework_id', _framework_id),)
 
+
 def invoke(method, request):
     return method(request, metadata=_metadata)
+
 
 def framework_method(func):
     def wrapper(instance, request, metadata):
         metadata += _metadata
         return func(instance, request, metadata=metadata)
     return wrapper
+
 
 def framework_only(func):
     def wrapper(instance, request, context):
@@ -33,11 +36,13 @@ def framework_only(func):
                 return func(instance, request, context)
     return wrapper
 
+
 def session_method(func):
     def wrapper(instance, request, metadata):
         metadata += (('session_id', instance.session_id),)
         return func(instance, request, metadata=metadata)
     return wrapper
+
 
 def per_session(func):
     def wrapper(instance, request, context):

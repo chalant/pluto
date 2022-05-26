@@ -6,26 +6,49 @@ import logging
 from concurrent import futures
 
 from nose_parameterized import parameterized
+
 import pandas as pd
+
 from numpy import testing
 import numpy as np
+
+from directory import utils as tdr
 
 from zipline.testing import test_resource_path, core
 from zipline.data import bundles
 from zipline.utils import cache
 
-from pluto.interface import directory
 from pluto import examples
 from pluto.test import test
+
+from pluto.control.processes import in_memory
+from pluto.control.processes import processes
+from pluto.control.controllable import server
 from pluto.control.modes import utils as mode_utils
 from pluto.control.loop import utils as loop_utils
 from pluto.control.modes.market import factory
 from pluto.control.modes.market import blotter_factory
 
+from pluto.interface import monitor
 
-def _build_data_frame(test_client, session_id):
+from pluto.universes import universes
+
+from pluto.interface import monitor
+
+from pluto.setup import run_setup
+from pluto.setup import directory_setup as ds
+
+
+class TestSetup(object):
+    def __init__(self, strategy_id, session_id):
+        self.session_id = session_id
+        self.strategy_id = strategy_id
+
+
+def _build_data_frame(mon, process_id):
     daily_perfs = []
-    for perf in test_client.watch(session_id):
+
+    for perf in mon.watch(process_id):
         daily_perf = perf.get('daily_perf', None)
         daily_perf.update(perf['cumulative_risk_metrics']),
         cum_perf = perf['cumulative_perf']
@@ -50,37 +73,60 @@ def _build_data_frame(test_client, session_id):
 
 
 def _run(client, example_name, expected_perf):
-    response = client.add_strategy(example_name)
     args, path_ = examples.EXAMPLE_MODULES[example_name]
 
-    with open(path_, 'r') as f:
-        # save the strategy as byte in the file system
-        client.save(response.strategy_id, f.read().encode('utf-8'))
+    # setup strategy...
 
-    capital = 1e7
-    ratio = args['capital_base'] / capital
+    stp = run_setup.RunSetup('test')
+    stp.broker = 'none'
+    stp.trading_universe = 'test'
+    stp.capital = args['capital_base']
+    stp.leverage = args['max_leverage']
+    stp.look_back = args['look_back']
+    stp.data_frequency = args['data_frequency']
+    stp.start = args['start']
+    stp.end = args['end']
 
-    max_leverage = args['max_leverage']
-    session_id = client.setup(
-        response.strategy_id,
-        args['start'],
-        args['end'],
-        capital,
-        max_leverage,
-        args['look_back'])
+    stp.clear_perf = True
 
-    client.run(session_id, ratio, max_leverage)
+    if 'commission_models' in args:
+        stp.commission_models = args['commission_models']
 
-    expected_perf = expected_perf[example_name]
-    daily_stats = _build_data_frame(client, session_id)
+    if 'slippage_models' in args:
+        stp.slippage_models = args['slippage_models']
 
-    _compare_df(
-        expected_perf[examples._cols_to_check],
-        daily_stats[examples._cols_to_check])
+    stp.tax_models = {}
+
+    client.add_strategy(
+        stp,
+        example_name,
+        path_).run(
+        stp,
+        expected_perf)
+
+    # capital = 1e7
+
+    # max_leverage = args['max_leverage']
+    # session_id = client.setup(
+    #     response.strategy_id,
+    #     args['start'],
+    #     args['end'],
+    #     capital,
+    #     max_leverage,
+    #     args['look_back'])
+
+    # client.run(session_id, ratio, max_leverage)
+
+    # expected_perf = expected_perf[example_name]
+    # daily_stats = _build_data_frame(mon, session_id)
+    #
+    # _compare_df(
+    #     expected_perf[examples._cols_to_check],
+    #     daily_stats[examples._cols_to_check])
 
 
 def _compare_df(desired, actual):
-    '''
+    """
 
     Parameters
     ----------
@@ -90,13 +136,16 @@ def _compare_df(desired, actual):
     Returns
     -------
 
-    '''
+    """
+
     errors = 0
     tests = 0
+
     for l, r in zip(desired.iteritems(), actual.iteritems()):
         tests += 1
         act = r[1]
         des = l[1]
+
         try:
             testing.assert_allclose(
                 np.nan_to_num(des.values),
@@ -122,8 +171,10 @@ class PlutoExamplesTests(unittest.TestCase):
         self._exit_stack = stack = ctx.ExitStack()
         self._thread_pool = stack.enter_context(
             futures.ThreadPoolExecutor(10))
-        self._pluto_tempdir = stack.enter_context(
-            directory.get_directory('test'))
+
+        root_dir = tdr.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp')))
+
+        self._pluto_tempdir = stack.enter_context(root_dir)
 
         bundles.register('test', lambda *args: None)
 
@@ -152,33 +203,36 @@ class PlutoExamplesTests(unittest.TestCase):
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
         thread_pool = self._thread_pool
+
         framework_url = self._framework_url
+        dir_ = self._pluto_tempdir
 
-        client = test.InMemoryTestClient(
-            self._pluto_tempdir,
-            framework_url,
-            mode_utils.SimulationModeFactory(
-                thread_pool,
-                framework_url),
-            loop_utils.SimpleSimulationLoopFactory(),
-            thread_pool)
+        # monitor for performance callbacks...
 
-        _run(client, example_name, self._expected_perf)
+        # process, uni = _create_process(
+        #     _STP,
+        #     example_name,
+        #     in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
-    @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
-    def test_live_simulation(self, example_name):
-        thread_pool = self._thread_pool
-        framework_url = self._framework_url
+        client = test.TestClient(
+            dir_,
+            in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
-        client = test.InMemoryTestClient(
-            self._pluto_tempdir,
-            framework_url,
-            mode_utils.LiveSimulationModeFactory(
-                framework_url,
-                factory.LiveSimulationMarketFactory(
-                    blotter_factory.MultiSimulationBlotterFactory()),
-                thread_pool),
-            loop_utils.SimpleSimulationLoopFactory(),
-            thread_pool)
+        _run(client, example_name, self._expected_perf[example_name])
 
-        _run(client, example_name, self._expected_perf)
+    # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
+    # def test_live_simulation(self, example_name):
+    #     thread_pool = self._thread_pool
+    #     framework_url = self._framework_url
+    #
+    #     client = test.InMemoryTestClient(
+    #         self._pluto_tempdir,
+    #         framework_url,
+    #         mode_utils.LiveSimulationModeFactory(
+    #             framework_url,
+    #             factory.LiveSimulationMarketFactory(
+    #                 blotter_factory.MultiSimulationBlotterFactory()),
+    #             thread_pool),
+    #         loop_utils.SimpleSimulationLoopFactory())
+    #
+    #     _run(client, example_name, self._expected_perf)

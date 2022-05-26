@@ -55,4 +55,4 @@ class SP500Constituents(CustomFilter):
 	'''we assume that data have been ingested...'''
 
 	def compute(self, today, assets, out):
-		out[:] = np.in1d(assets,get_sids(today))
+		out[:] = np.in1d(assets, get_sids(today))

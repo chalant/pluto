@@ -5,16 +5,9 @@ from protos import controller_pb2
 
 
 class ControllerService(controller_pb2_grpc.ControllerServicer):
-    def __init__(self, directory, controller):
-        '''
-
-        Parameters
-        ----------
-        directory
-        controller:
-        '''
+    def __init__(self, directory):
         self._directory = directory
-        self._controller = controller
+        self._controller = None
 
     def Run(self, request, context):
         with self._directory.read() as d:
@@ -39,3 +32,6 @@ class ControllerService(controller_pb2_grpc.ControllerServicer):
 
     def Stop(self, request, context):
         pass
+
+    def set_controller(self, controller):
+        self._controller = controller

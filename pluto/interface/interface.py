@@ -1,22 +1,20 @@
 import secrets
 
-from concurrent import futures
-
 import grpc
 
 from pluto.explorer import explorer
 from pluto.controller import controllerservice
-from pluto.controller import controller
 from pluto.interface.utils import grpc_interceptors as interceptors
 from pluto.interface import manager, credentials
 from pluto.interface.utils import security
+from pluto.server import service
 
 from protos import interface_pb2 as itf_msg
 from protos import interface_pb2_grpc as interface
 from protos import controller_pb2_grpc as ctl
 
 
-class Gateway(interface.GatewayServicer):
+class Gateway(interface.GatewayServicer, service.Service):
     def __init__(self, credentials, directory):
         '''
 
@@ -30,28 +28,14 @@ class Gateway(interface.GatewayServicer):
         self._credentials = credentials
         self._directory = drt = directory
 
-        # self._editor = edt = editor.Editor(drt)
-        self._monitor = mtr = manager.Manager(drt)
-        self._explorer = exp = explorer.Explorer(drt)
-        #todo: need live loop etc.
-        self._controller = clr = controllerservice.ControllerService(
-            drt, controller.Controller())
+        self._monitor = manager.Manager(drt)
+        self._explorer = explorer.Explorer(drt)
+        self._controller = controllerservice.ControllerService(drt)
 
         self._logged_in = False
 
-        self._authenticity = ath = interceptors.get_interceptors('authenticity')
-        self._availability = avl = interceptors.get_interceptors('availability')
-
-        # todo: add a framework server for framework level communications. (broker_service, monitor_service, ...)
-        # self._framework_server = grpc.server(pool)
-        self._server = server = grpc.server(
-            futures.ThreadPoolExecutor(),
-            interceptors=ath + avl)
-
-        interface.add_GatewayServicer_to_server(self, server)
-        interface.add_MonitorServicer_to_server(mtr, server)
-        interface.add_ExplorerServicer_to_server(exp, server)
-        ctl.add_ControllerServicer_to_server(clr, server)
+        self._authenticity = interceptors.get_interceptors('authenticity')
+        self._availability = interceptors.get_interceptors('availability')
 
     def Login(self, request, context):
         # todo: logout after some inactivity
@@ -88,12 +72,17 @@ class Gateway(interface.GatewayServicer):
 
         self._logged_in = False
 
-    def start(self, port, address='localhost'):
-        self._server.start(address + ':' + port)
-
-    def stop(self, grace=0):
+    def stop(self):
         self._logout()
-        self._server.stop(grace)
+
+    def set_server(self, server):
+        interface.add_GatewayServicer_to_server(self, server)
+        interface.add_MonitorServicer_to_server(self._monitor, server)
+        interface.add_ExplorerServicer_to_server(self._explorer, server)
+        ctl.add_ControllerServicer_to_server(self._controller, server)
+
+    def get_interceptors(self):
+        return self._authenticity + self._availability
 
     def _check_credentials(self, username, password):
         with credentials.read() as r:

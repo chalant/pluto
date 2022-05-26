@@ -10,11 +10,9 @@ from zipline.utils.input_validation import expect_types
 log = Logger('Blotter')
 warning_logger = Logger('AlgoWarning')
 
+
 class SimulationBlotter(blotter.Blotter):
-    def __init__(self,
-                 commission_models,
-                 slippage_models,
-                 cancel_policy=None):
+    def __init__(self, engine_setup, cancel_policy=None):
         super(SimulationBlotter, self).__init__(cancel_policy)
 
         # these orders are aggregated by asset
@@ -28,8 +26,10 @@ class SimulationBlotter(blotter.Blotter):
 
         self.max_shares = int(1e+11)
 
-        self.slippage_models = slippage_models
-        self.commission_models = commission_models
+        self.engine_setup = engine_setup
+
+        self.current_dt = None
+        self.cancel_policy = None
 
     def __repr__(self):
         return """
@@ -41,8 +41,7 @@ class SimulationBlotter(blotter.Blotter):
         new_orders={new_orders},
         current_dt={current_dt})
     """.strip().format(class_name=self.__class__.__name__,
-                       slippage_models=self.slippage_models,
-                       commission_models=self.commission_models,
+                       engine_setup=self.engine_setup,
                        open_orders=self._open_orders,
                        orders=self.orders,
                        new_orders=self.new_orders,
@@ -299,17 +298,17 @@ class SimulationBlotter(blotter.Blotter):
 
         if self._open_orders:
             for asset, asset_orders in self._open_orders.items():
-                asset_type = type(asset)
-                slippage = self.slippage_models.get_slippage_model(asset_type)
 
-                for order, txn in slippage.simulate(
+                slippage_model = self.engine_setup.get_slippage_model(asset)
+
+                for order, txn in slippage_model.simulate(
                         bar_data,
                         asset,
                         asset_orders):
-                    commission = self.commission_models.get_commission_model(
-                        asset_type,
-                        asset.exchange)
-                    additional_commission = commission.calculate(order, txn)
+
+                    commission_model = self.engine_setup.get_commission_model(asset)
+
+                    additional_commission = commission_model.calculate(order, txn)
 
                     if additional_commission > 0:
                         commissions.append({

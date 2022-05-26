@@ -27,9 +27,11 @@ from pluto.coms.utils import conversions as cv
 from pluto.utils import saving
 from pluto.coms.client.protos import account_state_pb2 as acc
 
-log = Logger("ZiplineLog")
+log = Logger("PlutoLog")
 
-#todo: is called externally by the controllable... keeps track of broker data, and used by the account
+#todo: is called externally by the controllable...
+# keeps track of broker data, and used by the account
+
 class BrokerClient(object):
     '''A client to a broker service. Converts zipline objects into proto messages and vice-versa...'''
 
@@ -391,7 +393,7 @@ class Ledger(saving.Savable):
                handle_non_market_minutes=False):
 
         '''Updates this account'''
-        #todo: this function gets called by the controllable (trader) to update the account data...
+        #todo: this function gets called by the controller to update this account data...
         # receives broker state... the broker is a structure that is a copy of the server-side
         # data...
 
@@ -402,6 +404,8 @@ class Ledger(saving.Savable):
         # syncs with last_sale_price
         # todo: if the data frequency is bigger than the emission_rate, don't sync until we've reached
         # the next session with an offset of period "data_frequency"
+
+        data_frequency = self._data_frequency
 
         #todo: why do we need to handle non market minutes?
 
@@ -414,7 +418,7 @@ class Ledger(saving.Savable):
                 field='price',
                 dt=previous_minute,
                 perspective_dt=dt,
-                data_frequency=self._data_frequency,
+                data_frequency=data_frequency,
             )
 
         else:
@@ -457,7 +461,7 @@ class Ledger(saving.Savable):
         positions = self._positions
 
         for transaction in transactions:
-            self._update_per_transaction(transaction, positions, portfolio, broker.orders)
+            self._update_per_transaction(transaction, positions, portfolio, orders)
         # update everything after processing transactions, commissions etc.
 
         for order in orders:
@@ -694,8 +698,7 @@ class Ledger(saving.Savable):
 
     # todo: no need to update the account. We will be using data from the overall account.
     # just display the main account. (not the sub-account (since there is no way to determine
-    # margin requirements accuretly.
-    # todo: we still need to update leverage data etc.
+    # margin requirements accurretly.
     # note: it is used in metrics to track the maximum leverage.
     # note: the account is meant to be used by the strategy developper to track some values, and put
     # some logic based on those values. It is not used in the metrics tracker or else where...
@@ -710,6 +713,9 @@ class Ledger(saving.Savable):
         cash = portfolio.cash
 
         sub_account.settled_cash = cash
+        sub_account.accrued_interest = main_account.accrued_interest
+        sub_account.buying_power = main_account.buying_power
+
         # sub_account.accrued_interest = ?
         sub_account.equity_with_loan = portfolio_value
         sub_account.total_positions_value = portfolio_value - cash
@@ -722,19 +728,11 @@ class Ledger(saving.Savable):
         # #fixme: we assume that we are subjected to rule based margins... with risk based margins,
         # # each sub-portfolio has its own margin requirements (based on its risk) which adds up
         # # to the margin requirements of the main portfolio. TIMS or SPAN
-        # sub_account.regt_margin = (main_account.regt_margin * positions_value) / main_positions_value
-        # init_marg_pr = main_account.initial_margin_requirement / main_positions_value
+        sub_account.regt_margin = cash
         # maint_marg_pr = main_account.maintenance_margin_requirement / main_positions_value
         #
-        # sub_account.initial_margin_requirement = init_mr = init_marg_pr * positions_value
-        # sub_account.maintenance_margin_requirement = maint_marg_pr * positions_value
-        #
-        # prev_pv = 0.0 #todo: we need the previous portfolio_value.
-        # #fixme: checks if it is a margin account of not? or we need to specify it externally?
-        # if init_mr == 0:
-        #     sub_account.buying_power = min(portfolio_value,prev_pv) - init_mr
-        # else:
-        #     sub_account.buying_power = (min(portfolio_value,prev_pv) - init_mr) * 4
+        sub_account.initial_margin_requirement = main_account.initial_margin_requirement
+        sub_account.maintenance_margin_requirement = main_account.maintenance_margin_requirement
 
         sub_account.available_funds = cash
         sub_account.excess_liquidity = cash

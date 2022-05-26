@@ -14,6 +14,7 @@ class AssetDBWriter(asset_writer.AssetDBWriter):
         #todo: append data to the asset_db_writer
         pass
 
+
 class AssetFinder(assets.AssetFinder):
     def lifetimes(self, dates, include_start_date, country_codes):
         lifetimes = self._compute_asset_lifetimes(country_codes)

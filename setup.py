@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 #
 # Copyright 2014 Quantopian, Inc.
@@ -29,17 +30,6 @@ from setuptools import (
     find_packages,
     setup,
 )
-from setuptools.command.install import install
-
-from wheel.bdist_wheel import bdist_wheel
-
-import time
-
-import zipfile
-
-import subprocess
-
-import shlex
 
 import versioneer
 
@@ -50,12 +40,10 @@ class LazyBuildExtCommandClass(dict):
     they've actually been downloaded and installed by setup_requires.
     """
     def __contains__(self, key):
-        if key == 'build_ext':
-            return True
-        elif key == 'install':
-            return True
-        else:
-            return super(LazyBuildExtCommandClass,self).__contains__(key)
+        return (
+            key == 'build_ext'
+            or super(LazyBuildExtCommandClass, self).__contains__(key)
+        )
 
     def __setitem__(self, key, value):
         if key == 'build_ext':
@@ -63,85 +51,32 @@ class LazyBuildExtCommandClass(dict):
         super(LazyBuildExtCommandClass, self).__setitem__(key, value)
 
     def __getitem__(self, key):
-        if key == 'build_ext':
-            from Cython.Distutils.build_ext import build_ext as cython_build_ext
-            import numpy
-
-            # Cython_build_ext isn't a new-style class in Py2.
-            class build_ext(cython_build_ext, object):
-                """
-                Custom build_ext command that lazily adds numpy's include_dir to
-                extensions.
-                """
-                def build_extensions(self):
-                    """
-                    Lazily append numpy's include directory to Extension includes.
-
-                    This is done here rather than at module scope because setup.py
-                    may be run before numpy has been installed, in which case
-                    importing numpy and calling `numpy.get_include()` will fail.
-                    """
-                    numpy_incl = numpy.get_include()
-                    for ext in self.extensions:
-                        ext.include_dirs.append(numpy_incl)
-
-                    super(build_ext, self).build_extensions()
-            return build_ext
-        # elif key == 'bdist_wheel':
-        #     class custom_sdist(bdist_wheel):
-        #         def __init__(self,dist):
-        #             self._internal = bdist_wheel(dist)
-        #             super(custom_sdist,self).__init__(dist)
-        #
-        #         def initialize_options(self):
-        #             self._internal.initialize_options()
-        #
-        #         def finalize_options(self):
-        #             self._internal.finalize_options()
-        #
-        #         def run(self):
-        #             self._internal.run()
-        #             wheel_name = self._get_bdist_wheel_name(
-        #                 self._get_dist_files(
-        #                     self._internal.distribution
-        #                 )
-        #             )
-        #
-        #             with zipfile.ZipFile(wheel_name,'a') as zip:
-        #                 dir = os.path.split(self._internal.distinfo_dir)[-1]
-        #                 zip.write('etc/requirements_blaze.txt','{0}/reqs.txt'.format(dir))
-        #
-        #         def _get_dist_files(self,distribution):
-        #             return distribution.dist_files
-        #
-        #         def _get_bdist_wheel_name(self,dist_files):
-        #             for file in dist_files:
-        #                 if file[0] == 'bdist_wheel':
-        #                     return file[2]
-        #
-        #         def get_sub_commands(self):
-        #             return self._internal.get_sub_commands()
-        #
-        #         def execute_command(self,command):
-        #
-        #             print("Running shell command: %s", command)
-        #
-        #             return_code = subprocess.call(shlex.split(command))
-        #
-        #             if return_code != 0:
-        #                 print("Error running command {0}".format(command) + "- exit code: {0}".format(return_code))
-        #                 raise IOError("Shell Commmand Failed")
-        #
-        #             return return_code
-        #     return custom_sdist
-        elif key == 'install':
-            class custom_install(install):
-                def run(self):
-                    install.run(self)
-                    subprocess.call(shlex.split("pip install -r etc/requirements_blaze.txt"))
-            return custom_install
-        else:
+        if key != 'build_ext':
             return super(LazyBuildExtCommandClass, self).__getitem__(key)
+
+        from Cython.Distutils import build_ext as cython_build_ext
+        import numpy
+
+        # Cython_build_ext isn't a new-style class in Py2.
+        class build_ext(cython_build_ext, object):
+            """
+            Custom build_ext command that lazily adds numpy's include_dir to
+            extensions.
+            """
+            def build_extensions(self):
+                """
+                Lazily append numpy's include directory to Extension includes.
+                This is done here rather than at module scope because setup.py
+                may be run before numpy has been installed, in which case
+                importing numpy and calling `numpy.get_include()` will fail.
+                """
+                numpy_incl = numpy.get_include()
+                for ext in self.extensions:
+                    ext.include_dirs.append(numpy_incl)
+
+                super(build_ext, self).build_extensions()
+        return build_ext
+
 
 def window_specialization(typename):
     """Make an extension for an AdjustedArrayWindow specialization."""
@@ -172,6 +107,7 @@ ext_modules = [
         ['zipline/finance/_finance_ext.pyx'],
     ),
     Extension('zipline.gens.sim_engine', ['zipline/gens/sim_engine.pyx']),
+    Extension('pluto.control.clock.sim_engine', ['pluto/control/clock/sim_engine.pyx']),
     Extension(
         'zipline.data._minute_bar_internal',
         ['zipline/data/_minute_bar_internal.pyx']
@@ -185,8 +121,6 @@ ext_modules = [
         ['zipline/pipeline/loaders/blaze/_core.pyx'],
         depends=['zipline/lib/adjustment.pxd'],
     ),
-    Extension('pluto.control.clock.sim_engine',
-              ['pluto/control/clock/sim_engine.pyx']),
 ]
 
 
@@ -211,8 +145,7 @@ def _filter_requirements(lines_iter, filter_names=None,
 
         match = REQ_PATTERN.match(line)
         if match is None:
-            raise AssertionError(
-                "Could not parse requirement: '%s'" % line)
+            raise AssertionError("Could not parse requirement: %r" % line)
 
         name = match.group('name')
         if filter_names is not None and name not in filter_names:
@@ -232,30 +165,10 @@ def _filter_requirements(lines_iter, filter_names=None,
         yield line
 
 
-REQ_UPPER_BOUNDS = {
-    'bcolz': '<1',
-    'pandas': '<=0.22',
-    'networkx': '<2.0',
-}
-
-
-def _with_bounds(req):
-    try:
-        req, lower = req.split('==')
-    except ValueError:
-        return req
-    else:
-        with_bounds = [req, '>=', lower]
-        upper = REQ_UPPER_BOUNDS.get(req)
-        if upper:
-            with_bounds.extend([',', upper])
-        return ''.join(with_bounds)
-
-
 REQ_PATTERN = re.compile(
-    r"(?P<name>[^=<>]+)(?P<comp>[<=>]{1,2})(?P<spec>[^;]+)"
+    r"(?P<name>[^=<>;]+)((?P<comp>[<=>]{1,2})(?P<spec>[^;]+))?"
     r"(?:(;\W*python_version\W*(?P<pycomp>[<=>]{1,2})\W*"
-    r"(?P<pyspec>[0-9\.]+)))?"
+    r"(?P<pyspec>[0-9.]+)))?\W*"
 )
 
 
@@ -267,7 +180,11 @@ def _conda_format(req):
         if name == 'tables':
             name = 'pytables'
 
-        formatted = '%s %s%s' % ((name,) + m.group('comp', 'spec'))
+        comp, spec = m.group('comp', 'spec')
+        if comp and spec:
+            formatted = '%s %s%s' % (name, comp, spec)
+        else:
+            formatted = name
         pycomp, pyspec = m.group('pycomp', 'pyspec')
         if pyspec:
             # Compare the two-digit string versions as ints.
@@ -282,22 +199,15 @@ def _conda_format(req):
 
 
 def read_requirements(path,
-                      strict_bounds,
                       conda_format=False,
                       filter_names=None):
     """
-    Read a requirements.txt file, expressed as a path relative to Zipline root.
-
-    Returns requirements with the pinned versions as lower bounds
-    if `strict_bounds` is falsey.
+    Read a requirements file, expressed as a path relative to Zipline root.
     """
     real_path = join(dirname(abspath(__file__)), path)
     with open(real_path) as f:
         reqs = _filter_requirements(f.readlines(), filter_names=filter_names,
                                     filter_sys_version=not conda_format)
-
-        if not strict_bounds:
-            reqs = map(_with_bounds, reqs)
 
         if conda_format:
             reqs = map(_conda_format, reqs)
@@ -305,29 +215,25 @@ def read_requirements(path,
         return list(reqs)
 
 
-def install_requires(strict_bounds=False, conda_format=False):
-    return read_requirements('etc/requirements.txt',
-                             strict_bounds=strict_bounds,
-                             conda_format=conda_format)
+def install_requires(conda_format=False):
+    return read_requirements('etc/requirements.txt', conda_format=conda_format)
 
 
 def extras_requires(conda_format=False):
     extras = {
         extra: read_requirements('etc/requirements_{0}.txt'.format(extra),
-                                 strict_bounds=True,
                                  conda_format=conda_format)
-        for extra in ('dev', 'talib', 'ib', 'alpaca')
+        for extra in ('dev', 'talib')
     }
     extras['all'] = [req for reqs in extras.values() for req in reqs]
 
     return extras
 
 
-def setup_requirements(requirements_path, module_names, strict_bounds,
+def setup_requirements(requirements_path, module_names,
                        conda_format=False):
     module_names = set(module_names)
     module_lines = read_requirements(requirements_path,
-                                     strict_bounds=strict_bounds,
                                      conda_format=conda_format,
                                      filter_names=module_names)
 
@@ -343,15 +249,18 @@ conda_build = os.path.basename(sys.argv[0]) in ('conda-build',  # unix
                                                 'conda-build-script.py')  # win
 
 setup_requires = setup_requirements(
-    'etc/requirements.txt',
+    'etc/requirements_build.txt',
     ('Cython', 'numpy'),
-    strict_bounds=conda_build,
     conda_format=conda_build,
 )
 
 conditional_arguments = {
     'setup_requires' if not conda_build else 'build_requires': setup_requires,
 }
+
+if 'sdist' in sys.argv:
+    with open('README.rst') as f:
+        conditional_arguments['long_description'] = f.read()
 
 setup(
     name='pluto',

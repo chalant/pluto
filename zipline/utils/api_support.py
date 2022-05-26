@@ -18,6 +18,7 @@ from zipline.utils.algo_instance import get_algo_instance, set_algo_instance
 
 from pluto import api
 
+
 class ZiplineAPI(object):
     """
     Context manager for making an algorithm instance available to zipline API

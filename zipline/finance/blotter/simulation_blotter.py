@@ -66,6 +66,7 @@ class SimulationBlotter(Blotter):
                 volume_limit=DEFAULT_FUTURE_VOLUME_SLIPPAGE_BAR_LIMIT,
             ),
         }
+
         self.commission_models = {
             Equity: equity_commission or PerShare(),
             Future: future_commission or PerContract(
@@ -342,8 +343,8 @@ class SimulationBlotter(Blotter):
             for asset, asset_orders in iteritems(self.open_orders):
                 slippage = self.slippage_models[type(asset)]
 
-                for order, txn in \
-                        slippage.simulate(bar_data, asset, asset_orders):
+                for order, txn in slippage.simulate(bar_data, asset, asset_orders):
+
                     commission = self.commission_models[type(asset)]
                     additional_commission = commission.calculate(order, txn)
 
@@ -382,6 +383,7 @@ class SimulationBlotter(Blotter):
         for order in closed_orders:
             asset = order.asset
             asset_orders = self.open_orders[asset]
+
             try:
                 asset_orders.remove(order)
             except ValueError:

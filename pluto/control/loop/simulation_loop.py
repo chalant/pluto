@@ -10,11 +10,20 @@ from protos import clock_pb2
 
 
 class SimulationLoop(object):
-    def __init__(self, start_dt, end_dt, frequency='day'):
+    def __init__(
+            self,
+            start_dt,
+            end_dt,
+            signal_handler,
+            monitor=None,
+            frequency='daily'):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
 
+        self._monitor = monitor
+
+        self._signal_handler = signal_handler
         self._frequency = frequency
 
         self._clocks = clocks = {}
@@ -22,6 +31,7 @@ class SimulationLoop(object):
         clocks['fake'] = clock.FakeClock()
 
         self._calendar = cu.get_calendar_in_range('24/7', start_dt, end_dt)
+
         self._num_clocks = len(clocks)
 
         self._init_flag = False
@@ -37,14 +47,18 @@ class SimulationLoop(object):
     def start_dt(self):
         return self._start_dt
 
-    def get_mode(self, mode_type):
-        mode = self._control_modes.get(mode_type, None)
-        if not mode:
-            raise ValueError('{} mode is not supported'.format(mode))
-        return mode
+    def get_mode(self):
+        return self._signal_handler
 
-    def start(self):
+    def start(self, exchanges, watcher):
+
+        self._add_clock(exchanges)
+
         calendar = self._calendar
+
+        signal_handler = self._signal_handler
+
+        signal_handler.watch(watcher)
 
         for ts, evt in get_generator(
                 calendar,
@@ -58,8 +72,10 @@ class SimulationLoop(object):
                 # call for any update that needs to be done before
                 # anything else
 
-                signals = []
                 # aggregate the signals into a single signal.
+
+                signals = []
+
                 for cl in self._clocks.values():
                     # todo: how do we know the clock has ended?
                     # todo:
@@ -73,16 +89,26 @@ class SimulationLoop(object):
                         signals.append(signal)
 
                 #
-                for control_mode in self._control_modes.values():
-                    control_mode.update(ts, evt, signals)
-                    # process cached commands
-                    control_mode.process(ts)
-                    # continue execution
-                    control_mode.clock_update(ts, evt, signals)
+                # signal_handler.update(ts, evt, signals)
+                # # process cached commands
+                # signal_handler.process(ts)
+                # # continue execution
+                signal_handler.clock_update(ts, evt, signals)
+
+                # for control_mode in self._control_modes.values():
+                #     control_mode.update(ts, evt, signals)
+                #     # process cached commands
+                #     control_mode.process(ts)
+                #     # continue execution
+                #     control_mode.clock_update(ts, evt, signals)
 
     def execute(self, command):
         with self._execution_lock:
             command(self._get_clocks)
+
+    def _add_clock(self, exchanges):
+        with self._execution_lock:
+            self._get_clocks(exchanges)
 
     def add_control_mode(self, mode):
         mode.accept_loop(self)
@@ -103,6 +129,7 @@ class SimulationLoop(object):
         for exchange in exchanges:
             exchange = cu.resolve_alias(exchange)
             cl = clocks.get(exchange, None)
+
             if not cl:
                 # create clock, put it in the queue and return it.
                 # the clock will be activated on the next loop iteration

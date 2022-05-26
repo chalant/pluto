@@ -1,14 +1,16 @@
-from pluto.control.controllable import controllable
+from pluto.control.controllable import controllable as cbl
 from pluto.finance import live_blotter
 from pluto import algorithm
 
-class LiveControllable(controllable.Controllable):
+
+class LiveControllable(cbl.Controllable):
     def __init__(self, broker_stub):
         super(LiveControllable, self).__init__()
         self._broker = broker_stub
 
     def _get_algorithm_class(self,
                              controllable,
+                             universe,
                              params,
                              blotter,
                              metrics_tracker,
@@ -37,7 +39,7 @@ class LiveControllable(controllable.Controllable):
     def _update_blotter(self, blotter, broker_data):
         blotter.update(broker_data)
 
-    def _create_blotter(self, session_id, universe, cancel_policy):
+    def _create_blotter(self, session_id, engine_setup, cancel_policy):
         return live_blotter.LiveBlotter(
             session_id,
             self._broker,
