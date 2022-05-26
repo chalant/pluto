@@ -119,7 +119,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._directory = directory
 
         self._log_performance = False
-        self._perf_writer = pl.NullPerformanceWriter()
+        self._perf_writer = None
         self._stop = False
 
         self._frequency_filter = None
@@ -216,8 +216,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
         if controllable:
             self._controllable = controllable
 
-            print("loading at:", self._strategies_dir.get_file(id_, 'py').path)
-
             with open(self._strategies_dir.get_file(id_, 'py').path, 'r') as f:
                 controllable.initialize(
                     strategy_setup,
@@ -282,6 +280,11 @@ class ControllableService(cbl_rpc.ControllableServicer):
             self._perf_writer = pl.PerformanceWriter(
                 perf_path,
                 self._thread_pool,
+                id_
+            )
+        else:
+            self._perf_writer = pl.NullPerformanceWriter(
+                self._monitor,
                 id_
             )
 

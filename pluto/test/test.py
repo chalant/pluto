@@ -13,9 +13,12 @@ from pluto.coms.utils import conversions
 
 from pluto.utils import stream
 
-from pluto.control.processes import in_memory
 from pluto.control.loop import simulation_loop
+
 from pluto.control.processes import processes
+from pluto.control.processes import in_memory
+
+from pluto.coms.utils import conversions
 
 from pluto.strategies import strategies
 from pluto.strategies import schema
@@ -47,6 +50,8 @@ class TestWatcher(monitor.AbstractWatcher):
 
             perf = controller_pb2.PerformancePacket()
             perf.ParseFromString(packet.packet)
+
+            perf = conversions.from_proto_performance_packet(perf)
 
             daily_perf = perf.get('daily_perf', None)
             daily_perf.update(perf['cumulative_risk_metrics']),
@@ -99,16 +104,16 @@ class TestWatcher(monitor.AbstractWatcher):
                 except AssertionError as e:
                     errors += 1
 
-                    print('Name: {}\nError: {}'.format(des, e))
+                    print('Name: {}\nError: {}'.format(l[0], e))
 
                 except TypeError:
                     try:
                         pd.testing.assert_series_equal(act, des, check_less_precise=3)
                     except AssertionError as e:
-                        logging.warning('\nName: {}\nError: {}'.format(des, e))
+                        logging.warning('\nName: {}\nError: {}'.format(l[0], e))
 
-                if self._errors > 0:
-                    raise AssertionError('failed {} out of {}'.format(errors, tests))
+            if errors > 0:
+                raise AssertionError('failed {} out of {}'.format(errors, tests))
 
 
 class StrategyTester(object):

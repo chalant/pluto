@@ -113,15 +113,19 @@ class ClockUpdate(Command):
             # be used to filter data
             # only run when the observed exchanges are active
             dt = conversions.to_datetime(ts)
+
             if e == SESSION_START:
                 controllable.session_start(dt)
+
             elif e == BEFORE_TRADING_START:
                 controllable.before_trading_starts(dt)
+
             elif e == SESSION_END:
                 packet, end = controllable.session_end(dt)
                 writer.performance_update(packet, end)
                 if end:
                     raise StopExecution
+
             elif e == MINUTE_END:
                 packet, end = controllable.minute_end(dt)
                 writer.performance_update(packet, end)

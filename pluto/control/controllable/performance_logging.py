@@ -112,8 +112,20 @@ class Observer(object):
 
 
 class NullPerformanceWriter(object):
+    def __init__(self, monitor, process_id):
+        self._monitor = monitor
+        self._process_id = process_id
+
     def performance_update(self, performance, end):
-        pass
+        packet = conversions.to_proto_performance_packet(
+            performance).SerializeToString()
+
+        service_access.invoke(
+            self._monitor.PerformanceUpdate,
+            itf.Packet(
+                packet=packet,
+                session_id=self._process_id,
+                end=end))
 
     def observe(self, observer):
         pass
@@ -155,7 +167,7 @@ class PerformanceWriter(object):
             performance).SerializeToString()
 
         if self._observer:
-            self._current_observer.update(
+            self._observer.update(
                 packet,
                 end,
                 path,
