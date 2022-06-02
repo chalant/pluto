@@ -471,6 +471,7 @@ class Ledger(object):
         self._session_count += 1
         self._previous_total_returns = self.portfolio.returns
 
+    # todo: check this! we append returns
     def end_of_bar(self):
         if self._data_frequency == 'minute':
             self.daily_returns_array.append(self.todays_returns(self.portfolio.returns))
@@ -479,10 +480,12 @@ class Ledger(object):
         returns = self.daily_returns_array
         portfolio_returns = self.portfolio.returns
         # if self._data_frequency == 'daily':
+
         # todo: only pop when in live ?
         if self._session_count == self._look_back:
             returns.popleft()
             self._session_count = 0
+
         returns.append(self.todays_returns(portfolio_returns))
 
         # self._previous_total_returns = portfolio_returns

@@ -31,7 +31,7 @@ from protos import controller_pb2
 
 
 class TestWatcher(monitor.AbstractWatcher):
-    def __init__(self, process_id, expected_df, name):
+    def __init__(self, process_id, expected_df, name, error_callback):
         super(TestWatcher, self).__init__(process_id)
 
         self._expected_df = expected_df[examples._cols_to_check]
@@ -43,6 +43,8 @@ class TestWatcher(monitor.AbstractWatcher):
 
         self._daily_perfs = []
         self._name = name
+
+        self._error_callback = error_callback
 
     def performance_update(self, packet):
         daily_perfs = self._daily_perfs
@@ -113,7 +115,7 @@ class TestWatcher(monitor.AbstractWatcher):
                     pass
 
             if errors > 0:
-                raise AssertionError('{} failed {} out of {}'.format(self._name, errors, tests))
+                self._error_callback('{} failed {} out of {}'.format(self._name, errors, tests))
 
 
 class StrategyTester(object):
@@ -129,12 +131,15 @@ class StrategyTester(object):
             self._process,
             stp.data_frequency)
 
+        def on_error(message):
+            raise AssertionError(message)
+
         loop.start(
             self._universe.exchanges,
             TestWatcher(
                 self._process.process_id,
                 expected_perf,
-                self._name))
+                self._name, on_error))
 
 
 class TestClient(object):

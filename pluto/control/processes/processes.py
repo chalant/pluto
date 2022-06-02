@@ -122,6 +122,9 @@ class Process(object):
         self._controllable.Stop(emp.Empty, ())
         # self._stop()
 
+    def join(self):
+        self._controllable.Join(emp.Empty, ())
+
     def watch(self, watcher):
         # subscribe the watcher...
         self._controllable.watch(watcher)
@@ -178,6 +181,8 @@ class ProcessInitializer(object):
             }
         else:
             tax_models = {}
+
+        # starts a thread
 
         self._controllable.Run(
             cbl.RunRequest(

@@ -39,7 +39,7 @@ from trading_calendars import get_calendar
 
 # Users don't construct instances of this object, and embedding the signature
 # in the docstring seems to confuse Sphinx, so disable it for now.
-@cython.embedsignature(False)
+@cython.embedsignature(True)
 cdef class Asset:
     """
     Base class for entities that can be owned by a trading algorithm.
@@ -259,7 +259,7 @@ cdef class Asset:
         return calendar.is_open_on_minute(dt_minute)
 
 
-@cython.embedsignature(False)
+@cython.embedsignature(True)
 cdef class Equity(Asset):
     """
     Asset subclass representing partial ownership of a company, trust, or
@@ -299,8 +299,10 @@ cdef class Equity(Asset):
             DeprecationWarning)
             return self.asset_name
 
+cdef class FractionalEquity(Equity):
+    
 
-@cython.embedsignature(False)
+@cython.embedsignature(True)
 cdef class Future(Asset):
     """Asset subclass representing ownership of a futures contract.
     """

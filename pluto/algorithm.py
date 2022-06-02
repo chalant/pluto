@@ -26,7 +26,8 @@ from zipline.utils.math_utils import (
 from zipline.errors import (
     CannotOrderDelistedAsset,
     DuplicatePipelineName,
-    AttachPipelineAfterInitialize
+    AttachPipelineAfterInitialize,
+    OrderInBeforeTradingStart
 )
 
 from zipline.pipeline import Pipeline
@@ -39,6 +40,7 @@ from zipline.pipeline.engine import (
 from zipline.utils.api_support import (
     api_method,
     require_not_initialized,
+    disallowed_in_before_trading_start
 )
 
 from zipline.utils.preprocess import preprocess
@@ -296,6 +298,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                                   emission_rate,
                                   is_interday,
                                   portfolio_value_adjustment=0.0):
+        # done externally
         return
 
     @api_method
@@ -413,6 +416,39 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             Raised when no contract named 'symbol' is found.
         """
         return self._controllable.asset_finder.lookup_future_symbol(symbol)
+
+    @api_method
+    @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
+    def order(self,
+              asset,
+              amount,
+              limit_price=None,
+              stop_price=None,
+              style=None):
+
+        # todo: we can order a fraction of an asset here
+
+        # todo: if the amount is a fraction and the asset is not fractional,
+        #  raise an error.
+
+        # todo: raise an error if the broker does not support limit price or shorting, ... for
+        #  fractional assets.
+
+        # todo: guard against buying fraction for certain assets (Futures)
+
+        # todo: also check if we hit the minimal fractional amount
+
+        pass
+
+    # @api_method
+    # @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
+    # def order_target_value(self,
+    #                        asset,
+    #                        target,
+    #                        limit_price=None,
+    #                        stop_price=None,
+    #                        style=None):
+    #     pass
 
     def _calculate_order_value_amount(self, asset, value):
         """

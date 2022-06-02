@@ -16,7 +16,7 @@ from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__
 from protos import assets_pb2 as protos_dot_assets__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14protos/finance.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/assets.proto\"}\n\x0bTransaction\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x03\x12&\n\x02\x64t\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05price\x18\x04 \x01(\x02\x12\x10\n\x08order_id\x18\x05 \x01(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14protos/finance.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/assets.proto\"}\n\x0bTransaction\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x02 \x01(\x02\x12&\n\x02\x64t\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05price\x18\x04 \x01(\x02\x12\x10\n\x08order_id\x18\x05 \x01(\tb\x06proto3')
 
 
 

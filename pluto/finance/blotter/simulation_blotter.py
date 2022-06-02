@@ -296,17 +296,21 @@ class SimulationBlotter(blotter.Blotter):
         transactions = []
         commissions = []
 
+        engine_setup = self.engine_setup
+
+        # todo: handle
+
         if self._open_orders:
             for asset, asset_orders in self._open_orders.items():
 
-                slippage_model = self.engine_setup.get_slippage_model(asset)
+                slippage_model = engine_setup.get_slippage_model(asset)
 
                 for order, txn in slippage_model.simulate(
                         bar_data,
                         asset,
                         asset_orders):
 
-                    commission_model = self.engine_setup.get_commission_model(asset)
+                    commission_model = engine_setup.get_commission_model(asset)
 
                     additional_commission = commission_model.calculate(order, txn)
 

@@ -29,6 +29,7 @@ class BenchmarkSource(abc.ABC):
         benchmark: pluto.data.benchmark.Benchmark
         emission_rate: str
         '''
+
         self._emission_rate = emission_rate
 
         self._start_dt = start = sessions[0]

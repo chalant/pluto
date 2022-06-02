@@ -96,6 +96,7 @@ class Controllable(ABC):
 
         self._last_sync_time = None
         self._calculate_minute_capital_changes = None
+
         self._emission_rate = 'daily'
         self._data_frequency = 'daily'
 
