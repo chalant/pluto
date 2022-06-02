@@ -135,7 +135,7 @@ class Position(object):
 
         total_shares = self.amount + txn.amount
 
-        if total_shares == 0:
+        if total_shares == 0.0:
             self.cost_basis = 0.0
         else:
             prev_direction = copysign(1, self.amount)
@@ -179,7 +179,7 @@ class Position(object):
 
         # If we no longer hold this position, there is no cost basis to
         # adjust.
-        if self.amount == 0:
+        if self.amount == 0.0:
             return
 
         # We treat cost basis as the share price where we have broken even.

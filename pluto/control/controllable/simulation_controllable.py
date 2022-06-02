@@ -48,3 +48,6 @@ class SimulationControllable(cbl.Controllable):
         return simulation_blotter.SimulationBlotter(
             engine_setup,
             cancel_policy)
+
+    def restore_state(self, state, strategy):
+        pass

@@ -4,6 +4,7 @@ from zipline.data.loader import ensure_benchmark_data
 
 from pluto.interface.utils import paths
 
+
 class Benchmark(object):
     def __init__(self, ticker):
         self._dir = paths.get_dir(

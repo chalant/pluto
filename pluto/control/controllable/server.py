@@ -314,6 +314,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         return emp.Empty()
 
+    @service_access.framework_only
+    def Join(self, request, context):
+        # blocks until thread finishes
+        if self._thread:
+            self._thread.join()
+
     def _run(self):
         q = self._queue
         while not self._stop:

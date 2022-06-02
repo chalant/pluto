@@ -137,6 +137,9 @@ class InMemoryControllableStub(stub.ControllableStub):
             request,
             FakeContext(metadata))
 
+    def _join(self, request, metadata):
+        return self._servicer.Join(request, FakeContext(metadata))
+
 
 class InMemoryMonitorStub(object):
     def __init__(self, monitor_servicer):
@@ -159,3 +162,5 @@ class InMemoryMonitorStub(object):
         return self._monitor_server.PerformanceUpdate(
             request_iterator,
             FakeContext(metadata))
+
+

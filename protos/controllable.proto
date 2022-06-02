@@ -21,6 +21,7 @@ service Controllable {
 
     rpc Watch (google.protobuf.Empty) returns (google.protobuf.Empty);
     rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc Join(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 message RunSetup {

@@ -35,6 +35,10 @@ class ControllableStub(object):
     def StopWatching(self, request, metadata=()):
         return self._stop_watching(request, metadata)
 
+    @service_access.framework_method
+    def Join(self, request, metadata=()):
+        return self._join(request, metadata)
+
     @abc.abstractmethod
     def _initialize(self, request, metadata):
         raise NotImplementedError

@@ -60,18 +60,22 @@ class Transaction(object):
 
 
 def create_transaction(order, dt, price, amount):
+    # note: we remove the amount check since we allow
+    #  fractional trades.
 
     # floor the amount to protect against non-whole number orders
     # TODO: Investigate whether we can add a robust check in blotter
     # and/or tradesimulation, as well.
-    amount_magnitude = int(abs(amount))
+    # amount_magnitude = int(abs(amount))
 
-    if amount_magnitude < 1:
-        raise Exception("Transaction magnitude must be at least 1.")
+    # if amount_magnitude < 1:
+    #     raise Exception("Transaction magnitude must be at least 1.")
+
+    # removed amount conversion to integer to support fractional amounts
 
     transaction = Transaction(
         asset=order.asset,
-        amount=int(amount),
+        amount=amount,
         dt=dt,
         price=price,
         order_id=order.id
