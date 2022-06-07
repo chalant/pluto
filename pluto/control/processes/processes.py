@@ -36,52 +36,6 @@ class ProcessFactory(abc.ABC):
         pass
 
 
-class ProcessWrapper(abc.ABC):
-    def __init__(self, process):
-        '''
-
-        Parameters
-        ----------
-        process: Process
-        '''
-        self._process = process
-
-    @property
-    def session_id(self):
-        return self._process.session_id
-
-    def initialize(self, start, end, capital, max_leverage, mode):
-        self._initialize(start, end, capital, max_leverage, mode)
-        self._process.initialize(start, end, capital, max_leverage, mode)
-
-    def parameter_update(self, params):
-        self._process.parameter_update(params)
-
-    def clock_update(self, clock_event):
-        self._clock_update(clock_event)
-        self._process.clock_update(clock_event)
-
-    def account_update(self, broker_state):
-        self._process.account_update(broker_state)
-
-    def stop(self):
-        self._process.stop()
-
-    def watch(self):
-        self._process.watch()
-
-    def stop_watching(self):
-        self._process.stop()
-
-    @abc.abstractmethod
-    def _initialize(self, start, end, capital, max_leverage, mode):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _clock_update(self, clock_event):
-        raise NotImplementedError
-
-
 # todo: add logging for all process failures
 # todo: should there be a limit for recovery attempts?
 # todo: recovery must not block
@@ -163,8 +117,6 @@ class ProcessInitializer(object):
 
         # convert python objects into protobuf messages
 
-        print(setup.commission_models['futures'])
-
         commission_models = {
             'equity': structs.create_data(setup.commission_models['equity']),
             'futures': structs.create_data(setup.commission_models['futures'])}
@@ -183,6 +135,8 @@ class ProcessInitializer(object):
             tax_models = {}
 
         # starts a thread
+        fts = setup.fractional_trade_setup
+        ts = setup.trade_setup
 
         self._controllable.Run(
             cbl.RunRequest(
@@ -196,6 +150,19 @@ class ProcessInitializer(object):
                     commission_models=commission_models,
                     slippage_models=slippage_models,
                     tax_models=tax_models),
+                broker_setup=cbl.BrokerSetup(
+                    fractional=setup.fractional,
+                    f_trade_setup=cbl.FractionalTradeSetup(
+                        minimum_purchase=fts.minimum_purchase,
+                        minimal_fraction=fts.minimal_fraction,
+                        order_types=fts.order_types,
+                        asset_types=fts.asset_types,
+                        can_short=fts.can_short),
+                    trade_setup=cbl.TradeSetup(
+                        order_types=ts.order_types,
+                        asset_types=ts.asset_types,
+                        can_short=ts.can_short),
+                ),
                 universe_name=setup.trading_universe,
                 clear_perf=setup.clear_perf),
             ())

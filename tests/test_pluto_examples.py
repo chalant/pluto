@@ -17,6 +17,8 @@ from directory import utils as tdr
 from zipline.testing import test_resource_path, core
 from zipline.data import bundles
 from zipline.utils import cache
+from zipline.assets.assets import Equity, Future
+from zipline.finance.execution import StopOrder, LimitOrder, StopLimitOrder, MarketOrder
 
 from pluto import examples
 from pluto.test import test
@@ -37,6 +39,8 @@ from pluto.interface import monitor
 
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
+
+from pluto.broker import broker_setup as bks
 
 
 class TestSetup(object):
@@ -78,6 +82,7 @@ def _run(client, example_name, expected_perf):
     # setup strategy...
 
     stp = run_setup.RunSetup('test')
+
     stp.broker = 'none'
     stp.trading_universe = 'test'
     stp.capital = args['capital_base']
@@ -89,6 +94,27 @@ def _run(client, example_name, expected_perf):
     stp.end = args['end']
 
     stp.clear_perf = True
+
+    fts = bks.FractionalTradeSetup()
+    ts = bks.TradeSetup()
+    bs = bks.BrokerSetup()
+
+    fts.asset_types = {Equity.__name__}
+    fts.order_types = {MarketOrder.__name__}
+    fts.minimal_fraction = 3
+    fts.minimum_purchase = 1.0
+
+    ts.asset_types = {Equity.__name__, Future.__name__}
+    ts.order_types = {
+        StopOrder.__name__,
+        LimitOrder.__name__,
+        StopLimitOrder.__name__,
+        MarketOrder.__name__}
+
+    bs.fractional = True
+
+    stp.fractional_trade_setup = fts
+    stp.trade_setup = ts
 
     if 'commission_models' in args:
         stp.commission_models = args['commission_models']
@@ -221,7 +247,7 @@ class PlutoExamplesTests(unittest.TestCase):
             dir_,
             in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
-        print("Example ", example_name)
+        # print("Example ", example_name)
 
         _run(client, example_name, self._expected_perf[example_name])
 

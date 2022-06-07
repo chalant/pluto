@@ -36,13 +36,18 @@ class RunSetup(object):
                 volume_limit=DEFAULT_FUTURE_VOLUME_SLIPPAGE_BAR_LIMIT)
         }
 
+        self.fractional_trade_setup = None
+        self.trade_setup = None
+
+        self.fractional = False
+
         self.tax_models = {}
 
         self.session_id = session_id
         self.clear_perf = False
 
 
-def load_run_setup(dir_):
+def load_run_setup(dir_, session_id):
     """
 
     Parameters
@@ -64,7 +69,7 @@ def load_run_setup(dir_):
         # todo: load and create commission models
         cm = yaml.load(f, Loader=yaml.FullLoader)
 
-    run_setup = RunSetup()
+    run_setup = RunSetup(session_id)
 
     return run_setup
 

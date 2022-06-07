@@ -426,19 +426,29 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
               stop_price=None,
               style=None):
 
-        # todo: we can order a fraction of an asset here
+        if not self._can_order_asset(asset):
+            return None
 
-        # todo: if the amount is a fraction and the asset is not fractional,
-        #  raise an error.
+        controllable = self._controllable
 
-        # todo: raise an error if the broker does not support limit price or shorting, ... for
-        #  fractional assets.
+        br_stp = controllable.broker_setup
+        current_data = controllable.current_data
 
-        # todo: guard against buying fraction for certain assets (Futures)
+        style = self._convert_style(asset, amount)
 
-        # todo: also check if we hit the minimal fractional amount
+        amount, can_order = br_stp.can_order(
+            asset,
+            style,
+            amount,
+            current_data)
 
-        pass
+        if not can_order:
+            return None
+
+        # check if we can trade the amount this should raise an error
+        # if we can't trade that amount.
+
+        return self.blotter.order(asset, amount, style)
 
     # @api_method
     # @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
@@ -449,6 +459,27 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
     #                        stop_price=None,
     #                        style=None):
     #     pass
+
+    def _convert_style(self, asset, amount,
+                       limit_price=None, stop_price=None, style=None):
+
+        # Raises a ZiplineError if invalid parameters are detected.
+        self.validate_order_params(
+            asset,
+            amount,
+            limit_price,
+            stop_price,
+            style)
+
+        # Convert deprecated limit_price and stop_price parameters to use
+        # ExecutionStyle objects.
+        style = self.__convert_order_params_for_blotter(
+            asset,
+            limit_price,
+            stop_price,
+            style)
+
+        return style
 
     def _calculate_order_value_amount(self, asset, value):
         """
