@@ -298,8 +298,6 @@ class SimulationBlotter(blotter.Blotter):
 
         engine_setup = self.engine_setup
 
-        # todo: handle
-
         if self._open_orders:
             for asset, asset_orders in self._open_orders.items():
 

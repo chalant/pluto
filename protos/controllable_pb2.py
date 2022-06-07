@@ -20,29 +20,25 @@ from protos import data_pb2 as protos_dot_data__pb2
 from protos import structs_pb2 as protos_dot_structs__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/broker.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\x1a\x14protos/structs.proto\"\x1f\n\x08RunSetup\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"i\n\x12InitializeResponse\x12\x16\n\x0e\x64\x61ta_frequency\x18\x01 \x01(\t\x12\x10\n\x08shorting\x18\x03 \x01(\x08\x12\x15\n\rasset_classes\x18\x04 \x01(\t\x12\x12\n\nfractional\x18\x05 \x01(\x08\"\xef\x02\n\x0b\x45ngineSetup\x12=\n\x11\x63ommission_models\x18\x01 \x03(\x0b\x32\".EngineSetup.CommissionModelsEntry\x12\x39\n\x0fslippage_models\x18\x02 \x03(\x0b\x32 .EngineSetup.SlippageModelsEntry\x12/\n\ntax_models\x18\x03 \x03(\x0b\x32\x1b.EngineSetup.TaxModelsEntry\x1a>\n\x15\x43ommissionModelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x14\n\x05value\x18\x02 \x01(\x0b\x32\x05.Data:\x02\x38\x01\x1a<\n\x13SlippageModelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x14\n\x05value\x18\x02 \x01(\x0b\x32\x05.Data:\x02\x38\x01\x1a\x37\n\x0eTaxModelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x14\n\x05value\x18\x02 \x01(\x0b\x32\x05.Data:\x02\x38\x01\"\xf2\x01\n\nRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x12\n\nsession_id\x18\x02 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\x12\x10\n\x08leverage\x18\x04 \x01(\x02\x12)\n\x05start\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\"\n\x0c\x65ngine_setup\x18\x07 \x01(\x0b\x32\x0c.EngineSetup\x12\x15\n\runiverse_name\x18\x08 \x01(\t\x12\x12\n\nclear_perf\x18\t \x01(\x08\"a\n\x0bStopRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\x12+\n\x07real_ts\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"}\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x05\x65vent\x18\x02 \x01(\x0e\x32\n.EventType\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply\"\xc5\x02\n\x11\x43ontrollableState\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rsession_state\x18\x02 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x0b \x01(\x02\x12\x10\n\x08universe\x18\x04 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\ncheckpoint\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1d\n\x15metrics_tracker_state\x18\n \x01(\x0c\"D\n\x17ParametersUpdateRequest\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x02 \x01(\x02\x32\xbc\x03\n\x0c\x43ontrollable\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12,\n\nInitialize\x12\t.RunSetup\x1a\x13.InitializeResponse\x12*\n\x03Run\x12\x0b.RunRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x31\n\rUpdateAccount\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12,\n\x04Stop\x12\x0c.StopRequest\x1a\x16.google.protobuf.Empty\x12\x37\n\x05Watch\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12>\n\x0cStopWatching\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Emptyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19protos/controllable.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x13protos/broker.proto\x1a\x12protos/clock.proto\x1a\x11protos/data.proto\x1a\x14protos/structs.proto\"i\n\x12InitializeResponse\x12\x16\n\x0e\x64\x61ta_frequency\x18\x01 \x01(\t\x12\x10\n\x08shorting\x18\x03 \x01(\x08\x12\x15\n\rasset_classes\x18\x04 \x01(\t\x12\x12\n\nfractional\x18\x05 \x01(\x08\"\xef\x02\n\x0b\x45ngineSetup\x12=\n\x11\x63ommission_models\x18\x01 \x03(\x0b\x32\".EngineSetup.CommissionModelsEntry\x12\x39\n\x0fslippage_models\x18\x02 \x03(\x0b\x32 .EngineSetup.SlippageModelsEntry\x12/\n\ntax_models\x18\x03 \x03(\x0b\x32\x1b.EngineSetup.TaxModelsEntry\x1a>\n\x15\x43ommissionModelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x14\n\x05value\x18\x02 \x01(\x0b\x32\x05.Data:\x02\x38\x01\x1a<\n\x13SlippageModelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x14\n\x05value\x18\x02 \x01(\x0b\x32\x05.Data:\x02\x38\x01\x1a\x37\n\x0eTaxModelsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x14\n\x05value\x18\x02 \x01(\x0b\x32\x05.Data:\x02\x38\x01\"\x87\x01\n\x14\x46ractionalTradeSetup\x12\x18\n\x10minimum_purchase\x18\x01 \x01(\x02\x12\x18\n\x10minimal_fraction\x18\x02 \x01(\x05\x12\x13\n\x0border_types\x18\x03 \x03(\t\x12\x13\n\x0b\x61sset_types\x18\x04 \x03(\t\x12\x11\n\tcan_short\x18\x05 \x01(\x08\"I\n\nTradeSetup\x12\x13\n\x0border_types\x18\x01 \x03(\t\x12\x13\n\x0b\x61sset_types\x18\x02 \x03(\t\x12\x11\n\tcan_short\x18\x03 \x01(\x08\"q\n\x0b\x42rokerSetup\x12\x12\n\nfractional\x18\x01 \x01(\x08\x12,\n\rf_trade_setup\x18\x02 \x01(\x0b\x32\x15.FractionalTradeSetup\x12 \n\x0btrade_setup\x18\x03 \x01(\x0b\x32\x0b.TradeSetup\"\x1f\n\x08RunSetup\x12\x13\n\x0bstrategy_id\x18\x01 \x01(\t\"\x96\x02\n\nRunRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x12\n\nsession_id\x18\x02 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\x12\x10\n\x08leverage\x18\x04 \x01(\x02\x12)\n\x05start\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\"\n\x0c\x65ngine_setup\x18\x07 \x01(\x0b\x32\x0c.EngineSetup\x12\"\n\x0c\x62roker_setup\x18\n \x01(\x0b\x32\x0c.BrokerSetup\x12\x15\n\runiverse_name\x18\x08 \x01(\t\x12\x12\n\nclear_perf\x18\t \x01(\x08\"a\n\x0bStopRequest\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x11\n\tliquidate\x18\x02 \x01(\x08\x12+\n\x07real_ts\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"}\n\rUpdateRequest\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x19\n\x05\x65vent\x18\x02 \x01(\x0e\x32\n.EventType\x12\"\n\x0c\x62roker_state\x18\x03 \x01(\x0b\x32\x0c.BrokerState\"\r\n\x0bUpdateReply\"\xc5\x02\n\x11\x43ontrollableState\x12\x12\n\nsession_id\x18\x01 \x01(\t\x12\x15\n\rsession_state\x18\x02 \x01(\t\x12\x0f\n\x07\x63\x61pital\x18\x03 \x01(\x02\x12\x14\n\x0cmax_leverage\x18\x0b \x01(\x02\x12\x10\n\x08universe\x18\x04 \x01(\t\x12\x11\n\tlook_back\x18\x05 \x01(\x05\x12\x16\n\x0e\x64\x61ta_frequency\x18\x06 \x01(\t\x12)\n\x05start\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\'\n\x03\x65nd\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\ncheckpoint\x18\t \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1d\n\x15metrics_tracker_state\x18\n \x01(\x0c\"D\n\x17ParametersUpdateRequest\x12\x0f\n\x07\x63\x61pital\x18\x01 \x01(\x02\x12\x18\n\x10maximum_leverage\x18\x02 \x01(\x02\x32\xf4\x03\n\x0c\x43ontrollable\x12\x44\n\x10UpdateParameters\x12\x18.ParametersUpdateRequest\x1a\x16.google.protobuf.Empty\x12,\n\nInitialize\x12\t.RunSetup\x1a\x13.InitializeResponse\x12*\n\x03Run\x12\x0b.RunRequest\x1a\x16.google.protobuf.Empty\x12\x32\n\x0b\x43lockUpdate\x12\x0b.ClockEvent\x1a\x16.google.protobuf.Empty\x12\x31\n\rUpdateAccount\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12,\n\x04Stop\x12\x0c.StopRequest\x1a\x16.google.protobuf.Empty\x12\x37\n\x05Watch\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12>\n\x0cStopWatching\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12\x36\n\x04Join\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Emptyb\x06proto3')
 
 
 
-_RUNSETUP = DESCRIPTOR.message_types_by_name['RunSetup']
 _INITIALIZERESPONSE = DESCRIPTOR.message_types_by_name['InitializeResponse']
 _ENGINESETUP = DESCRIPTOR.message_types_by_name['EngineSetup']
 _ENGINESETUP_COMMISSIONMODELSENTRY = _ENGINESETUP.nested_types_by_name['CommissionModelsEntry']
 _ENGINESETUP_SLIPPAGEMODELSENTRY = _ENGINESETUP.nested_types_by_name['SlippageModelsEntry']
 _ENGINESETUP_TAXMODELSENTRY = _ENGINESETUP.nested_types_by_name['TaxModelsEntry']
+_FRACTIONALTRADESETUP = DESCRIPTOR.message_types_by_name['FractionalTradeSetup']
+_TRADESETUP = DESCRIPTOR.message_types_by_name['TradeSetup']
+_BROKERSETUP = DESCRIPTOR.message_types_by_name['BrokerSetup']
+_RUNSETUP = DESCRIPTOR.message_types_by_name['RunSetup']
 _RUNREQUEST = DESCRIPTOR.message_types_by_name['RunRequest']
 _STOPREQUEST = DESCRIPTOR.message_types_by_name['StopRequest']
 _UPDATEREQUEST = DESCRIPTOR.message_types_by_name['UpdateRequest']
 _UPDATEREPLY = DESCRIPTOR.message_types_by_name['UpdateReply']
 _CONTROLLABLESTATE = DESCRIPTOR.message_types_by_name['ControllableState']
 _PARAMETERSUPDATEREQUEST = DESCRIPTOR.message_types_by_name['ParametersUpdateRequest']
-RunSetup = _reflection.GeneratedProtocolMessageType('RunSetup', (_message.Message,), {
-  'DESCRIPTOR' : _RUNSETUP,
-  '__module__' : 'protos.controllable_pb2'
-  # @@protoc_insertion_point(class_scope:RunSetup)
-  })
-_sym_db.RegisterMessage(RunSetup)
-
 InitializeResponse = _reflection.GeneratedProtocolMessageType('InitializeResponse', (_message.Message,), {
   'DESCRIPTOR' : _INITIALIZERESPONSE,
   '__module__' : 'protos.controllable_pb2'
@@ -80,6 +76,34 @@ _sym_db.RegisterMessage(EngineSetup)
 _sym_db.RegisterMessage(EngineSetup.CommissionModelsEntry)
 _sym_db.RegisterMessage(EngineSetup.SlippageModelsEntry)
 _sym_db.RegisterMessage(EngineSetup.TaxModelsEntry)
+
+FractionalTradeSetup = _reflection.GeneratedProtocolMessageType('FractionalTradeSetup', (_message.Message,), {
+  'DESCRIPTOR' : _FRACTIONALTRADESETUP,
+  '__module__' : 'protos.controllable_pb2'
+  # @@protoc_insertion_point(class_scope:FractionalTradeSetup)
+  })
+_sym_db.RegisterMessage(FractionalTradeSetup)
+
+TradeSetup = _reflection.GeneratedProtocolMessageType('TradeSetup', (_message.Message,), {
+  'DESCRIPTOR' : _TRADESETUP,
+  '__module__' : 'protos.controllable_pb2'
+  # @@protoc_insertion_point(class_scope:TradeSetup)
+  })
+_sym_db.RegisterMessage(TradeSetup)
+
+BrokerSetup = _reflection.GeneratedProtocolMessageType('BrokerSetup', (_message.Message,), {
+  'DESCRIPTOR' : _BROKERSETUP,
+  '__module__' : 'protos.controllable_pb2'
+  # @@protoc_insertion_point(class_scope:BrokerSetup)
+  })
+_sym_db.RegisterMessage(BrokerSetup)
+
+RunSetup = _reflection.GeneratedProtocolMessageType('RunSetup', (_message.Message,), {
+  'DESCRIPTOR' : _RUNSETUP,
+  '__module__' : 'protos.controllable_pb2'
+  # @@protoc_insertion_point(class_scope:RunSetup)
+  })
+_sym_db.RegisterMessage(RunSetup)
 
 RunRequest = _reflection.GeneratedProtocolMessageType('RunRequest', (_message.Message,), {
   'DESCRIPTOR' : _RUNREQUEST,
@@ -133,30 +157,36 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _ENGINESETUP_SLIPPAGEMODELSENTRY._serialized_options = b'8\001'
   _ENGINESETUP_TAXMODELSENTRY._options = None
   _ENGINESETUP_TAXMODELSENTRY._serialized_options = b'8\001'
-  _RUNSETUP._serialized_start=173
-  _RUNSETUP._serialized_end=204
-  _INITIALIZERESPONSE._serialized_start=206
-  _INITIALIZERESPONSE._serialized_end=311
-  _ENGINESETUP._serialized_start=314
-  _ENGINESETUP._serialized_end=681
-  _ENGINESETUP_COMMISSIONMODELSENTRY._serialized_start=500
-  _ENGINESETUP_COMMISSIONMODELSENTRY._serialized_end=562
-  _ENGINESETUP_SLIPPAGEMODELSENTRY._serialized_start=564
-  _ENGINESETUP_SLIPPAGEMODELSENTRY._serialized_end=624
-  _ENGINESETUP_TAXMODELSENTRY._serialized_start=626
-  _ENGINESETUP_TAXMODELSENTRY._serialized_end=681
-  _RUNREQUEST._serialized_start=684
-  _RUNREQUEST._serialized_end=926
-  _STOPREQUEST._serialized_start=928
-  _STOPREQUEST._serialized_end=1025
-  _UPDATEREQUEST._serialized_start=1027
-  _UPDATEREQUEST._serialized_end=1152
-  _UPDATEREPLY._serialized_start=1154
-  _UPDATEREPLY._serialized_end=1167
-  _CONTROLLABLESTATE._serialized_start=1170
-  _CONTROLLABLESTATE._serialized_end=1495
-  _PARAMETERSUPDATEREQUEST._serialized_start=1497
-  _PARAMETERSUPDATEREQUEST._serialized_end=1565
-  _CONTROLLABLE._serialized_start=1568
-  _CONTROLLABLE._serialized_end=2012
+  _INITIALIZERESPONSE._serialized_start=173
+  _INITIALIZERESPONSE._serialized_end=278
+  _ENGINESETUP._serialized_start=281
+  _ENGINESETUP._serialized_end=648
+  _ENGINESETUP_COMMISSIONMODELSENTRY._serialized_start=467
+  _ENGINESETUP_COMMISSIONMODELSENTRY._serialized_end=529
+  _ENGINESETUP_SLIPPAGEMODELSENTRY._serialized_start=531
+  _ENGINESETUP_SLIPPAGEMODELSENTRY._serialized_end=591
+  _ENGINESETUP_TAXMODELSENTRY._serialized_start=593
+  _ENGINESETUP_TAXMODELSENTRY._serialized_end=648
+  _FRACTIONALTRADESETUP._serialized_start=651
+  _FRACTIONALTRADESETUP._serialized_end=786
+  _TRADESETUP._serialized_start=788
+  _TRADESETUP._serialized_end=861
+  _BROKERSETUP._serialized_start=863
+  _BROKERSETUP._serialized_end=976
+  _RUNSETUP._serialized_start=978
+  _RUNSETUP._serialized_end=1009
+  _RUNREQUEST._serialized_start=1012
+  _RUNREQUEST._serialized_end=1290
+  _STOPREQUEST._serialized_start=1292
+  _STOPREQUEST._serialized_end=1389
+  _UPDATEREQUEST._serialized_start=1391
+  _UPDATEREQUEST._serialized_end=1516
+  _UPDATEREPLY._serialized_start=1518
+  _UPDATEREPLY._serialized_end=1531
+  _CONTROLLABLESTATE._serialized_start=1534
+  _CONTROLLABLESTATE._serialized_end=1859
+  _PARAMETERSUPDATEREQUEST._serialized_start=1861
+  _PARAMETERSUPDATEREQUEST._serialized_end=1929
+  _CONTROLLABLE._serialized_start=1932
+  _CONTROLLABLE._serialized_end=2432
 # @@protoc_insertion_point(module_scope)

@@ -170,7 +170,11 @@ class TestClient(object):
                 name)
 
         pi = processes.ProcessInitializer(self._controllable)
-        pi.initialize(stp, name)
+        init_response = pi.initialize(stp, name)
+
+        # todo: if initial requirements aren't met, raise an error...
+
+        stp.fractional = init_response.fractional
 
         uni = universes.get_universe(stp.trading_universe)
 

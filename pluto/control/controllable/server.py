@@ -30,6 +30,7 @@ from pluto.strategies import setup as stg_stp
 
 from pluto.setup import engine_setup as m_stp
 from pluto.setup import directory_setup as drs
+from pluto.broker import broker_setup as bks
 
 from protos import broker_pb2
 from protos import controllable_pb2
@@ -203,6 +204,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     @service_access.framework_only
     def Initialize(self, request, context):
+        # todo: add broker setup for the algorithm class
+
         id_ = request.strategy_id  # the id of the controllable => will be used in performance updates
 
         self._strategy_setup = strategy_setup = stg_stp.StrategySetup(id_)
@@ -299,6 +302,9 @@ class ControllableService(cbl_rpc.ControllableServicer):
             controllable.run(
                 id_,
                 self._strategy_setup,
+                bks.load_broker_setup(
+                    request.broker_setup
+                ),
                 engine_setup,
                 conversions.to_datetime(request.start),
                 conversions.to_datetime(request.end))

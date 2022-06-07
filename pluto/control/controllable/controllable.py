@@ -23,6 +23,7 @@ from pluto.control.controllable import synchronization_states as ss
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
 from pluto.universes import universes
+from pluto.broker import broker_setup as brs
 
 from protos import controllable_pb2
 
@@ -100,6 +101,8 @@ class Controllable(ABC):
         self._emission_rate = 'daily'
         self._data_frequency = 'daily'
 
+        self._broker_setup = brs.BrokerSetup()
+
         self._capital_change_deltas = {}
         self._capital_changes = {}
 
@@ -124,7 +127,7 @@ class Controllable(ABC):
         self._real_dt = None
         self._params = None
 
-        self._ready = ready = _Ready()
+        self._ready = _Ready()
         self._transitioning = _Transitioning(self)
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
@@ -222,6 +225,7 @@ class Controllable(ABC):
     def run(self,
             process_id,
             strategy_setup,
+            broker_setup,
             run_setup,
             start_dt,
             end_dt):
@@ -231,7 +235,8 @@ class Controllable(ABC):
         Parameters
         ----------
         process_id: str
-        strategy_setup
+        strategy_setup: pluto.strategies.setup.StrategySetup
+        broker_setup: pluto.broker.broker_setup.BrokerSetup
         run_setup
         start_dt: pandas.Timestamp
         end_dt: pandas.Timestamp
@@ -245,6 +250,7 @@ class Controllable(ABC):
             pass
 
         self._session_id = process_id
+        self._broker_setup = broker_setup
 
         namespace = self._namespace
         look_back = self._look_back
@@ -380,6 +386,10 @@ class Controllable(ABC):
         # initialize the algo (called only once per lifetime)
         algo.initialize(**{})  # todo: kwargs?
         algo.initialized = True
+
+    @property
+    def broker_setup(self):
+        return self._broker_setup
 
     @abstractmethod
     def _get_algorithm_class(self,
@@ -626,7 +636,8 @@ class Controllable(ABC):
         # self._current_dt = conversions.to_datetime(state.checkpoint)
 
     def stop(self, dt):
-        # todo: liquidate all positions
+        # todo: disable buying stocks, only allow selling...
+        #  this will gradually close positions...
         pass
 
     def update_blotter(self, broker_data):
@@ -732,8 +743,7 @@ class Controllable(ABC):
             simulation_dt_func=self.get_current_dt,
             data_frequency=data_frequency,
             trading_calendar=calendar,
-            restrictions=restrictions
-        )
+            restrictions=restrictions)
 
     def _cleanup_expired_assets(self,
                                 dt,

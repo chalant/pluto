@@ -18,16 +18,13 @@ service Controllable {
     //sends broker state
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
     rpc Stop (StopRequest) returns (google.protobuf.Empty);
-
+    // monitor methods
     rpc Watch (google.protobuf.Empty) returns (google.protobuf.Empty);
     rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
+    // todo: remove this method!
     rpc Join(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
-message RunSetup {
-    string strategy_id = 1;
-
-}
 
 message InitializeResponse {
     string data_frequency = 1;
@@ -42,6 +39,31 @@ message EngineSetup{
     map<string, Data> tax_models = 3;
 }
 
+message FractionalTradeSetup {
+    float minimum_purchase = 1;
+    int32 minimal_fraction = 2;
+    repeated string order_types = 3;
+    repeated string asset_types = 4;
+    bool can_short = 5;
+}
+
+message TradeSetup {
+    repeated string order_types = 1;
+    repeated string asset_types = 2;
+    bool can_short = 3;
+}
+
+message BrokerSetup {
+    bool fractional = 1;
+
+    FractionalTradeSetup f_trade_setup = 2;
+    TradeSetup trade_setup = 3;
+
+}
+
+message RunSetup {
+    string strategy_id = 1;
+}
 
 message RunRequest {
     string id = 1;
@@ -54,6 +76,7 @@ message RunRequest {
     google.protobuf.Timestamp end = 6;
 
     EngineSetup engine_setup = 7;
+    BrokerSetup broker_setup = 10;
 
     string universe_name = 8;
 
