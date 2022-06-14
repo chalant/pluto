@@ -3,6 +3,8 @@ import os
 
 import sqlalchemy as sa
 
+from dev import events
+
 from zipline.data import bundles
 
 from zipline.pipeline.loaders import USEquityPricingLoader
@@ -18,8 +20,19 @@ from pluto.pipeline import domain
 
 from protos import calendar_pb2
 
+_CACHE = {}
 
 class AbstractUniverse(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def start_date(self):
+        return
+
+    @property
+    @abc.abstractmethod
+    def end_date(self):
+        return
+
     @property
     @abc.abstractmethod
     def domain(self):
@@ -219,6 +232,22 @@ class TestUniverse(AbstractUniverse):
         self._calendar = None
         self._cache = calendar_cache
 
+        bundles.register('test', lambda *args: None)
+
+        self._bundle = bundles.load(
+            self.bundle_name)
+
+        self._equity_daily_bar_reader = self._bundle.equity_daily_bar_reader
+
+
+    @property
+    def start_date(self):
+        return self._equity_daily_bar_reader.first_trading_day()
+
+    @property
+    def end_date(self):
+        return self._equity_daily_bar_reader.last_available_dt()
+
     @property
     def name(self):
         return 'test'
@@ -243,10 +272,12 @@ class TestUniverse(AbstractUniverse):
     def bundle_name(self):
         return 'test'
 
+    @property
+    def data_frequencies(self):
+        return 'daily',
+
     def load_bundle(self):
-        return bundles.load(
-            self.bundle_name,
-            environ=os.environ)
+        return self._bundle
 
     @property
     def benchmark(self):
@@ -292,8 +323,23 @@ class TestUniverse(AbstractUniverse):
         return choose_loader
 
 
-def get_universe(name, cache=False):
-    '''
+def with_cache(cache):
+    def decorator(fn):
+        def wrapper(name, cache_=False, environ=None):
+            if name not in cache:
+                uni = fn(name, cache_, environ)
+                cache[name] = uni
+                return uni
+
+            return cache[name]
+
+        return wrapper
+    return decorator
+
+
+@with_cache(_CACHE)
+def get_universe(name, cache=False, environ=None):
+    """
 
     Parameters
     ----------
@@ -303,7 +349,10 @@ def get_universe(name, cache=False):
     Returns
     -------
     AbstractUniverse
-    '''
+    """
+
+    # cache universe in case we use it in-memory...
+
     if name == 'test':
         return TestUniverse(cache)
     elif name == 'quandl':

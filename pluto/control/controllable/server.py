@@ -112,7 +112,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         Parameters
         ----------
-        directory: directory.directory.Directory
+        directory: directory.utils.DirectoryInterface
         monitor
         controllable_factory
         """

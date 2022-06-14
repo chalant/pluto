@@ -257,8 +257,10 @@ class ReturnsStatistic(Metric):
 
     def end_of_bar(self, **kwargs):
         res = self._function(kwargs.pop('ledger').daily_returns)
+
         if not np.isfinite(res):
             res = None
+
         kwargs.pop('packet')['cumulative_risk_metrics'][self._field_name] = res
 
     def end_of_session(self, **kwargs):

@@ -154,25 +154,33 @@ def create_strategy(connection, strategy_creator, strategy_name):
     else:
         raise FileExistsError("Strategy of name {} already exists".format(strategy_name))
 
-    strategy.strategy_id = hashlib.md5(strategy.strategy_name.encode()).hexdigest()
+    strategy.strategy_id = _create_id(strategy)
 
     return strategy
 
 
+def _create_id(stg):
+    return int(hashlib.md5(stg.strategy_name.encode()).hexdigest(), 16)
+
+
 def get_strategies(connection):
     for res in connection.execute(_GET_STRATEGIES):
-        yield Strategy(res['strategy_name'], res['status'])
+        stg = Strategy(res['strategy_name'], res['status'])
+
+        stg.strategy_id = _create_id(stg)
+
+        yield stg
 
 
 def get_strategy(connection, strategy_name):
     res = connection.execute(
         _GET_STRATEGY,
         strategy_name=strategy_name
-    )
+    ).first()
 
     strategy = Strategy(strategy_name, res['status'])
 
-    strategy.strategy_id = res['strategy_id']
+    strategy.strategy_id = _create_id(strategy)
 
     return strategy
 
@@ -209,30 +217,30 @@ def create_strategy_session(connection, strategy, session):
     )
 
 
-def get_strategy_session(connection, strategy_id, session_id):
-    # loads a strategy session
-
-    # create strategy session if it doesn't exist...
-
-    res = connection.execute(
-        _GET_STRATEGY_SESSION,
-        strategy_id=strategy_id,
-        session_id=session_id
-    )
-
-    if res:
-        session = sessions.Session(
-            universes.get_universe(res['universe_name']),
-            res['data_frequency']
-        )
-
-        stg_sess = StrategySession(
-            Strategy(res['strategy_name'], res['status']),
-            session,
-            res['status'])
-    else:
-        raise FileNotFoundError('No strategy session for strategy {}'.format(strategy.strategy_name))
-
-    return stg_sess
+# def get_strategy_session(connection, strategy_id, session_id):
+#     # loads a strategy session
+#
+#     # create strategy session if it doesn't exist...
+#
+#     res = connection.execute(
+#         _GET_STRATEGY_SESSION,
+#         strategy_id=strategy_id,
+#         session_id=session_id
+#     ).first()
+#
+#     if res:
+#         session = sessions.Session(
+#             universes.get_universe(res['universe_name']),
+#             res['data_frequency']
+#         )
+#
+#         stg_sess = StrategySession(
+#             Strategy(res['strategy_name'], res['status']),
+#             session,
+#             res['status'])
+#     else:
+#         raise FileNotFoundError('No strategy session for strategy {}'.format(stg_sess.s.strategy_name))
+#
+#     return stg_sess
 
 

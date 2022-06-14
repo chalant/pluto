@@ -1,32 +1,31 @@
 import yaml
 
-from directory import directory as drt
-from directory import utils as du
+from dev import events
 
 from pluto.interface import monitor
 
-from pluto.control.controllable import server
 from pluto.control.loop import simulation_loop
 from pluto.control.processes import in_memory
 from pluto.control.processes import processes
 
+from pluto.strategies import strategies
+from pluto.strategies import schema
+
 from pluto.universes import universes
 
 from pluto.setup import run_setup
-from pluto.setup import directory_setup as drp
 
-
-# def load_backtest_setup():
-#     with open(drp.setup_dir.get_file("setup", "yaml").path) as f:
-#         stp = yaml.load(f, Loader=yaml.FullLoader)
+events.add_event('backtesting.started')
+events.add_event('backtesting.ended')
 
 
 class BackTester(object):
-    def __init__(self, controllable):
+    def __init__(self, controllable, directory):
         # note end date is always the most recent data point
 
         self._stg_stp = None
         self._process = None
+        self._controllable = controllable
 
     def _setup(self, setup, controllable):
         pi = processes.ProcessInitializer(controllable)
@@ -49,20 +48,35 @@ class BackTester(object):
 
         return pi.start(r_stp), uni
 
-    def run(self, setup, watcher, directory):
+    def run(self, stp, strategy, loader, watcher):
         # get calendar of the universe
 
-        mon = monitor.Monitor()
+        pi = processes.ProcessInitializer(self._controllable)
+        init_response = pi.initialize(stp, strategy.name)
 
-        process, uni = self._setup(setup, mon, directory)
+        loader.load_strategy(strategy)
 
-        # subscribe watcher to monitor...
-        mon.watch(watcher)
+        # todo: if initial requirements aren't met, raise an error...
+
+        stp.fractional = init_response.fractional
+
+        uni = universes.get_universe(stp.trading_universe)
+
+        process = pi.start(stp)
 
         loop = simulation_loop.SimulationLoop(
-            setup.start,
-            setup.end,
-            process,
-            setup.frequency)
+            stp.start,
+            stp.end,
+            stp.frequency)
 
+        # subscribe process to clock events
+        events.subscribe('clock.update', process.clock_update)
+
+        # subscribe to monitor events
+        process.watch(watcher)
+
+        events.post_event('backtesting.started', None)
+
+        # run loop on these specific exchanges
         loop.start(uni.exchanges)
+

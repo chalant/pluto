@@ -96,9 +96,6 @@ class InMemoryControllableStub(stub.ControllableStub):
             InMemoryControllableFactory(),
             mode)
 
-    def watch(self, watcher):
-        self._monitor.watch(watcher)
-
     def _run(self, request, metadata):
         return self._servicer.Run(request, FakeContext(metadata))
 

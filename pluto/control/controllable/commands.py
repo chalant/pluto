@@ -7,6 +7,8 @@ from protos.clock_pb2 import (
     BEFORE_TRADING_START
 )
 
+from dev import events
+
 from pluto.coms.utils import conversions
 
 

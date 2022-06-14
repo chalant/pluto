@@ -5,6 +5,10 @@ from sqlalchemy import create_engine
 from directory import directory as dr
 from directory import utils as du
 
+from dev import strategy_store
+
+from pluto import examples
+
 # root_dir = dr.create_directory(path.expanduser('~./pluto'), 'root')
 # root_dir.add_file('setup', 'yaml')
 #
@@ -51,6 +55,17 @@ def create_directory(root_path):
 
     strategies_db_engine = create_engine(
         'sqlite://' + strategy_metadata.path)
+
+    store = strategy_store.StrategyStore(root_dir)
+
+    # copy examples
+    for name, ap in examples.EXAMPLE_MODULES.items():
+        args, path_ = ap
+
+        try:
+            store.add_strategy(name, path_)
+        except FileExistsError:
+            pass
 
     return root_dir
 

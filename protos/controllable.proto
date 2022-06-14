@@ -21,8 +21,6 @@ service Controllable {
     // monitor methods
     rpc Watch (google.protobuf.Empty) returns (google.protobuf.Empty);
     rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
-    // todo: remove this method!
-    rpc Join(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 
@@ -63,6 +61,8 @@ message BrokerSetup {
 
 message RunSetup {
     string strategy_id = 1;
+
+    map<string, string> environ = 2;
 }
 
 message RunRequest {

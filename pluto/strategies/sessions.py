@@ -33,8 +33,10 @@ class Session(object):
 def create_session(universe, data_frequency):
     return Session(universe, data_frequency)
 
+
 def get_session(universe, data_frequency):
     return
+
 
 def save_session(connection, session):
     universe = session.universe

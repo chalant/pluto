@@ -6,6 +6,8 @@ from pluto.control.clock import clock
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.control.clock.utils import get_generator
 
+from dev import events
+
 from protos import clock_pb2
 
 
@@ -14,16 +16,11 @@ class SimulationLoop(object):
             self,
             start_dt,
             end_dt,
-            signal_handler,
-            monitor=None,
             frequency='daily'):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
 
-        self._monitor = monitor
-
-        self._signal_handler = signal_handler
         self._frequency = frequency
 
         self._clocks = clocks = {}
@@ -47,18 +44,11 @@ class SimulationLoop(object):
     def start_dt(self):
         return self._start_dt
 
-    def get_mode(self):
-        return self._signal_handler
-
-    def start(self, exchanges, watcher):
+    def start(self, exchanges):
 
         self._add_clock(exchanges)
 
         calendar = self._calendar
-
-        signal_handler = self._signal_handler
-
-        signal_handler.watch(watcher)
 
         for ts, evt in get_generator(
                 calendar,
@@ -93,7 +83,11 @@ class SimulationLoop(object):
                 # # process cached commands
                 # signal_handler.process(ts)
                 # # continue execution
-                signal_handler.clock_update(ts, evt, signals)
+                # signal_handler.clock_update(ts, evt, signals)
+
+                events.post_event(
+                    "clock.update",
+                    {'ts': ts, 'event': evt, 'signals': signals})
 
                 # for control_mode in self._control_modes.values():
                 #     control_mode.update(ts, evt, signals)

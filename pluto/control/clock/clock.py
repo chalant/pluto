@@ -5,6 +5,10 @@ import pandas as pd
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.control.clock.utils import get_generator
 
+from dev import events
+
+events.add_event('clock.update')
+
 
 class StopExecution(Exception):
     pass

@@ -7,6 +7,7 @@ from zipline.data import bundles
 from pluto.data.io import paths
 from pluto.data import io
 
+
 class Bundle(object):
     def __init__(self,
                  asset_finder,
