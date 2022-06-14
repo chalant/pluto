@@ -67,6 +67,9 @@ def create_directory(root_path):
         except FileExistsError:
             pass
 
+    # todo: create example data
+    #  register bundles
+
     return root_dir
 
 

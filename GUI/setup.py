@@ -228,7 +228,6 @@ class Setup(QtWidgets.QWidget):
 
         # todo: need to add tax setup
         stp.tax_models = {}
-
         self._layout = layout = QtWidgets.QVBoxLayout(parent)
 
         self.setLayout(layout)
@@ -247,7 +246,7 @@ class Setup(QtWidgets.QWidget):
         self._universes = universes = combobox.ComboBox(self)
         universes.set_item_store(Universes())
 
-        self._set_universe(universes.value)
+        # self._set_universe(universes.value)
 
         layout.addWidget(fields.Field(self, 'Universes', universes))
 
@@ -268,6 +267,8 @@ class Setup(QtWidgets.QWidget):
 
         # todo:
         layout.addWidget(fields.Field(self, 'Data Frequency', self._data_frequency))
+
+        parent.setFixedWidth(layout.sizeHint().width())
 
         self._data_frequency.setDisabled(True)
 
