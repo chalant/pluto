@@ -18,35 +18,18 @@ from zipline.testing import test_resource_path, core
 from zipline.data import bundles
 from zipline.utils import cache
 from zipline.assets.assets import Equity, Future
-from zipline.finance.execution import StopOrder, LimitOrder, StopLimitOrder, MarketOrder
+from zipline.finance.execution import (
+    StopOrder,
+    LimitOrder,
+    StopLimitOrder,
+    MarketOrder)
 
 from pluto import examples
 from pluto.test import test
-
 from pluto.control.processes import in_memory
-from pluto.control.processes import processes
-from pluto.control.controllable import server
-from pluto.control.modes import utils as mode_utils
-from pluto.control.loop import utils as loop_utils
-from pluto.control.modes.market import factory
-from pluto.control.modes.market import blotter_factory
-
-from pluto.interface import monitor
-
-from pluto.universes import universes
-
-from pluto.interface import monitor
-
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
-
 from pluto.broker import broker_setup as bks
-
-
-class TestSetup(object):
-    def __init__(self, strategy_id, session_id):
-        self.session_id = session_id
-        self.strategy_id = strategy_id
 
 
 def _build_data_frame(mon, process_id):
@@ -83,7 +66,7 @@ def _run(client, example_name, expected_perf):
 
     stp = run_setup.RunSetup('test')
 
-    stp.broker = 'none'
+    # stp.broker = 'none'
     stp.trading_universe = 'test'
     stp.capital = args['capital_base']
 
@@ -127,7 +110,8 @@ def _run(client, example_name, expected_perf):
     client.add_strategy(
         stp,
         example_name,
-        path_).run(
+        path_
+    ).run(
         stp,
         expected_perf)
 
@@ -214,6 +198,8 @@ class PlutoExamplesTests(unittest.TestCase):
 
         environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
+        # cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
+
         cls._expected_perf = cache.dataframe_cache(
             dir_.getpath(
                 'example_data/expected_perf/%s' %
@@ -231,9 +217,6 @@ class PlutoExamplesTests(unittest.TestCase):
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
-        thread_pool = self._thread_pool
-
-        framework_url = self._framework_url
         dir_ = self._pluto_tempdir
 
         # monitor for performance callbacks...

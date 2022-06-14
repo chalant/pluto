@@ -7,9 +7,9 @@ import pandas as pd
 from numpy import testing
 import numpy as np
 
-from pluto import examples
+from dev import strategy_store, events
 
-from pluto.coms.utils import conversions
+from pluto import examples
 
 from pluto.utils import stream
 
@@ -47,6 +47,7 @@ class TestWatcher(monitor.AbstractWatcher):
         self._error_callback = error_callback
 
     def performance_update(self, packet):
+
         daily_perfs = self._daily_perfs
         # append until end...
 
@@ -56,7 +57,7 @@ class TestWatcher(monitor.AbstractWatcher):
         perf = conversions.from_proto_performance_packet(perf)
 
         daily_perf = perf.get('daily_perf', None)
-        daily_perf.update(perf['cumulative_risk_metrics']),
+        daily_perf.update(perf['cumulative_risk_metrics'])
 
         cum_perf = perf['cumulative_perf']
         cum_perf.pop('period_close')
@@ -128,18 +129,26 @@ class StrategyTester(object):
         loop = simulation_loop.SimulationLoop(
             stp.start,
             stp.end,
-            self._process,
             stp.data_frequency)
 
         def on_error(message):
             raise AssertionError(message)
 
-        loop.start(
-            self._universe.exchanges,
-            TestWatcher(
-                self._process.process_id,
-                expected_perf,
-                self._name, on_error))
+        watcher = TestWatcher(
+            self._process.process_id,
+            expected_perf,
+            self._name,
+            on_error)
+
+        self._process.watch(watcher)
+
+        # subscribe to clock events
+        events.subscribe('clock.update', self._process.clock_update)
+
+        # make a watch request
+        # self._process.watch()
+
+        loop.start(self._universe.exchanges)
 
 
 class TestClient(object):
@@ -152,30 +161,21 @@ class TestClient(object):
 
         """
 
-        self._strategy_dir = dir_ = directory.get_directory('strategies')
-        self._strategy_db_engine = engine = create_engine(
-            'sqlite:///' + dir_.get_file('metadata', 'sqlite').path)
-
         self._controllable = controllable
 
-        schema.meta.create_all(engine)
+        self._store = strategy_store.StrategyStore(directory)
+        self._directory = directory
 
     def add_strategy(self, stp, name, source_path):
-        with self._strategy_db_engine.connect() as connection:
-            strategies.create_strategy(
-                connection,
-                strategies.StrategyCreator(
-                    self._strategy_dir,
-                    source_path),
-                name)
+        self._store.add_strategy(name, source_path)
 
         pi = processes.ProcessInitializer(self._controllable)
         init_response = pi.initialize(stp, name)
 
         # todo: if initial requirements aren't met, raise an error...
 
-        stp.fractional = init_response.fractional
-
         uni = universes.get_universe(stp.trading_universe)
+
+        stp.fractional = init_response.fractional
 
         return StrategyTester(pi.start(stp), uni, name)

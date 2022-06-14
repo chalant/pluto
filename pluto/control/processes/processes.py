@@ -9,6 +9,8 @@ import structs
 
 from google.protobuf import empty_pb2 as emp
 
+from dev import events
+
 from pluto.coms.utils import conversions
 
 from pluto.interface.utils import paths
@@ -54,13 +56,13 @@ class Process(object):
     def parameter_update(self, params):
         return self._controllable.ParameterUpdate(params, ())
 
-    def clock_update(self, dt, evt, signals):
+    def clock_update(self, clock_event):
         return self._controllable.ClockUpdate(
             clock_pb2.ClockEvent(
-                timestamp=conversions.to_proto_timestamp(dt),
+                timestamp=conversions.to_proto_timestamp(clock_event['ts']),
                 real_ts=conversions.to_proto_timestamp(Timestamp.utcnow()),
-                event=evt,
-                signals=signals), ())
+                event=clock_event['event'],
+                signals=clock_event['signals']), ())
 
     def account_update(self, broker_state):
         return self._controllable.UpdateAccount(
@@ -80,8 +82,17 @@ class Process(object):
         self._controllable.Join(emp.Empty, ())
 
     def watch(self, watcher):
-        # subscribe the watcher...
-        self._controllable.watch(watcher)
+        # # subscribe the watcher...
+        # self._controllable.watch(watcher)
+
+        # subscribe to monitor events for this process.
+        event_name = 'monitor.{}'.format(self._process_id)
+
+        events.add_event(event_name)
+
+        events.subscribe(
+            event_name,
+            watcher.performance_update)
 
         # make a watch request...
         self._controllable.Watch(emp.Empty(), ())

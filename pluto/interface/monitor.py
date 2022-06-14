@@ -4,6 +4,8 @@ from abc import abstractmethod, ABC
 
 from google.protobuf import empty_pb2 as emp
 
+from dev import events
+
 from pluto.interface.utils import service_access
 
 from protos import interface_pb2_grpc as itf
@@ -29,7 +31,7 @@ class AbstractWatcher(ABC):
 
     @abstractmethod
     def performance_update(self, packet):
-        pass
+        raise NotImplementedError(self.performance_update.__name__)
 
 
 class GeneratorWatcher(object):
@@ -64,14 +66,13 @@ class GeneratorWatcher(object):
 
 class Monitor(itf.MonitorServicer):
     def __init__(self):
-        self._watch_list = {}
+        self._watchers = []
 
     @service_access.framework_only
     def PerformanceUpdate(self, request, context):
-        watcher = self._watch_list.get(request.session_id, None)
-
-        if watcher:
-            watcher.performance_update(request)
+        events.post_event(
+            'monitor.{}'.format(request.session_id),
+            request)
 
         return emp.Empty()
 
@@ -85,15 +86,6 @@ class Monitor(itf.MonitorServicer):
     #     self._watch_list[session_id] = watcher = _Watcher(pr)
     #
     #     return watcher
-
-    def watch(self, watcher):
-        watcher.monitor = self
-
-        self._watch_list[watcher.process_id] = watcher
-
-    def stop_watching(self, watcher):
-        watcher = self._watch_list.pop(watcher.process_id)
-        watcher.monitor = None
 
     # def StopWatching(self, request, context):
     #     pr = self._watch_list.pop(request.session_id, None)

@@ -145,6 +145,7 @@ _default_calendar_aliases = {
     'JKT': 'XIDX',
 }
 
+
 class TradingCalendarDispatcher(object):
     """
     A class for dispatching and caching trading calendars.

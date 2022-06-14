@@ -1,0 +1,315 @@
+from PyQt6 import QtWidgets, QtCore
+from PyQt6.QtCore import Qt
+
+from pandas import Timestamp
+
+from zipline.assets.assets import Equity, Future
+from zipline.finance.execution import (
+    StopOrder,
+    LimitOrder,
+    StopLimitOrder,
+    MarketOrder)
+
+from pluto.setup import run_setup as rs
+from pluto.universes import universes
+from pluto.broker import broker_setup as bks
+
+from GUI.fields import fields
+from GUI.fields import combobox
+
+from dev import events
+
+events.add_event('setup.universe')
+events.add_event('setup.data_frequency')
+events.add_event('setup.broker')
+events.add_event('setup.start_date')
+events.add_event('setup.end_date')
+events.add_event('setup.capital')
+
+events.add_event('setup.internal.start')
+events.add_event('setup.internal.end')
+
+events.add_event('universe.loaded')
+
+
+class Date(QtWidgets.QDateEdit):
+    def __init__(self, parent, event_name):
+        """
+
+        Parameters
+        ----------
+        parent
+        """
+        super(Date, self).__init__(parent)
+
+        self.dateChanged.connect(self._set_date)
+
+        self._event_name = event_name
+
+    def _set_date(self, qt_date):
+        events.post_event(self._event_name, qt_date)
+
+
+class Brokers(object):
+    def __init__(self):
+        self._item_names = [
+            'alpaca'
+        ]
+
+        self._current_item_index = 0
+
+    @property
+    def item_names(self):
+        return self._item_names
+
+    @property
+    def current_item_index(self):
+        return self._current_item_index
+
+    @current_item_index.setter
+    def current_item_index(self, value):
+        self._current_item_index = value
+
+        events.post_event('setup.broker', self._item_names[value])
+
+
+class Universes(object):
+    def __init__(self):
+        self._item_names = [
+            'test'
+        ]
+
+        self._current_item_index = 0
+
+    @property
+    def item_names(self):
+        return self._item_names
+
+    @property
+    def current_item_index(self):
+        return self._current_item_index
+
+    @current_item_index.setter
+    def current_item_index(self, value):
+        self._current_item_index = value
+
+        events.post_event('setup.universe', self._item_names[value])
+
+
+class DataFrequencies(object):
+    def __init__(self, universe):
+        self._item_names = [universe.data_frequencies]
+
+        self._current_item_index = 0
+
+    @property
+    def item_names(self):
+        return self._item_names
+
+    @property
+    def current_item_index(self):
+        return self._current_item_index
+
+    @current_item_index.setter
+    def current_item_index(self, value):
+        self._current_item_index = value
+
+        events.post_event('setup.data_frequency', self._item_names[value])
+
+
+class BackTestPeriod(QtWidgets.QWidget):
+    def __init__(self, parent):
+        super(BackTestPeriod, self).__init__(parent)
+
+        layout = QtWidgets.QHBoxLayout(self)
+
+        self.setLayout(layout)
+
+        start_dt = QtWidgets.QDateEdit()
+        end_dt = QtWidgets.QDateEdit()
+
+        start_dt.setDisabled(True)
+        end_dt.setDisabled(True)
+
+        events.subscribe('universe.loaded', self._universe_loaded)
+
+        events.subscribe('setup.internal.start', self._start_date_updated)
+        events.subscribe('setup.internal.end', self._end_date_updated)
+
+        self._start_dt = start_dt = Date(self, 'setup.internal.start')
+        self._end_dt = end_dt = Date(self, 'setup.internal.end')
+
+        layout.addWidget(
+            fields.Field(
+                self,
+                "Start",
+                start_dt))
+
+        layout.addWidget(
+            fields.Field(
+                self,
+                "End",
+                end_dt))
+
+        # todo: if start is greater than end, increase end such that
+        #  it is one day.
+
+        # todo: the smallest datetime is determined by the available data.
+        #  asset lifetimes, or data portal?
+
+    def _strategy_loaded(self, meta):
+        pass
+
+    def _new_strategy(self, meta):
+        pass
+
+    def _universe_loaded(self, uni):
+        self._min_date = QtCore.QDate(uni.start_date.to_pydatetime().date())
+        self._max_date = QtCore.QDate(uni.end_date.to_pydatetime().date())
+
+        self._start_dt.setDate(self._max_date)
+        self._end_dt.setDate(self._max_date)
+
+        self._start_dt.setMinimumDate(self._min_date)
+        self._start_dt.setMaximumDate(self._end_dt.date().addDays(-1))
+
+        self._end_dt.setMinimumDate(self._start_dt.date().addDays(1))
+        self._end_dt.setMaximumDate(self._max_date)
+
+        self._start_dt.setDisabled(False)
+        self._end_dt.setDisabled(False)
+
+    def _start_date_updated(self, dt):
+        self._end_dt.setMinimumDate(dt.addDays(1))
+
+        events.post_event('setup.start_date', Timestamp(dt.toPyDate(), tz='utc'))
+
+    def _end_date_updated(self, dt):
+        self._start_dt.setMaximumDate(dt.addDays(-1))
+
+        events.post_event('setup.end_date', Timestamp(dt.toPyDate(), tz='utc'))
+
+
+# setup widget
+class Setup(QtWidgets.QWidget):
+    def __init__(self, parent, session_id):
+        super(Setup, self).__init__(parent)
+
+        self._run_setup = stp = rs.RunSetup(session_id)
+
+        stp.clear_perf = True
+
+        # todo: add a way to serialize setup object... (yaml?)
+        #  note: we already have a way in protobuf...
+
+        # todo: default broker setup, ideally, we should load this
+        #  from a file
+
+        fts = bks.FractionalTradeSetup()
+        ts = bks.TradeSetup()
+        bs = bks.BrokerSetup()
+
+        fts.asset_types = {Equity.__name__}
+        fts.order_types = {MarketOrder.__name__}
+        fts.minimal_fraction = 3
+        fts.minimum_purchase = 1.0
+
+        ts.asset_types = {Equity.__name__, Future.__name__}
+        ts.order_types = {
+            StopOrder.__name__,
+            LimitOrder.__name__,
+            StopLimitOrder.__name__,
+            MarketOrder.__name__}
+
+        bs.fractional = True
+
+        stp.fractional_trade_setup = fts
+        stp.trade_setup = ts
+
+        # todo: need to add tax setup
+        stp.tax_models = {}
+
+        self._layout = layout = QtWidgets.QVBoxLayout(parent)
+
+        self.setLayout(layout)
+
+        events.subscribe('setup.universe', self._set_universe)
+        events.subscribe('setup.data_frequency', self._set_data_frequency)
+
+        events.subscribe('setup.start_date', self._set_start)
+        events.subscribe('setup.end_date', self._set_end)
+
+        self._datetime_setup = BackTestPeriod(self)
+
+        layout.addWidget(self._datetime_setup)
+
+        #
+        self._universes = universes = combobox.ComboBox(self)
+        universes.set_item_store(Universes())
+
+        self._set_universe(universes.value)
+
+        layout.addWidget(fields.Field(self, 'Universes', universes))
+
+        self._capital_slider = slider = QtWidgets.QSlider(orientation=Qt.Orientation.Horizontal)
+
+        slider.setMinimum(1000)
+        slider.setMinimum(100000000)
+        slider.setSingleStep(1000)
+
+        layout.addWidget(fields.Field(
+            self,
+            'Capital',
+            slider))
+
+        slider.valueChanged.connect(self._capital_value)
+
+        self._data_frequency = combobox.ComboBox(self)
+
+        # todo:
+        layout.addWidget(fields.Field(self, 'Data Frequency', self._data_frequency))
+
+        self._data_frequency.setDisabled(True)
+
+    @property
+    def run_setup(self):
+        return self._run_setup
+
+    def _set_universe(self, name):
+        uni = universes.get_universe(name)
+
+        events.post_event('universe.loaded', uni)
+
+        self._run_setup.trading_universe = name
+
+        self._data_frequency.set_item_store(DataFrequencies(uni))
+        self._data_frequency.setDisabled(False)
+
+    def _capital_value(self, value):
+        self._run_setup.capital = float(value)
+
+    def load_setup(self, meta):
+        # todo: might need to load stuff from file... (broker parameters)
+
+        # set default values
+        run_setup = self._run_setup
+        period = self._datetime_setup
+
+        run_setup.capital = float(self._capital_slider.value())
+        # run_setup.start = period.start
+        # run_setup.end = period.end
+
+        run_setup.trading_universe = self._universes.value
+
+        # todo: also load broker setup from a file...
+
+        return run_setup
+
+    def _set_data_frequency(self, value):
+        self._run_setup.data_frequency = value
+
+    def _set_start(self, value):
+        self._run_setup.start = value
+
+    def _set_end(self, value):
+        self._run_setup.end = value
