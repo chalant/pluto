@@ -301,6 +301,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         if controllable:
             controllable.run(
                 id_,
+                self._directory,
                 self._strategy_setup,
                 bks.load_broker_setup(
                     request.broker_setup

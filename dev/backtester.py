@@ -11,7 +11,7 @@ from pluto.control.processes import processes
 from pluto.strategies import strategies
 from pluto.strategies import schema
 
-from pluto.universes import universes
+from pluto.data.universes import universes
 
 from pluto.setup import run_setup
 
@@ -26,6 +26,7 @@ class BackTester(object):
         self._stg_stp = None
         self._process = None
         self._controllable = controllable
+        self._directory = directory
 
     def _setup(self, setup, controllable):
         pi = processes.ProcessInitializer(controllable)
@@ -44,7 +45,9 @@ class BackTester(object):
 
         # todo: save the setups into the data-base, could be useful for deployment etc.
 
-        uni = universes.get_universe(r_stp.trading_universe)
+        uni = universes.get_universe(
+            r_stp.trading_universe,
+            self._directory)
 
         return pi.start(r_stp), uni
 
@@ -60,7 +63,9 @@ class BackTester(object):
 
         stp.fractional = init_response.fractional
 
-        uni = universes.get_universe(stp.trading_universe)
+        uni = universes.get_universe(
+            stp.trading_universe,
+            self._directory)
 
         process = pi.start(stp)
 

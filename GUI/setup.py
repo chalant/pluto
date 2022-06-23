@@ -11,7 +11,7 @@ from zipline.finance.execution import (
     MarketOrder)
 
 from pluto.setup import run_setup as rs
-from pluto.universes import universes
+from pluto.data.universes import universes
 from pluto.broker import broker_setup as bks
 
 from GUI.fields import fields
@@ -89,16 +89,13 @@ class Universes(object):
     def current_item_index(self):
         return self._current_item_index
 
-    @current_item_index.setter
-    def current_item_index(self, value):
-        self._current_item_index = value
-
+    def set_item_index(self, value):
         events.post_event('setup.universe', self._item_names[value])
 
 
 class DataFrequencies(object):
     def __init__(self, universe):
-        self._item_names = [universe.data_frequencies]
+        self._item_names = [i for i in universe.data_frequencies]
 
         self._current_item_index = 0
 
@@ -110,10 +107,7 @@ class DataFrequencies(object):
     def current_item_index(self):
         return self._current_item_index
 
-    @current_item_index.setter
-    def current_item_index(self, value):
-        self._current_item_index = value
-
+    def set_item_index(self, value):
         events.post_event('setup.data_frequency', self._item_names[value])
 
 
@@ -151,9 +145,6 @@ class BackTestPeriod(QtWidgets.QWidget):
                 "End",
                 end_dt))
 
-        # todo: if start is greater than end, increase end such that
-        #  it is one day.
-
         # todo: the smallest datetime is determined by the available data.
         #  asset lifetimes, or data portal?
 
@@ -164,10 +155,11 @@ class BackTestPeriod(QtWidgets.QWidget):
         pass
 
     def _universe_loaded(self, uni):
+
         self._min_date = QtCore.QDate(uni.start_date.to_pydatetime().date())
         self._max_date = QtCore.QDate(uni.end_date.to_pydatetime().date())
 
-        self._start_dt.setDate(self._max_date)
+        self._start_dt.setDate(self._min_date)
         self._end_dt.setDate(self._max_date)
 
         self._start_dt.setMinimumDate(self._min_date)
@@ -192,10 +184,11 @@ class BackTestPeriod(QtWidgets.QWidget):
 
 # setup widget
 class Setup(QtWidgets.QWidget):
-    def __init__(self, parent, session_id):
+    def __init__(self, parent, session_id, directory):
         super(Setup, self).__init__(parent)
 
         self._run_setup = stp = rs.RunSetup(session_id)
+        self._directory = directory
 
         stp.clear_perf = True
 
@@ -238,13 +231,16 @@ class Setup(QtWidgets.QWidget):
         events.subscribe('setup.start_date', self._set_start)
         events.subscribe('setup.end_date', self._set_end)
 
+        events.subscribe('strategy.loaded', self._activate)
+        events.subscribe('strategy.new', self._activate)
+
         self._datetime_setup = BackTestPeriod(self)
 
         layout.addWidget(self._datetime_setup)
 
         #
         self._universes = universes = combobox.ComboBox(self)
-        universes.set_item_store(Universes())
+        # universes.set_item_store(Universes())
 
         # self._set_universe(universes.value)
 
@@ -276,8 +272,11 @@ class Setup(QtWidgets.QWidget):
     def run_setup(self):
         return self._run_setup
 
+    def _activate(self, stg):
+        self._universes.set_item_store(Universes())
+
     def _set_universe(self, name):
-        uni = universes.get_universe(name)
+        uni = universes.get_universe(name, self._directory)
 
         events.post_event('universe.loaded', uni)
 

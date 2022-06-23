@@ -6,7 +6,7 @@ from pluto.interface.utils import paths
 
 
 class Benchmark(object):
-    def __init__(self, ticker):
+    def __init__(self, directory, ticker):
         self._dir = paths.get_dir(
             ticker,
             root=paths.get_dir('benchmark', paths.get_dir('data')))
@@ -35,6 +35,7 @@ class Benchmark(object):
         df['Date'] = df['Date'].astype('datetime64[ns]')
         df = df.set_index('Date')
         return df['Close'].pct_change().iloc[1:][df.index.slice_indexer(start_dt, end_dt)]
+
 
 class ZiplineBenchmark(object):
     def __init__(self, ticker='SPY', environ=None):

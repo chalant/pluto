@@ -1,34 +1,6 @@
-from os import path
-
 from sqlalchemy import create_engine
 
 from directory import directory as dr
-from directory import utils as du
-
-from dev import strategy_store
-
-from pluto import examples
-
-# root_dir = dr.create_directory(path.expanduser('~./pluto'), 'root')
-# root_dir.add_file('setup', 'yaml')
-#
-# setup_dir = root_dir.add_directory('setup')
-# setup_dir.add_file('run_setup', 'yaml')
-# setup_dir.add_file('metadata', 'sqlite')
-#
-# universes_dir = root_dir.add_directory('universes')
-# universes_dir.add_file('metadata', 'sqlite')
-#
-# # universe_engine = create_engine('sqlite://' + universes_dir.get_file('metadata', 'sqlite').path)
-#
-# strategies_dir = root_dir.add_directory('strategies')
-# strategy_states_dir = strategies_dir.add_directory('states')
-# strategy_performance_dir = strategies_dir.add_directory('performance')
-#
-# root_dir.add_file('metadata', 'sqlite')
-#
-# strategies_db_engine = create_engine(
-#     'sqlite://' + strategies_dir.get_file('metadata', 'sqlite').path)
 
 
 def create_directory(root_path):
@@ -41,8 +13,8 @@ def create_directory(root_path):
     setup_dir.add_file('run_setup', 'yaml')
     setup_dir.add_file('metadata', 'sqlite')
 
-    universes_dir = root_dir.add_directory('universes')
-    universes_dir.add_file('metadata', 'sqlite')
+    data_dir = root_dir.add_directory('data')
+    data_dir.add_file('data', 'sqlite')
 
     # universe_engine = create_engine('sqlite://' + universes_dir.get_file('metadata', 'sqlite').path)
 
@@ -55,20 +27,6 @@ def create_directory(root_path):
 
     strategies_db_engine = create_engine(
         'sqlite://' + strategy_metadata.path)
-
-    store = strategy_store.StrategyStore(root_dir)
-
-    # copy examples
-    for name, ap in examples.EXAMPLE_MODULES.items():
-        args, path_ = ap
-
-        try:
-            store.add_strategy(name, path_)
-        except FileExistsError:
-            pass
-
-    # todo: create example data
-    #  register bundles
 
     return root_dir
 

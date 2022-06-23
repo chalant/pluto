@@ -30,6 +30,7 @@ from pluto.control.processes import in_memory
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
 from pluto.broker import broker_setup as bks
+from pluto.data.bundles import test as tb
 
 
 def _build_data_frame(mon, process_id):
@@ -188,7 +189,12 @@ class PlutoExamplesTests(unittest.TestCase):
 
         cls._pluto_tempdir = stack.enter_context(root_dir)
 
-        bundles.register('test', lambda *args: None)
+        # bundles.register('test', lambda *args: None)
+
+        # ingest test bundle
+        test_bundle = stack.enter_context(tb.TestBundle(root_dir))
+
+        test_bundle.ingest()
 
         cls._zpl_tempdir = dir_ = stack.enter_context(
             core.tmp_dir(path=path.expanduser('~/tmp/zipline')))
@@ -196,7 +202,7 @@ class PlutoExamplesTests(unittest.TestCase):
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path)
 
-        environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
+        # environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
         # cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
 
@@ -212,7 +218,6 @@ class PlutoExamplesTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        bundles.unregister('test')
         cls._exit_stack.close()
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
