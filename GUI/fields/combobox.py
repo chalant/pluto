@@ -12,13 +12,14 @@ class ComboBox(QtWidgets.QComboBox):
 
     def set_item_store(self, store):
         self._item_store = store
-        combo = self
 
-        combo.addItems(store.item_names)
-        combo.setCurrentIndex(store.current_item_index)
+        self.addItems(store.item_names)
+        # combo.setCurrentIndex(store.current_item_index)
 
     def _on_selected(self, index):
-        self._item_store.current_element_index = index
+        # print("A")
+        # self._item_store.current_element_index = index
+        self._item_store.set_item_index(index)
 
     @property
     def value(self):

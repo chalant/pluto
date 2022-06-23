@@ -8,8 +8,10 @@ from zipline.pipeline import domain
 
 class Domain(domain.Domain):
     def __init__(self,
+                 country_code,
                  universe,
                  data_query_offset=-np.timedelta64(45, 'm')):
+        self._country_code = country_code
         self._universe = universe
         self._data_query_offset = (
             # add one minute because `open_time` is actually the open minute
@@ -30,8 +32,7 @@ class Domain(domain.Domain):
 
     @property
     def country_code(self):
-        #todo
-        return ''
+        return self._country_code
 
     def data_query_cutoff_for_sessions(self, sessions):
         # note: if data isn't available before the next open session, query will be cutoff...

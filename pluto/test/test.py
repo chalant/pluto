@@ -25,7 +25,7 @@ from pluto.strategies import schema
 
 from pluto.interface import monitor
 
-from pluto.universes import universes
+from pluto.data.universes import universes
 
 from protos import controller_pb2
 
@@ -174,7 +174,9 @@ class TestClient(object):
 
         # todo: if initial requirements aren't met, raise an error...
 
-        uni = universes.get_universe(stp.trading_universe)
+        uni = universes.get_universe(
+            stp.trading_universe,
+            self._directory)
 
         stp.fractional = init_response.fractional
 

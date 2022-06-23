@@ -10,6 +10,8 @@ import sys
 
 from os import path
 
+import tarfile
+
 from PyQt6 import QtWidgets
 from GUI import backtesting
 
@@ -17,8 +19,12 @@ import click
 
 from directory import utils
 
+from dev import strategy_store
+
 from pluto.setup import directory_setup as ds
 from pluto.control.processes import in_memory
+from pluto import examples
+from pluto.data.bundles import test
 
 
 class MainWindow(QtWidgets.QWidget):
@@ -37,10 +43,33 @@ def main():
 
 
 @main.command()
+def install_examples():
+    print("Installing examples...")
+
+    root_dir = ds.create_directory(path.expanduser('~/.pluto'))
+
+    store = strategy_store.StrategyStore(root_dir)
+
+    # copy examples into directory
+    for name, ap in examples.EXAMPLE_MODULES.items():
+        args, path_ = ap
+
+        try:
+            store.add_strategy(name, path_)
+        except FileExistsError:
+            pass
+
+    test_bundle = test.TestBundle(
+        root_dir)
+
+    # ingest data...
+    test_bundle.ingest()
+
+    print("Done")
+
+
+@main.command()
 def dev():
-    # todo: copy examples to directory...
-    #  we will use them for testing etc.
-    # create directories if they do not exist...
     root_dir = utils.DirectoryInterface(ds.create_directory(path.expanduser('~/.pluto')))
 
     app = QtWidgets.QApplication(sys.argv)

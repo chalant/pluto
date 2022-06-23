@@ -10,7 +10,10 @@ from zipline.data import bundles
 from zipline.pipeline.loaders import USEquityPricingLoader
 from zipline.pipeline.data import equity_pricing
 
+from zipline.country import CountryCode
+
 from pluto.data import benchmark as bm
+from pluto.data.bundles import test
 
 # from pluto.universes import writer
 
@@ -21,6 +24,7 @@ from pluto.pipeline import domain
 from protos import calendar_pb2
 
 _CACHE = {}
+
 
 class AbstractUniverse(abc.ABC):
     @property
@@ -84,112 +88,30 @@ class AbstractUniverse(abc.ABC):
     def calendars(self):
         raise NotImplementedError
 
+    @property
     @abc.abstractmethod
-    def pipeline_loader(self, bundle):
+    def pipeline_loader(self):
         raise NotImplementedError('pipeline_loader')
 
+    @property
+    @abc.abstractmethod
+    def asset_finder(self):
+        raise NotImplementedError('asset_finder')
 
-# class Universe(AbstractUniverse):
-#     def __init__(self, name, directory):
-#         self._name = name
-#         self._directory = directory
-#         self._exchanges = None
-#         self._asset_filter = None
-#         self._calendar_path = None
-#
-#         self._engine = writer.get_engine()
-#
-#         self._benchmark = None
-#
-#     @property
-#     def name(self):
-#         return self._name
-#
-#     @property
-#     def exchanges(self):
-#         # query the exchanges associated with this universe
-#         exchanges = self._exchanges
-#         if not exchanges:
-#             with self._engine.begin() as conn:
-#                 stm = schema.universes
-#                 self._exchanges = \
-#                     exchanges = [
-#                     row[0]
-#                     for row in conn.execute(
-#                         sa.select([stm.c.exchange])
-#                             .join(schema.universe_exchanges)
-#                             .where(stm.c.universe == self._name))]
-#         return exchanges
-#
-#     def get_calendar(self, start, end, cache=False):
-#         '''
-#
-#         Parameters
-#         ----------
-#         start
-#         end
-#
-#         Returns
-#         -------
-#         trading_calendars.TradingCalendar
-#         '''
-#         with self._engine.begin() as conn:
-#             stm = schema.calendars
-#             result = conn.execute(
-#                 sa.select([stm.c.file_path])
-#                     .join(schema.calendar_exchanges)
-#                     .join(schema.exchanges)
-#                     .where(*(stm.c.exchange == exchange
-#                              for exchange in self._exchanges)))
-#             self._calendar_path = cal_path = result.fetchone()['file_path']
-#
-#         with open(cal_path) as f:
-#             proto = calendar_pb2.Calendar()
-#             proto.ParseFromString(f.read())
-#
-#         # todo: the calendar should have a name.
-#         return cu.from_proto_calendar(proto, start, end, cache)
-#
-#     @property
-#     def calendars(self):
-#         raise NotImplementedError
-#
-#     @property
-#     def calendar_name(self):
-#         raise NotImplementedError
-#
-#     @property
-#     def bundle_name(self):
-#         bundle = self._bundle_name
-#         if not bundle:
-#             with self._engine.begin() as conn:
-#                 stm = schema.universes
-#                 result = conn.execute(
-#                     sa.select([stm.c.bundle])
-#                         .where(self._name == stm.c.universe))
-#                 self._bundle_name = bundle = result.fetchone()['bundle']
-#         return bundle
-#
-#     @property
-#     def asset_filter(self):
-#         # returns an asset filter of this universe
-#         asset_filter = self._asset_filter
-#         if not asset_filter:
-#             return AssetFilter(self._directory)
-#         else:
-#             return asset_filter
-#
-#     @property
-#     def platform(self):
-#         return 'pluto'
-#
-#     def pipeline_loader(self, bundle):
-#         raise NotImplementedError
-#
-#     def benchmark(self):
-#         if not self._benchmark:
-#             self._benchmark = bm.Benchmark('SPY')
-#         return self._benchmark
+    @property
+    @abc.abstractmethod
+    def equity_minute_bar_reader(self):
+        raise NotImplementedError('equity_minute_bar_reader')
+
+    @property
+    @abc.abstractmethod
+    def equity_daily_bar_reader(self):
+        raise NotImplementedError('equity_daily_bar_reader')
+
+    @property
+    @abc.abstractmethod
+    def adjustment_reader(self):
+        raise NotImplementedError('')
 
 
 class ZiplineQuandlUniverse(AbstractUniverse):
@@ -201,7 +123,7 @@ class ZiplineQuandlUniverse(AbstractUniverse):
 
     @property
     def exchanges(self):
-        return ('AMEX', 'NASDAQ', 'NYSE')
+        return 'AMEX', 'NASDAQ', 'NYSE'
 
     @property
     def calendars(self):
@@ -219,34 +141,32 @@ class ZiplineQuandlUniverse(AbstractUniverse):
     def benchmark(self):
         return bm.ZiplineBenchmark()
 
-    def pipeline_loader(self, bundle):
+    @property
+    def pipeline_loader(self):
         raise NotImplementedError
 
 
 class TestUniverse(AbstractUniverse):
-    def __init__(self, calendar_cache=False):
+    def __init__(self, root_dir, calendar_cache=False, environ=None):
         super(TestUniverse, self).__init__()
 
-        self._domain = domain.Domain(self)
+        self._domain = domain.Domain(CountryCode.UNITED_STATES, self)
 
         self._calendar = None
         self._cache = calendar_cache
 
-        bundles.register('test', lambda *args: None)
+        self._bundle = test.TestBundle(root_dir)
+        self._bundle_data = self._bundle.load()
 
-        self._bundle = bundles.load(
-            self.bundle_name)
-
-        self._equity_daily_bar_reader = self._bundle.equity_daily_bar_reader
-
+        self._equity_daily_bar_reader = e = self._bundle_data.equity_daily_bar_reader
 
     @property
     def start_date(self):
-        return self._equity_daily_bar_reader.first_trading_day()
+        return self._equity_daily_bar_reader.first_trading_day
 
     @property
     def end_date(self):
-        return self._equity_daily_bar_reader.last_available_dt()
+        return self._equity_daily_bar_reader.last_available_dt
 
     @property
     def name(self):
@@ -254,7 +174,7 @@ class TestUniverse(AbstractUniverse):
 
     @property
     def exchanges(self):
-        return {'AMEX', 'NYSE', 'NASDAQ'}
+        return 'AMEX', 'NYSE', 'NASDAQ'
 
     @property
     def domain(self):
@@ -277,12 +197,12 @@ class TestUniverse(AbstractUniverse):
         return 'daily',
 
     def load_bundle(self):
-        return self._bundle
+        return self._bundle_data
 
     @property
     def benchmark(self):
         return bm.ZiplineBenchmark(
-            environ=os.environ)
+            environ=self._bundle._environ)
 
     @property
     def trading_calendar(self):
@@ -301,7 +221,10 @@ class TestUniverse(AbstractUniverse):
 
         return calendar
 
-    def pipeline_loader(self, bundle):
+    @property
+    def pipeline_loader(self):
+        bundle = self._bundle_data
+
         loader = USEquityPricingLoader.without_fx(
             bundle.equity_daily_bar_reader,
             bundle.adjustment_reader
@@ -322,6 +245,22 @@ class TestUniverse(AbstractUniverse):
 
         return choose_loader
 
+    @property
+    def asset_finder(self):
+        return self._bundle_data.asset_finder
+
+    @property
+    def equity_minute_bar_reader(self):
+        return self._bundle_data.equity_daily_bar_reader
+
+    @property
+    def equity_daily_bar_reader(self):
+        return self._bundle_data.equity_daily_bar_reader
+
+    @property
+    def adjustment_reader(self):
+        return self._bundle_data.adjustment_reader
+
 
 def with_cache(cache):
     def decorator(fn):
@@ -338,12 +277,13 @@ def with_cache(cache):
 
 
 @with_cache(_CACHE)
-def get_universe(name, cache=False, environ=None):
+def get_universe(name, root_dir, cache=True, environ=None):
     """
 
     Parameters
     ----------
     name: str
+    root_dir: directory.directory.Directory
     cache:
 
     Returns
@@ -354,9 +294,10 @@ def get_universe(name, cache=False, environ=None):
     # cache universe in case we use it in-memory...
 
     if name == 'test':
-        return TestUniverse(cache)
+        return TestUniverse(root_dir, cache, environ)
     elif name == 'quandl':
         return ZiplineQuandlUniverse()
     else:
         raise NotImplementedError("No universe named {}".format(name))
         # return Universe(name, writer.get_directory(name))
+

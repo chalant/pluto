@@ -22,7 +22,7 @@ from pluto.coms.utils import conversions
 from pluto.control.controllable import synchronization_states as ss
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
-from pluto.universes import universes
+from pluto.data.universes import universes
 from pluto.broker import broker_setup as brs
 
 from protos import controllable_pb2
@@ -224,6 +224,7 @@ class Controllable(ABC):
 
     def run(self,
             process_id,
+            directory,
             strategy_setup,
             broker_setup,
             run_setup,
@@ -235,6 +236,7 @@ class Controllable(ABC):
         Parameters
         ----------
         process_id: str
+        directory: directory.directory.Directory
         strategy_setup: pluto.strategies.setup.StrategySetup
         broker_setup: pluto.broker.broker_setup.BrokerSetup
         run_setup
@@ -257,7 +259,9 @@ class Controllable(ABC):
 
         data_frequency = strategy_setup.data_frequency
 
-        uni = universes.get_universe(run_setup.trading_universe, True)
+        uni = universes.get_universe(
+            run_setup.trading_universe,
+            directory)
 
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
 
@@ -311,9 +315,9 @@ class Controllable(ABC):
         # we assume that the data has already been ingested => the controller must first
         # send data. An error is raised if there is no data
 
-        bundle = uni.load_bundle()
+        bundle = uni
 
-        self._asset_finder = asset_finder = bundle.asset_finder
+        self._asset_finder = asset_finder = uni.asset_finder
 
         # todo: first trading day should be the start_dt?
         first_trading_day = calendar.first_session
@@ -372,7 +376,7 @@ class Controllable(ABC):
             params=params,
             blotter=blotter,
             metrics_tracker=metrics_tracker,
-            pipeline_loader=uni.pipeline_loader(bundle),
+            pipeline_loader=uni.pipeline_loader,
             initialize=namespace.get('initialize', noop),
             handle_data=namespace.get('handle_data', noop),
             before_trading_start=namespace.get('before_trading_start', noop),
@@ -424,6 +428,9 @@ class Controllable(ABC):
         end_dt = self._end_dt
 
         if dt > end_dt:
+            # todo: we need a better way for reloading everything
+            #  we should only reload the calendar, since the data gets
+            #  updated in the background...
 
             # reload a new calendar
             start_dt = dt - pd.Timedelta(days=self._look_back)
@@ -464,7 +471,7 @@ class Controllable(ABC):
             )
 
             # reload bundle so that it updates the calendar instance
-            bundle = self._universe.load_bundle()
+            bundle = self._universe
 
             self._data_portal = data_portal = dp.DataPortal(
                 asset_finder=self._asset_finder,

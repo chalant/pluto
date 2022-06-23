@@ -11,16 +11,6 @@ from GUI import plotting
 from GUI import setup
 
 
-# handles setup for the backtesting.
-class Setup(object):
-    def __init__(self, view, setup_model):
-        """
-        view:: GUI.ui_backtesting.Ui_Backtesting
-        """
-        self._view = view
-        self_setup_model = setup_model
-
-
 class BackTesting(QtWidgets.QWidget):
     def __init__(
             self,
@@ -58,7 +48,9 @@ class BackTesting(QtWidgets.QWidget):
         # setup view
         self._setup = stp = setup.Setup(
             ui.settings_frame,
-            'backtest')
+            'backtest',
+            directory
+        )
 
         stp.setEnabled(False)
 
@@ -165,7 +157,7 @@ class BackTesting(QtWidgets.QWidget):
         self._load_strategy(meta)
 
     def show(self) -> None:
-        self._setup.show()
+        # self._setup.show()
         super(BackTesting, self).show()
 
 

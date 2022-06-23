@@ -195,6 +195,46 @@ class BadClean(click.ClickException, ValueError):
         return self.message
 
 
+def most_recent_data(bundle_name, timestamp, environ=None):
+    """Get the path to the most recent data after ``date``for the
+    given bundle.
+
+    Parameters
+    ----------
+    bundle_name : str
+        The name of the bundle to lookup.
+    timestamp : datetime
+        The timestamp to begin searching on or before.
+    environ : dict, optional
+        An environment dict to forward to zipline_root.
+    """
+    if bundle_name not in bundles:
+        raise UnknownBundle(bundle_name)
+
+    try:
+        candidates = os.listdir(
+            pth.data_path([bundle_name], environ=environ),
+        )
+        return pth.data_path(
+            [bundle_name,
+             max(
+                 filter(complement(pth.hidden), candidates),
+                 key=from_bundle_ingest_dirname,
+             )],
+            environ=environ,
+        )
+    except (ValueError, OSError) as e:
+        if getattr(e, 'errno', errno.ENOENT) != errno.ENOENT:
+            raise
+        raise ValueError(
+            'no data for bundle {bundle!r} on or before {timestamp}\n'
+            'maybe you need to run: $ zipline ingest -b {bundle}'.format(
+                bundle=bundle_name,
+                timestamp=timestamp,
+            ),
+        )
+
+
 def _make_bundle_core():
     """Create a family of data bundle functions that read from the same
     bundle mapping.
@@ -456,45 +496,6 @@ def _make_bundle_core():
                     shutil.copy2(assets_db_path, wf.path)
                     downgrade(wf.path, version)
 
-    def most_recent_data(bundle_name, timestamp, environ=None):
-        """Get the path to the most recent data after ``date``for the
-        given bundle.
-
-        Parameters
-        ----------
-        bundle_name : str
-            The name of the bundle to lookup.
-        timestamp : datetime
-            The timestamp to begin searching on or before.
-        environ : dict, optional
-            An environment dict to forward to zipline_root.
-        """
-        if bundle_name not in bundles:
-            raise UnknownBundle(bundle_name)
-
-        try:
-            candidates = os.listdir(
-                pth.data_path([bundle_name], environ=environ),
-            )
-            return pth.data_path(
-                [bundle_name,
-                 max(
-                     filter(complement(pth.hidden), candidates),
-                     key=from_bundle_ingest_dirname,
-                 )],
-                environ=environ,
-            )
-        except (ValueError, OSError) as e:
-            if getattr(e, 'errno', errno.ENOENT) != errno.ENOENT:
-                raise
-            raise ValueError(
-                'no data for bundle {bundle!r} on or before {timestamp}\n'
-                'maybe you need to run: $ zipline ingest -b {bundle}'.format(
-                    bundle=bundle_name,
-                    timestamp=timestamp,
-                ),
-            )
-
     def load(name, environ=os.environ, timestamp=None):
         """Loads a previously ingested bundle.
 
@@ -614,6 +615,5 @@ def _make_bundle_core():
         return cleaned
 
     return BundleCore(bundles, register, unregister, ingest, load, clean)
-
 
 bundles, register, unregister, ingest, load, clean = _make_bundle_core()
