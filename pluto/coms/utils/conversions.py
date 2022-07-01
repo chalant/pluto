@@ -473,6 +473,7 @@ def to_proto_performance_packet(perf_packet):
     if not period_perf:
         period_perf = perf_packet.get('minute_perf')
         key = 'minute_perf'
+
     return ctl.PerformancePacket(
         cumulative_perf=to_proto_cum_metrics(perf_packet['cumulative_perf']),
         period_perf=to_proto_period_perf(period_perf),

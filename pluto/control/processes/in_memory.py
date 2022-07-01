@@ -1,4 +1,4 @@
-from pluto.broker import broker_stub
+from pluto.finance.broker import broker_stub
 
 from pluto.control.controllable import server
 from pluto.control.controllable.utils import factory
@@ -81,6 +81,8 @@ class InMemoryControllableFactory(factory.ControllableFactory):
 
             return live_controllable.LiveControllable(
                 BrokerStub(self._broker_service, params.session_id))
+
+# todo: perform handle some stuff this side... like updating broker etc.
 
 
 class InMemoryControllableStub(stub.ControllableStub):

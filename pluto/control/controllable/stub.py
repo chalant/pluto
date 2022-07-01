@@ -2,6 +2,7 @@ import abc
 
 from pluto.interface.utils import service_access
 
+
 class ControllableStub(object):
     @service_access.framework_method
     def Initialize(self, request, metadata):
@@ -17,6 +18,8 @@ class ControllableStub(object):
 
     @service_access.framework_method
     def ClockUpdate(self, request, metadata=()):
+        # todo: perform some stuff before the controllable...
+        #  update broker...
         return self._clock_update(request, metadata)
 
     @service_access.framework_method

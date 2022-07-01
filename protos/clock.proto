@@ -53,10 +53,16 @@ enum EventType {
     CALENDAR = 9;
 }
 
+enum EmissionRate {
+    MINUTE = 0;
+    DAILY = 1;
+}
+
 message Signal {
     google.protobuf.Timestamp timestamp = 1;
     EventType event = 2;
-    string exchange = 3;
+    string calendar_name = 3;
+
 }
 
 message ClockEvent {

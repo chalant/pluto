@@ -4,7 +4,7 @@ from zipline import protocol
 from zipline.finance import asset_restrictions
 
 from pluto.coms.utils import conversions
-from pluto.control.controllable import synchronization_states as ss
+from pluto.control.controllable import controllable_states as ss
 
 from protos import clock_pb2
 

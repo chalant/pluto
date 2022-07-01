@@ -29,7 +29,7 @@ from pluto.test import test
 from pluto.control.processes import in_memory
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
-from pluto.broker import broker_setup as bks
+from pluto.finance.broker import broker_setup as bks
 from pluto.data.bundles import test as tb
 
 

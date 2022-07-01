@@ -30,7 +30,7 @@ from pluto.strategies import setup as stg_stp
 
 from pluto.setup import engine_setup as m_stp
 from pluto.setup import directory_setup as drs
-from pluto.broker import broker_setup as bks
+from pluto.finance.broker import broker_setup as bks
 
 from protos import broker_pb2
 from protos import controllable_pb2
@@ -43,26 +43,18 @@ from protos.clock_pb2 import (BAR, TRADE_END)
 
 class FrequencyFilter(abc.ABC):
     @abc.abstractmethod
-    def filter(self, evt_exc_pairs):
+    def filter(self, evt):
         raise NotImplementedError
 
 
 class DayFilter(FrequencyFilter):
-    def filter(self, evt_exc_pairs):
-        exchanges = []
-        for evt, exc in evt_exc_pairs:
-            if evt == TRADE_END:
-                exchanges.append(exc)
-        return exchanges
+    def filter(self, evt):
+        return evt == TRADE_END
 
 
 class MinuteFilter(FrequencyFilter):
-    def filter(self, evt_exc_pairs):
-        exchanges = []
-        for evt, exc in evt_exc_pairs:
-            if evt == TRADE_END or evt == BAR:
-                exchanges.append(exc)
-        return exchanges
+    def filter(self, evt):
+        return evt == TRADE_END or evt == BAR
 
 
 class _ServiceState(abc.ABC):
@@ -202,7 +194,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
     def stop(self):
         pass
 
-    @service_access.framework_only
+    @service_access.framework
     def Initialize(self, request, context):
         # todo: add broker setup for the algorithm class
 
@@ -246,7 +238,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
             fractional=strategy_setup.fractional
         )
 
-    @service_access.framework_only
+    @service_access.framework
     def Run(self, request, context):
         id_ = request.id  # the id of the controllable => will be used in performance updates
 
@@ -321,7 +313,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         return emp.Empty()
 
-    @service_access.framework_only
+    @service_access.framework
     def Join(self, request, context):
         # blocks until thread finishes
         if self._thread:
@@ -406,7 +398,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         # request, if it is identical, ignore it. (This might happen if the
         # controller is recovering from failure)
 
-    @service_access.framework_only
+    @service_access.framework
     def Stop(self, request, context):
         # todo needs to liquidate positions and wipe the state.
         # multiple steps to execute: place orders, wait for all of them
@@ -414,7 +406,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._stop = True
         return emp.Empty()
 
-    @service_access.framework_only
+    @service_access.framework
     def UpdateParameters(self, request, context):
         self._queue.put(
             commands.CapitalUpdate(
@@ -424,7 +416,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         )
         return emp.Empty()
 
-    @service_access.framework_only
+    @service_access.framework
     def UpdateAccount(self, request_iterator, context):
         self._queue.put(
             commands.AccountUpdate(
@@ -443,7 +435,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         brk_state.ParseFromString(b)
         return brk_state
 
-    @service_access.framework_only
+    @service_access.framework
     def ClockUpdate(self, request, context):
         '''Note: an update call might arrive while the step is executing..., so
         we must queue the update message... => the step must be a thread that pulls data

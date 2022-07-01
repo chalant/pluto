@@ -2,23 +2,9 @@ import math
 import abc
 import uuid
 
-from pluto.control.modes.market import factory
-
 
 class Broker(abc.ABC):
-    @property
-    def calendars(self):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def compute_capital(self, ratio):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def adjust_max_leverage(self, max_leverage):
-        raise NotImplementedError
-
-    def update(self, dt, evt, signals):
+    def clock_update(self, dt, evt, signals):
         return self._update(dt, evt, signals)
 
     @abc.abstractmethod
@@ -26,10 +12,6 @@ class Broker(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def add_market(self, session_id, data_frequency, start, end, universe_name):
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def order(self, session_id, order):
         raise NotImplementedError
 
@@ -52,49 +34,6 @@ class Broker(abc.ABC):
     @abc.abstractmethod
     def execute_cancel_policy(self, session_id, event):
         raise NotImplementedError
-
-    @abc.abstractmethod
-    def _get_calendars(self):
-        raise NotImplementedError
-
-class SimulationBroker(Broker):
-    def __init__(self, capital, max_leverage):
-        self._capital = capital
-        self._max_leverage = max_leverage
-        self._mkt_factory = factory.NoopMarketFactory()
-
-    def compute_capital(self, ratio):
-        return math.floor(self._capital * ratio)
-
-    def adjust_max_leverage(self, max_leverage):
-        return max_leverage
-
-    def _update(self, dt, evt, signals):
-        return
-
-    def add_market(self, session_id, data_frequency, start, end, universe_name):
-        self._mkt_factory.get_market(data_frequency, universe_name, start, end)
-
-    def order(self, session_id, order):
-        return
-
-    def cancel(self, session_id, order_id, relay_status=True):
-        pass
-
-    def cancel_all_orders_for_asset(self, session_id, asset, warn=False, relay_status=True):
-        pass
-
-    def reject(self, session_id, order_id, reason=''):
-        pass
-
-    def hold(self, session_id, order_id, reason=''):
-        pass
-
-    def execute_cancel_policy(self, session_id, event):
-        pass
-
-    def _get_calendars(self):
-        return self._mkt_factory.calendars
 
 
 class LiveBroker(Broker):
@@ -106,6 +45,7 @@ class LiveBroker(Broker):
 
     def adjust_max_leverage(self, max_leverage):
         pass
+
 
 class LiveSimulationBroker(Broker):
     def __init__(self, capital, max_leverage, market_factory):

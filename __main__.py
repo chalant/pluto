@@ -10,10 +10,8 @@ import sys
 
 from os import path
 
-import tarfile
-
-from PyQt6 import QtWidgets
-from GUI import backtesting
+from PyQt6 import QtWidgets, QtCore
+from gui import backtesting
 
 import click
 
@@ -25,16 +23,6 @@ from pluto.setup import directory_setup as ds
 from pluto.control.processes import in_memory
 from pluto import examples
 from pluto.data.bundles import test
-
-
-class MainWindow(QtWidgets.QWidget):
-    def __init__(self):
-        super(MainWindow, self).__init__()
-
-
-class Model(object):
-    def deploy(self):
-        pass
 
 
 @click.group()
@@ -70,7 +58,12 @@ def install_examples():
 
 @main.command()
 def dev():
-    root_dir = utils.DirectoryInterface(ds.create_directory(path.expanduser('~/.pluto')))
+
+    # todo: need to walk down the directory tree to get already existing
+    #  files.
+
+    root_dir = utils.DirectoryInterface(ds.create_directory(
+        path.expanduser('~/.pluto')))
 
     app = QtWidgets.QApplication(sys.argv)
 

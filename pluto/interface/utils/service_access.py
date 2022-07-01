@@ -5,11 +5,40 @@ import grpc
 
 _framework_id = hashlib.sha3_512().hexdigest()
 
+_session_ids = {}
+
 _metadata = (('framework_id', _framework_id),)
+
+
+def add_session_id(session_id):
+    _session_ids[session_id] = session_id
+
+
+def with_session_id(class_):
+    def init(self, session_id, *args, **kwargs):
+        self._session_id = session_id
+        class_.__init__(*args, *kwargs)
+
+    class_.__init__ = init
+
+    return init
 
 
 def invoke(method, request):
     return method(request, metadata=_metadata)
+
+
+def with_metadata(access_types):
+    def decorator(fn):
+        def wrapper(instance, *args, **kwargs):
+            for access in access_types:
+                if access == 'framework':
+                    kwargs['metadata'] += _metadata
+                if access == 'session':
+                    kwargs['metadata'] += instance.session_id
+            fn(instance, *args, **kwargs)
+        return wrapper
+    return decorator
 
 
 def framework_method(func):
@@ -19,7 +48,7 @@ def framework_method(func):
     return wrapper
 
 
-def framework_only(func):
+def framework(func):
     def wrapper(instance, request, context):
         metadata = dict(context.invocation_metadata())
         framework_id = metadata.get('framework_id', None)
@@ -53,7 +82,7 @@ def per_session(func):
                 grpc.StatusCode.PERMISSION_DENIED,
                 'must specify session_id')
         else:
-            if not session_id in instance.session_ids:
+            if session_id not in _session_ids:
                 context.abort(
                     grpc.StatusCode.PERMISSION_DENIED,
                     'access to this service is forbidden')

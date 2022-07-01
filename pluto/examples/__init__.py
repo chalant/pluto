@@ -47,6 +47,7 @@ for f in os.listdir(os.path.dirname(__file__)):
     if not f.endswith('.py') or f == '__init__.py':
         continue
     modname = f[:-len('.py')]
+
     mod = import_module('pluto.examples.{}'.format(modname))
     EXAMPLE_MODULES[modname] = (mod._test_args(), mod.__spec__.origin)
 

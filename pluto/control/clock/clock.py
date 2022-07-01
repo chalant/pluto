@@ -2,12 +2,13 @@ from datetime import time
 
 import pandas as pd
 
-from pluto.trading_calendars import calendar_utils as cu
+from pluto.data.universes import universes
 from pluto.control.clock.utils import get_generator
 
 from dev import events
 
 events.add_event('clock.update')
+events.add_event('clock.calendar_update')
 
 
 class StopExecution(Exception):
@@ -19,11 +20,21 @@ class FakeClock(object):
         return ()
 
 
-# a clock is responsible of filtering time events from the loop.
-class Clock(object):
-    def __init__(self, exchange, start_dt, end_dt=None, minute_emission=False):
+class ExplodingClock(object):
+    def update(self, dt):
+        raise RuntimeError("Clock was not set!")
 
-        self._exchange = exchange
+
+# a clock is responsible for filtering time events from the loop.
+class Clock(object):
+    def __init__(self,
+                 universe: universes.AbstractUniverse,
+                 start_dt,
+                 end_dt,
+                 minute_emission=False):
+
+        self._universe = universe
+        self._calendar_name = universe.calendar_name
 
         self._start_dt = start_dt
         self._end_dt = end_dt
@@ -33,26 +44,36 @@ class Clock(object):
 
         self._load_attributes(start_dt, end_dt)
 
-        # next evt and dt
-        self._nxt_dt, self._nxt_evt = self._next_(start_dt)
-
         self._reload_flag = False
 
     @property
-    def exchange(self):
-        return self._exchange
+    def session_start(self):
+        return self._start_dt
+
+    @property
+    def session_end(self):
+        return self._end_dt
+
+    @property
+    def calendar(self):
+        return self._calendar
+
+    @property
+    def calendar_name(self):
+        return self._calendar_name
 
     def update(self, dt):
         # todo: we should consider reloading when there is a calendar update...
         # todo: should we catch a stop iteration?
+
         ts, evt = self._nxt_dt, self._nxt_evt
-        exchange = self._exchange
+
         if dt >= ts:
             try:
                 self._nxt_dt, self._nxt_evt = self._next_(dt)
-                return ts, evt, exchange
+                return ts, evt
             except StopExecution:
-                return ts, evt, exchange
+                return ts, evt
         else:
             # don't call next
             # clock is in advance, so will return nothing until it is in-sync
@@ -62,30 +83,49 @@ class Clock(object):
         try:
             return next(self._generator)
         except StopIteration:
-            if dt < self._end_dt:
-                self._load_attributes(
-                    pd.Timestamp(
-                        pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min),
-                        tz='UTC'))
-                return next(self._generator)
-            else:
-                # we've reached the end date, reload only if the clock runs forever
-                if self._reload_flag:
+            # if dt < self._end_dt:
+            #     self._load_attributes(
+            #         pd.Timestamp(
+            #             pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min),
+            #             tz='UTC'))
+            #     events.post_event('clock.calendar_update', self)
+            #     return next(self._generator)
+            # else:
+            # we've reached the end date, reload only if the clock runs forever
+            if self._reload_flag:
+                if dt > self._end_dt:
                     self._load_attributes(
                         pd.Timestamp(
                             pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min),
                             tz='UTC'))
-                    # self._notify(real_dt, dt, clock_pb2.CALENDAR)
-                    # print('Current timestamp {} Last timestamp {}'.format(dt, self._end_dt))
-                    return next(self._generator)
-                else:
-                    raise StopExecution
+                    events.post_event('clock.calendar_update', self)
+                return next(self._generator)
+            else:
+                raise StopExecution
 
     def _load_attributes(self, start_dt, end_dt=None):
         self._start_dt = start_dt
 
-        self._calendar = cal = cu.get_calendar_in_range(self.exchange, start_dt, end_dt)
+        # if not end_dt:
+        #     # todo: we could parametrize this... (look back period...)
+        #     end_dt = start_dt + pd.Timedelta(days=150)
 
-        self._end_dt = end_dt if end_dt else cal.all_sessions[-1]
+        # todo: we need to start from the first available data point (universe)
 
-        self._generator = iter(get_generator(cal, cal.all_sessions))
+        self._calendar = cal = self._universe.load_calendar(start_dt - pd.Timedelta(days=150), end_dt)
+
+        # self._start_dt = cal.first_session
+
+        self._generator = gen = iter(get_generator(cal, cal.all_sessions))
+
+        self._nxt_dt, self._nxt_evt = next(gen)
+
+        # skip to start date.
+
+        while start_dt.date() > self._nxt_dt.date():
+            # next evt and dt
+            self._nxt_dt, self._nxt_evt = next(gen)
+
+        self._end_dt = end_dt
+
+        # self._generator = iter(get_generator(cal, cal.all_sessions))

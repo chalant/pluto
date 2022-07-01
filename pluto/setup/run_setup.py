@@ -18,8 +18,8 @@ class RunSetup(object):
         self.end = None
 
         self.broker = ""
-        self.capital = ""
-        self.leverage = ""
+        self.capital = 100000.0
+        self.leverage = 1.0
         self.trading_universe = ""
         self.data_frequency = ""
 

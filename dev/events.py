@@ -23,7 +23,8 @@ class Event(object):
             obs(signal)
 
     def __iadd__(self, other):
-        self._observers.append(other)
+        if other not in self._observers:
+            self._observers.append(other)
 
         return self
 

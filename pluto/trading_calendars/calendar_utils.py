@@ -357,6 +357,7 @@ class TradingCalendarDispatcher(object):
         self._calendar_factories.clear()
         self._aliases.clear()
 
+
 global_calendar_dispatcher = TradingCalendarDispatcher(
     calendars={},
     calendar_factories=_default_calendar_factories,
@@ -365,8 +366,10 @@ global_calendar_dispatcher = TradingCalendarDispatcher(
 
 _cache = {}
 
+
 def resolve_alias(name):
     return global_calendar_dispatcher.resolve_alias(name)
+
 
 def get_calendar_in_range(name, start_dt, end_dt=None, cache=False):
     """
@@ -376,6 +379,7 @@ def get_calendar_in_range(name, start_dt, end_dt=None, cache=False):
     name: str
     start_dt: pandas.Timestamp
     end_dt: pandas.Timestamp
+    cache: bool
 
     Returns
     -------
@@ -393,9 +397,10 @@ def get_calendar_in_range(name, start_dt, end_dt=None, cache=False):
         end_dt = start_dt + pd.Timedelta(days=10)
     cal = wr.OpenOffsetFix(start_dt, end_dt, factory)
     if cache:
-        #cache the latest instance
+        # cache the latest instance
         _cache[name] = cal
     return cal
+
 
 def get_calendar(name):
     try:
@@ -405,8 +410,9 @@ def get_calendar(name):
     except KeyError:
         raise RuntimeError("Calendar instance doesn't exist.")
 
+
 class TradingCalendar(tc.TradingCalendar):
-    #todo: instead of calling init, we should call __new__
+    # todo: instead of calling init, we should call __new__
     def __init__(self, start, end, proto_calendar):
         super(TradingCalendar, self).__init__(start, end)
         self._proto_calendar = proto_calendar
