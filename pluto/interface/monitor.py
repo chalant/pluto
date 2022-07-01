@@ -68,7 +68,7 @@ class Monitor(itf.MonitorServicer):
     def __init__(self):
         self._watchers = []
 
-    @service_access.framework_only
+    @service_access.framework
     def PerformanceUpdate(self, request, context):
         events.post_event(
             'monitor.{}'.format(request.session_id),

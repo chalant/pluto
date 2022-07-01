@@ -33,6 +33,7 @@ message Order {
     bool stop_reached = 11;
     bool limit_reached = 12;
     int64 broker_order_id = 13;
+    string session_id = 15;
 }
 
 message Position {

@@ -49,6 +49,12 @@ class Process(object):
         self._process_id = process_id
         self._controllable = controllable
 
+        try:
+            event_name = 'monitor.{}'.format(self._process_id)
+            events.add_event(event_name)
+        except KeyError:
+            pass
+
     @property
     def process_id(self):
         return self._process_id
@@ -86,12 +92,8 @@ class Process(object):
         # self._controllable.watch(watcher)
 
         # subscribe to monitor events for this process.
-        event_name = 'monitor.{}'.format(self._process_id)
-
-        events.add_event(event_name)
-
         events.subscribe(
-            event_name,
+            'monitor.{}'.format(self._process_id),
             watcher.performance_update)
 
         # make a watch request...

@@ -14,7 +14,10 @@ class StrategyLoader(object):
         self._root_dir = root_dir
 
     def load_strategy(self, mode="r"):
-        with open(path.join(self._root_dir, self._meta.name), mode) as f:
+        with open(path.join(
+                self._root_dir.path,
+                self._meta.strategy_name + ".py"),
+                mode) as f:
             return f.read()
 
 

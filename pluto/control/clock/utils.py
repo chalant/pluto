@@ -2,6 +2,7 @@ import pandas as pd
 
 from pluto.control.clock import sim_engine as sim
 
+
 def get_generator(calendar, sessions, minute_emission=False, frequency='day'):
     # loops every x frequency
 

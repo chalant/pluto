@@ -56,7 +56,7 @@ class LiveBlotter(blotter.Blotter):
                 if order.open:
                     self._open_orders[order.asset].append(order)
             self._orders_placed = True
-        return tuple(self._new_orders)
+        return self._new_orders
 
     @new_orders.setter
     def new_orders(self, value):

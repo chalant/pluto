@@ -298,8 +298,8 @@ class MaxLeverage(Metric):
         self._max_leverage = 0.0
 
     def end_of_bar(self, **kwargs):
-        self._max_leverage = max(self._max_leverage, kwargs.pop('ledger').account.leverage)
-        kwargs.pop('packet')['cumulative_risk_metrics']['max_leverage'] = self._max_leverage
+        self._max_leverage = ml = max(self._max_leverage, kwargs['ledger'].account.leverage)
+        kwargs['packet']['cumulative_risk_metrics']['max_leverage'] = ml
 
     def end_of_session(self, **kwargs):
         self.end_of_bar(**kwargs)

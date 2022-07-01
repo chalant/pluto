@@ -7,8 +7,6 @@ from protos.clock_pb2 import (
     BEFORE_TRADING_START
 )
 
-from dev import events
-
 from pluto.coms.utils import conversions
 
 
@@ -84,64 +82,55 @@ class ClockUpdate(Command):
                  frequency_filter,
                  request,
                  state_store):
-        '''
+        """
 
         Parameters
         ----------
         perf_writer
         controllable
         frequency_filter
-        state
         request
         state_store
-        '''
+        """
         super(ClockUpdate, self).__init__(controllable, request)
         self._perf_writer = perf_writer
         self._frequency_filter = frequency_filter
         self._state_store = state_store
+        self._flag = False
 
     def _execute(self, controllable, request):
-        evt = request.event
-        dt = conversions.to_datetime(request.timestamp)
-        signals = request.signals
+        s = controllable.clock.update(conversions.to_datetime(request.timestamp))
 
-        s = controllable.state.aggregate(dt, evt, signals)
         if s:
             writer = self._perf_writer
 
             # todo: exchanges should be filtered in the here
-            ts, e, exchanges = s
-            # exchanges will be used to filter the assets and the resulting assets will
-            # be used to filter data
-            # only run when the observed exchanges are active
-            dt = conversions.to_datetime(ts)
+            ts, e = s
 
             if e == SESSION_START:
-                controllable.session_start(dt)
+                controllable.session_start(ts)
 
             elif e == BEFORE_TRADING_START:
-                controllable.before_trading_starts(dt)
+                controllable.before_trading_starts(ts)
 
             elif e == SESSION_END:
-                packet, end = controllable.session_end(dt)
+                packet, end = controllable.session_end(ts)
                 writer.performance_update(packet, end)
                 if end:
                     raise StopExecution
 
             elif e == MINUTE_END:
-                packet, end = controllable.minute_end(dt)
+                packet, end = controllable.minute_end(ts)
                 writer.performance_update(packet, end)
+
                 if end:
                     raise StopExecution
             else:
                 # TRADE_END/BAR event
-                targets = self._frequency_filter.filter(exchanges)
-                if targets:
-                    # note: in daily mode, this can still be called more than once (if it is
-                    # a different exchange)
-                    controllable.bar(dt)
+                if self._frequency_filter.filter(e):
+                    controllable.bar(ts)
 
-                #store state at each bar event, since it only changes on bar/trade_end events
+                # store state at each bar event, since it only changes on bar/trade_end events
 
                 # todo: non-blocking!
                 # todo: PROBLEM: we might have some conflicts in state, since we could have
@@ -149,4 +138,4 @@ class ClockUpdate(Command):
                 # modes...
                 # todo: store state
                 # todo: store the controllable state
-                self._state_store.store(dt, controllable)
+                self._state_store.store(ts, controllable)

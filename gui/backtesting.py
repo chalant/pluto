@@ -4,14 +4,15 @@ from dev import backtester
 from dev import strategy_store
 from dev import events
 
-from GUI import ui_backtesting
-from GUI import load_dialog
-from GUI import new_dialog
-from GUI import plotting
-from GUI import setup
+from gui import ui_main_window
+from gui import load_dialog
+from gui import new_dialog
+from gui.plotting import plotting, plotting_control
+from gui import setup
+from gui import controls
 
 
-class BackTesting(QtWidgets.QWidget):
+class BackTesting(QtWidgets.QMainWindow):
     def __init__(
             self,
             directory,
@@ -30,15 +31,34 @@ class BackTesting(QtWidgets.QWidget):
             controllable,
             directory)
 
-        self._ui = ui = ui_backtesting.Ui_Backtesting()
+        self._ui = ui = ui_main_window.Ui_MainWindow()
         self._strategy_store = store = strategy_store.StrategyStore(directory)
 
         ui.setupUi(self)
 
-        ui.load_button.clicked.connect(self._load)
-        ui.new_button.clicked.connect(self._new)
-        ui.deploy_button.clicked.connect(self._deploy)
-        ui.backtest_button.clicked.connect(self._run)
+        self._backtesting_control = bct = controls.BacktestingControl(
+            ui.toolBar)
+
+        ui.toolBar.addWidget(bct)
+
+        bct.setEnabled(False)
+
+        ui.actionNew.triggered.connect(self._new)
+        ui.actionOpen.triggered.connect(self._load)
+
+        # ui.deploy_button.clicked.connect(self._deploy)
+        # ui.backtest_button.clicked.connect(self._run)
+
+        # self._layout = QtWidgets.QVBoxLayout()
+        #
+        # ui.centralwidget.setLayout(self._layout)
+
+        self._plotting = plotting.PlottingHandler(
+            ui.centralwidget,
+            ui.verticalLayout_2)
+
+        # self._layout.addWidget(self._plotting)
+
 
         self._template_path = tp = ""  # todo
 
@@ -47,15 +67,28 @@ class BackTesting(QtWidgets.QWidget):
 
         # setup view
         self._setup = stp = setup.Setup(
-            ui.settings_frame,
-            'backtest',
-            directory
+            ui.setup_dock
         )
+
+        self._bt_setup = setup.BacktestSetup(
+            stp,
+            'backtest',
+            directory)
+
+        self._plotting_control = plotting_control.PlottingControl(stp)
+
+        ui.setup_dock.setWidget(stp)
+
+        stp.add_setup(self._bt_setup)
+        stp.add_setup(self._plotting_control)
 
         stp.setEnabled(False)
 
         events.subscribe('strategy.loaded', self._load_strategy)
         events.subscribe('strategy.new', self._new_strategy)
+
+        events.subscribe('backtesting.start', self._start_backtesting)
+        events.subscribe('backtesting.stop', self._stop_backtesting)
 
         events.subscribe('backtesting.started', self._backtesting_started)
         events.subscribe('backtesting.ended', self._backtesting_ended)
@@ -66,8 +99,8 @@ class BackTesting(QtWidgets.QWidget):
     def _new(self):
         ui = self._ui
 
-        ui.load_button.setEnabled(False)
-        ui.new_button.setEnabled(False)
+        ui.actionOpen.setEnabled(False)
+        ui.actionNew.setEnabled(False)
 
         self._new_dialog.show()
 
@@ -78,49 +111,57 @@ class BackTesting(QtWidgets.QWidget):
         """
         ui = self._ui
 
-        ui.load_button.setEnabled(False)
-        ui.new_button.setEnabled(False)
+        ui.actionOpen.setEnabled(False)
+        ui.actionNew.setEnabled(False)
 
         self._load_dialog.show()
 
-    def _run(self):
+    def _start_backtesting(self, data):
         """
         run the algorithm with the specified parameters (universe, start_dt...)
         note: the strategy always run until the most recent available datapoint.
         """
+
         # todo: disable run button when the load dialog box
         #  is active
 
-        stp = self._setup.run_setup
+        stp = self._bt_setup.run_setup
 
-        if stp.data_frequency == 'minute':
-            plotter = plotting.MinutePerformancePlotter()
-        else:
-            plotter = plotting.DailyPerformancePlotter()
+        # todo: we need a plotting manager...
+        # todo: we need a plotting setup...
+
+
+        # todo: need emission rate from plotting control ?
+
+        self._plotting.set_plotting_setup(
+            data_frequency=stp.data_frequency,
+            plotting_range=(stp.start, stp.end),
+            emission_rate='daily'
+        )
 
         self._backtester.run(
             stp,
             self._strategy,
             self._strategy_store.load_strategy(self._strategy),
-            plotter
+            self._plotting
         )
 
-    def _backtesting_started(self):
-        # todo: disable backtesting button
+    def _stop_backtesting(self, data):
+        pass
+
+    def _backtesting_started(self, data):
         ui = self._ui
 
-        ui.load_button.setEnabled(False)
-        ui.new_button.setEnabled(False)
-        ui.backtest_button.setEnabled(False)
+        self._plotting.reset()
 
-    def _backtesting_ended(self):
-        # todo: enable backtesting button
+        ui.actionOpen.setEnabled(False)
+        ui.actionNew.setEnabled(False)
 
+    def _backtesting_ended(self, data):
         ui = self._ui
 
-        ui.load_button.setEnabled(True)
-        ui.new_button.setEnabled(True)
-        ui.backtest_button.setEnabled(True)
+        ui.actionOpen.setEnabled(True)
+        ui.actionNew.setEnabled(True)
 
     def _deploy(self):
         """
@@ -136,9 +177,10 @@ class BackTesting(QtWidgets.QWidget):
     def _load_strategy(self, meta):
         # todo: load parameters associated with the
         #  strategy
-        # todo: enable run button
 
-        stp = self._setup
+        # todo: set up plotting axes...
+
+        stp = self._bt_setup
 
         ui = self._ui
 
@@ -147,17 +189,15 @@ class BackTesting(QtWidgets.QWidget):
 
         stp.load_setup(meta)
 
-        ui.backtest_button.setEnabled(True)
         self._setup.setEnabled(True)
 
-        ui.load_button.setEnabled(True)
-        ui.new_button.setEnabled(True)
+        ui.actionOpen.setEnabled(True)
+        ui.actionNew.setEnabled(True)
+
+        self._backtesting_control.setEnabled(True)
 
     def _new_strategy(self, meta):
         self._load_strategy(meta)
 
-    def show(self) -> None:
-        # self._setup.show()
-        super(BackTesting, self).show()
 
 

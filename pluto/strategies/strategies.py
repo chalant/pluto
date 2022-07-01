@@ -200,8 +200,7 @@ def deploy_strategy(connection, strategy_session):
     connection.execute(
         _SET_STRATEGY_STATUS,
         status='deployed',
-        strategy_id=strategy.strategy_id
-    )
+        strategy_id=strategy.strategy_id)
 
 
 def create_strategy_session(connection, strategy, session):

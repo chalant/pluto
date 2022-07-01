@@ -1,5 +1,6 @@
 from trading_calendars import TradingCalendar
 
+
 class OpenOffsetFix(TradingCalendar):
     def __init__(self, start, end, calendar_type):
         '''

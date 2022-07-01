@@ -23,7 +23,7 @@ class Directory(object):
 
     @property
     def name(self):
-        return self.name
+        return self._name
 
     def is_root(self):
         return self._parent is None
@@ -74,12 +74,16 @@ class Directory(object):
         """
         p = path.join(self.path, name)
 
-        d = Directory(p, self)
+        d = Directory(p, name, parent=self)
 
         try:
             os.mkdir(p)
         except FileExistsError as e:
-            pass
+            #
+            for f in os.listdir(p):
+                if os.path.isfile(os.path.join(p, f)):
+                    fn, extension = f.split('.')
+                    d.add_file(fn, extension)
 
         self._children[name] = d
 
@@ -121,7 +125,7 @@ class Directory(object):
 
         Returns
         -------
-        File
+        Fileimport datetime
         """
 
         id_ = _file_id(name, extension)

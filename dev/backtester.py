@@ -55,9 +55,9 @@ class BackTester(object):
         # get calendar of the universe
 
         pi = processes.ProcessInitializer(self._controllable)
-        init_response = pi.initialize(stp, strategy.name)
+        init_response = pi.initialize(stp, strategy.strategy_name)
 
-        loader.load_strategy(strategy)
+        loader.load_strategy()
 
         # todo: if initial requirements aren't met, raise an error...
 
@@ -72,7 +72,7 @@ class BackTester(object):
         loop = simulation_loop.SimulationLoop(
             stp.start,
             stp.end,
-            stp.frequency)
+            stp.data_frequency)
 
         # subscribe process to clock events
         events.subscribe('clock.update', process.clock_update)
@@ -83,5 +83,5 @@ class BackTester(object):
         events.post_event('backtesting.started', None)
 
         # run loop on these specific exchanges
-        loop.start(uni.exchanges)
+        loop.start(uni.calendar_name)
 

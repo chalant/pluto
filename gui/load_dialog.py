@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets
 
-from GUI import ui_load_dialog
+from gui import ui_load_dialog
 
 from dev import events
 

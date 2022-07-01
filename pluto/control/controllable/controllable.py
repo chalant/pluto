@@ -19,13 +19,16 @@ from zipline.protocol import BarData
 from zipline.utils import api_support
 
 from pluto.coms.utils import conversions
-from pluto.control.controllable import synchronization_states as ss
+from pluto.control.controllable import controllable_states as ss
 from pluto.finance.metrics import tracker
 from pluto.sources import benchmark_source as bs
 from pluto.data.universes import universes
-from pluto.broker import broker_setup as brs
+from pluto.finance.broker import broker_setup as brs
+from pluto.control.clock import clock
 
 from protos import controllable_pb2
+
+from dev import events
 
 log = logbook.Logger('Controllable')
 
@@ -132,11 +135,18 @@ class Controllable(ABC):
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
 
+        self._clock = clock.ExplodingClock()
+
         self._sync_state_tracker = None
         # todo: asset restrictions are also loaded per session
         self._restrictions = asset_restrictions.NoRestrictions()
 
         self._mode = None
+        self.flag = False
+
+    @property
+    def clock(self):
+        return self._clock
 
     @property
     def state(self):
@@ -222,6 +232,10 @@ class Controllable(ABC):
         self._look_back = strategy_setup.look_back
         self._mode = arena
 
+    @property
+    def strategy_name(self):
+        return self._name
+
     def run(self,
             process_id,
             directory,
@@ -255,19 +269,32 @@ class Controllable(ABC):
         self._broker_setup = broker_setup
 
         namespace = self._namespace
-        look_back = self._look_back
+        # look_back = self._look_back
 
         data_frequency = strategy_setup.data_frequency
+
+        self._name = strategy_setup.strategy_id
 
         uni = universes.get_universe(
             run_setup.trading_universe,
             directory)
 
+        self._clock = cl = clock.Clock(
+            uni,
+            start_dt,
+            end_dt)
+
+        events.subscribe(
+            'clock.calendar_update',
+            self._update_calendar)
+
         self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
 
-        calendar = uni.load_calendar(
-            start_dt - pd.Timedelta(days=look_back),
-            end_dt)
+        # calendar = uni.load_calendar(
+        #     start_dt - pd.Timedelta(days=look_back),
+        #     end_dt)
+
+        calendar = cl.calendar
 
         self._start_dt = start_dt
 
@@ -425,68 +452,71 @@ class Controllable(ABC):
             self._sessions), dt == self._end_dt
 
     def session_start(self, dt):
-        end_dt = self._end_dt
+        # if dt > self._end_dt:
+        #     self._last_session_close = self._calendar.session_close(dt)
 
-        if dt > end_dt:
-            # todo: we need a better way for reloading everything
-            #  we should only reload the calendar, since the data gets
-            #  updated in the background...
-
-            # reload a new calendar
-            start_dt = dt - pd.Timedelta(days=self._look_back)
-            self._end_dt = dt
-
-            # todo: reload equity minute bar reader etc (reload bundle)
-
-            self._calendar = calendar = self._universe.load_calendar(
-                start_dt,
-                dt)
-
-            self._last_session_close = calendar.session_close(dt)
-
-            # fixme: this might not be correct
-            self._start_dt = fs = calendar.first_session
-            look_back = calendar.last_session - fs
-
-            sessions = self._sessions_array
-            # reload calendar if it is not the full look-back period
-            if look_back < self._look_back:
-                self._end_dt = end = fs + pd.Timedelta(days=150)
-                self._calendar = calendar = self._universe.load_calendar(fs, end)
-                dt = end
-
-            sessions.popleft()
-            sessions.append(dt)
-
-            # updates the sessions (live)
-            params = self._params
-            self._params = trading.SimulationParameters(
-                fs,
-                dt,
-                calendar,
-                params.capital_base,
-                params.emission_rate,
-                params.data_frequency,
-                params.arena
-            )
-
-            # reload bundle so that it updates the calendar instance
-            bundle = self._universe
-
-            self._data_portal = data_portal = dp.DataPortal(
-                asset_finder=self._asset_finder,
-                trading_calendar=calendar,
-                first_trading_day=fs,
-                equity_minute_reader=bundle.equity_minute_bar_reader,
-                equity_daily_reader=bundle.equity_daily_bar_reader,
-                adjustment_reader=bundle.adjustment_reader
-            )
-
-            self._current_data = self._create_bar_data(
-                data_portal,
-                calendar,
-                self._restrictions,
-                params.data_frequency)
+        # end_dt = self._end_dt
+        #
+        # if dt > end_dt:
+        #     # todo: we need a better way for reloading everything
+        #     #  we should only reload the calendar, since the data gets
+        #     #  updated in the background...
+        #
+        #     # reload a new calendar
+        #     start_dt = dt - pd.Timedelta(days=self._look_back)
+        #     self._end_dt = dt
+        #
+        #     # todo: reload equity minute bar reader etc (reload bundle)
+        #
+        #     self._calendar = calendar = self._universe.load_calendar(
+        #         start_dt,
+        #         dt)
+        #
+        #     self._last_session_close = calendar.session_close(dt)
+        #
+        #     # fixme: this might not be correct
+        #     self._start_dt = fs = calendar.first_session
+        #     look_back = calendar.last_session - fs
+        #
+        #     sessions = self._sessions_array
+        #     # reload calendar if it is not the full look-back period
+        #     if look_back < self._look_back:
+        #         self._end_dt = end = fs + pd.Timedelta(days=150)
+        #         self._calendar = calendar = self._universe.load_calendar(fs, end)
+        #         dt = end
+        #
+        #     sessions.popleft()
+        #     sessions.append(dt)
+        #
+        #     # updates the sessions (live)
+        #     params = self._params
+        #     self._params = trading.SimulationParameters(
+        #         fs,
+        #         dt,
+        #         calendar,
+        #         params.capital_base,
+        #         params.emission_rate,
+        #         params.data_frequency,
+        #         params.arena
+        #     )
+        #
+        #     # reload bundle so that it updates the calendar instance
+        #     bundle = self._universe
+        #
+        #     self._data_portal = data_portal = dp.DataPortal(
+        #         asset_finder=self._asset_finder,
+        #         trading_calendar=calendar,
+        #         first_trading_day=fs,
+        #         equity_minute_reader=bundle.equity_minute_bar_reader,
+        #         equity_daily_reader=bundle.equity_daily_bar_reader,
+        #         adjustment_reader=bundle.adjustment_reader
+        #     )
+        #
+        #     self._current_data = self._create_bar_data(
+        #         data_portal,
+        #         calendar,
+        #         self._restrictions,
+        #         params.data_frequency)
 
         metrics_tracker = self._metrics_tracker
 
@@ -657,6 +687,74 @@ class Controllable(ABC):
     def update_account(self, main_account):
         self._update_account(self._blotter, main_account)
 
+    def _update_calendar(self, clock_):
+        self._calendar = calendar = clock_.calendar
+
+        # todo: we need a better way for reloading everything
+        #  we should only reload the calendar, since the data gets
+        #  updated in the background...
+
+        # reload a new calendar
+        # start_dt = dt - pd.Timedelta(days=self._look_back)
+        # self._end_dt = dt
+        #
+        # # todo: reload equity minute bar reader etc (reload bundle)
+        #
+        # self._calendar = calendar = self._universe.load_calendar(
+        #     start_dt,
+        #     dt)
+
+        self._end_dt = end_dt = calendar.last_session
+
+        self._last_session_close = calendar.session_close(end_dt)
+
+        # fixme: this might not be correct
+        self._start_dt = fs = calendar.first_session
+
+        look_back = calendar.last_session - fs
+
+        sessions = self._sessions_array
+        # reload calendar if it is not the full look-back period
+        # if look_back < self._look_back:
+        #     self._end_dt = end = fs + pd.Timedelta(days=150)
+        #     self._calendar = calendar = self._universe.load_calendar(fs, end)
+        #     dt = end
+
+        dt = clock_.session_end
+
+        sessions.popleft()
+        sessions.append(dt)
+
+        # updates the sessions (live)
+        params = self._params
+        self._params = trading.SimulationParameters(
+            fs,
+            dt,
+            calendar,
+            params.capital_base,
+            params.emission_rate,
+            params.data_frequency,
+            params.arena
+        )
+
+        # reload bundle so that it updates the calendar instance
+        bundle = self._universe
+
+        self._data_portal = data_portal = dp.DataPortal(
+            asset_finder=self._asset_finder,
+            trading_calendar=calendar,
+            first_trading_day=fs,
+            equity_minute_reader=bundle.equity_minute_bar_reader,
+            equity_daily_reader=bundle.equity_daily_bar_reader,
+            adjustment_reader=bundle.adjustment_reader
+        )
+
+        self._current_data = self._create_bar_data(
+            data_portal,
+            calendar,
+            self._restrictions,
+            params.data_frequency)
+
     @abstractmethod
     def _update_account(self, blotter, main_account):
         raise NotImplementedError
@@ -805,6 +903,7 @@ class Controllable(ABC):
             asset for asset in blotter._open_orders
             if past_auto_close_date(asset)
         ]
+
         for asset in assets_to_cancel:
             blotter.cancel_all_orders_for_asset(asset)
 

@@ -1,6 +1,6 @@
 import abc
 
-from pluto.broker import broker_stub
+from pluto.finance.broker import broker_stub
 
 from pluto.control.controllable import live_controllable
 from pluto.control.controllable import simulation_controllable

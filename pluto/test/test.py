@@ -74,6 +74,9 @@ class TestWatcher(monitor.AbstractWatcher):
 
         daily_perfs.append(daily_perf)
 
+        # if self._name == 'buyapple':
+        #     print("PERF", self._name, daily_perf['algorithm_period_return'])
+
         if packet.end:
 
             # compare values to expected values.

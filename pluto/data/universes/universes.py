@@ -58,6 +58,17 @@ class AbstractUniverse(abc.ABC):
         raise NotImplementedError(self.name.__name__)
 
     def load_calendar(self, start, end):
+        """
+
+        Parameters
+        ----------
+        start
+        end
+
+        Returns
+        -------
+        trading_calendars.TradingCalendar
+        """
         raise NotImplementedError(self.load_calendar.__name__)
 
     @property

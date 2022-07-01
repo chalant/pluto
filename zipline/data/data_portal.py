@@ -774,6 +774,12 @@ class DataPortal(object):
         tds = self.trading_calendar.all_sessions
         end_loc = tds.get_loc(end_date)
         start_loc = end_loc - bar_count + 1
+
+        if self._first_trading_day == end_date:
+            print("End Date!",
+                  self._first_trading_day,
+                  end_date)
+
         if start_loc < self._first_trading_day_loc:
             raise HistoryWindowStartsBeforeData(
                 first_trading_day=self._first_trading_day.date(),
