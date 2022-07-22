@@ -35,7 +35,7 @@ class ControllableStub(object):
         self.ClockUpdate = channel.unary_unary(
                 '/Controllable/ClockUpdate',
                 request_serializer=protos_dot_clock__pb2.ClockEvent.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                response_deserializer=protos_dot_controllable__pb2.ClockUpdateResponse.FromString,
                 )
         self.UpdateAccount = channel.stream_unary(
                 '/Controllable/UpdateAccount',
@@ -54,11 +54,6 @@ class ControllableStub(object):
                 )
         self.StopWatching = channel.unary_unary(
                 '/Controllable/StopWatching',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                )
-        self.Join = channel.unary_unary(
-                '/Controllable/Join',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
@@ -106,18 +101,13 @@ class ControllableServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def Watch(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """monitor methods
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def StopWatching(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Join(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -144,7 +134,7 @@ def add_ControllableServicer_to_server(servicer, server):
             'ClockUpdate': grpc.unary_unary_rpc_method_handler(
                     servicer.ClockUpdate,
                     request_deserializer=protos_dot_clock__pb2.ClockEvent.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+                    response_serializer=protos_dot_controllable__pb2.ClockUpdateResponse.SerializeToString,
             ),
             'UpdateAccount': grpc.stream_unary_rpc_method_handler(
                     servicer.UpdateAccount,
@@ -163,11 +153,6 @@ def add_ControllableServicer_to_server(servicer, server):
             ),
             'StopWatching': grpc.unary_unary_rpc_method_handler(
                     servicer.StopWatching,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'Join': grpc.unary_unary_rpc_method_handler(
-                    servicer.Join,
                     request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
@@ -245,7 +230,7 @@ class Controllable(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/ClockUpdate',
             protos_dot_clock__pb2.ClockEvent.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            protos_dot_controllable__pb2.ClockUpdateResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -312,23 +297,6 @@ class Controllable(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Controllable/StopWatching',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def Join(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Controllable/Join',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,

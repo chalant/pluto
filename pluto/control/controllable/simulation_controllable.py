@@ -4,12 +4,9 @@ from pluto import algorithm
 
 
 class SimulationControllable(cbl.Controllable):
-    def __init__(self):
-        super(SimulationControllable, self).__init__()
-
     def _get_algorithm_class(self,
                              controllable,
-                             universe,
+                             pipeline_domain,
                              params,
                              blotter,
                              metrics_tracker,
@@ -26,11 +23,11 @@ class SimulationControllable(cbl.Controllable):
 
         return algorithm.TradingAlgorithm(
             controllable,
-            universe,
             params,
             blotter,
             metrics_tracker,
             pipeline_loader,
+            pipeline_domain,
             initialize,
             handle_data,
             before_trading_start,

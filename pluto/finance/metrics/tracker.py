@@ -3,6 +3,7 @@ import pandas as pd
 from pluto.finance import metrics as mtr
 from pluto.coms.utils import conversions
 from pluto.finance import ledger
+from pluto.finance import returns
 
 from protos import tracker_state_pb2 as trs
 
@@ -12,6 +13,7 @@ class MetricsTracker(object):
                  benchmark_source,
                  capital,
                  data_frequency,
+                 emission_rate,
                  start_dt,
                  look_back,
                  metrics=None):
@@ -28,14 +30,17 @@ class MetricsTracker(object):
         self._benchmark_source = benchmark_source
         self._ledger = ledger.Ledger(
             capital,
-            data_frequency,
-            start_dt,
+            start_dt)
+
+        self._returns_tracker = returns.ReturnsTracker(
+            self._ledger,
             look_back)
 
         self._first_open_session = None
 
         self._capital_base = capital
         self._data_frequency = data_frequency
+        self._emission_rate = emission_rate
 
         if metrics is None:
             self._metrics = mtr.pluto_metrics()
@@ -43,7 +48,9 @@ class MetricsTracker(object):
         self._first_session = start_dt
 
         for metric in self._metrics:
-            metric.initialization(first_session=start_dt, ledger=self._ledger)
+            metric.initialization(
+                first_session=start_dt,
+                ledger=self._ledger)
 
     @property
     def portfolio(self):
@@ -70,15 +77,21 @@ class MetricsTracker(object):
         self._ledger.process_commission(commission)
 
     def process_close_position(self, asset, dt, data_portal):
-        self._ledger.close_position(asset, dt, data_portal)
+        self._ledger.close_position(
+            asset, dt,
+            data_portal,
+            self._data_frequency)
 
     def capital_change(self, amount):
         self._ledger.capital_change(amount)
 
     def sync_last_sale_prices(self, dt, data_portal, handle_non_market_minutes=False):
-        self._ledger.sync_last_sale_prices(dt, data_portal, handle_non_market_minutes)
+        self._ledger.sync_last_sale_prices(
+            dt, data_portal,
+            self._data_frequency,
+            handle_non_market_minutes)
 
-    def update_account(self, dt, main_account):
+    def update_account(self, main_account):
         self._ledger.update_account(main_account)
 
     def get_state(self, dt):
@@ -90,7 +103,7 @@ class MetricsTracker(object):
         ).SerializeToString()
 
     def restore_state(self, state):
-        ledger = self._ledger
+        ledger_ = self._ledger
 
         tr_state = trs.TrackerState()
         tr_state.ParseFromString(state)
@@ -99,8 +112,7 @@ class MetricsTracker(object):
             conversions.to_datetime(tr_state.first_open_session),
             tz='UTC')
 
-        self._last_checkpoint = ledger.restore_state(tr_state.account_state)
-
+        self._last_checkpoint = ledger_.restore_state(tr_state.account_state)
 
     def handle_minute_close(self, dt, data_portal, trading_calendar, sessions):
         """
@@ -118,9 +130,9 @@ class MetricsTracker(object):
 
         """
         # self.sync_last_sale_prices(dt, data_portal) <= this is already done at the update method...
-        ledger = self._ledger
+        ledger_ = self._ledger
 
-        first_session = ledger.first_session
+        first_session = ledger_.first_session
 
         packet = {
             'period_start': first_session,
@@ -140,17 +152,21 @@ class MetricsTracker(object):
 
         # updates returns at the end of the minute.
         benchmark_source = self._benchmark_source
-        ledger.end_of_bar()
+        # ledger_.end_of_bar(self._data_frequency)
+        returns_tracker = self._returns_tracker
         benchmark_source.on_minute_end(dt, data_portal, trading_calendar, sessions)
+        returns_tracker.end_of_bar(self._data_frequency)
 
         for metric in self._metrics:
             metric.end_of_bar(
                 packet=packet,
-                ledger=ledger,
+                ledger=ledger_,
                 benchmark_source=benchmark_source,
                 dt=dt,
                 data_portal=data_portal,
-                emission_rate=self._data_frequency)
+                emission_rate=self._emission_rate,
+                returns_tracker=returns_tracker
+            )
         return packet
 
     def handle_market_open(self, session_label, data_portal, trading_calendar, sessions):
@@ -167,8 +183,9 @@ class MetricsTracker(object):
         trading_calendar : trading_calendars.TradingCalendar
 
         """
-        ledger = self._ledger
-        ledger.start_of_session(session_label)
+        ledger_ = self._ledger
+        ledger_.start_of_session(session_label)
+        self._returns_tracker.start_of_session(session_label)
         self._benchmark_source.on_session_start(sessions)
 
         self._current_session = session_label
@@ -185,7 +202,7 @@ class MetricsTracker(object):
             metric.start_of_session(
                 dt=session_label,
                 session=session_label,
-                ledger=ledger,
+                ledger=ledger_,
                 data_portal=data_portal)
 
     def handle_market_close(self, dt, data_portal, trading_calendar, sessions):
@@ -207,18 +224,21 @@ class MetricsTracker(object):
             'cumulative_risk_metrics': {},
         }
 
-        ledger = self._ledger
+        ledger_ = self._ledger
+        returns_tracker = self._returns_tracker
         benchmark_source = self._benchmark_source
-        ledger.end_of_session(sessions)
+        returns_tracker.end_of_session(sessions)
         benchmark_source.on_session_end(data_portal, trading_calendar, sessions)
 
         for metric in self._metrics:
             metric.end_of_session(
                 dt=dt,
                 packet=packet,
-                ledger=ledger,
+                ledger=ledger_,
                 benchmark_source=benchmark_source,
-                data_portal=data_portal)
+                data_portal=data_portal,
+                returns_tracker=returns_tracker
+            )
 
         return packet
 

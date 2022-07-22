@@ -1,13 +1,8 @@
-from dev import events
+class OrderTransactions(object):
+    __slots__ = ['commissions', 'transactions', 'order']
 
-events.add_event('')
-
-
-# class for orders...
-class ControllerBlotter(object):
-    def __init__(self, broker_service):
-        self._broker_service = broker_service
-
-    def get_broker_data(self):
-        pass
+    def __init__(self, order):
+        self.order = order
+        self.transactions = []
+        self.commissions = []
 

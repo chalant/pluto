@@ -1,13 +1,19 @@
 import abc
 
+from google.protobuf import empty_pb2
+
+from pluto.coms.utils import conversions
+
 from protos.clock_pb2 import (
     SESSION_START,
     SESSION_END,
     MINUTE_END,
-    BEFORE_TRADING_START
+    BEFORE_TRADING_START,
+    TRADE_END,
+    BAR
 )
 
-from pluto.coms.utils import conversions
+from protos import broker_pb2
 
 
 class StopExecution(Exception):
@@ -20,7 +26,7 @@ class Command(abc.ABC):
     def __init__(self, controllable, request):
         self._controllable = controllable
         self._request = request
-        self._dt = conversions.to_datetime(request.real_ts)
+        self._dt = conversions.to_datetime(request.timestamp)
 
     def __call__(self):
         controllable = self._controllable
@@ -50,7 +56,7 @@ class Command(abc.ABC):
 
 class Stop(Command):
     def _execute(self, controllable, request):
-        pass
+        raise StopExecution
 
 
 class CapitalUpdate(Command):
@@ -74,7 +80,8 @@ class ClockUpdate(Command):
         '_perf_writer',
         '_controllable',
         '_frequency_filter',
-        '_state_store']
+        '_state_store',
+        '_broker']
 
     def __init__(self,
                  perf_writer,
@@ -97,14 +104,21 @@ class ClockUpdate(Command):
         self._frequency_filter = frequency_filter
         self._state_store = state_store
         self._flag = False
+        self._broker = controllable.broker
 
     def _execute(self, controllable, request):
+        broker = self._broker
+
+        batch = broker_pb2.OrderBatch(
+            ts=request.timestamp,
+            ended=False)
+
+        # batch.not_running = 0
         s = controllable.clock.update(conversions.to_datetime(request.timestamp))
 
         if s:
             writer = self._perf_writer
 
-            # todo: exchanges should be filtered in the here
             ts, e = s
 
             if e == SESSION_START:
@@ -116,19 +130,27 @@ class ClockUpdate(Command):
             elif e == SESSION_END:
                 packet, end = controllable.session_end(ts)
                 writer.performance_update(packet, end)
-                if end:
-                    raise StopExecution
+
+                controllable.ended = end
 
             elif e == MINUTE_END:
                 packet, end = controllable.minute_end(ts)
                 writer.performance_update(packet, end)
+                controllable.ended = end
 
-                if end:
-                    raise StopExecution
             else:
+                # send orders to broker.
+
                 # TRADE_END/BAR event
                 if self._frequency_filter.filter(e):
-                    controllable.bar(ts)
+                    blotter = controllable.bar(ts)
+
+                    for order in blotter.new_orders:
+
+                        batch.orders.append(
+                            conversions.to_proto_order(order.to_dict()))
+
+                    blotter.new_orders.clear()
 
                 # store state at each bar event, since it only changes on bar/trade_end events
 
@@ -139,3 +161,11 @@ class ClockUpdate(Command):
                 # todo: store state
                 # todo: store the controllable state
                 self._state_store.store(ts, controllable)
+
+        # print("Placed orders", request.timestamp)
+        # if request.event == BAR or request.event == TRADE_END:
+        broker.PlaceOrders(batch.SerializeToString(), ())
+
+        if controllable.ended:
+            controllable.not_running = 1
+            raise StopExecution

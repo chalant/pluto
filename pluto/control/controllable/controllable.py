@@ -18,21 +18,25 @@ from zipline.protocol import BarData
 
 from zipline.utils import api_support
 
+from pluto.pipeline import domain
 from pluto.coms.utils import conversions
 from pluto.control.controllable import controllable_states as ss
 from pluto.finance.metrics import tracker
+from pluto.finance.broker import broker_setup as brs
 from pluto.sources import benchmark_source as bs
 from pluto.data.universes import universes
-from pluto.finance.broker import broker_setup as brs
+
 from pluto.control.clock import clock
 
 from protos import controllable_pb2
+from protos import broker_pb2
 
 from dev import events
 
 log = logbook.Logger('Controllable')
 
 
+# todo: trigger the order placed event here...
 class _State(ABC):
     @abstractmethod
     def handle_data(self, algo, current_data, dt):
@@ -42,6 +46,13 @@ class _State(ABC):
     def before_trading_starts(self, algo, dt):
         raise NotImplementedError
 
+    def send_orders(self, blotter, dt):
+        self._send_orders(blotter, dt)
+
+    @abstractmethod
+    def _send_orders(self, orders, dt):
+        raise NotImplementedError
+
 
 class _Recovering(_State):
     def handle_data(self, algo, current_data, dt):
@@ -49,6 +60,9 @@ class _Recovering(_State):
         pass
 
     def before_trading_starts(self, algo, dt):
+        pass
+
+    def _send_orders(self, orders, dt):
         pass
 
 
@@ -66,9 +80,7 @@ class _Transitioning(_State):
         self._controllable = controllable
 
     def handle_data(self, algo, current_data, dt):
-        if not self._bfs_flag:
-            pass
-        else:
+        if self._bfs_flag:
             controllable = self._controllable
             controllable.run_state = controllable.ready
             algo.event_manager.handle_data(algo, current_data, dt)
@@ -77,13 +89,27 @@ class _Transitioning(_State):
         algo.before_trading_start(algo, dt)
         self._bfs_flag = True
 
+    def _send_orders(self, orders, dt):
+        if self._bfs_flag:
+            # todo: send orders to broker...
+            pass
+
 
 class _Ready(_State):
+    def __init__(self, broker):
+        self._events = {}
+        self._orders = {}
+
+        self._broker = broker
+
     def handle_data(self, algo, current_data, dt):
         algo.event_manager.handle_data(algo, current_data, dt)
 
     def before_trading_starts(self, algo, current_dt):
         algo.before_trading_start(algo, current_dt)
+
+    def _send_orders(self, blotter, dt):
+        pass
 
 
 class Controllable(ABC):
@@ -114,7 +140,6 @@ class Controllable(ABC):
 
         self._calendar = None
         self._universe = None
-        self._calendars = None
         self._benchmark = None
         self._benchmark_source = None
         self._last_session_close = None
@@ -130,7 +155,8 @@ class Controllable(ABC):
         self._real_dt = None
         self._params = None
 
-        self._ready = _Ready()
+        self._broker = None
+        self._ready = _Ready(self._broker)
         self._transitioning = _Transitioning(self)
         self._recovering = recovering = _Recovering()
         self._run_state = recovering
@@ -143,6 +169,43 @@ class Controllable(ABC):
 
         self._mode = None
         self.flag = False
+
+        self._not_running = 0
+        self._ended = False
+
+        self._transactions = []
+
+    @property
+    def not_running(self):
+        return self._not_running
+
+    @not_running.setter
+    def not_running(self, value):
+        self._not_running = value
+
+    @property
+    def ended(self):
+        return self._ended
+
+    @ended.setter
+    def ended(self, value):
+        self._ended = value
+
+    @property
+    def broker(self):
+        return self._broker
+
+    @property
+    def datetime(self):
+        return self._current_dt
+
+    @property
+    def data_frequency(self):
+        return self._data_frequency
+
+    @property
+    def session_id(self):
+        return self._session_id
 
     @property
     def clock(self):
@@ -204,18 +267,21 @@ class Controllable(ABC):
     def current_data(self):
         return self._current_data
 
+    def set_broker(self, broker):
+        self._broker = broker
+
     def initialize(self,
                    strategy_setup,
                    strategy,
                    arena):
-        '''
+        """
 
         Parameters
         ----------
         strategy_setup: pluto.strategies.setup.StrategySetup
         strategy: bytes
         arena: str
-        '''
+        """
 
         def noop(*args, **kwargs):
             pass
@@ -237,6 +303,7 @@ class Controllable(ABC):
         return self._name
 
     def run(self,
+            broker,
             process_id,
             directory,
             strategy_setup,
@@ -249,6 +316,7 @@ class Controllable(ABC):
 
         Parameters
         ----------
+        broker: pluto.finance.broker.broker_stub.BrokerStub
         process_id: str
         directory: directory.directory.Directory
         strategy_setup: pluto.strategies.setup.StrategySetup
@@ -265,6 +333,7 @@ class Controllable(ABC):
         def noop(*args, **kwargs):
             pass
 
+        self._broker = broker
         self._session_id = process_id
         self._broker_setup = broker_setup
 
@@ -280,7 +349,7 @@ class Controllable(ABC):
             directory)
 
         self._clock = cl = clock.Clock(
-            uni,
+            uni.calendar_name,
             start_dt,
             end_dt)
 
@@ -288,7 +357,7 @@ class Controllable(ABC):
             'clock.calendar_update',
             self._update_calendar)
 
-        self._sync_state_tracker = sst = ss.Tracker(uni.calendars)
+        # self._sync_state_tracker = sst = ss.Tracker(uni.calendars_names)
 
         # calendar = uni.load_calendar(
         #     start_dt - pd.Timedelta(days=look_back),
@@ -378,6 +447,7 @@ class Controllable(ABC):
             benchmark_source,
             run_setup.capital,
             data_frequency,
+            self._emission_rate,
             start_dt,
             strategy_setup.look_back)
 
@@ -394,23 +464,30 @@ class Controllable(ABC):
             self._restrictions,
             data_frequency)
 
+        dom = domain.Domain(
+            uni.country_code,
+            calendar)
+
         # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
 
         self._algo = algo = self._get_algorithm_class(
             controllable=self,
-            universe=uni,
             params=params,
             blotter=blotter,
             metrics_tracker=metrics_tracker,
-            pipeline_loader=uni.pipeline_loader,
+            pipeline_loader=uni.pipeline_loader(dom),
+            pipeline_domain=dom,
             initialize=namespace.get('initialize', noop),
             handle_data=namespace.get('handle_data', noop),
             before_trading_start=namespace.get('before_trading_start', noop),
             analyze=noop)
 
-        sst.state = sst.out_session
+        # sst.state = sst.out_session
         self._run_state = self._ready
+        algo.set_pipeline_domain(domain.Domain(
+            uni.country_code,
+            calendar))
 
         api_support.set_algo_instance(algo)
         algo.on_dt_changed(start_dt)
@@ -425,7 +502,7 @@ class Controllable(ABC):
     @abstractmethod
     def _get_algorithm_class(self,
                              controllable,
-                             universe,
+                             pipeline_domain,
                              params,
                              blotter,
                              metrics_tracker,
@@ -518,6 +595,9 @@ class Controllable(ABC):
         #         self._restrictions,
         #         params.data_frequency)
 
+        # clear previous transactions
+        self._transactions.clear()
+
         metrics_tracker = self._metrics_tracker
 
         capital_changes = self._calculate_capital_changes(
@@ -529,6 +609,7 @@ class Controllable(ABC):
         algo = self._algo
 
         data_portal = self._data_portal
+
         self._current_dt = dt
 
         algo.on_dt_changed(dt)
@@ -546,9 +627,11 @@ class Controllable(ABC):
 
         if assets_we_care_about:
             splits = data_portal.get_splits(assets_we_care_about, dt)
+
             if splits:
                 algo.blotter.process_splits(splits)
                 metrics_tracker.handle_splits(splits)
+
         return capital_changes
 
     def before_trading_starts(self, dt):
@@ -556,6 +639,7 @@ class Controllable(ABC):
         self._current_dt = dt
         algo.on_dt_changed(dt)
 
+        # fixme: should we do this here ?
         api_support.set_algo_instance(algo)
         self._run_state.before_trading_starts(algo, self._current_data)
 
@@ -567,6 +651,7 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         blotter = self._blotter
 
+        # fixme: we need to do something with this.
         capital_changes = self._calculate_minute_capital_changes(
             dt,
             metrics_tracker,
@@ -576,20 +661,30 @@ class Controllable(ABC):
         # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
+        closed_orders = []
+
         # todo: this is where we update everything (ledger etc.)
-        new_transactions, new_commissions, closed_orders = \
-            blotter.get_transactions(current_data)
+        # new_transactions, new_commissions, closed_orders = \
+        #     blotter.get_transactions(current_data)
 
-        for transaction in new_transactions:
+        # todo: add tax handling here!
+
+        for order, transaction, commission in self._transactions:
+            order.filled += transaction.amount
+            order.commission += commission
+
+            order.dt = transaction.dt
+
+            if not order.open:
+                closed_orders.append(order)
+
             metrics_tracker.process_transaction(transaction)
-
-            order = blotter.orders[transaction.order_id]
             metrics_tracker.process_order(order)
-
-            # todo: add tax handling here!
-
-        for commission in new_commissions:
-            metrics_tracker.process_commission(commission)
+            metrics_tracker.process_commission({
+                'asset': transaction.asset,
+                'cost': commission,
+                'order': order
+            })
 
         blotter.prune_orders(closed_orders)
 
@@ -602,12 +697,41 @@ class Controllable(ABC):
 
         # if we have any new orders, record them so that we know
         # in what perf period they were placed.
+
         for new_order in blotter.new_orders:
             metrics_tracker.process_order(new_order)
 
-        blotter.new_orders = []
+        return blotter
 
-        return capital_changes
+    def update_blotter(self, broker_data):
+        # self._update_blotter(self._blotter, broker_data)
+
+        transactions = self._transactions
+
+        orders = self._blotter.orders
+
+        for ct in broker_data.transactions:
+            order_id = ct.transaction.order_id
+            order_ = orders.get(order_id, None)
+
+            if order_:
+                transactions.append((
+                    order_,
+                    conversions.to_zp_transaction(ct.transaction),
+                    ct.commission))
+
+        # for commission in broker_data.commissions:
+        #     order = conversions.to_zp_order(commission.order)
+        #     order_id = order.id
+        #     o = orders.get(order_id, None)
+        #     if o:
+        #         commissions.append({
+        #             'asset': conversions.to_zp_asset(commission.asset),
+        #             'cost': commission.cost,
+        #             'order': order
+        #         })
+        #
+        #     orders[order_id] = order  # update the order state
 
     def session_end(self, dt):
         metrics_tracker = self._metrics_tracker
@@ -618,12 +742,15 @@ class Controllable(ABC):
         data_portal = self._data_portal
         algo = self._algo
 
+        # fixme: this must be handled by the controller.
         self._cleanup_expired_assets(
             dt,
             data_portal,
             blotter,
             metrics_tracker,
             position_assets)
+
+        # fixme: validate account controls controller side.
 
         # todo execute cancellation policy on trade end events not session end
         # blotter.execute_cancel_policy(sim_engine.SESSION_END)
@@ -677,9 +804,6 @@ class Controllable(ABC):
         #  this will gradually close positions...
         pass
 
-    def update_blotter(self, broker_data):
-        self._update_blotter(self._blotter, broker_data)
-
     @abstractmethod
     def _update_blotter(self, blotter, broker_data):
         raise NotImplementedError
@@ -688,6 +812,8 @@ class Controllable(ABC):
         self._update_account(self._blotter, main_account)
 
     def _update_calendar(self, clock_):
+        algo = self._algo
+
         self._calendar = calendar = clock_.calendar
 
         # todo: we need a better way for reloading everything
@@ -755,6 +881,17 @@ class Controllable(ABC):
             self._restrictions,
             params.data_frequency)
 
+        dom = domain.Domain(
+            self._universe.country_code,
+            calendar)
+
+        algo.set_trading_calendar(calendar)
+
+        algo.set_pipeline_domain(dom)
+
+        # re-initialize pipeline engine
+        algo.init_engine(self._universe.pipeline_loader(dom))
+
     @abstractmethod
     def _update_account(self, blotter, main_account):
         raise NotImplementedError
@@ -773,7 +910,7 @@ class Controllable(ABC):
                            data_portal,
                            trading_calendar,
                            sessions):
-        '''
+        """
 
         Parameters
         ----------
@@ -786,7 +923,7 @@ class Controllable(ABC):
         Returns
         -------
 
-        '''
+        """
         """
         Get a perf message for the given datetime.
         """
@@ -808,7 +945,7 @@ class Controllable(ABC):
                             data_portal,
                             trading_calendar,
                             sessions):
-        '''
+        """
 
         Parameters
         ----------
@@ -821,7 +958,7 @@ class Controllable(ABC):
         Returns
         -------
 
-        '''
+        """
         """
         Get a perf message for the given datetime.
         """
@@ -856,7 +993,7 @@ class Controllable(ABC):
                                 blotter,
                                 metrics_tracker,
                                 position_assets):
-        '''
+        """
 
         Parameters
         ----------
@@ -869,7 +1006,7 @@ class Controllable(ABC):
         Returns
         -------
 
-        '''
+        """
         """
         Clear out any assets that have expired before starting a new sim day.
 

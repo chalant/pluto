@@ -9,10 +9,10 @@ from zipline.pipeline import domain
 class Domain(domain.Domain):
     def __init__(self,
                  country_code,
-                 universe,
+                 trading_calendar,
                  data_query_offset=-np.timedelta64(45, 'm')):
         self._country_code = country_code
-        self._universe = universe
+        self._calendar = trading_calendar
         self._data_query_offset = (
             # add one minute because `open_time` is actually the open minute
             # label which is one minute _after_ market open...
@@ -25,10 +25,11 @@ class Domain(domain.Domain):
             )
 
     def all_sessions(self):
-        return self._universe.trading_calendar.all_sessions
+        return self._calendar.all_sessions
 
+    @property
     def calendar(self):
-        return self._universe.trading_calendar
+        return self._calendar
 
     @property
     def country_code(self):

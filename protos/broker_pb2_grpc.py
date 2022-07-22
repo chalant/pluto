@@ -5,7 +5,7 @@ import grpc
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from protos import assets_pb2 as protos_dot_assets__pb2
 from protos import broker_pb2 as protos_dot_broker__pb2
-from protos import protocol_pb2 as protos_dot_protocol__pb2
+from protos import data_pb2 as protos_dot_data__pb2
 
 
 class BrokerStub(object):
@@ -17,10 +17,15 @@ class BrokerStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.PlaceOrders = channel.stream_stream(
+        self.PlaceOrders = channel.stream_unary(
                 '/Broker/PlaceOrders',
-                request_serializer=protos_dot_protocol__pb2.Order.SerializeToString,
-                response_deserializer=protos_dot_protocol__pb2.Order.FromString,
+                request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                )
+        self.Stopped = channel.unary_unary(
+                '/Broker/Stopped',
+                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
         self.CancelOrder = channel.unary_unary(
                 '/Broker/CancelOrder',
@@ -30,12 +35,7 @@ class BrokerStub(object):
         self.CancelAllOrdersForAsset = channel.unary_unary(
                 '/Broker/CancelAllOrdersForAsset',
                 request_serializer=protos_dot_assets__pb2.Asset.SerializeToString,
-                response_deserializer=protos_dot_broker__pb2.WarningMessage.FromString,
-                )
-        self.ExecuteCancelPolicy = channel.unary_unary(
-                '/Broker/ExecuteCancelPolicy',
-                request_serializer=protos_dot_broker__pb2.CancelEvent.SerializeToString,
-                response_deserializer=protos_dot_broker__pb2.WarningMessage.FromString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
 
 
@@ -50,6 +50,12 @@ class BrokerServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Stopped(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CancelOrder(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -57,13 +63,8 @@ class BrokerServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def CancelAllOrdersForAsset(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ExecuteCancelPolicy(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """rpc ExecuteCancelPolicy (CancelEvent) returns (google.protobuf.Empty);
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -71,10 +72,15 @@ class BrokerServicer(object):
 
 def add_BrokerServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'PlaceOrders': grpc.stream_stream_rpc_method_handler(
+            'PlaceOrders': grpc.stream_unary_rpc_method_handler(
                     servicer.PlaceOrders,
-                    request_deserializer=protos_dot_protocol__pb2.Order.FromString,
-                    response_serializer=protos_dot_protocol__pb2.Order.SerializeToString,
+                    request_deserializer=protos_dot_data__pb2.Chunk.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'Stopped': grpc.unary_unary_rpc_method_handler(
+                    servicer.Stopped,
+                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'CancelOrder': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelOrder,
@@ -84,12 +90,7 @@ def add_BrokerServicer_to_server(servicer, server):
             'CancelAllOrdersForAsset': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelAllOrdersForAsset,
                     request_deserializer=protos_dot_assets__pb2.Asset.FromString,
-                    response_serializer=protos_dot_broker__pb2.WarningMessage.SerializeToString,
-            ),
-            'ExecuteCancelPolicy': grpc.unary_unary_rpc_method_handler(
-                    servicer.ExecuteCancelPolicy,
-                    request_deserializer=protos_dot_broker__pb2.CancelEvent.FromString,
-                    response_serializer=protos_dot_broker__pb2.WarningMessage.SerializeToString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -112,9 +113,26 @@ class Broker(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/Broker/PlaceOrders',
-            protos_dot_protocol__pb2.Order.SerializeToString,
-            protos_dot_protocol__pb2.Order.FromString,
+        return grpc.experimental.stream_unary(request_iterator, target, '/Broker/PlaceOrders',
+            protos_dot_data__pb2.Chunk.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def Stopped(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Broker/Stopped',
+            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -148,23 +166,6 @@ class Broker(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Broker/CancelAllOrdersForAsset',
             protos_dot_assets__pb2.Asset.SerializeToString,
-            protos_dot_broker__pb2.WarningMessage.FromString,
-            options, channel_credentials,
-            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
-
-    @staticmethod
-    def ExecuteCancelPolicy(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Broker/ExecuteCancelPolicy',
-            protos_dot_broker__pb2.CancelEvent.SerializeToString,
-            protos_dot_broker__pb2.WarningMessage.FromString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

@@ -93,7 +93,7 @@ class SimulationBlotter(Blotter):
                    current_dt=self.current_dt)
 
     @expect_types(asset=Asset)
-    def order(self, asset, amount, style, order_id=None):
+    def order(self, asset, amount, style, session_id, order_id=None):
         """Place an order.
 
         Parameters
@@ -140,6 +140,7 @@ class SimulationBlotter(Blotter):
 
         is_buy = (amount > 0)
         order = Order(
+            session_id=session_id,
             dt=self.current_dt,
             asset=asset,
             amount=amount,

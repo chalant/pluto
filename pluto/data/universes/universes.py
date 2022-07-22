@@ -19,14 +19,17 @@ from pluto.data.bundles import test
 
 from pluto.trading_calendars import calendar_utils as cu
 
-from pluto.pipeline import domain
-
 from protos import calendar_pb2
 
 _CACHE = {}
 
 
 class AbstractUniverse(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def country_code(self):
+        return
+
     @property
     @abc.abstractmethod
     def start_date(self):
@@ -96,12 +99,12 @@ class AbstractUniverse(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def calendars(self):
+    def base_calendars(self):
+        # should return the calendar the universe is composed with...
         raise NotImplementedError
 
-    @property
     @abc.abstractmethod
-    def pipeline_loader(self):
+    def pipeline_loader(self, domain):
         raise NotImplementedError('pipeline_loader')
 
     @property
@@ -161,8 +164,6 @@ class TestUniverse(AbstractUniverse):
     def __init__(self, root_dir, calendar_cache=False, environ=None):
         super(TestUniverse, self).__init__()
 
-        self._domain = domain.Domain(CountryCode.UNITED_STATES, self)
-
         self._calendar = None
         self._cache = calendar_cache
 
@@ -170,6 +171,10 @@ class TestUniverse(AbstractUniverse):
         self._bundle_data = self._bundle.load()
 
         self._equity_daily_bar_reader = e = self._bundle_data.equity_daily_bar_reader
+
+    @property
+    def country_code(self):
+        return CountryCode.UNITED_STATES
 
     @property
     def start_date(self):
@@ -220,7 +225,7 @@ class TestUniverse(AbstractUniverse):
         return self._calendar
 
     @property
-    def calendars(self):
+    def base_calendars(self):
         return 'XNYS',
 
     def load_calendar(self, start, end):
@@ -232,8 +237,7 @@ class TestUniverse(AbstractUniverse):
 
         return calendar
 
-    @property
-    def pipeline_loader(self):
+    def pipeline_loader(self, domain):
         bundle = self._bundle_data
 
         loader = USEquityPricingLoader.without_fx(
@@ -241,7 +245,7 @@ class TestUniverse(AbstractUniverse):
             bundle.adjustment_reader
         )
 
-        eq = equity_pricing.EquityPricing.specialize(self._domain)
+        eq = equity_pricing.EquityPricing.specialize(domain)
 
         # for a single pipeline, we can't have multiple domains...
 
@@ -288,7 +292,7 @@ def with_cache(cache):
 
 
 @with_cache(_CACHE)
-def get_universe(name, root_dir, cache=True, environ=None):
+def get_universe(name, root_dir, cache=True, environ=None) -> AbstractUniverse:
     """
 
     Parameters

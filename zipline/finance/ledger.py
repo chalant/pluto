@@ -35,7 +35,7 @@ from ._finance_ext import (
     update_position_last_sale_prices,
 )
 
-log = logbook.Logger('Performance')
+log = logbook.Logger(__name__)
 
 
 class PositionTracker(object):

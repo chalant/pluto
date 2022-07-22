@@ -12,10 +12,13 @@ import pandas as pd
 from numpy import testing
 import numpy as np
 
+from trading_calendars import calendar_utils
+
 from directory import utils as tdr
 
+
 from zipline.testing import test_resource_path, core
-from zipline.data import bundles
+from zipline.data import data_portal
 from zipline.utils import cache
 from zipline.assets.assets import Equity, Future
 from zipline.finance.execution import (
@@ -23,14 +26,24 @@ from zipline.finance.execution import (
     LimitOrder,
     StopLimitOrder,
     MarketOrder)
+from zipline.finance import asset_restrictions
 
 from pluto import examples
 from pluto.test import test
+
+from pluto.finance import ledger
+from pluto.finance.blotter import simulation_blotter
 from pluto.control.processes import in_memory
+from pluto.control.controller import process_manager
+from pluto.control.controllable import running_behavior
+from pluto.control.loop import simulation_loop
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
 from pluto.finance.broker import broker_setup as bks
 from pluto.data.bundles import test as tb
+from pluto.data.universes import universes
+from pluto.trading_calendars import calendar_utils as cu
+from pluto.setup import engine_setup
 
 
 def _build_data_frame(mon, process_id):
@@ -60,7 +73,7 @@ def _build_data_frame(mon, process_id):
     return daily_stats
 
 
-def _run(client, example_name, expected_perf):
+def _run(dir_, example_name, expected_perf):
     args, path_ = examples.EXAMPLE_MODULES[example_name]
 
     # setup strategy...
@@ -108,13 +121,100 @@ def _run(client, example_name, expected_perf):
 
     stp.tax_models = {}
 
-    client.add_strategy(
+    eng_stp = engine_setup.EngineSetup()
+    eng_stp.slippage_models = stp.commission_models
+
+    eng_stp.slippage_models = {
+        Equity: stp.slippage_models['equity'],
+        Future: stp.slippage_models['futures']
+    }
+
+    eng_stp.commission_models = {
+        Equity: stp.commission_models['equity'],
+        Future: stp.commission_models['futures']
+    }
+
+    uni = universes.get_universe(
+        stp.trading_universe,
+        dir_)
+
+    manager = process_manager.ProcessManager(
+        uni.asset_finder,
+        ledger.Ledger(
+            stp.capital,
+            stp.start
+        )
+    )
+
+    restrictions = asset_restrictions.NoRestrictions()
+
+    loop = simulation_loop.SimulationLoop(
+        stp.start,
+        stp.end,
+        stp.data_frequency
+    )
+
+    for calendar_name in uni.base_calendars:
+        calendar = cu.get_calendar_in_range(
+            calendar_name,
+            stp.start,
+            stp.end)
+
+        last_session = calendar.last_session
+
+        dp = data_portal.DataPortal(
+            asset_finder=uni.asset_finder,
+            trading_calendar=calendar,
+            first_trading_day=calendar.first_session,
+            equity_minute_reader=uni.equity_minute_bar_reader,
+            equity_daily_reader=uni.equity_daily_bar_reader,
+            adjustment_reader=uni.adjustment_reader,
+            last_available_session=last_session,
+            last_available_minute=calendar.minutes_for_session(last_session)[-1]
+        )
+
+        manager.add_data_portal(
+            calendar_name,
+            dp)
+
+        manager.add_bar_data(
+            'daily',
+            dp,
+            restrictions)
+
+        manager.add_blotter(
+            calendar_name,
+            simulation_blotter.SimulationBlotter(
+                eng_stp))
+
+        loop.add_clock(calendar_name)
+
+    client = test.TestClient(
+        dir_,
+        in_memory.InMemoryControllableStub(
+            dir_,
+            'backtesting',
+            manager,
+            running_behavior.Blocking()))
+
+    process = client.add_strategy(
         stp,
         example_name,
         path_
-    ).run(
-        stp,
-        expected_perf)
+    )
+
+    manager.add_process(process)
+
+    tester = test.StrategyTester(
+        process,
+        uni,
+        example_name,
+        manager)
+
+    tester.run(
+        loop,
+        expected_perf
+    )
 
     # capital = 1e7
 
@@ -216,14 +316,15 @@ class PlutoExamplesTests(unittest.TestCase):
 
         cls._framework_url = '[::]:50051'
 
+        calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
+
     @classmethod
     def tearDownClass(cls) -> None:
+        calendar_utils._default_calendar_aliases.pop('YAHOO')
         cls._exit_stack.close()
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
-        dir_ = self._pluto_tempdir
-
         # monitor for performance callbacks...
 
         # process, uni = _create_process(
@@ -231,13 +332,11 @@ class PlutoExamplesTests(unittest.TestCase):
         #     example_name,
         #     in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
-        client = test.TestClient(
-            dir_,
-            in_memory.InMemoryControllableStub(dir_, 'backtesting'))
+
 
         # print("Example ", example_name)
 
-        _run(client, example_name, self._expected_perf[example_name])
+        _run(self._pluto_tempdir, example_name, self._expected_perf[example_name])
 
     # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     # def test_live_simulation(self, example_name):

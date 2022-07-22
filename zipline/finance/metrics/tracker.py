@@ -260,6 +260,7 @@ class MetricsTracker(object):
         ledger.start_of_session(session_label)
 
         adjustment_reader = data_portal.adjustment_reader
+
         if adjustment_reader is not None:
             # this is None when running with a dataframe source
             ledger.process_dividends(
