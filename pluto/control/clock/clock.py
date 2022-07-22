@@ -4,6 +4,8 @@ import pandas as pd
 
 from pluto.data.universes import universes
 from pluto.control.clock.utils import get_generator
+from pluto.trading_calendars import calendar_utils as cu
+
 
 from dev import events
 
@@ -15,12 +17,27 @@ class StopExecution(Exception):
     pass
 
 
-class FakeClock(object):
-    def update(self, dt):
-        return ()
-
-
 class ExplodingClock(object):
+    @property
+    def global_ts(self):
+        raise RuntimeError("Clock was not set!")
+
+    @property
+    def session_start(self):
+        raise RuntimeError("Clock was not set!")
+
+    @property
+    def session_end(self):
+        raise RuntimeError("Clock was not set!")
+
+    @property
+    def calendar(self):
+        raise RuntimeError("Clock was not set!")
+
+    @property
+    def calendar_name(self):
+        raise RuntimeError("Clock was not set!")
+
     def update(self, dt):
         raise RuntimeError("Clock was not set!")
 
@@ -28,13 +45,12 @@ class ExplodingClock(object):
 # a clock is responsible for filtering time events from the loop.
 class Clock(object):
     def __init__(self,
-                 universe: universes.AbstractUniverse,
+                 calendar_name,
                  start_dt,
                  end_dt,
                  minute_emission=False):
 
-        self._universe = universe
-        self._calendar_name = universe.calendar_name
+        self._calendar_name = calendar_name
 
         self._start_dt = start_dt
         self._end_dt = end_dt
@@ -45,6 +61,12 @@ class Clock(object):
         self._load_attributes(start_dt, end_dt)
 
         self._reload_flag = False
+
+        self._global_dt = None
+
+    @property
+    def global_ts(self):
+        return self._global_dt
 
     @property
     def session_start(self):
@@ -65,6 +87,7 @@ class Clock(object):
     def update(self, dt):
         # todo: we should consider reloading when there is a calendar update...
         # todo: should we catch a stop iteration?
+        self._global_dt = dt
 
         ts, evt = self._nxt_dt, self._nxt_evt
 
@@ -112,7 +135,10 @@ class Clock(object):
 
         # todo: we need to start from the first available data point (universe)
 
-        self._calendar = cal = self._universe.load_calendar(start_dt - pd.Timedelta(days=150), end_dt)
+        self._calendar = cal = cu.get_calendar_in_range(
+            self._calendar_name,
+            start_dt - pd.Timedelta(days=150),
+            end_dt)
 
         # self._start_dt = cal.first_session
 

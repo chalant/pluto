@@ -5,7 +5,7 @@ import logbook
 from zipline.finance import position
 import zipline.protocol as zp
 
-log = logbook.Logger('Performance')
+log = logbook.Logger('Position')
 
 
 class Position(position.Position):

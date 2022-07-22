@@ -3,6 +3,7 @@ import abc
 from pluto.interface.utils import service_access
 
 from pluto.coms.utils import conversions
+from pluto.utils import stream
 
 from protos import broker_pb2_grpc
 
@@ -18,8 +19,7 @@ class BrokerStub(abc.ABC):
     @service_access.framework_method
     @service_access.session_method
     def PlaceOrders(self, request, metadata):
-        for order in self._place_orders(request, metadata):
-            yield conversions.to_zp_order(order)
+        self._place_orders(stream.chunk_bytes(request), metadata)
 
     @service_access.framework_method
     @service_access.session_method
@@ -36,6 +36,11 @@ class BrokerStub(abc.ABC):
     def ExecuteCancelPolicy(self, request, metadata):
         return self._execute_cancel_policy(request, metadata)
 
+    @service_access.framework_method
+    @service_access.session_method
+    def Stopped(self, request, metadata):
+        return self._stopped(request, metadata)
+
     @abc.abstractmethod
     def _execute_cancel_policy(self, request, metadata):
         raise NotImplementedError
@@ -50,6 +55,10 @@ class BrokerStub(abc.ABC):
 
     @abc.abstractmethod
     def _cancel_order(self, request, metadata):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _stopped(self, request, metadata):
         raise NotImplementedError
 
 

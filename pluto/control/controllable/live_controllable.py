@@ -4,13 +4,9 @@ from pluto import algorithm
 
 
 class LiveControllable(cbl.Controllable):
-    def __init__(self, broker_stub):
-        super(LiveControllable, self).__init__()
-        self._broker = broker_stub
-
     def _get_algorithm_class(self,
                              controllable,
-                             universe,
+                             pipeline_domain,
                              params,
                              blotter,
                              metrics_tracker,
@@ -30,6 +26,7 @@ class LiveControllable(cbl.Controllable):
             blotter,
             metrics_tracker,
             pipeline_loader,
+            pipeline_domain,
             initialize,
             handle_data,
             before_trading_start,

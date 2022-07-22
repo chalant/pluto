@@ -191,7 +191,9 @@ def to_zp_asset(pr_asset):
 def to_zp_order(proto_order):
     stop = proto_order.stop
     limit = proto_order.limit
+
     return Order(
+        session_id=proto_order.session_id,
         dt=to_datetime(proto_order.dt),
         asset=to_zp_asset(proto_order.asset),
         amount=proto_order.amount,
@@ -199,7 +201,7 @@ def to_zp_order(proto_order):
         limit=limit.value if limit.is_set else None,
         filled=proto_order.filled,
         commission=proto_order.commission,
-        id=proto_order.id
+        id_=proto_order.id
     )
 
 
@@ -309,6 +311,7 @@ def to_proto_order(zp_order):
     stop = zp_order['stop']
 
     return pr.Order(
+        session_id=zp_order['session_id'],
         dt=to_proto_timestamp(zp_order['dt']),
         asset=to_proto_asset(zp_order['sid']),
         amount=zp_order['amount'],
@@ -316,7 +319,7 @@ def to_proto_order(zp_order):
             is_set=stop != None,
             value=stop
         ),
-        limit = pr.Order.Limit(
+        limit=pr.Order.Limit(
             is_set=limit != None,
             value=limit
         ),

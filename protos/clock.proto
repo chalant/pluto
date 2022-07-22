@@ -53,7 +53,7 @@ enum EventType {
     CALENDAR = 9;
 }
 
-enum EmissionRate {
+enum Frequency {
     MINUTE = 0;
     DAILY = 1;
 }
@@ -67,15 +67,7 @@ message Signal {
 
 message ClockEvent {
     google.protobuf.Timestamp timestamp = 1;
-    google.protobuf.Timestamp real_ts = 4;
     EventType event = 2;
-    repeated Signal signals = 3;
-}
-
-
-enum Frequency {
-    MINUTE = 0;
-    DAILY = 1;
 }
 
 message SimulationClockParameters {

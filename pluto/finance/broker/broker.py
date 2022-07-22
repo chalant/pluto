@@ -4,11 +4,11 @@ import uuid
 
 
 class Broker(abc.ABC):
-    def clock_update(self, dt, evt, signals):
-        return self._update(dt, evt, signals)
+    def clock_update(self, dt, evt, calendar):
+        return self._update(dt, evt, calendar)
 
     @abc.abstractmethod
-    def _update(self, dt, evt, signals):
+    def _update(self, dt, evt, calendar):
         raise NotImplementedError
 
     @abc.abstractmethod

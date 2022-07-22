@@ -12,7 +12,7 @@ from zipline.finance.execution import (
 
 from pluto.setup import run_setup as rs
 from pluto.data.universes import universes
-from pluto.broker import broker_setup as bks
+from pluto.finance.broker import broker_setup as bks
 
 from gui.fields import fields
 from gui.fields import combobox

@@ -36,7 +36,7 @@ class Metric(abc.ABC):
         Keyword Arguments
         -----------------
         packet : dict
-        ledger : Account
+        ledger : Ledger
         dt : Timestamp
         trading_calendar : TradingCalendar
         data_portal : DataPortal
@@ -65,10 +65,10 @@ class SimpleLedgerField(Metric):
             self._packet_field = packet_field
 
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf'][self._packet_field] = self._get_ledger_field(kwargs.pop('ledger'))
+        kwargs['packet']['minute_perf'][self._packet_field] = self._get_ledger_field(kwargs['ledger'])
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf'][self._packet_field] = self._get_ledger_field(kwargs.pop('ledger'))
+        kwargs['packet']['daily_perf'][self._packet_field] = self._get_ledger_field(kwargs['ledger'])
 
 
 class DailyLedgerField(Metric):
@@ -83,13 +83,13 @@ class DailyLedgerField(Metric):
         field = self._packet_field
         packet = kwargs.pop('packet')
         packet['cumulative_perf'][field] = packet['minute_perf'][field] = \
-            (self._get_ledger_field(kwargs.pop('ledger')))
+            (self._get_ledger_field(kwargs['ledger']))
 
     def end_of_session(self, **kwargs):
         field = self._packet_field
         packet = kwargs['packet']
         packet['cumulative_perf'][field] = packet['daily_perf'][field] = \
-            (self._get_ledger_field(kwargs.pop('ledger')))
+            (self._get_ledger_field(kwargs['ledger']))
 
 
 class StartOfPeriodLedgerField(Metric):
@@ -101,10 +101,10 @@ class StartOfPeriodLedgerField(Metric):
             self._packet_field = packet_field
 
     def initialization(self, **kwargs):
-        self._start_of_simulation = self._get_ledger_field(kwargs.pop('ledger'))
+        self._start_of_simulation = self._get_ledger_field(kwargs['ledger'])
 
     def start_of_session(self, **kwargs):
-        self._previous_day = self._get_ledger_field(kwargs.pop('ledger'))
+        self._previous_day = self._get_ledger_field(kwargs['ledger'])
 
     def _end_of_period(self, sub_field, packet):
         packet_field = self._packet_field
@@ -112,10 +112,10 @@ class StartOfPeriodLedgerField(Metric):
         packet[sub_field][packet_field] = self._previous_day
 
     def end_of_bar(self, **kwargs):
-        self._end_of_period('minute_perf', kwargs.pop('packet'))
+        self._end_of_period('minute_perf', kwargs['packet'])
 
     def end_of_session(self, **kwargs):
-        self._end_of_period('daily_perf', kwargs.pop('packet'))
+        self._end_of_period('daily_perf', kwargs['packet'])
 
 
 class Returns(Metric):
@@ -126,10 +126,10 @@ class Returns(Metric):
         packet['cumulative_risk_metrics']['algorithm_period_return'] = portfolio_returns
 
     def end_of_bar(self, **kwargs):
-        return self._end_of_period('minute_perf', kwargs.pop('packet'), kwargs.pop('ledger'))
+        return self._end_of_period('minute_perf', kwargs['packet'], kwargs['ledger'])
 
     def end_of_session(self, **kwargs):
-        self._end_of_period('daily_perf', kwargs.pop('packet'), kwargs.pop('ledger'))
+        self._end_of_period('daily_perf', kwargs['packet'], kwargs['ledger'])
 
 
 class BenchmarkReturnsAndVolatility(Metric):
@@ -141,11 +141,10 @@ class BenchmarkReturnsAndVolatility(Metric):
 
     def end_of_bar(self, **kwargs):
         if kwargs.pop('emission_rate') == 'minute':
-            benchmark_source = kwargs.pop('benchmark_source')
+            benchmark_source = kwargs['benchmark_source']
             packet = kwargs.pop('packet')
 
             r = benchmark_source.minute_cumulative_returns
-
 
             if np.isnan(r):
                 r = None
@@ -157,7 +156,7 @@ class BenchmarkReturnsAndVolatility(Metric):
             packet['cumulative_risk_metrics']['benchmark_volatility'] = v
 
     def end_of_session(self, **kwargs):
-        packet = kwargs.pop('packet')
+        packet = kwargs['packet']
 
         benchmark_source = kwargs.pop('benchmark_source')
         r = benchmark_source.cumulative_returns
@@ -185,10 +184,10 @@ class PNL(Metric):
         packet['cumulative_perf']['pnl'] = ledger.portfolio.pnl
 
     def end_of_bar(self, **kwargs):
-        self._end_of_period('minute_perf', kwargs.pop('packet'), kwargs.pop('ledger'))
+        self._end_of_period('minute_perf', kwargs['packet'], kwargs['ledger'])
 
     def end_of_session(self, **kwargs):
-        self._end_of_period('daily_perf', kwargs.pop('packet'), kwargs.pop('ledger'))
+        self._end_of_period('daily_perf', kwargs['packet'], kwargs['ledger'])
 
 
 class CashFlow(Metric):
@@ -196,7 +195,7 @@ class CashFlow(Metric):
         self._previous_cash_flow = 0.0
 
     def end_of_bar(self, **kwargs):
-        cash_flow = kwargs.pop('ledger').portfolio.cash_flow
+        cash_flow = kwargs['ledger'].portfolio.cash_flow
         packet = kwargs.pop('packet')
         packet['minute_perf']['capital_used'] = (cash_flow - self._previous_cash_flow)
         packet['cumulative_perf']['capital_used'] = cash_flow
@@ -213,26 +212,26 @@ class CashFlow(Metric):
 
 class Orders(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf']['orders'] = kwargs.pop('ledger').orders(kwargs.pop('dt'))
+        kwargs.pop('packet')['minute_perf']['orders'] = kwargs['ledger'].orders(kwargs['dt'])
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf']['orders'] = kwargs.pop('ledger').orders()
+        kwargs.pop('packet')['daily_perf']['orders'] = kwargs['ledger'].orders()
 
 
 class Transactions(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf']['transactions'] = kwargs.pop('ledger').transactions(kwargs.pop('dt'))
+        kwargs.pop('packet')['minute_perf']['transactions'] = kwargs['ledger'].transactions(kwargs.pop('dt'))
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf']['transactions'] = kwargs.pop('ledger').transactions()
+        kwargs.pop('packet')['daily_perf']['transactions'] = kwargs['ledger'].transactions()
 
 
 class Positions(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf']['positions'] = kwargs.pop('ledger').positions(kwargs.pop('dt'))
+        kwargs.pop('packet')['minute_perf']['positions'] = kwargs['ledger'].positions(kwargs.pop('dt'))
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf']['positions'] = kwargs.pop('ledger').positions()
+        kwargs.pop('packet')['daily_perf']['positions'] = kwargs['ledger'].positions()
 
 
 class ReturnsStatistic(Metric):
@@ -256,7 +255,7 @@ class ReturnsStatistic(Metric):
         self._field_name = field_name
 
     def end_of_bar(self, **kwargs):
-        res = self._function(kwargs.pop('ledger').daily_returns)
+        res = self._function(kwargs['returns_tracker'].daily_returns)
 
         if not np.isfinite(res):
             res = None
@@ -274,7 +273,7 @@ class AlphaBeta(Metric):
     def end_of_bar(self, **kwargs):
         risk = kwargs.pop('packet')['cumulative_risk_metrics']
 
-        ledger_returns = kwargs.pop('ledger').daily_returns
+        ledger_returns = kwargs['returns_tracker'].daily_returns
         benchmark_returns = kwargs.pop('benchmark_source').daily_returns()
 
         alpha, beta = ep.alpha_beta_aligned(

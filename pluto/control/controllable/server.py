@@ -23,6 +23,7 @@ from pluto.control.controllable import commands
 from pluto.control.controllable import state_storage as st
 from pluto.control.controllable.utils import factory
 from pluto.control.controllable import performance_logging as pl
+from pluto.control.controllable import running_behavior
 
 from pluto.server import server, service
 
@@ -37,6 +38,7 @@ from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
 from protos import interface_pb2_grpc as itf_rpc
 from protos import interface_pb2 as itf
+from protos import clock_pb2
 
 from protos.clock_pb2 import (BAR, TRADE_END)
 
@@ -58,14 +60,16 @@ class MinuteFilter(FrequencyFilter):
 
 
 class _ServiceState(abc.ABC):
-    __slots__ = ['_service', '_controllable']
+    __slots__ = ['_service']
 
-    def __init__(self, svc, controllable):
+    def __init__(self, svc):
         self._service = svc
-        self._controllable = controllable
 
     def execute(self, command):
-        self._execute(self._service, command, self._controllable)
+        self._execute(
+            self._service,
+            command,
+            self._service.controllable)
 
     @abc.abstractmethod
     def _execute(self, svc, command, controllable):
@@ -86,6 +90,7 @@ class _Recovering(_ServiceState):
             # set controllable run state to ready
             controllable.run_state = controllable.ready
             # execute command
+            controllable.not_running = 0
             command()
 
 
@@ -99,7 +104,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
                  directory,
                  monitor,
                  controllable_factory,
-                 mode):
+                 mode,
+                 rb):
         """
 
         Parameters
@@ -107,6 +113,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
         directory: directory.utils.DirectoryInterface
         monitor
         controllable_factory
+        mode:
+        rb:
         """
 
         self._directory = directory
@@ -125,8 +133,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         self._recover = False
 
-        self._ready = _Ready(self, cbl)
-        self._recovery = recovery = _Recovering(self, cbl)
+        self._ready = _Ready(self)
+        self._recovery = recovery = _Recovering(self)
         self._state = recovery
 
         self._strategy_path = None
@@ -147,6 +155,13 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._strategy_setup = None
 
         self._mode = mode
+        self._running_behavior = rb
+
+        rb.set_state(self._state)
+
+    @property
+    def controllable(self):
+        return self._controllable
 
     @property
     def log_performance(self):
@@ -197,16 +212,17 @@ class ControllableService(cbl_rpc.ControllableServicer):
     @service_access.framework
     def Initialize(self, request, context):
         # todo: add broker setup for the algorithm class
-
         id_ = request.strategy_id  # the id of the controllable => will be used in performance updates
 
+        # this object will be populated by the script...
         self._strategy_setup = strategy_setup = stg_stp.StrategySetup(id_)
 
         mode = self._mode
 
-        controllable = self._cbl_fty.get_controllable(factory.ControllableParams(
-            mode,
-            id_))
+        controllable = self._cbl_fty.get_controllable(
+            factory.ControllableParams(
+                mode,
+                id_))
 
         if controllable:
             self._controllable = controllable
@@ -275,13 +291,11 @@ class ControllableService(cbl_rpc.ControllableServicer):
             self._perf_writer = pl.PerformanceWriter(
                 perf_path,
                 self._thread_pool,
-                id_
-            )
+                id_)
         else:
             self._perf_writer = pl.NullPerformanceWriter(
                 self._monitor,
-                id_
-            )
+                id_)
 
         if request.clear_perf:
             # clear file if we're in simulation mode
@@ -292,6 +306,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         if controllable:
             controllable.run(
+                self._cbl_fty.create_broker(id_),
                 id_,
                 self._directory,
                 self._strategy_setup,
@@ -303,29 +318,14 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 conversions.to_datetime(request.end))
 
             # run the thread
-            self._state = self._ready
+            self._running_behavior.set_state(self._ready)
 
-            self._thread = thread = threading.Thread(target=self._run)
-            thread.start()
+            self._running_behavior.run()
         else:
             context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
             context.set_details("Strategy was not initialized".format(mode))
 
         return emp.Empty()
-
-    @service_access.framework
-    def Join(self, request, context):
-        # blocks until thread finishes
-        if self._thread:
-            self._thread.join()
-
-    def _run(self):
-        q = self._queue
-        while not self._stop:
-            try:
-                self._state.execute(q.get())
-            except commands.StopExecution:
-                break
 
     def _load_state(self, session_id, state_path):
         with open(state_path, 'rb') as f:
@@ -379,6 +379,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 commands.AccountUpdate(
                     controllable,
                     evt)()
+
             elif evt_type == 'stop':
                 for request in evt.requests:
                     if request.session_id == session_id:
@@ -391,8 +392,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
         controllable.run_state = controllable.transitioning
 
         # create and start a thread to execute queued events
-        self._thread = thread = threading.Thread(target=self._run)
-        thread.start()
+        self._running_behavior.run()
 
         # todo: store the last update request and compare it to the current
         # request, if it is identical, ignore it. (This might happen if the
@@ -403,12 +403,16 @@ class ControllableService(cbl_rpc.ControllableServicer):
         # todo needs to liquidate positions and wipe the state.
         # multiple steps to execute: place orders, wait for all of them
         # to be executed, update performances, then return
-        self._stop = True
+        self._running_behavior.execute(
+            commands.Stop(
+                self._controllable,
+                request))
+
         return emp.Empty()
 
     @service_access.framework
     def UpdateParameters(self, request, context):
-        self._queue.put(
+        self._running_behavior.execute(
             commands.CapitalUpdate(
                 self._controllable,
                 request
@@ -418,7 +422,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     @service_access.framework
     def UpdateAccount(self, request_iterator, context):
-        self._queue.put(
+        self._running_behavior.execute(
             commands.AccountUpdate(
                 self._controllable,
                 self._load_broker_state(
@@ -429,29 +433,47 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
     def _load_broker_state(self, request_iterator):
         b = b''
+
         for chunk in request_iterator:
             b += chunk.data
+
         brk_state = broker_pb2.BrokerState()
         brk_state.ParseFromString(b)
+
         return brk_state
 
     @service_access.framework
     def ClockUpdate(self, request, context):
-        '''Note: an update call might arrive while the step is executing..., so
+        """
+        Note: an update call might arrive while the step is executing..., so
         we must queue the update message... => the step must be a thread that pulls data
         from the queue...
-        '''
 
-        self._queue.put(
-            commands.ClockUpdate(
-                self._perf_writer,
-                self._controllable,
-                self._frequency_filter,
-                request,
-                self._state_storage
+        """
+
+        controllable = self._controllable
+
+        if not controllable.ended:
+            self._running_behavior.execute(
+                commands.ClockUpdate(
+                    self._perf_writer,
+                    controllable,
+                    self._frequency_filter,
+                    request,
+                    self._state_storage)
             )
+        else:
+            controllable.broker.PlaceOrders(
+                broker_pb2.OrderBatch(
+                    ts=request.timestamp,
+                    ended=False).SerializeToString(), ())
+        # else:
+        #     broker = controllable.broker
+        #     broker.PlaceOrder(broker)
+
+        return controllable_pb2.ClockUpdateResponse(
+            not_running=controllable.not_running
         )
-        return emp.Empty()
 
     # @service_access.framework_only
     def Watch(self, request, context):
@@ -521,6 +543,8 @@ def start(
     # or write to a log file. If the strategy crashes internally, there might be some bug that
     # need reviewing
 
+    # todo: check if mode is supported!
+
     # set the framework_id if ran as a process
     service_access._framework_id = framework_id
     channel = grpc.insecure_channel(framework_url)
@@ -528,7 +552,10 @@ def start(
     controllable_service = ControllableService(
         du.DirectoryInterface(drs.create_directory(root_dir)),
         itf_rpc.MonitorStub(channel),
-        factory.RemoteControllableFactory(channel))
+        factory.RemoteControllableFactory(channel),
+        mode,
+        running_behavior.NonBlocking()
+    )
 
     controllable_service.store_state = store_state
     controllable_service.recover = recovery

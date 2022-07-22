@@ -42,13 +42,13 @@ class Order(object):
     # using __slots__ to save on memory usage.  Simulations can create many
     # Order objects and we keep them all in memory, so it's worthwhile trying
     # to cut down on the memory footprint of this object.
-    __slots__ = ["id", "dt", "reason", "created", "asset", "amount", "filled",
+    __slots__ = ["session_id", "id", "dt", "reason", "created", "asset", "amount", "filled",
                  "commission", "_status", "stop", "limit", "stop_reached",
                  "limit_reached", "direction", "type", "broker_order_id"]
 
     @expect_types(asset=Asset)
-    def __init__(self, dt, asset, amount, stop=None, limit=None, filled=0,
-                 commission=0, id=None):
+    def __init__(self, session_id, dt, asset, amount, stop=None, limit=None, filled=0,
+                 commission=0, id_=None):
         """
         @dt - datetime.datetime that the order was placed
         @asset - asset for the order.
@@ -59,8 +59,9 @@ class Order(object):
         """
 
         # get a string representation of the uuid.
-        self.id = self.make_id() if id is None else id
+        self.id = self.make_id() + session_id if id_ is None else id_
         self.dt = dt
+        self.session_id = session_id
         self.reason = None
         self.created = dt
         self.asset = asset
@@ -256,3 +257,9 @@ class Order(object):
         Unicode representation for this object.
         """
         return text_type(repr(self))
+
+    def __hash__(self):
+        return int(self.id, 16)
+
+    def __eq__(self, other):
+        return other.id == self.id

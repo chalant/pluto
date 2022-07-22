@@ -37,8 +37,14 @@ class AlgorithmSimulator(object):
         'daily': 'daily_perf'
     }
 
-    def __init__(self, algo, sim_params, data_portal, clock, benchmark_source,
-                 restrictions, universe_func):
+    def __init__(self,
+                 algo,
+                 sim_params,
+                 data_portal,
+                 clock,
+                 benchmark_source,
+                 restrictions,
+                 universe_func):
 
         # ==============
         # Simulation

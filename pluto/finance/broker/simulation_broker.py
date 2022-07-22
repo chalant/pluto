@@ -1,14 +1,24 @@
 from pluto.finance.broker import broker
 from pluto.finance.blotter import simulation_blotter
 
+# todo: should we classify blotters by calendar/clock?
+
 
 class SimulationBroker(broker.Broker):
     def __init__(self, engine_setup, cancel_policy=None):
         super(SimulationBroker, self).__init__()
 
+        self._blotters = {}
+
         self._blotter = simulation_blotter.SimulationBlotter(
             engine_setup,
             cancel_policy
+        )
+
+    def add_blotter(self, calendar):
+        self._blotters[calendar] = simulation_blotter.SimulationBlotter(
+            self._engine_setup,
+            self._cancel_policy
         )
 
     def session_start(self, dt):
@@ -20,8 +30,13 @@ class SimulationBroker(broker.Broker):
     def session_end(self):
         pass
 
-    def _update(self, dt, evt, signals):
-        self._blotter.process_splits()
+    def _update(self, dt, evt, calendar):
+        blotter = self._blotters[calendar]
+
+        if evt == SESSION_START:
+            blotter.process_splits()
+        elif evt == BAR:
+            pass
 
     def order(self, session_id, order):
         return

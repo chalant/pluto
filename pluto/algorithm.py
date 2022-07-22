@@ -11,6 +11,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
+import pluto.control.controllable.controllable
+
 from zipline import algorithm
 from zipline.utils import events
 from zipline.utils import cache
@@ -58,21 +60,23 @@ AttachedPipeline = namedtuple('AttachedPipeline', 'pipe chunks eager')
 # TODO: we need to store the algorithm state as-well=> store its dictionary variable etc.
 class TradingAlgorithm(algorithm.TradingAlgorithm):
     def __init__(self,
-                 controllable,
-                 universe,
+                 controllable: pluto.control.controllable.controllable.Controllable,
                  sim_params,
                  blotter,
                  metrics_tracker,
                  pipeline_loader,
+                 pipeline_domain,
                  initialize,
                  handle_data,
                  before_trading_start,
                  analyze=None):
 
         self._controllable = controllable
+        self._session_id = controllable.session_id
+
         self.engine = None
 
-        self._universe = universe
+        self._trading_calendar = None
 
         self._metrics_tracker = metrics_tracker
         # List of trading controls to be used to validate orders.
@@ -89,6 +93,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         self.sim_params = sim_params
         self._last_sync_time = pd.NaT
 
+        self._domain = pipeline_domain
         self.init_engine(pipeline_loader)
         self._pipelines = {}
 
@@ -134,6 +139,9 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         self._controllable.sync_last_sale_prices()
         return self._metrics_tracker.portfolio
 
+    def set_trading_calendar(self, calendar):
+        self._trading_calendar = calendar
+
     def initialize(self, *args, **kwargs):
         self._initialize(self, *args, **kwargs)
 
@@ -149,6 +157,9 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
     def get_generator(self):
         return
 
+    def set_pipeline_domain(self, domain):
+        self._domain = domain
+
     def init_engine(self, pipeline_loader):
         """
         Construct and store a PipelineEngine from loader.
@@ -162,7 +173,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             self.engine = SimplePipelineEngine(
                 loader,
                 self._controllable,
-                self._universe.domain
+                self._domain
             )
         else:
             self.engine = ExplodingPipelineEngine()
@@ -244,10 +255,8 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                      # If we are in daily mode the time_rule is ignored.
                      events.time_rules.every_minute())
 
-        cal = self._universe.trading_calendar
-
         self.add_event(
-            events.make_eventrule(date_rule, time_rule, cal, half_days),
+            events.make_eventrule(date_rule, time_rule, self._trading_calendar, half_days),
             func)
 
     def get_history_window(self, bar_count, frequency, assets, field, ffill):
@@ -448,7 +457,11 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         # check if we can trade the amount this should raise an error
         # if we can't trade that amount.
 
-        return self.blotter.order(asset, amount, style)
+        return self.blotter.order(
+            asset,
+            amount,
+            style,
+            self._session_id)
 
     # @api_method
     # @disallowed_in_before_trading_start(OrderInBeforeTradingStart())

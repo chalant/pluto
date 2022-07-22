@@ -2,10 +2,14 @@ from collections import defaultdict
 from logbook import Logger
 from copy import copy
 
-from zipline.finance.order import Order
 from zipline.assets import Asset
 from zipline.finance.blotter import blotter
+from zipline.finance.cancel_policy import NeverCancel
+from zipline.finance.order import Order
 from zipline.utils.input_validation import expect_types
+
+from pluto.finance.blotter.controller_blotter import OrderTransactions
+
 
 log = Logger('Blotter')
 warning_logger = Logger('AlgoWarning')
@@ -29,7 +33,7 @@ class SimulationBlotter(blotter.Blotter):
         self.engine_setup = engine_setup
 
         self.current_dt = None
-        self.cancel_policy = None
+        self.cancel_policy = cancel_policy if cancel_policy else NeverCancel()
 
     def __repr__(self):
         return """
@@ -52,7 +56,7 @@ class SimulationBlotter(blotter.Blotter):
         return self._open_orders
 
     @expect_types(asset=Asset)
-    def order(self, asset, amount, style, order_id=None):
+    def order(self, asset, amount, style, session_id, order_id=None):
         """Place an order.
 
         Parameters
@@ -65,6 +69,7 @@ class SimulationBlotter(blotter.Blotter):
             this is the number of shares to sell or short.
         style : zipline.finance.execution.ExecutionStyle
             The execution style for the order.
+        session_id : str
         order_id : str, optional
             The unique identifier for this order.
 
@@ -99,12 +104,13 @@ class SimulationBlotter(blotter.Blotter):
 
         is_buy = (amount > 0)
         order = Order(
+            session_id=session_id,
             dt=self.current_dt,
             asset=asset,
             amount=amount,
             stop=style.get_stop_price(is_buy),
             limit=style.get_limit_price(is_buy),
-            id=order_id
+            id_=order_id
         )
 
         self._open_orders[order.asset].append(order)
@@ -126,6 +132,7 @@ class SimulationBlotter(blotter.Blotter):
 
             if cur_order in self.new_orders:
                 self.new_orders.remove(cur_order)
+
             cur_order.cancel()
             cur_order.dt = self.current_dt
 
@@ -331,6 +338,82 @@ class SimulationBlotter(blotter.Blotter):
 
         return transactions, commissions, closed_orders
 
+    def transactions_per_order(self, bar_data):
+        """
+        Creates a list of transactions based on the current open orders,
+        slippage model, and commission model.
+
+        Parameters
+        ----------
+        bar_data: zipline._protocol.BarData
+
+        Notes
+        -----
+        This method book-keeps the blotter's open_orders dictionary, so that
+         it is accurate by the time we're done processing open orders.
+
+        Returns
+        -------
+        transactions_list: List
+            transactions_list: list of transactions resulting from the current
+            open orders.  If there were no open orders, an empty list is
+            returned.
+
+        commissions_list: List
+            commissions_list: list of commissions resulting from filling the
+            open orders.  A commission is an object with "asset" and "cost"
+            parameters.
+
+        closed_orders: List
+            closed_orders: list of all the orders that have filled.
+        """
+
+        transactions = []
+        closed_orders = []
+
+        engine_setup = self.engine_setup
+
+        if self._open_orders:
+            for asset, asset_orders in self._open_orders.items():
+
+                slippage_model = engine_setup.get_slippage_model(asset)
+
+                for order, txn in slippage_model.simulate(
+                        bar_data,
+                        asset,
+                        asset_orders):
+
+                    # order_transactions = OrderTransactions(order)
+
+                    commission_model = engine_setup.get_commission_model(asset)
+
+                    additional_commission = commission_model.calculate(order, txn)
+
+                    # if additional_commission > 0:
+                    #     order_transactions.commissions.append(
+                    #         {
+                    #             "asset": order.asset,
+                    #             "order": order.to_dict(),
+                    #             "cost": additional_commission
+                    #         }
+                    #     )
+
+                    order.filled += txn.amount
+                    order.commission += additional_commission
+
+                    order.dt = txn.dt
+
+                    # order_transactions.transactions.append(
+                    #     {'order': order, 'transaction': txn, 'commission': additional_commission}
+                    # )
+
+                    if not order.open:
+                        closed_orders.append(order)
+
+                    transactions.append({'order': order, 'transaction': txn, 'commission': additional_commission})
+
+        return transactions, closed_orders
+
     def prune_orders(self, closed_orders):
         """
         Removes all given orders from the blotter's open_orders list.
@@ -343,14 +426,27 @@ class SimulationBlotter(blotter.Blotter):
         -------
         None
         """
+
         # remove all closed orders from our open_orders dict
         for order in closed_orders:
             asset = order.asset
             asset_orders = self._open_orders[asset]
+
             try:
                 asset_orders.remove(order)
             except ValueError:
                 continue
+
+            # if order in asset_orders:
+            #     print("Removing!", order)
+            #     asset_orders.remove(order)
+
+            # self._open_orders[asset] = asset_orders
+
+            # s2 = set(asset_orders)
+
+            # print("After!", [order.id for order in asset_orders])
+            # print("Difference", s1.difference(s2))
 
         # now clear out the assets from our open_orders dict that have
         # zero open orders

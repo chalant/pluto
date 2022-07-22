@@ -17,6 +17,7 @@ from pluto.control.loop import simulation_loop
 
 from pluto.control.processes import processes
 from pluto.control.processes import in_memory
+from pluto.control.controller import controller
 
 from pluto.coms.utils import conversions
 
@@ -123,16 +124,13 @@ class TestWatcher(monitor.AbstractWatcher):
 
 
 class StrategyTester(object):
-    def __init__(self, process, universe, name):
+    def __init__(self, process, universe, name, process_manager):
         self._process = process
         self._universe = universe
         self._name = name
+        self._process_manager = process_manager
 
-    def run(self, stp, expected_perf):
-        loop = simulation_loop.SimulationLoop(
-            stp.start,
-            stp.end,
-            stp.data_frequency)
+    def run(self, loop, expected_perf):
 
         def on_error(message):
             raise AssertionError(message)
@@ -145,13 +143,10 @@ class StrategyTester(object):
 
         self._process.watch(watcher)
 
-        # subscribe to clock events
-        events.subscribe('clock.update', self._process.clock_update)
+        # # subscribe to clock events
+        # events.subscribe('clock.update', self._process.clock_update)
 
-        # make a watch request
-        # self._process.watch()
-
-        loop.start(self._universe.exchanges)
+        loop.start(controller.Controller(self._process_manager))
 
 
 class TestClient(object):
@@ -177,10 +172,5 @@ class TestClient(object):
 
         # todo: if initial requirements aren't met, raise an error...
 
-        uni = universes.get_universe(
-            stp.trading_universe,
-            self._directory)
-
         stp.fractional = init_response.fractional
-
-        return StrategyTester(pi.start(stp), uni, name)
+        return pi.start(stp)

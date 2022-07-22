@@ -9,8 +9,7 @@ class _Server(object):
     def __init__(self, service):
         self._event = threading.Event()
         self._server = server = grpc.server(
-            futures.ThreadPoolExecutor(),
-            interceptors=service.get_interceptors())
+            futures.ThreadPoolExecutor())
         self._service = service
         service.set_server(server)
 
@@ -32,6 +31,11 @@ class _Server(object):
         event.wait()
         service.stop()
         server.stop(0)
+
+    def add_service(self, service):
+        service.set_server(
+            self._server
+        )
 
     def stop(self):
         self._event.set()

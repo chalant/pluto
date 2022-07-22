@@ -6,24 +6,35 @@ import "google/protobuf/timestamp.proto";
 import "protos/protocol.proto";
 import "protos/assets.proto";
 import "protos/finance.proto";
-import "protos/clock.proto";
+import "protos/data.proto";
 
 service Broker {
     /*This is an interface that provides brokerage access to clients. It encapsulates
     methods for accessing performing trades. Each caller passes its credentials as metadata*/
-    rpc PlaceOrders (stream Order) returns (stream Order);
+    rpc PlaceOrders (stream Chunk) returns (google.protobuf.Empty);
+    rpc Stopped(google.protobuf.Empty) returns (google.protobuf.Empty);
     rpc CancelOrder (CancelRequest) returns (google.protobuf.Empty);
-    rpc CancelAllOrdersForAsset (Asset) returns (WarningMessage);
-    rpc ExecuteCancelPolicy (CancelEvent) returns (WarningMessage);
+    rpc CancelAllOrdersForAsset (Asset) returns (google.protobuf.Empty);
+//    rpc ExecuteCancelPolicy (CancelEvent) returns (google.protobuf.Empty);
 }
 
 
 message BrokerState {
-    repeated Transaction transactions = 1;
-    repeated Commission commissions = 2;
-    Account account = 3;
-    google.protobuf.Timestamp timestamp = 4;
-    google.protobuf.Timestamp real_ts = 5;
+    repeated TransactionCommission transactions = 1;
+    Account account = 2;
+    google.protobuf.Timestamp timestamp = 3;
+    uint32 not_running = 4;
+}
+
+message TransactionCommission {
+    Transaction transaction = 1;
+    float commission = 2;
+}
+
+message OrderBatch {
+    google.protobuf.Timestamp ts = 1;
+    repeated Order orders = 2;
+    bool ended = 3;
 }
 
 message Commission {
@@ -51,6 +62,6 @@ message CancelRequest {
     string order_id = 1;
 }
 
-message CancelEvent {
-    EventType event_type = 1;
-}
+//message CancelEvent {
+//    EventType event_type = 1;
+//}

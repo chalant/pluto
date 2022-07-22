@@ -24,8 +24,6 @@ class SimulationLoop(object):
         self._frequency = frequency
 
         self._clocks = clocks = {}
-        # create fake clock
-        clocks['fake'] = clock.FakeClock()
 
         self._calendar = cu.get_calendar_in_range(
             '24/7',
@@ -43,17 +41,19 @@ class SimulationLoop(object):
         self._execution_lock = threading.Lock()
         self._to_execute = collections.deque()
 
+        self._processes = []
+
     @property
     def start_dt(self):
         return self._start_dt
 
-    def start(self, calendar_name):
+    def start(self, process):
 
         # self._add_clock(calendar_name)
 
         calendar = self._calendar
 
-        for ts, evt in get_generator(
+        for ts, global_event in get_generator(
                 calendar,
                 calendar.all_sessions,
                 frequency=self._frequency):
@@ -68,6 +68,22 @@ class SimulationLoop(object):
                 # aggregate the signals into a single signal.
 
                 signals = []
+
+                for cl in self._clocks.values():
+                    res = cl.update(ts)
+
+                    if res:
+                        cts, evt = res
+
+                        signals.append((cts, evt, cl.calendar_name))
+
+                        # events.post_event(
+                        #     'clock.controller_update',
+                        #     {'ts': cts, 'evt': evt, 'calendar': cl.calendar_name}
+                        # )
+
+
+
                 #
                 # for cl in self._clocks.values():
                 #     # todo: how do we know the clock has ended?
@@ -89,24 +105,15 @@ class SimulationLoop(object):
                 # # continue execution
                 # signal_handler.clock_update(ts, evt, signals)
 
-                events.post_event(
-                    "clock.update",
-                    {'ts': ts, 'event': evt, 'signals': signals})
-
-                # for control_mode in self._control_modes.values():
-                #     control_mode.update(ts, evt, signals)
-                #     # process cached commands
-                #     control_mode.process(ts)
-                #     # continue execution
-                #     control_mode.clock_update(ts, evt, signals)
+                process.clock_update(ts, global_event, signals)
 
     def execute(self, command):
         with self._execution_lock:
             command(self._get_clocks)
 
-    def _add_clock(self, exchanges):
-        with self._execution_lock:
-            self._get_clocks(exchanges)
+    def add_clock(self, calendar_name):
+        self._clocks[calendar_name] = self._create_clock(
+            calendar_name)
 
     def stop(self):
         pass
@@ -128,7 +135,3 @@ class SimulationLoop(object):
                 # the clock will be activated on the next loop iteration
                 cl = self._create_clock(name)
                 clocks[name] = cl
-        try:
-            clocks.pop('fake')
-        except KeyError:
-            pass

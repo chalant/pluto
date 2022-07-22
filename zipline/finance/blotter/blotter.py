@@ -29,7 +29,7 @@ class Blotter(with_metaclass(ABCMeta)):
         self.current_dt = dt
 
     @abstractmethod
-    def order(self, asset, amount, style, order_id=None):
+    def order(self, asset, amount, style, session_id, order_id=None):
         """Place an order.
 
         Parameters

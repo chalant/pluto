@@ -12,12 +12,14 @@ from google.protobuf import empty_pb2 as emp
 from dev import events
 
 from pluto.coms.utils import conversions
+from pluto.utils import stream
 
 from pluto.interface.utils import paths
 from pluto.interface.utils.service_access import _framework_id
 
 from protos import controllable_pb2 as cbl
 from protos import clock_pb2
+from protos.data_pb2 import Chunk
 
 
 class ProcessFactory(abc.ABC):
@@ -43,7 +45,7 @@ class ProcessFactory(abc.ABC):
 # todo: recovery must not block
 
 class Process(object):
-    __slots__ = ['_process_id', '_controllable']
+    __slots__ = ['_process_id', '_controllable', '_data_frequency']
 
     def __init__(self, process_id, controllable):
         self._process_id = process_id
@@ -56,23 +58,25 @@ class Process(object):
             pass
 
     @property
+    def data_frequency(self):
+        return self._data_frequency
+
+    @property
     def process_id(self):
         return self._process_id
 
     def parameter_update(self, params):
         return self._controllable.ParameterUpdate(params, ())
 
-    def clock_update(self, clock_event):
+    def clock_update(self, ts, evt):
         return self._controllable.ClockUpdate(
             clock_pb2.ClockEvent(
-                timestamp=conversions.to_proto_timestamp(clock_event['ts']),
-                real_ts=conversions.to_proto_timestamp(Timestamp.utcnow()),
-                event=clock_event['event'],
-                signals=clock_event['signals']), ())
+                timestamp=conversions.to_proto_timestamp(ts),
+                event=evt), ())
 
     def account_update(self, broker_state):
         return self._controllable.UpdateAccount(
-            broker_state, ())
+            stream.chunk_bytes((broker_state.SerializeToString())), ())
 
     def stop(self):
         # upon receiving the stop message, the controllable will
@@ -112,6 +116,7 @@ class ProcessInitializer(object):
 
         self._controllable = controllable
         self._strategy_id = None
+        self._stg_setup = None
 
     def initialize(self, setup, strategy_id):
         # send parameters to the controllable as a stream of bytes
@@ -180,7 +185,9 @@ class ProcessInitializer(object):
                 clear_perf=setup.clear_perf),
             ())
 
-        return Process(process_id, self._controllable)
+        return Process(
+            process_id,
+            self._controllable)
 
     # def recover(self):
     #     self._controllable = self._create_controllable(

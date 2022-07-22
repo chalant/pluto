@@ -74,14 +74,15 @@ class Controller(object):
         self._end_dt = end_dt
 
     def run(self, mode_type, directory, params):
-        '''
+        """
 
         Parameters
         ----------
+        mode_type:
         directory: pluto.interface.directory._Read
         params: protos.controller_pb2.RunParams
 
-        '''
+        """
         loop = self._loop
         # start is the same in both loop and controllable
         start = loop.start_dt

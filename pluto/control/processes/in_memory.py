@@ -53,8 +53,7 @@ class BrokerStub(broker_stub.BrokerStub):
 
     def _place_orders(self, request_iterator, metadata):
         return self._servicer.PlaceOrders(
-            request_iterator,
-            FakeContext(metadata))
+            request_iterator, FakeContext(metadata))
 
     def _cancel_all_orders_for_asset(self, request, metadata):
         return self._servicer.CancelAllOrdersForAsset(
@@ -66,27 +65,32 @@ class BrokerStub(broker_stub.BrokerStub):
             request,
             FakeContext(metadata))
 
+    def _stopped(self, request, metadata):
+        return self._servicer.Stopped(
+            request,
+            FakeContext(metadata))
+
 
 class InMemoryControllableFactory(factory.ControllableFactory):
-    def __init__(self, broker_service=None):
-        self._broker_service = broker_service
+    def __init__(self, broker):
+        self._broker = broker
+
+    def _create_broker(self, session_id):
+        return BrokerStub(self._broker, session_id)
 
     def _create_controllable(self, params):
         if params.mode == 'backtesting':
             return simulation_controllable.SimulationControllable()
         elif params.mode == 'live':
-            # todo: this is temporary and ugly!
-            if not self._broker_service:
-                raise ValueError("Broker service not set for live mode")
-
-            return live_controllable.LiveControllable(
-                BrokerStub(self._broker_service, params.session_id))
+            return live_controllable.LiveControllable()
+        else:
+            raise ValueError('Mode: {} not supported'.format(params.mode))
 
 # todo: perform handle some stuff this side... like updating broker etc.
 
 
 class InMemoryControllableStub(stub.ControllableStub):
-    def __init__(self, directory, mode):
+    def __init__(self, directory, mode, broker, running_behavior):
         # creator monitor service
         mon = monitor.Monitor()
 
@@ -95,8 +99,9 @@ class InMemoryControllableStub(stub.ControllableStub):
         self._servicer = server.ControllableService(
             directory,
             InMemoryMonitorStub(mon),
-            InMemoryControllableFactory(),
-            mode)
+            InMemoryControllableFactory(broker),
+            mode,
+            running_behavior)
 
     def _run(self, request, metadata):
         return self._servicer.Run(request, FakeContext(metadata))
@@ -135,9 +140,6 @@ class InMemoryControllableStub(stub.ControllableStub):
         return self._servicer.StopWatching(
             request,
             FakeContext(metadata))
-
-    def _join(self, request, metadata):
-        return self._servicer.Join(request, FakeContext(metadata))
 
 
 class InMemoryMonitorStub(object):
