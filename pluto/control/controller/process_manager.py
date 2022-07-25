@@ -141,6 +141,9 @@ class ProcessManager(brk_rpc.BrokerServicer):
         #     blotter.
         pass
 
+    def set_asset_finder(self, asset_finder):
+        self._asset_finder = asset_finder
+
     def set_global_timestamp(self, ts):
         self._global_ts = ts
 

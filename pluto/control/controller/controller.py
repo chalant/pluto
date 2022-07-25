@@ -173,9 +173,7 @@ class Controller(object):
 
         # todo: put some additional logic for leverage control, portfolio
         #  optimization here...
-
         controllable_manager.place_orders(new_orders)
-
         # clear all variables
         controllable_manager.clear()
 

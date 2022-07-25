@@ -42,11 +42,6 @@ class AbstractUniverse(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def domain(self):
-        raise NotImplementedError(self.domain.__name__)
-
-    @property
-    @abc.abstractmethod
     def trading_calendar(self):
         raise NotImplementedError(self.calendar.__name__)
 
@@ -193,10 +188,6 @@ class TestUniverse(AbstractUniverse):
         return 'AMEX', 'NYSE', 'NASDAQ'
 
     @property
-    def domain(self):
-        return self._domain
-
-    @property
     def calendar_name(self):
         return 'XNYS'
 
@@ -298,7 +289,7 @@ def get_universe(name, root_dir, cache=True, environ=None) -> AbstractUniverse:
     Parameters
     ----------
     name: str
-    root_dir: directory.directory.Directory
+    root_dir: directory.utils.DirectoryInterface
     cache:
 
     Returns

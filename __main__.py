@@ -62,16 +62,10 @@ def dev():
     # todo: need to walk down the directory tree to get already existing
     #  files.
 
-    root_dir = utils.DirectoryInterface(ds.create_directory(
-        path.expanduser('~/.pluto')))
-
     app = QtWidgets.QApplication(sys.argv)
 
-    bk = backtesting.BackTesting(
-        root_dir,
-        in_memory.InMemoryControllableStub(
-            root_dir,
-            'backtesting'))
+    bk = backtesting.BackTesting(utils.DirectoryInterface(ds.create_directory(
+        path.expanduser('~/.pluto'))))
 
     bk.show()
 

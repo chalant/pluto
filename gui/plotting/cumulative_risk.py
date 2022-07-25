@@ -26,6 +26,7 @@ class MaxLeverage(plotter.AbstractPlotter):
         ts.addSeries(ml)
 
         self.setChart(ts)
+        self.show()
 
     def performance_update(
             self,
