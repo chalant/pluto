@@ -15,6 +15,7 @@ from pluto.control.controller import controller
 from pluto.control.controller import process_manager
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.finance.blotter import simulation_blotter
+from pluto.finance import ledger
 
 from pluto.strategies import strategies
 from pluto.strategies import schema
@@ -29,13 +30,20 @@ events.add_event('backtesting.ended')
 
 
 class BackTester(object):
-    def __init__(self, controllable, directory):
+    def __init__(
+            self,
+            controllable,
+            directory,
+            process_manager_):
+
         # note end date is always the most recent data point
 
         self._stg_stp = None
         self._process = None
         self._controllable = controllable
         self._directory = directory
+
+        self._process_manager = process_manager_
 
     def _setup(self, setup, controllable):
         pi = processes.ProcessInitializer(controllable)
@@ -63,51 +71,22 @@ class BackTester(object):
     def run(self, stp, strategy, loader, watcher):
         # get calendar of the universe
 
-        pi = processes.ProcessInitializer(self._controllable)
-        init_response = pi.initialize(stp, strategy.strategy_name)
-
-        loader.load_strategy()
-
-        # todo: if initial requirements aren't met, raise an error...
-
-        stp.fractional = init_response.fractional
-
-        uni = universes.get_universe(
-            stp.trading_universe,
-            self._directory)
-
-        process = pi.start(stp)
-
-        loop = simulation_loop.SimulationLoop(
-            stp.start,
-            stp.end,
-            stp.data_frequency)
-
-        # subscribe process to clock events
-        # events.subscribe('clock.update', process.clock_update)
-
-        # subscribe to monitor events
-        process.watch(watcher)
-
-        events.post_event('backtesting.started', None)
-
-        # run loop on these specific exchanges
-        loop.start(process)
+        # events.post_event('backtesting.started', None)Z
+        self._run(stp, watcher, strategy)
 
     def _run(self, stp, watcher, strategy):
-        pi = processes.ProcessInitializer(self._controllable)
-        stg_stp = pi.initialize(stp, strategy.strategy_name)
-
         uni = universes.get_universe(
             stp.trading_universe,
             self._directory)
 
-        process = pi.start(stp)
+        controllable = in_memory.InMemoryControllableStub(
+            self._directory,
+            'backtesting',
+            pm,
+            running_behavior.Blocking())
 
-        # todo: process manager should be an abstraction
-        pm = process_manager.ProcessManager()
-
-        pm.add_process(process)
+        pi = processes.ProcessInitializer(controllable)
+        stg_stp = pi.initialize(stp, strategy.strategy_name)
 
         restrictions = asset_restrictions.NoRestrictions()
 
@@ -128,7 +107,10 @@ class BackTester(object):
 
         for bc in uni.base_calendars:
             # todo: create bar data using setup and add it...
-            calendar = cu.get_calendar_in_range(bc)
+            calendar = cu.get_calendar_in_range(
+                bc,
+                stp.start,
+                stp.end)
 
             last_session = calendar.last_session
 
@@ -159,8 +141,9 @@ class BackTester(object):
 
             pm.add_data_portal(bc, dp)
 
-        # todo: set ledger
         ctl = controller.Controller(pm)
+
+        process = pi.start(stp)
 
         loop = simulation_loop.SimulationLoop(
             stp.start,

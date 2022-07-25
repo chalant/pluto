@@ -72,6 +72,8 @@ class PlottingHandler(QtWidgets.QWidget):
         # todo: need to append performance so that when we add a plotter, we plot
         #  starting from some point.
 
+        # print("Update!")
+
         perf = controller_pb2.PerformancePacket()
         perf.ParseFromString(packet.packet)
 

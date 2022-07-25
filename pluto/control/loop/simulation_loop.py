@@ -104,7 +104,6 @@ class SimulationLoop(object):
                 # signal_handler.process(ts)
                 # # continue execution
                 # signal_handler.clock_update(ts, evt, signals)
-
                 process.clock_update(ts, global_event, signals)
 
     def execute(self, command):
