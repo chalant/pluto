@@ -1,9 +1,7 @@
 import abc
-import os
 
-import sqlalchemy as sa
 
-from dev import events
+from trading_calendars import calendar_utils
 
 from zipline.data import bundles
 
@@ -15,11 +13,7 @@ from zipline.country import CountryCode
 from pluto.data import benchmark as bm
 from pluto.data.bundles import test
 
-# from pluto.universes import writer
-
 from pluto.trading_calendars import calendar_utils as cu
-
-from protos import calendar_pb2
 
 _CACHE = {}
 
@@ -166,6 +160,8 @@ class TestUniverse(AbstractUniverse):
         self._bundle_data = self._bundle.load()
 
         self._equity_daily_bar_reader = e = self._bundle_data.equity_daily_bar_reader
+
+        calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
 
     @property
     def country_code(self):
