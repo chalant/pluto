@@ -807,7 +807,6 @@ class BcolzMinuteBarWriter(object):
         day_before_input = input_first_day - tds.freq
 
         self.pad(sid, day_before_input)
-        table = self._ensure_ctable(sid)
 
         # Get the number of minutes already recorded in this sid's ctable
         num_rec_mins = table.size
