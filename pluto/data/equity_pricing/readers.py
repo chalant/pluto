@@ -1,4 +1,7 @@
+import collections
 from abc import ABC
+
+import pandas as pd
 
 import clickhouse_driver
 
@@ -6,9 +9,14 @@ import numpy as np
 import trading_calendars
 
 from zipline.data import session_bars
+from zipline.data.bar_reader import (
+    NoDataAfterDate,
+    NoDataBeforeDate,
+    NoDataOnDate,
+)
 
 _REQUEST_DAILY_COLUMN = """
-SELECT %(col)s, %(sid)s FROM data.daily_bars 
+SELECT %(col)s, %(sid)s FROM daily_bars 
 WHERE sid = %(sid)s day BETWEEN %(start)s AND %(end)s ORDER BY (sid, day)
 
 """
@@ -135,12 +143,22 @@ class ClickHouseMinuteBarReader(session_bars.CurrencyAwareSessionBarReader):
 class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
     def __init__(
             self,
-            clickhouse_client: clickhouse_driver.Client,
-            trading_calendar: trading_calendars.TradingCalendar):
-        self._client = clickhouse_client
+            db_config,
+            trading_calendar: trading_calendars.TradingCalendar,
+            metadata,
+            lifetimes,
+            bundle_name,
+            cache):
+
+        self._config = db_config
         self._trading_calendar = trading_calendar
+        self._bundle_name = bundle_name
+        self._metadata = metadata
+        self._lifetimes = lifetimes
+        self._cache = cache
 
     def set_trading_calendar(self, trading_calendar):
+        # todo: reload and cache
         self._trading_calendar = trading_calendar
 
     @property
@@ -153,10 +171,20 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
 
     @property
     def sessions(self):
-        pass
+        return self._trading_calendar.all_sessions
 
-    def currency_codes(self, sids):
-        pass
+    @property
+    def first_trading_day(self):
+        meta = self._metadata
+
+        try:
+            pd.Timestamp(meta['first_trading_day'])
+        except KeyError:
+            return None
+
+    @property
+    def last_available_dt(self):
+        return self.sessions[-1]
 
     def load_raw_arrays(self, columns, start_date, end_date, assets):
         """
@@ -179,7 +207,7 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
             values for the respective field over start and end dt range.
         """
 
-        clt = self._client
+        db_config = self._config
 
         # ensure assets are sorted
         assets = list(assets)
@@ -187,44 +215,93 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
 
         results = []
 
-        msr = self._trading_calendar.minutes_for_sessions_in_range(
+        msr = self._trading_calendar.sessions_in_range(
             start_date,
             end_date
         )
 
-        for col in columns:
-            outbuf = np.zeros(
-                shape=(len(msr), len(assets)),
-                dtype=np.uint32)
+        with clickhouse_driver.Client(
+            db_config['host'],
+            db_config['port'],
+            database=self._bundle_name,
+            password=db_config['password'],
+            settings={
+                'use_client_time_zone': True,
+                'date_time_output_format': 'unix_timestamp'
+            }
+        ) as clt:
 
-            m = 0
-            a = 0
+            for col in columns:
+                outbuf = np.zeros(
+                    shape=(len(msr), len(assets)),
+                    dtype=np.uint32)
 
-            for result in clt.execute_iter(
-                    _REQUEST_DAILY_COLUMN,
-                    {'col': col,
-                     'start': start_date,
-                     'end': end_date}):
+                m = 0
+                a = 0
 
-                col, sid = result
+                # fixme: string formatting is unsafe for queries.
 
-                if sid == assets[a]:
-                    outbuf[m, sid] = col
+                for result in clt.execute_iter(
+                        _REQUEST_DAILY_COLUMN,
+                        {'col': col, 'start': start_date, 'end': end_date}):
 
-                    m += 1
+                    col, sid = result
 
-                    if m > len(msr):
-                        m = 0
-                        a += 1
+                    if sid == assets[a]:
+                        outbuf[m, sid] = col
 
-                        if a > len(assets):
-                            break
+                        m += 1
 
-            results.append(
-                outbuf
+                        if m > len(msr):
+                            m = 0
+                            a += 1
+
+                            if a > len(assets):
+                                break
+
+                results.append(
+                    outbuf
+                )
+
+            return results
+
+    def get_last_traded_dt(self, asset, day):
+        lifetime = self._lifetimes[asset]
+        start = lifetime[0]
+        end = lifetime[1]
+
+        # last trade is after requested day
+        if day.value < end:
+            return day
+        # no data before date
+        elif day.value < start:
+            return pd.NaT
+        # no data after date
+        elif day.value >= end:
+            return end
+
+    def _get_index(self, sessions, dt, sid):
+        lifetime = self._lifetimes[sid]
+        start = lifetime[0]
+        end = lifetime[1]
+
+        try:
+            idx = sessions.get_loc(dt)
+        except Exception:
+            raise NoDataOnDate("day={0} is outside of calendar={1}".format(
+                dt, sessions))
+
+        if dt.value < start:
+            raise NoDataBeforeDate(
+                "No data on or before day={0} for sid={1}".format(
+                    dt, sid))
+        if dt.value > end:
+            raise NoDataAfterDate(
+                "No data on or after day={0} for sid={1}".format(
+                    dt, sid)
             )
 
-        return results
+        return idx
 
     def get_value(self, sid, dt, field):
         """
@@ -251,26 +328,41 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
             If the given dt is not a valid market minute (in minute mode) or
             session (in daily mode) according to this reader's tradingcalendar.
         """
-        pass
 
-    def get_last_traded_dt(self, asset, dt):
-        """
-        Get the latest minute on or before ``dt`` in which ``asset`` traded.
+        clt = self._client
+        sessions = self.sessions
+        cache = self._cache
+        ix = self._get_index(sessions, dt, sid)
 
-        If there are no trades on or before ``dt``, returns ``pd.NaT``.
+        if field not in cache:
+            cols = collections.defaultdict(list)
 
-        Parameters
-        ----------
-        asset : zipline.asset.Asset
-            The asset for which to get the last traded minute.
-        dt : pd.Timestamp
-            The minute at which to start searching for the last traded minute.
+            # fixme: usage of string formatting is not safe!
 
-        Returns
-        -------
-        last_traded : pd.Timestamp
-            The dt of the last trade for the given asset, using the input
-            dt as a vantage point.
-        """
-        pass
+            for result in clt.execute_iter(
+                    _REQUEST_DAILY_COLUMN,
+                    {'col': field,
+                     'start': sessions[0],
+                     'end': sessions[-1]}):
+
+                col, sid = result
+
+                cols[sid].append(col)
+
+            cache.set(field, cols)
+        else:
+            cols = cache.get(field)
+
+        price = cols[sid][ix]
+
+        if field != 'volume':
+            if price == 0:
+                return np.nan
+            else:
+                return price * 0.001
+        else:
+            return price
+
+    def currency_codes(self, sids):
+        raise NotImplementedError
 

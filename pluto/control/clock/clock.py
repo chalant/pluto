@@ -121,7 +121,9 @@ class Clock(object):
                         pd.Timestamp(
                             pd.Timestamp.combine(dt + pd.Timedelta('1 day'), time.min),
                             tz='UTC'))
-                    events.post_event('clock.calendar_update', self)
+                    events.post_event(
+                        'clock.calendar_update',
+                        self)
                 return next(self._generator)
             else:
                 raise StopExecution

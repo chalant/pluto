@@ -775,11 +775,6 @@ class DataPortal(object):
         end_loc = tds.get_loc(end_date)
         start_loc = end_loc - bar_count + 1
 
-        if self._first_trading_day == end_date:
-            print("End Date!",
-                  self._first_trading_day,
-                  end_date)
-
         if start_loc < self._first_trading_day_loc:
             raise HistoryWindowStartsBeforeData(
                 first_trading_day=self._first_trading_day.date(),
@@ -804,9 +799,10 @@ class DataPortal(object):
         days_for_window = self._get_days_for_window(session, bar_count)
 
         if len(assets) == 0:
-            return pd.DataFrame(None,
-                                index=days_for_window,
-                                columns=None)
+            return pd.DataFrame(
+                None,
+                index=days_for_window,
+                columns=None)
 
         data = self._get_history_daily_window_data(
             assets, days_for_window, end_dt, field_to_use, data_frequency

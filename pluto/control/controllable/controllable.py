@@ -415,9 +415,6 @@ class Controllable(ABC):
 
         self._asset_finder = asset_finder = uni.asset_finder
 
-        # todo: first trading day should be the start_dt?
-        first_trading_day = calendar.first_session
-
         last_session = calendar.last_session
 
         # todo: we should raise an error if the there is no data for the look back
@@ -426,7 +423,7 @@ class Controllable(ABC):
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
-            first_trading_day=first_trading_day,
+            first_trading_day=bundle.first_trading_day,
             equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader,
