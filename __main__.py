@@ -14,6 +14,7 @@ from PyQt6 import QtWidgets, QtCore
 from gui import backtesting
 
 import click
+import logbook
 
 from directory import utils
 
@@ -62,13 +63,14 @@ def dev():
     # todo: need to walk down the directory tree to get already existing
     #  files.
 
+    logbook.StderrHandler()
+
     app = QtWidgets.QApplication(sys.argv)
 
     bk = backtesting.BackTesting(utils.DirectoryInterface(ds.create_directory(
         path.expanduser('~/.pluto'))))
 
     bk.show()
-
     sys.exit(app.exec())
 
 

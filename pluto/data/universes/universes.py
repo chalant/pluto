@@ -172,6 +172,14 @@ class TestUniverse(AbstractUniverse):
         return self._equity_daily_bar_reader.first_trading_day
 
     @property
+    def first_trading_day(self):
+        return self._equity_daily_bar_reader.first_trading_day
+
+    @property
+    def last_available_dt(self):
+        return self._equity_daily_bar_reader.last_available_dt
+
+    @property
     def end_date(self):
         return self._equity_daily_bar_reader.last_available_dt
 

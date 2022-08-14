@@ -33,17 +33,23 @@ from pluto.test import test
 
 from pluto.finance import ledger
 from pluto.finance.blotter import simulation_blotter
+from pluto.finance.broker import broker_setup as bks
+
 from pluto.control.processes import in_memory
 from pluto.control.controller import process_manager
 from pluto.control.controllable import running_behavior
 from pluto.control.loop import simulation_loop
+
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
-from pluto.finance.broker import broker_setup as bks
+from pluto.setup import engine_setup
+
+
 from pluto.data.bundles import test as tb
 from pluto.data.universes import universes
+from pluto.data import caching
+
 from pluto.trading_calendars import calendar_utils as cu
-from pluto.setup import engine_setup
 
 
 def _build_data_frame(mon, process_id):
@@ -287,14 +293,18 @@ class PlutoExamplesTests(unittest.TestCase):
 
         root_dir = tdr.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp')))
 
+        # ingest test bundle
+        test_bundle = stack.enter_context(tb.ClickHouseTestBundle(
+            root_dir,
+            caching.InMemoryCache()
+        ))
+
+        # ingest the test bundle
+        test_bundle.ingest()
+
         cls._pluto_tempdir = stack.enter_context(root_dir)
 
         # bundles.register('test', lambda *args: None)
-
-        # ingest test bundle
-        test_bundle = stack.enter_context(tb.TestBundle(root_dir))
-
-        test_bundle.ingest()
 
         cls._zpl_tempdir = dir_ = stack.enter_context(
             core.tmp_dir(path=path.expanduser('~/tmp/zipline')))

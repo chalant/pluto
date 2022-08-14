@@ -1,3 +1,5 @@
+import toml
+
 from sqlalchemy import create_engine
 
 from directory import directory as dr
@@ -14,7 +16,7 @@ def create_directory(root_path):
     setup_dir.add_file('metadata', 'sqlite')
 
     data_dir = root_dir.add_directory('data')
-    data_dir.add_file('data', 'sqlite')
+    data_dir.add_file('metadata', 'sqlite')
 
     # universe_engine = create_engine('sqlite://' + universes_dir.get_file('metadata', 'sqlite').path)
 

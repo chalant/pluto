@@ -246,6 +246,7 @@ class BackTesting(QtWidgets.QMainWindow):
 
             events.post_event('backtesting.started', None)
             # run loop on these specific exchanges
+
             loop.start(ctl)
 
             # self._backtester.run(

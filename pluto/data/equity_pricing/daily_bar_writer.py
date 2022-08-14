@@ -1,19 +1,20 @@
 import clickhouse_driver
 
-_INSERT = """INSERT INTO daily_bars VALUES (x)"""
+_INSERT = """
+INSERT INTO daily_bars (sid, open, high, low, close, volume, day) VALUES """
 
 
 def create_table(clickhouse_client: clickhouse_driver.Client):
     create = """
-    CREATE TABLE data.daily_bars
+        CREATE TABLE IF NOT EXISTS daily_bars
         (
             sid UInt32,
             open UInt32,
             high UInt32,
             low UInt32,
-            close UInt32
+            close UInt32,
             volume UInt32,
-            day DateTime
+            day DateTime64(8, 'UTC')
         )
         ENGINE = MergeTree()
         ORDER BY (sid, day)
@@ -22,30 +23,60 @@ def create_table(clickhouse_client: clickhouse_driver.Client):
     clickhouse_client.execute(create)
 
 
+def drop_table(clickhouse_client: clickhouse_driver.Client, db_name):
+    drop = """
+    DROP TABLE IF EXISTS daily_bars
+    
+    """.format(
+        db_name
+    )
+
+    clickhouse_client.execute(drop)
+
+
 class ClickHouseDailyBarWriter(object):
-    def __init__(self, clickhouse_client: clickhouse_driver.Client):
-        self._client = clickhouse_client
+    def __init__(self, db_config, bundle_name):
+
+        self._db_config = db_config
+        self._bundle_name = bundle_name
+
+        with clickhouse_driver.Client(
+                db_config['host'],
+                db_config['port'],
+                password=db_config['password'],
+                database=bundle_name) as cl:
+            create_table(cl)
 
     def write(self, data):
-        clt = self._client
+        db_config = self._db_config
 
-        with clt.disconnect_on_error(_INSERT, None):
-            clt.connection.send_query(_INSERT, query_id=None)
+        with clickhouse_driver.Client(
+                db_config['host'],
+                db_config['port'],
+                settings={
+                    'use_client_time_zone': False
+                },
+                password=db_config['password'],
+                database=self._bundle_name) as clt:
 
-            sample_block = clt.receive_sample_block()
-            rv = None
+            with clt.disconnect_on_error(_INSERT, None):
+                clt.connection.send_query(_INSERT, query_id=None)
+                clt.connection.send_external_tables(None)
+                # fixme: this blocks! why?
 
-            if sample_block:
-                columns = [x[0] for x in sample_block.columns_with_types]
+                sample_block = clt.receive_sample_block()
+                rv = None
 
-                def generator():
-                    for df in data:
-                        yield [df[column] for column in columns]
+                if sample_block:
+                    columns = [x[0] for x in sample_block.columns_with_types]
 
-                rv = clt.send_data(
-                    sample_block,
-                    generator(),
-                    columnar=True)
+                    # def generator():
+                    #     for df in data:
+                    #         yield [df[column] for column in columns]
 
-                clt.receive_end_of_query()
+                    rv = clt.send_data(
+                        sample_block,
+                        data)
+
+                    clt.receive_end_of_query()
 
