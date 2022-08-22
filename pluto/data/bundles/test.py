@@ -14,6 +14,8 @@ import shutil
 
 import pandas as pd
 
+import sqlalchemy as sa
+
 import clickhouse_driver
 
 from zipline.assets import assets
@@ -198,8 +200,28 @@ class ClickHouseTestBundle(AbstractBundle):
 
         first_rows = daily_reader._first_rows
         last_rows = daily_reader._last_rows
+        calendar_offset = daily_reader._calendar_offsets
 
         lifetimes = {}
+
+        lf = asset_finder.lifetimes(
+            sessions_in_range, True, ('US',)
+        )
+
+        equities_cols = asset_finder.equities.c
+        exchanges = asset_finder.exchanges
+
+        # load lifetimes
+
+        for sid, start, end in sa.select((
+            equities_cols.sid,
+            equities_cols.start_date,
+            equities_cols.end_date,
+        )).where(
+            (exchanges.c.exchange == equities_cols.exchange) &
+            (exchanges.c.country_code.in_(("US",)))
+        ).execute().fetchall():
+            lifetimes[sid] = (start, end)
 
         def convert_to_int(value, factor):
             if not np.isnan(value):
@@ -213,29 +235,25 @@ class ClickHouseTestBundle(AbstractBundle):
                     ['open', 'high', 'low', 'close', 'volume'],
                     daily_reader.first_trading_day,
                     daily_reader.last_available_dt,
-                    [sid,])
+                    [sid])
 
                 idx = 0
-
-                start_idx = first_rows[sid]
-                end_idx = last_rows[sid]
-
-                arr = [0, 0]
-
-                lifetimes[sid] = arr
 
                 for session in sessions_in_range:
                     volume = data[4][idx, 0]
                     close = data[3][idx, 0]
 
-                    if idx == start_idx:
-                        arr[0] = session.value
+                    # if offset + start_idx == end_idx:
+                    #     arr[1] = session.value
+
+                    # if s_idx == start_idx:
+                    #     arr[0] = session.value
 
                     # fixme: should we consider zero volume
                     # as last traded day? (it is not always the case...)
 
-                    if idx == end_idx:
-                        arr[1] = session.value
+                    # if s_idx == end_idx:
+                    #     arr[1] = session.value
 
                     if not np.isnan(close):
                         yield {
@@ -260,6 +278,7 @@ class ClickHouseTestBundle(AbstractBundle):
                 'last_available_dt': daily_reader.last_available_dt.isoformat()}, f)
 
         with open(self._lifetimes.path, 'w+') as f:
+            print("Dumping", lifetimes)
             json.dump(lifetimes, f)
 
         # remove directory
@@ -267,14 +286,13 @@ class ClickHouseTestBundle(AbstractBundle):
 
         print("Done Ingesting...")
 
-
-
     def _load(self, name):
         with open(self._meta.path) as f:
             bundle_meta = json.load(f)
 
         with open(self._lifetimes.path) as f:
-            lifetimes = json.load(f)
+            lifetimes = {int(k): v for k, v in json.load(f).items()}
+            print("Loaded", lifetimes)
 
         # load calendar...
         cal = calendar_utils.get_calendar_in_range(

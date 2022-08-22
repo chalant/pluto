@@ -27,9 +27,7 @@ def drop_table(clickhouse_client: clickhouse_driver.Client, db_name):
     drop = """
     DROP TABLE IF EXISTS daily_bars
     
-    """.format(
-        db_name
-    )
+    """.format(db_name)
 
     clickhouse_client.execute(drop)
 
@@ -62,7 +60,7 @@ class ClickHouseDailyBarWriter(object):
             with clt.disconnect_on_error(_INSERT, None):
                 clt.connection.send_query(_INSERT, query_id=None)
                 clt.connection.send_external_tables(None)
-                # fixme: this blocks! why?
+                # note this blocks if we don't send external tables...
 
                 sample_block = clt.receive_sample_block()
                 rv = None

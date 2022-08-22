@@ -79,12 +79,14 @@ def _build_data_frame(mon, process_id):
     return daily_stats
 
 
-def _run(dir_, example_name, expected_perf):
+def _run(dir_, example_name, expected_perf, environ):
     args, path_ = examples.EXAMPLE_MODULES[example_name]
 
     # setup strategy...
 
     stp = run_setup.RunSetup('test')
+
+    stp.environ = environ
 
     # stp.broker = 'none'
     stp.trading_universe = 'test'
@@ -97,6 +99,7 @@ def _run(dir_, example_name, expected_perf):
     stp.end = args['end']
 
     stp.clear_perf = True
+    stp.remote_cache = False
 
     fts = bks.FractionalTradeSetup()
     ts = bks.TradeSetup()
@@ -107,7 +110,10 @@ def _run(dir_, example_name, expected_perf):
     fts.minimal_fraction = 3
     fts.minimum_purchase = 1.0
 
-    ts.asset_types = {Equity.__name__, Future.__name__}
+    ts.asset_types = {
+        Equity.__name__,
+        Future.__name__}
+
     ts.order_types = {
         StopOrder.__name__,
         LimitOrder.__name__,
@@ -142,7 +148,10 @@ def _run(dir_, example_name, expected_perf):
 
     uni = universes.get_universe(
         stp.trading_universe,
-        dir_)
+        dir_,
+        caching.InMemoryCache(),
+        stp.environ
+    )
 
     manager = process_manager.ProcessManager(
         uni.asset_finder,
@@ -314,7 +323,7 @@ class PlutoExamplesTests(unittest.TestCase):
 
         # environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
-        # cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
+        cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
 
         cls._expected_perf = cache.dataframe_cache(
             dir_.getpath(
@@ -342,11 +351,12 @@ class PlutoExamplesTests(unittest.TestCase):
         #     example_name,
         #     in_memory.InMemoryControllableStub(dir_, 'backtesting'))
 
-
-
         # print("Example ", example_name)
 
-        _run(self._pluto_tempdir, example_name, self._expected_perf[example_name])
+        _run(self._pluto_tempdir,
+             example_name,
+             self._expected_perf[example_name],
+             self._environ)
 
     # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     # def test_live_simulation(self, example_name):

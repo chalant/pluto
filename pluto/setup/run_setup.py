@@ -45,6 +45,7 @@ class RunSetup(object):
 
         self.session_id = session_id
         self.clear_perf = False
+        self.remote_cache = False
 
 
 def load_run_setup(dir_, session_id):

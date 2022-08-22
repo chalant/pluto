@@ -20,3 +20,20 @@ class InMemoryCache(Cache):
 
     def set(self, field, data):
         self._cache[field] = data
+
+    def __contains__(self, item):
+        return item in self._cache
+
+
+class RedisCache(Cache):
+    def __init__(self, host, port):
+        raise NotImplementedError("Redis not supported yet!")
+
+    def get(self, field):
+        raise NotImplementedError
+
+    def set(self, field, data):
+        raise NotImplementedError
+
+    def __contains__(self, item):
+        raise NotImplementedError

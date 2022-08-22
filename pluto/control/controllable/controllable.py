@@ -309,6 +309,8 @@ class Controllable(ABC):
             strategy_setup,
             broker_setup,
             run_setup,
+            data_cache,
+            environ,
             start_dt,
             end_dt):
 
@@ -318,10 +320,12 @@ class Controllable(ABC):
         ----------
         broker: pluto.finance.broker.broker_stub.BrokerStub
         process_id: str
-        directory: directory.directory.Directory
+        directory: directory.utils.DirectoryInterface
         strategy_setup: pluto.strategies.setup.StrategySetup
         broker_setup: pluto.broker.broker_setup.BrokerSetup
         run_setup
+        data_cache: pluto.data.caching.Cache
+        environ: dict
         start_dt: pandas.Timestamp
         end_dt: pandas.Timestamp
 
@@ -346,7 +350,10 @@ class Controllable(ABC):
 
         uni = universes.get_universe(
             run_setup.trading_universe,
-            directory)
+            directory,
+            data_cache,
+            environ
+        )
 
         self._clock = cl = clock.Clock(
             uni.calendar_name,

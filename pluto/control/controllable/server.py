@@ -25,7 +25,10 @@ from pluto.control.controllable.utils import factory
 from pluto.control.controllable import performance_logging as pl
 from pluto.control.controllable import running_behavior
 
-from pluto.server import server, service
+from pluto.data import caching
+from pluto.configuration import configuration
+
+from pluto.server import server
 
 from pluto.strategies import setup as stg_stp
 
@@ -37,8 +40,6 @@ from protos import broker_pb2
 from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
 from protos import interface_pb2_grpc as itf_rpc
-from protos import interface_pb2 as itf
-from protos import clock_pb2
 
 from protos.clock_pb2 import (BAR, TRADE_END)
 
@@ -157,6 +158,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
         self._mode = mode
         self._running_behavior = rb
 
+        self._data_cache = caching.InMemoryCache()
+
         rb.set_state(self._state)
 
     @property
@@ -213,6 +216,14 @@ class ControllableService(cbl_rpc.ControllableServicer):
     def Initialize(self, request, context):
         # todo: add broker setup for the algorithm class
         id_ = request.strategy_id  # the id of the controllable => will be used in performance updates
+
+        if request.remote_cache:
+            self._data_cache = caching.RedisCache(
+                configuration['host'],
+                configuration['port']
+            )
+
+        self._environ = request.environ
 
         # this object will be populated by the script...
         self._strategy_setup = strategy_setup = stg_stp.StrategySetup(id_)
@@ -314,6 +325,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
                     request.broker_setup
                 ),
                 engine_setup,
+                self._data_cache,
+                self._environ,
                 conversions.to_datetime(request.start),
                 conversions.to_datetime(request.end))
 
