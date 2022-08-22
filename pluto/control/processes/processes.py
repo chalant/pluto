@@ -124,7 +124,9 @@ class ProcessInitializer(object):
 
         return self._controllable.Initialize(
             cbl.RunSetup(
-                strategy_id=strategy_id),
+                strategy_id=strategy_id,
+                environ=setup.environ,
+                remote_cache=setup.remote_cache),
             ())
 
     def start(self, setup):

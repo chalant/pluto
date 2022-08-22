@@ -64,8 +64,8 @@ message BrokerSetup {
 
 message RunSetup {
     string strategy_id = 1;
-
     map<string, string> environ = 2;
+    bool remote_cache = 3;
 }
 
 message RunRequest {

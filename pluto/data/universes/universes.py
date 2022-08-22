@@ -150,16 +150,17 @@ class ZiplineQuandlUniverse(AbstractUniverse):
 
 
 class TestUniverse(AbstractUniverse):
-    def __init__(self, root_dir, calendar_cache=False, environ=None):
+    def __init__(self, root_dir, data_cache, calendar_cache=False, environ=None):
         super(TestUniverse, self).__init__()
 
         self._calendar = None
         self._cache = calendar_cache
 
-        self._bundle = test.TestBundle(root_dir)
-        self._bundle_data = self._bundle.load()
+        self._bundle = bundle = test.ClickHouseTestBundle(root_dir, data_cache)
+        self._bundle_data = bundle.load()
 
-        self._equity_daily_bar_reader = e = self._bundle_data.equity_daily_bar_reader
+        self._equity_daily_bar_reader = self._bundle_data.equity_daily_bar_reader
+        self._environ = environ
 
         calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
 
@@ -213,7 +214,7 @@ class TestUniverse(AbstractUniverse):
     @property
     def benchmark(self):
         return bm.ZiplineBenchmark(
-            environ=self._bundle._environ)
+            environ=self._environ)
 
     @property
     def trading_calendar(self):
@@ -274,9 +275,9 @@ class TestUniverse(AbstractUniverse):
 
 def with_cache(cache):
     def decorator(fn):
-        def wrapper(name, cache_=False, environ=None):
+        def wrapper(name, *args, **kwargs):
             if name not in cache:
-                uni = fn(name, cache_, environ)
+                uni = fn(name, *args, **kwargs)
                 cache[name] = uni
                 return uni
 
@@ -287,14 +288,14 @@ def with_cache(cache):
 
 
 @with_cache(_CACHE)
-def get_universe(name, root_dir, cache=True, environ=None) -> AbstractUniverse:
+def get_universe(name, root_dir, data_cache, environ, calendar_cache=True) -> AbstractUniverse:
     """
 
     Parameters
     ----------
     name: str
     root_dir: directory.utils.DirectoryInterface
-    cache:
+    cache: data_cache
 
     Returns
     -------
@@ -304,7 +305,11 @@ def get_universe(name, root_dir, cache=True, environ=None) -> AbstractUniverse:
     # cache universe in case we use it in-memory...
 
     if name == 'test':
-        return TestUniverse(root_dir, cache, environ)
+        return TestUniverse(
+            root_dir,
+            data_cache,
+            calendar_cache,
+            environ)
     elif name == 'quandl':
         return ZiplineQuandlUniverse()
     else:
