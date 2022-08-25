@@ -198,15 +198,7 @@ class ClickHouseTestBundle(AbstractBundle):
             daily_reader.first_trading_day,
             daily_reader.last_available_dt)
 
-        first_rows = daily_reader._first_rows
-        last_rows = daily_reader._last_rows
-        calendar_offset = daily_reader._calendar_offsets
-
         lifetimes = {}
-
-        lf = asset_finder.lifetimes(
-            sessions_in_range, True, ('US',)
-        )
 
         equities_cols = asset_finder.equities.c
         exchanges = asset_finder.exchanges
@@ -278,7 +270,6 @@ class ClickHouseTestBundle(AbstractBundle):
                 'last_available_dt': daily_reader.last_available_dt.isoformat()}, f)
 
         with open(self._lifetimes.path, 'w+') as f:
-            print("Dumping", lifetimes)
             json.dump(lifetimes, f)
 
         # remove directory
@@ -292,7 +283,6 @@ class ClickHouseTestBundle(AbstractBundle):
 
         with open(self._lifetimes.path) as f:
             lifetimes = {int(k): v for k, v in json.load(f).items()}
-            print("Loaded", lifetimes)
 
         # load calendar...
         cal = calendar_utils.get_calendar_in_range(
