@@ -159,8 +159,7 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
 
         self._lifetimes = lifetimes
         self._cache = cache
-
-        print("HOST", db_config['host'])
+        self._db_config = db_config
 
         self._client = clickhouse_driver.Client(
             db_config['host'],
@@ -168,6 +167,8 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
             password=db_config['password'],
             database=bundle_name
         )
+
+        print("Metadata!!!", metadata)
 
     def set_trading_calendar(self, trading_calendar):
         # todo: reload and cache
@@ -190,13 +191,18 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
         meta = self._metadata
 
         try:
-            pd.Timestamp(meta['first_trading_day'])
+            return pd.Timestamp(meta['first_trading_day'])
         except KeyError:
             return None
 
     @property
     def last_available_dt(self):
-        return self.sessions[-1]
+        meta = self._metadata
+
+        try:
+            return pd.Timestamp(meta['last_available_dt'])
+        except KeyError:
+            return None
 
     def load_raw_arrays(self, columns, start_date, end_date, assets):
         """
@@ -219,7 +225,8 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
             values for the respective field over start and end dt range.
         """
 
-        db_config = self._config
+        # fixme: assets might not necessarily be in the same order...
+        #  so we need to sort an array of indices
 
         # ensure assets are sorted
         assets = list(assets)
@@ -229,44 +236,52 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
 
         msr = self._trading_calendar.sessions_in_range(
             start_date,
-            end_date
-        )
+            end_date)
 
-        clt = self._client
+        start_date = self._trading_calendar.previous_session_label(start_date)
 
-        for col in columns:
-            outbuf = np.zeros(
-                shape=(len(msr), len(assets)),
-                dtype=np.uint32)
+        db_config = self._db_config
 
-            m = 0
-            a = 0
+        with clickhouse_driver.Client(
+            db_config['host'],
+            db_config['port'],
+            password=db_config['password'],
+            database=self._bundle_name
+        ) as clt:
 
-            # fixme: string formatting is unsafe for queries.
+            for col in columns:
+                outbuf = np.zeros(
+                    shape=(len(msr), len(assets)),
+                    dtype=np.float)
 
-            for result in clt.execute_iter(
+                a = 0
+
+                result_generator = iter(clt.execute_iter(
                     _REQUEST_DAILY_COLUMN.format(col),
-                    {'start': start_date, 'end': end_date}):
+                    {'start': start_date, 'end': end_date}))
 
-                sid, day, col = result
+                sid, day, value = next(result_generator)
 
-                if sid == assets[a]:
-                    outbuf[m, sid] = col
+                for asset in assets:
+                    while True:
+                        if sid == asset:
+                            if col != 'volume':
+                                outbuf[msr.get_loc(day), a] = value * 0.001
+                            else:
+                                outbuf[msr.get_loc(day), a] = value
 
-                    m += 1
+                        try:
+                            sid, day, value = next(result_generator)
 
-                    if m > len(msr):
-                        m = 0
-                        a += 1
+                            if sid > asset:
+                                break
 
-                        if a > len(assets):
+                        except StopIteration:
                             break
 
-            results.append(
-                outbuf
-            )
+                    a += 1
 
-        print("RESULTS", results)
+                results.append(outbuf)
 
         return results
 
