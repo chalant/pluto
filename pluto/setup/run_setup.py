@@ -22,6 +22,7 @@ class RunSetup(object):
         self.leverage = 1.0
         self.trading_universe = ""
         self.data_frequency = ""
+        self.emission_rate = "daily"
 
         self.commission_models = {
             'equity': commission.PerShare(),

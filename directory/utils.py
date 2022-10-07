@@ -45,12 +45,10 @@ class DirectoryInterface(object):
         if not res:
             raise FileNotFoundError('No directory named {} in {}'.format(name, self._directory.name))
 
-        return res
+        return DirectoryInterface(res)
 
     def get_file(self, name, extension):
         res = self._directory.get_file(name, extension)
-
-        print("File!", name)
 
         if res:
             return res

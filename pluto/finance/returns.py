@@ -30,7 +30,7 @@ class ReturnsTracker(object):
         if data_frequency == 'minute':
             self.daily_returns_array.append(self.todays_returns(self._ledger.returns))
 
-    def end_of_session(self, sessions):
+    def end_of_session(self):
         returns = self.daily_returns_array
         portfolio_returns = self._ledger.returns
         # if self._data_frequency == 'daily':
@@ -41,4 +41,3 @@ class ReturnsTracker(object):
             self._session_count = 0
 
         returns.append(self.todays_returns(portfolio_returns))
-        self._sessions = sessions

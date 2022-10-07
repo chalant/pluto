@@ -6,26 +6,34 @@ from functools import partial
 
 from trading_calendars import calendar_utils
 
+from zipline import protocol
 from zipline.protocol import BarData
 from zipline.finance.order import ORDER_STATUS
 
-import pluto.finance.ledger
-from pluto.interface.utils import service_access
+from pluto.finance import ledger
+from pluto.finance.metrics import tracker
+
 from pluto.coms.utils import conversions
+from pluto.interface.utils import service_access
 
 from protos import broker_pb2_grpc as brk_rpc
 from protos import broker_pb2
 
 
-class ProcessManager(brk_rpc.BrokerServicer):
+class StrategyManager(brk_rpc.BrokerServicer):
     def __init__(self,
                  asset_finder,
-                 ledger: pluto.finance.ledger.Ledger):
+                 start_dt,
+                 capital,
+                 emission_rate='minute'):
 
         self._processes = {}
 
         self._asset_finder = asset_finder
-        self._ledger = ledger
+        self._ledger = ledger.Ledger(
+            start_dt,
+            protocol.Portfolio(start_dt, capital),
+            emission_rate)
 
         self._bar_data_dict = {}
         self._blotters = {}
@@ -270,12 +278,9 @@ class ProcessManager(brk_rpc.BrokerServicer):
 
         """
         Clear out any assets that have expired before starting a new sim day.
-
         Performs two functions:
-
         1. Finds all assets for which we have open orders and clears any
            orders whose assets are on or after their auto_close_date.
-
         2. Finds all assets for which we have positions and generates
            close_position events for any assets that have reached their
            auto_close_date.

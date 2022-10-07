@@ -269,7 +269,7 @@ class PNL(object):
         self._previous_pnl = 0.0
 
     def start_of_session(self, ledger, session, data_portal):
-        self._previous_pnl = ledger.portfolio.pnl
+        self._previous_pnl = ledger.portfolio.pnlself._previous_pnl = ledger.portfolio.pnl
 
     def _end_of_period(self, field, packet, ledger):
         pnl = ledger.portfolio.pnl
@@ -420,8 +420,10 @@ class ReturnsStatistic(object):
                    session_ix,
                    data_portal):
         res = self._function(ledger.daily_returns_array[:session_ix + 1])
+
         if not np.isfinite(res):
             res = None
+
         packet['cumulative_risk_metrics'][self._field_name] = res
 
     end_of_session = end_of_bar

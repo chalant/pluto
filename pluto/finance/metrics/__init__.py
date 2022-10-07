@@ -22,8 +22,8 @@ import empyrical
 def pluto_metrics():
     return {
         Returns(),
-        ReturnsStatistic(empyrical.annual_volatility, 'algo_volatility'),
-        BenchmarkReturnsAndVolatility(),
+        # ReturnsStatistic(empyrical.annual_volatility, 'algo_volatility'),
+        # BenchmarkReturnsAndVolatility(),
         PNL(),
         CashFlow(),
         Orders(),
@@ -61,11 +61,11 @@ def pluto_metrics():
         DailyLedgerField('account.gross_leverage'),
         DailyLedgerField('account.net_leverage'),
 
-        AlphaBeta(),
-        ReturnsStatistic(empyrical.sharpe_ratio, 'sharpe'),
-        ReturnsStatistic(empyrical.sortino_ratio, 'sortino'),
+        # AlphaBeta(),
+        # ReturnsStatistic(empyrical.sharpe_ratio, 'sharpe'),
+        # ReturnsStatistic(empyrical.sortino_ratio, 'sortino'),
 
-        ReturnsStatistic(empyrical.max_drawdown),
+        # ReturnsStatistic(empyrical.max_drawdown),
         MaxLeverage(),
 
         # Please kill these!

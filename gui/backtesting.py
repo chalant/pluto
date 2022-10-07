@@ -2,16 +2,6 @@ from PyQt6 import QtWidgets
 
 import threading
 
-from dev import strategy_store
-from dev import events
-
-from gui import ui_main_window
-from gui import load_dialog
-from gui import new_dialog
-from gui.plotting import plotting, plotting_control
-from gui import setup
-from gui import controls
-
 from zipline.assets import Equity, Future
 from zipline.data import data_portal
 from zipline.finance import asset_restrictions
@@ -22,6 +12,9 @@ from pluto.control.processes import processes
 from pluto.control.controller import controller
 from pluto.control.controller import process_manager
 from pluto.control.controllable import running_behavior
+from pluto.control.setup import setup as ctp
+from pluto.control.setup import account
+from pluto.control import script_handler
 
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.finance.blotter import simulation_blotter
@@ -30,6 +23,16 @@ from pluto.data.universes import universes
 from pluto.setup import run_setup
 from pluto.setup import engine_setup
 
+from dev import strategy_store
+from dev import events
+
+from gui import ui_main_window
+from gui import load_dialog
+from gui import new_dialog
+from gui.plotting import plotting, plotting_control
+from gui import setup
+from gui import controls
+
 events.add_event('backtesting.started')
 events.add_event('backtesting.ended')
 
@@ -37,7 +40,8 @@ events.add_event('backtesting.ended')
 class BackTesting(QtWidgets.QMainWindow):
     def __init__(
             self,
-            directory):
+            directory,
+            script_name):
         """
 
         Parameters
@@ -48,6 +52,7 @@ class BackTesting(QtWidgets.QMainWindow):
         super(BackTesting, self).__init__()
 
         self._directory = directory
+        self._script_name = script_name
 
         self._ui = ui = ui_main_window.Ui_MainWindow()
         self._strategy_store = store = strategy_store.StrategyStore(directory)
@@ -138,29 +143,40 @@ class BackTesting(QtWidgets.QMainWindow):
         run the algorithm with the specified parameters (universe, start_dt...)
         note: the strategy always run until the most recent available datapoint.
         """
+
+        # todo: when
+
         def start():
+            dir_ = self._directory
             stp = self._bt_setup.run_setup
+
+            stg_store = ctp.StrategyStore(self._directory)
+
+            # todo: create account class
+            script_stp = ctp.Setup(
+                stg_store,
+                account.AccountSetup(
+                    stp.capital
+                )
+            )
+
+            scripts_dir = dir_.get_directory('launchers')
+
+            handler = script_handler.load(scripts_dir.get_file(self._script_name))
+
+            # run setup function of the script
+            handler.setup(script_stp)
 
             uni = universes.get_universe(
                 stp.trading_universe,
                 self._directory)
 
-            self._process_manager = pm = process_manager.ProcessManager(
+            self._process_manager = pm = process_manager.StrategyManager(
                 uni.asset_finder,
-                ledger.Ledger(
-                    stp.capital,
-                    stp.start,
-                )
+                stp.start,
+                stp.capital,
+                stp.emission_rate
             )
-
-            controllable = in_memory.InMemoryControllableStub(
-                self._directory,
-                'backtesting',
-                pm,
-                running_behavior.Blocking())
-
-            pi = processes.ProcessInitializer(controllable)
-            stg_stp = pi.initialize(stp, self._strategy.strategy_name)
 
             restrictions = asset_restrictions.NoRestrictions()
 
@@ -204,13 +220,31 @@ class BackTesting(QtWidgets.QMainWindow):
                     last_available_minute=calendar.minutes_for_session(last_session)[-1]
                 )
 
-                pm.add_bar_data(
-                    stg_stp.data_frequency,
-                    dp,
-                    restrictions)
+                # todo: each strategy can be watched individually
+
+                # create strategy processes
+                for s, loader in stg_store.strategies:
+                    controllable = in_memory.InMemoryControllableStub(
+                        self._directory,
+                        'backtesting',
+                        pm,
+                        running_behavior.NonBlocking())
+
+                    pi = processes.ProcessInitializer(controllable)
+
+                    stg_stp = pi.initialize(
+                        stp,
+                        loader.strategy_name)
+
+                    pm.add_bar_data(
+                        stg_stp.data_frequency,
+                        dp,
+                        restrictions)
+
+                    process = pi.start(stp)
+                    pm.add_process(process)
 
                 # add blotter for the base calendar...
-
                 pm.add_blotter(
                     bc,
                     simulation_blotter.SimulationBlotter(
@@ -235,14 +269,13 @@ class BackTesting(QtWidgets.QMainWindow):
 
             ctl = controller.Controller(pm)
 
-            process = pi.start(stp)
-            pm.add_process(process)
-
             # subscribe process to clock events
             # events.subscribe('clock.update', process.clock_update)
 
+            # todo: watch the controller instead (implement watch method)
+
             # subscribe to monitor events
-            process.watch(self._plotting)
+            ctl.watch(self._plotting)
 
             events.post_event('backtesting.started', None)
             # run loop on these specific exchanges

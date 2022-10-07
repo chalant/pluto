@@ -38,10 +38,7 @@ from pluto.configuration import configuration
 
 class TestBundle(AbstractBundle):
     def __init__(self, root_dir, environ=None):
-        super(TestBundle, self).__init__(
-            'test',
-            root_dir,
-            'NYSE')
+        super(TestBundle, self).__init__('test', root_dir, 'NYSE')
 
         self._environ = environ if environ else {}
 

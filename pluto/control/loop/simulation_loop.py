@@ -75,7 +75,7 @@ class SimulationLoop(object):
                     if res:
                         cts, evt = res
 
-                        signals.append((cts, evt, cl.calendar_name))
+                        signals.append((cts, evt, cl.calendar))
 
                         # events.post_event(
                         #     'clock.controller_update',

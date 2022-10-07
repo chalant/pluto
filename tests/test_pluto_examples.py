@@ -31,6 +31,8 @@ from zipline.finance import asset_restrictions
 from pluto import examples
 from pluto.test import test
 
+from pluto.sources import benchmark_source as source
+
 from pluto.finance import ledger
 from pluto.finance.blotter import simulation_blotter
 from pluto.finance.broker import broker_setup as bks
@@ -153,12 +155,11 @@ def _run(dir_, example_name, expected_perf, environ):
         stp.environ
     )
 
-    manager = process_manager.ProcessManager(
+    manager = process_manager.StrategyManager(
         uni.asset_finder,
-        ledger.Ledger(
-            stp.capital,
-            stp.start
-        )
+        stp.start,
+        stp.capital,
+        stp.emission_rate
     )
 
     restrictions = asset_restrictions.NoRestrictions()
@@ -169,40 +170,46 @@ def _run(dir_, example_name, expected_perf, environ):
         stp.data_frequency
     )
 
-    for calendar_name in uni.base_calendars:
-        calendar = cu.get_calendar_in_range(
-            calendar_name,
-            stp.start,
-            stp.end)
+    calendar_name = 'XNYS'
 
-        last_session = calendar.last_session
+    calendar = cu.get_calendar_in_range(
+        calendar_name,
+        stp.start,
+        stp.end)
 
-        dp = data_portal.DataPortal(
-            asset_finder=uni.asset_finder,
-            trading_calendar=calendar,
-            first_trading_day=calendar.first_session,
-            equity_minute_reader=uni.equity_minute_bar_reader,
-            equity_daily_reader=uni.equity_daily_bar_reader,
-            adjustment_reader=uni.adjustment_reader,
-            last_available_session=last_session,
-            last_available_minute=calendar.minutes_for_session(last_session)[-1]
-        )
+    last_session = calendar.last_session
 
-        manager.add_data_portal(
-            calendar_name,
-            dp)
+    dp = data_portal.DataPortal(
+        asset_finder=uni.asset_finder,
+        trading_calendar=calendar,
+        first_trading_day=calendar.first_session,
+        equity_minute_reader=uni.equity_minute_bar_reader,
+        equity_daily_reader=uni.equity_daily_bar_reader,
+        adjustment_reader=uni.adjustment_reader,
+        last_available_session=last_session,
+        last_available_minute=calendar.minutes_for_session(last_session)[-1]
+    )
 
-        manager.add_bar_data(
-            'daily',
-            dp,
-            restrictions)
+    manager.add_data_portal(
+        calendar_name,
+        dp)
 
-        manager.add_blotter(
-            calendar_name,
-            simulation_blotter.SimulationBlotter(
-                eng_stp))
+    manager.add_bar_data(
+        'daily',
+        dp,
+        restrictions)
 
-        loop.add_clock(calendar_name)
+    manager.add_blotter(
+        calendar_name,
+        simulation_blotter.SimulationBlotter(
+            eng_stp))
+
+    # manager.add_metrics_tracker(
+    #     calendar_name,
+    #     'daily'
+    # )
+
+    loop.add_clock(calendar_name)
 
     client = test.TestClient(
         dir_,
@@ -226,9 +233,20 @@ def _run(dir_, example_name, expected_perf, environ):
         example_name,
         manager)
 
+    sessions = calendar.all_sessions
+
+    benchmark_source = source.SimulationBenchmarkSource(
+        calendar,
+        calendar.all_sessions,
+        uni.benchmark,
+        150
+    )
+
     tester.run(
         loop,
-        expected_perf
+        expected_perf,
+        benchmark_source,
+        sessions
     )
 
     # capital = 1e7
@@ -303,10 +321,12 @@ class PlutoExamplesTests(unittest.TestCase):
         root_dir = tdr.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp')))
 
         # ingest test bundle
-        test_bundle = stack.enter_context(tb.ClickHouseTestBundle(
-            root_dir,
-            caching.InMemoryCache()
-        ))
+        # test_bundle = stack.enter_context(tb.ClickHouseTestBundle(
+        #     root_dir,
+        #     caching.InMemoryCache()
+        # ))
+
+        test_bundle = stack.enter_context(tb.TestBundle(root_dir))
 
         # ingest the test bundle
         test_bundle.ingest()

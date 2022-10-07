@@ -15,29 +15,28 @@ from zipline.finance._finance_ext import minute_annual_volatility
 
 class BenchmarkSource(abc.ABC):
     def __init__(self,
-                 controllable,
+                 trading_calendar,
                  sessions,
                  benchmark,
-                 look_back,
+                 window_length,
                  emission_rate="daily"):
         '''
 
         Parameters
         ----------
-        controllable: pluto.control.controllable.controllable.Controllable
+        trading_calendar:
         sessions
         benchmark: pluto.data.benchmark.Benchmark
+        window_length: int
         emission_rate: str
         '''
 
         self._emission_rate = emission_rate
 
-        self._start_dt = start = sessions[0]
+        self._start_dt = sessions[0]
         self._end_dt = end = sessions[-1]
-        self._open_dt = controllable.trading_calendar.session_open(start)
-        self._minute_end_dt = controllable.trading_calendar.session_close(end)
 
-        self._look_back = look_back
+        self._look_back = window_length
 
         self._daily_returns = None
         self._cumulative_returns = None
@@ -66,7 +65,7 @@ class BenchmarkSource(abc.ABC):
                 self._calculate_benchmark_series(
                     sessions,
                     benchmark,
-                    controllable.trading_calendar,
+                    trading_calendar,
                     emission_rate,
                     end)
             returns = self._daily_returns
@@ -79,8 +78,12 @@ class BenchmarkSource(abc.ABC):
                 self._minute_annual_volatility = (
                         returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
 
-    def on_session_start(self, sessions):
-        self._start_dt = sessions[0]
+    @property
+    def daily_returns_series(self):
+        return self._precalculated_series
+
+    def on_session_start(self, start_dt):
+        self._start_dt = start_dt
         self._session_idx += 1
 
     def on_session_end(self, data_portal, trading_calendar, sessions):
@@ -110,9 +113,6 @@ class BenchmarkSource(abc.ABC):
             self._session_idx = 0
         returns.append(self._daily_returns[self._daily_index])
 
-        start = sessions[0]
-        self._open_dt = trading_calendar.session_open(start)
-        self._minute_end_dt = trading_calendar.session_close(end)
         self._end_dt = end
 
     def on_minute_end(self, dt, data_portal, trading_calendar, sessions):
@@ -144,7 +144,7 @@ class BenchmarkSource(abc.ABC):
         raise NotImplementedError
 
     def daily_returns(self):
-        return np.array(self._daily_returns_array)
+        return np.array(self._daily_returns)
 
     @property
     def cumulative_returns(self):
@@ -162,10 +162,10 @@ class BenchmarkSource(abc.ABC):
     def minute_annual_volatility(self):
         return self._minute_annual_volatility[self._minute_index]
 
-    def get_range(self):
+    def get_range(self, open_, close):
         series = self._precalculated_series
         if series:
-            return series.loc[self._open_dt:self._minute_end_dt]
+            return series.loc[open_:close]
         return
 
     def _calculate_benchmark_series(self, sessions, benchmark, trading_calendar, emission_rate, end_dt):

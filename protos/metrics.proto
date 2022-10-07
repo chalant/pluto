@@ -45,17 +45,17 @@ message PeriodMetrics {
 
 message CumulativeRiskMetrics {
     float algo_volatility = 1;
-    float benchmark_period_return = 2;
-    float benchmark_volatility = 3;
-    float algorithm_period_return = 4;
-    float alpha = 5;
-    float beta = 6;
-    float sharpe = 7;
-    float sortino = 8;
-    float max_drawdown = 9;
-    float max_leverage = 10;
-    int32 trading_days = 11;
-    string period_label = 12;
-    float excess_return = 13;
-    float treasury_period_return = 14;
+//    float benchmark_period_return = 2;
+//    float benchmark_volatility = 3;
+    float algorithm_period_return = 2;
+//    float alpha = 5;
+//    float beta = 6;
+//    float sharpe = 7;
+//    float sortino = 8;
+//    float max_drawdown = 9;
+    float max_leverage = 3;
+    int32 trading_days = 4;
+    string period_label = 5;
+    float excess_return = 6;
+    float treasury_period_return = 7;
 }

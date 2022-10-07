@@ -7,9 +7,12 @@ import pandas as pd
 from numpy import testing
 import numpy as np
 
+import empyrical as ep
+
 from dev import strategy_store, events
 
 from pluto import examples
+from pluto.sources import benchmark_source as bs
 
 from pluto.utils import stream
 
@@ -32,7 +35,13 @@ from protos import controller_pb2
 
 
 class TestWatcher(monitor.AbstractWatcher):
-    def __init__(self, process_id, expected_df, name, error_callback):
+    def __init__(self,
+                 process_id,
+                 expected_df,
+                 name,
+                 trading_sessions,
+                 benchmark_source,
+                 error_callback):
         super(TestWatcher, self).__init__(process_id)
 
         self._expected_df = expected_df[examples._cols_to_check]
@@ -46,8 +55,31 @@ class TestWatcher(monitor.AbstractWatcher):
         self._name = name
 
         self._error_callback = error_callback
+        self._benchmark_source = benchmark_source
+
+        self._session_idx = 0
+
+        # arr = np.empty(len(trading_sessions))
+        # arr[:] = np.nan
+        arr = np.zeros(len(trading_sessions))
+
+        self._algo_daily_returns = arr
+
+        benchmark_returns = benchmark_source.daily_returns_series
+
+        self._benchmark_period_return = (np.cumprod(1 + benchmark_returns.values) - 1)
+        self._benchmark_volatility = (benchmark_returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
+        self._benchmark_returns = benchmark_returns.values
+    def _check_is_nan(self, value):
+        if np.isnan(value):
+            return 0.0
+        return value
 
     def performance_update(self, packet):
+        # todo: need benchmark returns etc.
+        #  note: metrics could be determined by the setup
+        #  script, then computed by the controller.
+        #  the strategies only track returns, portfolio data etc.
 
         daily_perfs = self._daily_perfs
         # append until end...
@@ -73,13 +105,35 @@ class TestWatcher(monitor.AbstractWatcher):
 
         daily_perf.update(cum_perf)
 
+        session_idx = self._session_idx
+
+        self._algo_daily_returns[session_idx] = daily_perf['returns']
+
+        daily_perf['benchmark_period_return'] = self._benchmark_period_return[session_idx]
+        daily_perf['benchmark_volatility'] = self._check_is_nan(self._benchmark_volatility[session_idx])
+
+        self._session_idx += 1
+
+        algo_returns = self._algo_daily_returns[:session_idx + 1]
+
+        a, b = ep.alpha_beta_aligned(
+            algo_returns,
+            self._benchmark_returns[:session_idx + 1],
+        )
+
+        daily_perf['algo_volatility'] = self._check_is_nan(ep.annual_volatility(algo_returns))
+        daily_perf['alpha'] = self._check_is_nan(a)
+        daily_perf['beta'] = self._check_is_nan(b)
+
+        daily_perf['sharpe'] = self._check_is_nan(ep.sharpe_ratio(algo_returns))
+        daily_perf['sortino'] = self._check_is_nan(ep.sortino_ratio(algo_returns))
+        daily_perf['max_drawdown'] = ep.max_drawdown(algo_returns)
+        daily_perf['capital_used'] = daily_perf['capital_used']
+
         daily_perfs.append(daily_perf)
 
-        # if self._name == 'buyapple':
-        #     print("PERF", self._name, daily_perf['algorithm_period_return'])
 
         if packet.end:
-
             # compare values to expected values.
             expected_perf = self._expected_df
 
@@ -91,9 +145,15 @@ class TestWatcher(monitor.AbstractWatcher):
 
             errors = 0
             tests = 0
+            idx = 0
+
+            for i, j in zip(expected_perf['capital_used'], daily_stats['capital_used']):
+                if abs(round(i, 2) - round(j, 2)) > 0:
+                    print(idx, i, j, len(self._benchmark_returns), daily_dts[idx], daily_stats['capital_used'][idx-1], expected_perf['capital_used'][idx+1], expected_perf['capital_used'][idx-1])
+
+                idx += 1
 
             for l, r in zip(expected_perf.iteritems(), daily_stats.iteritems()):
-
                 tests += 1
 
                 des = l[1]
@@ -103,8 +163,8 @@ class TestWatcher(monitor.AbstractWatcher):
                     testing.assert_allclose(
                         np.nan_to_num(des.values),
                         act.values,
-                        rtol=0.1,
-                        atol=0.2,
+                        rtol=0.001,
+                        atol=0.02,
                         equal_nan=False)
 
                 except AssertionError as e:
@@ -130,8 +190,7 @@ class StrategyTester(object):
         self._name = name
         self._process_manager = process_manager
 
-    def run(self, loop, expected_perf):
-
+    def run(self, loop, expected_perf, benchmark_source, trading_sessions):
         def on_error(message):
             raise AssertionError(message)
 
@@ -139,6 +198,8 @@ class StrategyTester(object):
             self._process.process_id,
             expected_perf,
             self._name,
+            trading_sessions,
+            benchmark_source,
             on_error)
 
         self._process.watch(watcher)
@@ -146,7 +207,9 @@ class StrategyTester(object):
         # # subscribe to clock events
         # events.subscribe('clock.update', self._process.clock_update)
 
-        loop.start(controller.Controller(self._process_manager))
+        loop.start(controller.Controller(
+            self._process_manager
+        ))
 
 
 class TestClient(object):

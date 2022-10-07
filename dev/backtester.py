@@ -48,7 +48,7 @@ class BackTester(object):
     def _setup(self, setup, controllable):
         pi = processes.ProcessInitializer(controllable)
 
-        strategy_setup = pi.initialize(setup)
+        strategy_setup = pi.initialize(setup,)
 
         r_stp = run_setup.load_run_setup()
 
