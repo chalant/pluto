@@ -1,7 +1,10 @@
+import pandas as pd
+
+from zipline import protocol
+
 from dev import events
 
 import pluto.control.controller.process_manager
-import pluto.finance.metrics.tracker
 
 from pluto.coms.utils import conversions
 
@@ -10,14 +13,14 @@ from protos.clock_pb2 import (
     TRADE_END,
     SESSION_END,
     SESSION_START,
+    MINUTE_END,
     BEFORE_TRADING_START)
 
 from protos import broker_pb2
 
 
-# todo: this has a blotter, broker etc.
 class Controller(object):
-    def __init__(self, process_manager: pluto.control.controller.process_manager.ProcessManager):
+    def __init__(self, process_manager: pluto.control.controller.process_manager.StrategyManager):
         self._process_manager = process_manager
         self._orders = 0
 
@@ -32,12 +35,14 @@ class Controller(object):
         controllable_manager.set_global_timestamp(ts)
 
         # populate broker state to send to controllables
-        for cts, c_evt, calendar_name in signals:
+        for cts, c_evt, calendar in signals:
             # set current datetime
 
             # # skip
             # if calendar_name not in self._base_calendars:
             #     continue
+
+            calendar_name = calendar.name
 
             controllable_manager.set_calendar_timestamp(
                 calendar_name,
@@ -144,9 +149,7 @@ class Controller(object):
                             splits)
 
             elif c_evt == SESSION_END:
-                open_orders = controllable_manager.get_open_orders(calendar_name)
-
-                # print([order for orders in open_orders.values() for order in orders if order.open is False])
+                # open_orders = controllable_manager.get_open_orders(calendar_name)
 
                 for df in controllable_manager.get_frequencies(calendar_name):
                     controllable_manager.cleanup_expired_assets(
@@ -186,4 +189,7 @@ class Controller(object):
 
         # once all the processes have made an order, we can process the orders.
         # this must be done asap! so we do not wait for the next loop!
+
+    def watch(self, handler):
+        pass
 

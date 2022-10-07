@@ -325,7 +325,9 @@ class BacktestSetup(QtWidgets.QWidget):
         self._universes.set_item_store(Universes())
 
     def _set_universe(self, name):
-        uni = universes.get_universe(name, self._directory)
+        uni = universes.get_universe(
+            name,
+            self._directory)
 
         events.post_event('universe.loaded', uni)
 

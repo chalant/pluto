@@ -150,13 +150,22 @@ class ZiplineQuandlUniverse(AbstractUniverse):
 
 
 class TestUniverse(AbstractUniverse):
-    def __init__(self, root_dir, data_cache, calendar_cache=False, environ=None):
+    def __init__(self,
+                 root_dir,
+                 data_cache,
+                 calendar_cache=False,
+                 environ=None):
         super(TestUniverse, self).__init__()
 
         self._calendar = None
         self._cache = calendar_cache
 
-        self._bundle = bundle = test.ClickHouseTestBundle(root_dir, data_cache)
+        # self._bundle = bundle = test.ClickHouseTestBundle(
+        #     root_dir,
+        #     data_cache)
+
+        self._bundle = bundle = test.TestBundle(root_dir)
+
         self._bundle_data = bundle.load()
 
         self._equity_daily_bar_reader = self._bundle_data.equity_daily_bar_reader

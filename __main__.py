@@ -10,18 +10,16 @@ import sys
 
 from os import path
 
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtWidgets
 from gui import backtesting
 
 import click
-import logbook
 
 from directory import utils
 
 from dev import strategy_store
 
-from pluto.setup import directory_setup as ds
-from pluto.control.processes import in_memory
+from pluto import pluto_setup
 from pluto import examples
 from pluto.data.bundles import test
 
@@ -35,7 +33,7 @@ def main():
 def install_examples():
     print("Installing examples...")
 
-    root_dir = ds.create_directory(path.expanduser('~/.pluto'))
+    root_dir = pluto_setup.create_directory(path.expanduser('~/.pluto'))
 
     store = strategy_store.StrategyStore(root_dir)
 
@@ -58,25 +56,66 @@ def install_examples():
 
 
 @main.command()
-def dev():
+@click.argument('script_name')
+def backtester(script_name):
 
     # todo: need to walk down the directory tree to get already existing
     #  files.
 
-    logbook.StderrHandler()
+    # logbook.StderrHandler()
 
     app = QtWidgets.QApplication(sys.argv)
 
-    bk = backtesting.BackTesting(utils.DirectoryInterface(ds.create_directory(
-        path.expanduser('~/.pluto'))))
+    bk = backtesting.BackTesting(utils.DirectoryInterface(pluto_setup.create_directory(
+        path.expanduser('~/.pluto'))),
+        script_name
+    )
 
     bk.show()
     sys.exit(app.exec())
 
 
 @main.command()
-def account():
-    pass
+@click.argument('name')
+def add_setup(name):
+    root_dir = pluto_setup.create_directory(path.expanduser('~/.pluto'))
+
+    launchers = root_dir.get_directory('launchers')
+
+    if launchers.contains_file(name, 'py'):
+        print("File Already Exists...")
+        return
+
+    launchers.add_file(name, 'py').touch()
+
+    print('File created')
+
+
+@main.command()
+@click.argument('name')
+@click.option('-t', '--template', default='pipeline')
+def add_strategy(name, template):
+    root_dir = pluto_setup.create_directory(path.expanduser('~/.pluto'))
+    store = strategy_store.StrategyStore(root_dir)
+
+    templates_dir = root_dir.get_directory('strategies').get_directory('templates')
+
+    if not templates_dir.contains_file(template, 'py'):
+        print("Template of name {} does not exist".format(template))
+        return
+
+    template_file = templates_dir.get_file(template, 'py')
+
+    if name in store:
+        print("Strategy named {} already exits".format(name))
+        return
+
+    store.add_strategy(
+        name,
+        template_file.path
+    )
+
+    print("Strategy added")
 
 
 if __name__ == "__main__":

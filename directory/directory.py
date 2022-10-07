@@ -51,10 +51,6 @@ class Directory(object):
 
         if id_ not in self._files:
             fl = File(name, extension, self)
-
-            with open(fl.path, 'a'):
-                pass
-
             self._files[id_] = fl
 
             return fl
@@ -80,10 +76,12 @@ class Directory(object):
             os.mkdir(p)
         except FileExistsError as e:
             #
-            for f in os.listdir(p):
-                if os.path.isfile(os.path.join(p, f)):
-                    fn, extension = f.split('.')
-                    d.add_file(fn, extension)
+            # for f in os.listdir(p):
+            #     if os.path.isfile(os.path.join(p, f)):
+            #         print("Adding File", f)
+            #         fn, extension = path.splitext(f)
+            #         d.add_file(fn, extension)
+            pass
 
         self._children[name] = d
 
@@ -157,6 +155,16 @@ class Directory(object):
         """
         return self._parent
 
+    def clear(self):
+        self._files.clear()
+        self._children.clear()
+
+    def contains_file(self, name, extension):
+        return _file_id(name, extension) in self._files
+
+    def contains_directory(self, name):
+        return name in self._children
+
 
 class File(object):
     def __init__(self, name, extension, dir_):
@@ -167,6 +175,10 @@ class File(object):
     @property
     def path(self):
         return path.join(self.dir_.path, self.name + "." + self.extension)
+
+    def touch(self):
+        with open(self.path, 'a'):
+            pass
 
 
 def create_directory(path_, name, parent=None):

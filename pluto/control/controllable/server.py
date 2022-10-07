@@ -11,10 +11,9 @@ import click
 
 from google.protobuf import empty_pb2 as emp
 
-from directory import directory as drt
 from directory import utils as du
 
-from pluto.interface.utils import paths, service_access
+from pluto.interface.utils import service_access
 
 from pluto.coms.utils import conversions
 
@@ -280,6 +279,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         # todo: we should have a directory for storing performance
 
+        # todo: store this as human readable file instead of binary...
         # activate state storage if we're in live mode
         state_path = self._strategies_dir.add_file(id_, 'bin').path
 

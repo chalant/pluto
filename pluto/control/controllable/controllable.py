@@ -7,7 +7,6 @@ import pandas as pd
 
 import logbook
 
-from zipline.finance import cancel_policy
 from zipline.finance import trading
 from zipline.finance import asset_restrictions
 from zipline.finance.order import ORDER_STATUS
@@ -15,21 +14,22 @@ from zipline.finance.order import ORDER_STATUS
 from zipline.data import data_portal as dp
 
 from zipline.protocol import BarData
+from zipline import protocol
 
 from zipline.utils import api_support
 
 from pluto.pipeline import domain
 from pluto.coms.utils import conversions
-from pluto.control.controllable import controllable_states as ss
+
+from pluto.finance import ledger
 from pluto.finance.metrics import tracker
 from pluto.finance.broker import broker_setup as brs
-from pluto.sources import benchmark_source as bs
+
 from pluto.data.universes import universes
 
 from pluto.control.clock import clock
 
 from protos import controllable_pb2
-from protos import broker_pb2
 
 from dev import events
 
@@ -141,7 +141,7 @@ class Controllable(ABC):
         self._calendar = None
         self._universe = None
         self._benchmark = None
-        self._benchmark_source = None
+        # self._benchmark_source = None
         self._last_session_close = None
 
         self._sessions = pd.Series()
@@ -430,30 +430,33 @@ class Controllable(ABC):
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
-            first_trading_day=max(bundle.first_trading_day, calendar.all_sessions[0]),
+            first_trading_day=max(
+                bundle.first_trading_day,
+                calendar.all_sessions[0]),
             equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader,
             last_available_session=last_session,
             last_available_minute=calendar.minutes_for_session(last_session)[-1])
 
-        # todo: we need to load benchmark returns from a file using an environment
-        # todo: create benchmark source instance based on the run mode.
-        # (simulation benchmark, live benchmark)
-        self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
-            self,
-            sessions,
-            uni.benchmark,
-            self._look_back,
-            self._emission_rate)
+        # self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
+        #     calendar,
+        #     sessions,
+        #     uni.benchmark,
+        #     self._look_back,
+        #     self._emission_rate)
 
+        # todo: metrics tracker should not take a benchmark source
         self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(
-            benchmark_source,
+            ledger.Ledger(
+                start_dt,
+                protocol.Portfolio(start_dt, run_setup.capital),
+                protocol.Account()
+            ),
             run_setup.capital,
             data_frequency,
             self._emission_rate,
-            start_dt,
-            strategy_setup.look_back)
+            start_dt)
 
         # todo: we should set up the cancel policy externally.
 
@@ -471,6 +474,8 @@ class Controllable(ABC):
         dom = domain.Domain(
             uni.country_code,
             calendar)
+
+        # todo: pipeline loader should be created from a script...
 
         # the algorithm object is just for exposing methods (api) that are needed by the user
         # (we don't run the algorithm through the algorithm object)
@@ -528,9 +533,7 @@ class Controllable(ABC):
             dt,
             self._algo,
             self._metrics_tracker,
-            self._data_portal,
-            self._calendar,
-            self._sessions), dt == self._end_dt
+            self._data_portal), dt == self._end_dt
 
     def session_start(self, dt):
         # if dt > self._end_dt:
@@ -619,9 +622,7 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         metrics_tracker.handle_market_open(
             dt,
-            data_portal,
-            self._calendar,
-            self._sessions)
+            data_portal)
 
         # handle any splits that impact any positions or any open orders.
         assets_we_care_about = (
@@ -763,9 +764,7 @@ class Controllable(ABC):
             dt,
             algo,
             metrics_tracker,
-            data_portal,
-            self._calendar,
-            self._sessions
+            data_portal
         ), dt == self._last_session_close
 
     def get_state(self, dt):
@@ -911,9 +910,7 @@ class Controllable(ABC):
                            dt,
                            algo,
                            metrics_tracker,
-                           data_portal,
-                           trading_calendar,
-                           sessions):
+                           data_portal):
         """
 
         Parameters
@@ -922,7 +919,6 @@ class Controllable(ABC):
         algo: pluto.algorithm.TradingAlgorithm
         metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
         data_portal: zipline.data.data_portal.DataPortal
-        trading_calendar: trading_calendars.TradingCalendar
 
         Returns
         -------
@@ -935,9 +931,7 @@ class Controllable(ABC):
         self._sync_last_sale_prices(metrics_tracker, dt)
         perf_message = metrics_tracker.handle_market_close(
             dt,
-            data_portal,
-            trading_calendar,
-            sessions
+            data_portal
         )
         perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
         return perf_message
@@ -946,9 +940,7 @@ class Controllable(ABC):
                             dt,
                             algo,
                             metrics_tracker,
-                            data_portal,
-                            trading_calendar,
-                            sessions):
+                            data_portal):
         """
 
         Parameters
@@ -957,7 +949,6 @@ class Controllable(ABC):
         algo
         metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
         data_portal
-        trading_calendar: trading_calendars.TradingCalendar
 
         Returns
         -------
@@ -972,9 +963,7 @@ class Controllable(ABC):
 
         minute_message = metrics_tracker.handle_minute_close(
             dt,
-            data_portal,
-            trading_calendar,
-            sessions
+            data_portal
         )
 
         minute_message['minute_perf']['recorded_vars'] = rvars

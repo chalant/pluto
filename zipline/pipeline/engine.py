@@ -500,7 +500,7 @@ class SimplePipelineEngine(PipelineEngine):
                 lookback_length=extra_rows,
             )
 
-        # NOTE: This logic should probably be delegated to the domain once we
+        # TODO: This logic should probably be delegated to the domain once we
         #       start adding more complex domains.
         #
         # Build lifetimes matrix reaching back to `extra_rows` days before

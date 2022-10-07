@@ -178,6 +178,9 @@ def get_strategy(connection, strategy_name):
         strategy_name=strategy_name
     ).first()
 
+    if not res:
+        raise FileNotFoundError('Strategy of name {} does not exist'.format(strategy_name))
+
     strategy = Strategy(strategy_name, res['status'])
 
     strategy.strategy_id = _create_id(strategy)

@@ -25,6 +25,8 @@ def create_directory(root_path):
     strategy_performance_dir = strategies_dir.add_directory('performance')
     strategy_metadata = strategies_dir.add_file('metadata', 'sqlite')
 
+    launchers_dir = root_dir.add_directory('launchers')
+
     root_dir.add_file('metadata', 'sqlite')
 
     strategies_db_engine = create_engine(

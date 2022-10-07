@@ -296,19 +296,17 @@ class PositionTracker(object):
 
 
 class Ledger(object):
-    def __init__(self, capital, start_date):
+    def __init__(self, start_date, portfolio, account):
         # metric only uses array
         self.daily_returns_array = collections.deque()
 
         self._positions = None
 
-        self._immutable_account = account = protocol.Account()
+        self._immutable_account = account
         self._account = protocol.MutableView(account)
 
         # an immutable portfolio is necessary to prevent the user from overriding values
-        self._immutable_portfolio = ip = protocol.Portfolio(
-            start_date,
-            capital)
+        self._immutable_portfolio = ip = portfolio
 
         self._portfolio = protocol.MutableView(ip)
 
@@ -415,7 +413,7 @@ class Ledger(object):
     def update_account(self, main_account):
         # todo: this is called by the controller loop: passes
 
-        sub_account = self._account
+        account = self._account
         portfolio = self._portfolio
         stats = self._position_tracker.stats
 
@@ -427,11 +425,11 @@ class Ledger(object):
         portfolio_value = portfolio.portfolio_value
         cash = portfolio.cash
 
-        sub_account.settled_cash = cash
+        account.settled_cash = cash
         # sub_account.accrued_interest = ?
-        sub_account.equity_with_loan = portfolio_value
-        sub_account.total_positions_value = portfolio_value - cash
-        sub_account.total_positions_exposure = portfolio.positions_exposure
+        account.equity_with_loan = portfolio_value
+        account.total_positions_value = portfolio_value - cash
+        account.total_positions_exposure = portfolio.positions_exposure
 
         # positions_value = portfolio.positions_value
         #
@@ -454,19 +452,19 @@ class Ledger(object):
         # else:
         #     sub_account.buying_power = (min(portfolio_value,prev_pv) - init_mr) * 4
 
-        sub_account.available_funds = cash
-        sub_account.excess_liquidity = cash
-        sub_account.cushion = cash / portfolio_value if portfolio_value else np.nan
+        account.available_funds = cash
+        account.excess_liquidity = cash
+        account.cushion = cash / portfolio_value if portfolio_value else np.nan
 
-        sub_account.day_trades_remaining = main_account.day_trades_remaining  # todo: ?
+        account.day_trades_remaining = main_account.day_trades_remaining  # todo: ?
 
         # this is used in the metrics module.
-        sub_account.net_liquidation = portfolio_value
-        sub_account.gross_leverage, sub_account.net_leverage = self._calculate_period_stats(
+        account.net_liquidation = portfolio_value
+        account.gross_leverage, account.net_leverage = self._calculate_period_stats(
             portfolio_value,
             stats
         )
-        sub_account.leverage = sub_account.gross_leverage
+        account.leverage = account.gross_leverage
 
     def _update_portfolio(self):
         """Force a computation of the current portfolio state.
@@ -751,18 +749,19 @@ class Ledger(object):
         # in live, every x time, (days between end_dt and start_dt), we pop the left-most element
         # this will never happen in simulation mode, so it is safe for both to share the same
         # implementation.
-
         # TODO: watch out for this
         self._processed_transactions.clear()
         self._orders_by_modified.clear()
         self._orders_by_id.clear()
 
         # self._ptr = self._previous_total_returns
+        self._previous_total_returns = self.portfolio.returns
 
     # called by the algorithm object
     def capital_change(self, change_amount):
         self._update_portfolio()
         portfolio = self._portfolio
+
         # we update the cash and total value so this is not dirty
         portfolio.portfolio_value += change_amount
         portfolio.cash += change_amount

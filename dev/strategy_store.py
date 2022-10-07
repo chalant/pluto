@@ -70,10 +70,11 @@ class StrategyStore(object):
         return self._strategies[index]
 
     def get_strategy_of_name(self, name):
-        for stg in self._strategies:
-            if stg.name == name:
-                return stg
-        return
+        with self._strategy_db_engine.connect() as connection:
+            try:
+                strategies.get_strategy(connection, name)
+            except FileNotFoundError:
+                return False
 
     def contains_strategy_of_name(self, name):
         for stg in self._strategies:

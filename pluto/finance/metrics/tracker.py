@@ -2,7 +2,6 @@ import pandas as pd
 
 from pluto.finance import metrics as mtr
 from pluto.coms.utils import conversions
-from pluto.finance import ledger
 from pluto.finance import returns
 
 from protos import tracker_state_pb2 as trs
@@ -10,31 +9,27 @@ from protos import tracker_state_pb2 as trs
 
 class MetricsTracker(object):
     def __init__(self,
-                 benchmark_source,
+                 ledger_,
                  capital,
                  data_frequency,
                  emission_rate,
-                 start_dt,
-                 look_back,
-                 metrics=None):
+                 start_dt):
         """
 
         Parameters
         ----------
-        benchmark_source: pluto.sources.benchmark_source.BenchmarkSource
-        metrics: set
+        ledger_: pluto.finance.ledger.Ledger
+        capital: float
         data_frequency: str
+        emission_rate: str
         start_dt: pandas.Timestamp
-        look_back: int
         """
-        self._benchmark_source = benchmark_source
-        self._ledger = ledger.Ledger(
-            capital,
-            start_dt)
+        # self._benchmark_source = benchmark_source
+        self._ledger = ledger_
 
-        self._returns_tracker = returns.ReturnsTracker(
-            self._ledger,
-            look_back)
+        # self._returns_tracker = returns.ReturnsTracker(
+        #     self._ledger,
+        #     look_back)
 
         self._first_open_session = None
 
@@ -42,15 +37,19 @@ class MetricsTracker(object):
         self._data_frequency = data_frequency
         self._emission_rate = emission_rate
 
-        if metrics is None:
-            self._metrics = mtr.pluto_metrics()
+        self._metrics = mtr.pluto_metrics()
 
         self._first_session = start_dt
+        self._last_sync = None
 
         for metric in self._metrics:
             metric.initialization(
                 first_session=start_dt,
                 ledger=self._ledger)
+
+    @property
+    def ledger(self):
+        return self._ledger
 
     @property
     def portfolio(self):
@@ -86,10 +85,14 @@ class MetricsTracker(object):
         self._ledger.capital_change(amount)
 
     def sync_last_sale_prices(self, dt, data_portal, handle_non_market_minutes=False):
-        self._ledger.sync_last_sale_prices(
-            dt, data_portal,
-            self._data_frequency,
-            handle_non_market_minutes)
+        if dt != self._last_sync:
+
+            self._ledger.sync_last_sale_prices(
+                dt, data_portal,
+                self._data_frequency,
+                handle_non_market_minutes)
+
+            self._last_sync = dt
 
     def update_account(self, main_account):
         self._ledger.update_account(main_account)
@@ -114,7 +117,7 @@ class MetricsTracker(object):
 
         self._last_checkpoint = ledger_.restore_state(tr_state.account_state)
 
-    def handle_minute_close(self, dt, data_portal, trading_calendar, sessions):
+    def handle_minute_close(self, dt, data_portal):
         """
 
         Handles the close of the given minute in minute emission.
@@ -151,25 +154,24 @@ class MetricsTracker(object):
         }
 
         # updates returns at the end of the minute.
-        benchmark_source = self._benchmark_source
+        # benchmark_source = self._benchmark_source
         # ledger_.end_of_bar(self._data_frequency)
-        returns_tracker = self._returns_tracker
-        benchmark_source.on_minute_end(dt, data_portal, trading_calendar, sessions)
-        returns_tracker.end_of_bar(self._data_frequency)
+        # returns_tracker = self._returns_tracker
+        # benchmark_source.on_minute_end(dt, data_portal, trading_calendar, sessions)
+        # returns_tracker.end_of_bar(self._data_frequency)
 
         for metric in self._metrics:
             metric.end_of_bar(
                 packet=packet,
                 ledger=ledger_,
-                benchmark_source=benchmark_source,
+                # benchmark_source=benchmark_source,
                 dt=dt,
                 data_portal=data_portal,
-                emission_rate=self._emission_rate,
-                returns_tracker=returns_tracker
+                emission_rate=self._emission_rate
             )
         return packet
 
-    def handle_market_open(self, session_label, data_portal, trading_calendar, sessions):
+    def handle_market_open(self, session_label, data_portal):
         """
 
         Handles the start of each session.
@@ -185,18 +187,21 @@ class MetricsTracker(object):
         """
         ledger_ = self._ledger
         ledger_.start_of_session(session_label)
-        self._returns_tracker.start_of_session(session_label)
-        self._benchmark_source.on_session_start(sessions)
+
+        # self._returns_tracker.start_of_session(session_label)
+        # self._benchmark_source.on_session_start(session_label)
 
         self._current_session = session_label
 
         if not self._first_open_session:
             self._first_open_session = session_label
 
-        self._market_open, self._market_close = self._execution_open_and_close(
-            trading_calendar,
-            session_label,
-        )
+        self._market_open = session_label
+
+        # self._market_open, self._market_close = self._execution_open_and_close(
+        #     trading_calendar,
+        #     session_label,
+        # )
 
         for metric in self._metrics:
             metric.start_of_session(
@@ -205,7 +210,7 @@ class MetricsTracker(object):
                 ledger=ledger_,
                 data_portal=data_portal)
 
-    def handle_market_close(self, dt, data_portal, trading_calendar, sessions):
+    def handle_market_close(self, dt, data_portal):
         first_session = self._ledger.first_session
 
         packet = {
@@ -225,19 +230,24 @@ class MetricsTracker(object):
         }
 
         ledger_ = self._ledger
-        returns_tracker = self._returns_tracker
-        benchmark_source = self._benchmark_source
-        returns_tracker.end_of_session(sessions)
-        benchmark_source.on_session_end(data_portal, trading_calendar, sessions)
+
+        # returns_tracker = self._returns_tracker
+        # benchmark_source = self._benchmark_source
+        # returns_tracker.end_of_session()
+
+        # benchmark_source.on_session_end(
+        #     data_portal,
+        #     trading_calendar,
+        #     sessions)
 
         for metric in self._metrics:
             metric.end_of_session(
                 dt=dt,
                 packet=packet,
                 ledger=ledger_,
-                benchmark_source=benchmark_source,
-                data_portal=data_portal,
-                returns_tracker=returns_tracker
+                # benchmark_source=benchmark_source,
+                data_portal=data_portal
+                # returns_tracker=returns_tracker
             )
 
         return packet

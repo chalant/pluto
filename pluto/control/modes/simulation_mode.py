@@ -29,7 +29,7 @@ class SimulationControlMode(mode.ControlCommandHandler):
             self._max_leverage)
 
     def _create_process_manager(self):
-        return process_manager.ProcessManager()
+        return process_manager.StrategyManager()
 
     def _accept_loop(self, loop):
         # can accept any type of loop

@@ -48,3 +48,5 @@ strategy_assets = Table(
     Column('asset_class', String, nullable=False),
     Column('strategy_id', String, ForeignKey('strategies.strategy_id'))
 )
+
+

@@ -81,7 +81,7 @@ class DailyLedgerField(Metric):
 
     def end_of_bar(self, **kwargs):
         field = self._packet_field
-        packet = kwargs.pop('packet')
+        packet = kwargs['packet']
         packet['cumulative_perf'][field] = packet['minute_perf'][field] = \
             (self._get_ledger_field(kwargs['ledger']))
 
@@ -134,15 +134,15 @@ class Returns(Metric):
 
 class BenchmarkReturnsAndVolatility(Metric):
     def initialization(self, **kwargs):
-        self._first_session = kwargs.pop('first_session')
+        self._first_session = kwargs['first_session']
 
     def start_of_session(self, **kwargs):
-        self._current_session = kwargs.pop('dt')
+        self._current_session = kwargs['dt']
 
     def end_of_bar(self, **kwargs):
-        if kwargs.pop('emission_rate') == 'minute':
+        if kwargs['emission_rate'] == 'minute':
             benchmark_source = kwargs['benchmark_source']
-            packet = kwargs.pop('packet')
+            packet = kwargs['packet']
 
             r = benchmark_source.minute_cumulative_returns
 
@@ -158,7 +158,7 @@ class BenchmarkReturnsAndVolatility(Metric):
     def end_of_session(self, **kwargs):
         packet = kwargs['packet']
 
-        benchmark_source = kwargs.pop('benchmark_source')
+        benchmark_source = kwargs['benchmark_source']
         r = benchmark_source.cumulative_returns
         if np.isnan(r):
             r = None
@@ -176,7 +176,7 @@ class PNL(Metric):
         self._previous_pnl = 0.0
 
     def start_of_session(self, **kwargs):
-        self._previous_pnl = kwargs.pop('ledger').portfolio.pnl
+        self._previous_pnl = kwargs['ledger'].portfolio.pnl
 
     def _end_of_period(self, field, packet, ledger):
         pnl = ledger.portfolio.pnl
@@ -184,54 +184,64 @@ class PNL(Metric):
         packet['cumulative_perf']['pnl'] = ledger.portfolio.pnl
 
     def end_of_bar(self, **kwargs):
-        self._end_of_period('minute_perf', kwargs['packet'], kwargs['ledger'])
+        self._end_of_period(
+            'minute_perf',
+            kwargs['packet'],
+            kwargs['ledger'])
 
     def end_of_session(self, **kwargs):
-        self._end_of_period('daily_perf', kwargs['packet'], kwargs['ledger'])
+        self._end_of_period(
+            'daily_perf',
+            kwargs['packet'],
+            kwargs['ledger'])
 
 
 class CashFlow(Metric):
     def initialization(self, **kwargs):
         self._previous_cash_flow = 0.0
+        self._p = 0.0
+        self._cash_flow = 0.0
 
     def end_of_bar(self, **kwargs):
         cash_flow = kwargs['ledger'].portfolio.cash_flow
-        packet = kwargs.pop('packet')
+        packet = kwargs['packet']
         packet['minute_perf']['capital_used'] = (cash_flow - self._previous_cash_flow)
         packet['cumulative_perf']['capital_used'] = cash_flow
 
     def end_of_session(self, **kwargs):
-        cash_flow = kwargs.pop('ledger').portfolio.cash_flow
-        packet = kwargs.pop('packet')
-        packet['daily_perf']['capital_used'] = (
-                cash_flow - self._previous_cash_flow
-        )
+        cash_flow = kwargs['ledger'].portfolio.cash_flow
+        packet = kwargs['packet']
+        packet['daily_perf']['capital_used'] = p = cash_flow - self._previous_cash_flow
+        self._cash_flow = p
+        # assert round(p, 2) != round(-937.989990234375, 2)
+        #     raise NotImplementedError(self._p)
         packet['cumulative_perf']['capital_used'] = cash_flow
         self._previous_cash_flow = cash_flow
+        self._p = p
 
 
 class Orders(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf']['orders'] = kwargs['ledger'].orders(kwargs['dt'])
+        kwargs['packet']['minute_perf']['orders'] = kwargs['ledger'].orders(kwargs['dt'])
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf']['orders'] = kwargs['ledger'].orders()
+        kwargs['packet']['daily_perf']['orders'] = kwargs['ledger'].orders()
 
 
 class Transactions(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf']['transactions'] = kwargs['ledger'].transactions(kwargs.pop('dt'))
+        kwargs['packet']['minute_perf']['transactions'] = kwargs['ledger'].transactions(kwargs['dt'])
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf']['transactions'] = kwargs['ledger'].transactions()
+        kwargs['packet']['daily_perf']['transactions'] = kwargs['ledger'].transactions()
 
 
 class Positions(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['minute_perf']['positions'] = kwargs['ledger'].positions(kwargs.pop('dt'))
+        kwargs['packet']['minute_perf']['positions'] = kwargs['ledger'].positions(kwargs['dt'])
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['daily_perf']['positions'] = kwargs['ledger'].positions()
+        kwargs['packet']['daily_perf']['positions'] = kwargs['ledger'].positions()
 
 
 class ReturnsStatistic(Metric):
@@ -260,7 +270,7 @@ class ReturnsStatistic(Metric):
         if not np.isfinite(res):
             res = None
 
-        kwargs.pop('packet')['cumulative_risk_metrics'][self._field_name] = res
+        kwargs['packet']['cumulative_risk_metrics'][self._field_name] = res
 
     def end_of_session(self, **kwargs):
         self.end_of_bar(**kwargs)
@@ -271,10 +281,10 @@ class AlphaBeta(Metric):
         pass
 
     def end_of_bar(self, **kwargs):
-        risk = kwargs.pop('packet')['cumulative_risk_metrics']
+        risk = kwargs['packet']['cumulative_risk_metrics']
 
         ledger_returns = kwargs['returns_tracker'].daily_returns
-        benchmark_returns = kwargs.pop('benchmark_source').daily_returns()
+        benchmark_returns = kwargs['benchmark_source'].daily_returns()
 
         alpha, beta = ep.alpha_beta_aligned(
             ledger_returns,
@@ -297,7 +307,10 @@ class MaxLeverage(Metric):
         self._max_leverage = 0.0
 
     def end_of_bar(self, **kwargs):
-        self._max_leverage = ml = max(self._max_leverage, kwargs['ledger'].account.leverage)
+        self._max_leverage = ml = max(
+            self._max_leverage,
+            kwargs['ledger'].account.leverage)
+
         kwargs['packet']['cumulative_risk_metrics']['max_leverage'] = ml
 
     def end_of_session(self, **kwargs):
@@ -312,7 +325,7 @@ class NumTradingDays(Metric):
         self._num_trading_days += 1
 
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['cumulative_risk_metrics']['trading_days'] = (self._num_trading_days)
+        kwargs['packet']['cumulative_risk_metrics']['trading_days'] = (self._num_trading_days)
 
     def end_of_session(self, **kwargs):
         self.end_of_bar(**kwargs)
@@ -332,10 +345,10 @@ class _ConstantCumulativeRiskMetric(Metric):
         self._value = value
 
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['cumulative_risk_metrics'][self._field] = self._value
+        kwargs['packet']['cumulative_risk_metrics'][self._field] = self._value
 
     def end_of_session(self, **kwargs):
-        kwargs.pop('packet')['cumulative_risk_metrics'][self._field] = self._value
+        kwargs['packet']['cumulative_risk_metrics'][self._field] = self._value
 
 
 class PeriodLabel(Metric):
@@ -343,10 +356,10 @@ class PeriodLabel(Metric):
         """
 
     def start_of_session(self, **kwargs):
-        self._label = kwargs.pop('session').strftime('%Y-%m')
+        self._label = kwargs['session'].strftime('%Y-%m')
 
     def end_of_bar(self, **kwargs):
-        kwargs.pop('packet')['cumulative_risk_metrics']['period_label'] = self._label
+        kwargs['packet']['cumulative_risk_metrics']['period_label'] = self._label
 
     def end_of_session(self, **kwargs):
         self.end_of_bar(**kwargs)

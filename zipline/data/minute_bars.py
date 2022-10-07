@@ -1273,6 +1273,7 @@ class BcolzMinuteBarReader(MinuteBarReader):
 
         indices_to_exclude = self._exclusion_indices_for_range(
             start_idx, end_idx)
+
         if indices_to_exclude is not None:
             for excl_start, excl_stop in indices_to_exclude:
                 length = excl_stop - excl_start + 1
