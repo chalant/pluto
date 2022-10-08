@@ -190,7 +190,6 @@ class Order(object):
 
         # new_share_amount = old_share_amount / ratio
         # new_price = old_price * ratio
-
         self.amount = int(self.amount / ratio)
 
         if self.limit is not None:

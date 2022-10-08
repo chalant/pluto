@@ -29,6 +29,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         self._processes = {}
 
+        self._last_sync_dt = None
+
         self._asset_finder = asset_finder
         self._ledger = ledger.Ledger(
             start_dt,
@@ -115,7 +117,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
             if self._active_processes == 0:
                 self._orders_complete.set()
 
-            print("Stopped!", session_id, self._active_processes)
+            # print("Stopped!", session_id, self._active_processes)
 
         # if self._active_processes == 0:
         #     self._orders_complete.set()
@@ -157,6 +159,19 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     def set_calendar_timestamp(self, calendar_name, ts):
         self._per_calendar_dt[calendar_name] = ts
+
+    def sync_last_sale_prices(
+            self, dt, data_portal,
+            data_frequency, handle_non_market_minutes=False):
+
+        if dt != self._last_sync_dt:
+            self._ledger.sync_last_sale_prices(
+                dt,
+                data_portal,
+                data_frequency,
+                handle_non_market_minutes)
+
+            self._last_sync_dt = dt
 
     def get_orders(self):
         # with self._lock:
@@ -216,6 +231,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._ledger.process_commission(commission)
 
     def process_splits(self, calendar_name, splits):
+        self._blotters[calendar_name].process_splits(splits)
         self._ledger.process_splits(splits)
 
     def prune_orders(self, calendar_name, closed_orders):

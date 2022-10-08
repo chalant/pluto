@@ -656,7 +656,6 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         blotter = self._blotter
 
-        # fixme: we need to do something with this.
         capital_changes = self._calculate_minute_capital_changes(
             dt,
             metrics_tracker,
@@ -666,15 +665,16 @@ class Controllable(ABC):
         # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
-        closed_orders = []
-
         # todo: this is where we update everything (ledger etc.)
-        # new_transactions, new_commissions, closed_orders = \
-        #     blotter.get_transactions(current_data)
-
-        # todo: add tax handling here!
+        new_transactions, closed_orders = blotter.transactions_per_order(current_data)
+        i = 0
 
         for order, transaction, commission in self._transactions:
+            if new_transactions[i]['transaction'].amount != transaction.amount:
+                print(new_transactions[i]['transaction'].amount, transaction.amount, dt)
+
+            i += 1
+
             order.filled += transaction.amount
             order.commission += commission
 
@@ -684,12 +684,22 @@ class Controllable(ABC):
                 closed_orders.append(order)
 
             metrics_tracker.process_transaction(transaction)
+
             metrics_tracker.process_order(order)
-            metrics_tracker.process_commission({
-                'asset': transaction.asset,
-                'cost': commission,
-                'order': order
-            })
+
+            if commission > 0:
+                metrics_tracker.process_commission(
+                    {
+                        'asset': order.asset,
+                        'order': order,
+                        'cost': commission
+                    }
+                )
+
+        # todo: add tax handling here!
+
+        # for commission in new_commissions:
+        #     metrics_tracker.process_commission(commission)
 
         blotter.prune_orders(closed_orders)
 
@@ -702,7 +712,6 @@ class Controllable(ABC):
 
         # if we have any new orders, record them so that we know
         # in what perf period they were placed.
-
         for new_order in blotter.new_orders:
             metrics_tracker.process_order(new_order)
 

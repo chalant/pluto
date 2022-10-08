@@ -44,9 +44,7 @@ class Controller(object):
 
             calendar_name = calendar.name
 
-            controllable_manager.set_calendar_timestamp(
-                calendar_name,
-                cts)
+            controllable_manager.set_calendar_timestamp(calendar_name, cts)
 
             # bar events
             if c_evt == BAR:
@@ -54,10 +52,6 @@ class Controller(object):
 
                 transactions, closed_orders = controllable_manager.get_transactions(
                     calendar_name, 'minute')
-
-                controllable_manager.prune_orders(
-                    calendar_name,
-                    closed_orders)
 
                 # update states
 
@@ -82,6 +76,10 @@ class Controller(object):
                             transaction=conversions.to_proto_transaction(transaction['transaction'].to_dict()),
                             commission=transaction['commission']
                         ))
+
+                controllable_manager.prune_orders(
+                    calendar_name,
+                    closed_orders)
 
             elif c_evt == TRADE_END:
                 # update for all data frequencies...
@@ -120,6 +118,11 @@ class Controller(object):
                         # for commission in order_transactions.commissions:
                         #     controllable_manager.process_commission(commission)
                         #     bs.commissions.append(conversions.to_proto_commission(commission))
+                    data_portal = controllable_manager.get_data_portal(calendar_name)
+
+                    controllable_manager.sync_last_sale_prices(
+                        cts, data_portal, df
+                    )
 
             elif c_evt == SESSION_START:
                 data_portal = controllable_manager.get_data_portal(calendar_name)
@@ -131,10 +134,7 @@ class Controller(object):
                 positions = set(controllable_manager.get_positions(calendar_name))
                 open_orders = controllable_manager.get_open_orders(calendar_name)
 
-                controllable_manager.handle_market_open(
-                    ts,
-                    calendar_name
-                )
+                controllable_manager.handle_market_open(ts, calendar_name)
 
                 assets_we_care_about = positions | open_orders.keys()
 
