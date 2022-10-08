@@ -128,10 +128,8 @@ class TestWatcher(monitor.AbstractWatcher):
         daily_perf['sharpe'] = self._check_is_nan(ep.sharpe_ratio(algo_returns))
         daily_perf['sortino'] = self._check_is_nan(ep.sortino_ratio(algo_returns))
         daily_perf['max_drawdown'] = ep.max_drawdown(algo_returns)
-        daily_perf['capital_used'] = daily_perf['capital_used']
 
         daily_perfs.append(daily_perf)
-
 
         if packet.end:
             # compare values to expected values.
