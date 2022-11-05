@@ -430,9 +430,7 @@ class Controllable(ABC):
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
-            first_trading_day=max(
-                bundle.first_trading_day,
-                calendar.all_sessions[0]),
+            first_trading_day=max(bundle.first_trading_day, calendar.all_sessions[0]),
             equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader,
@@ -451,8 +449,8 @@ class Controllable(ABC):
             ledger.Ledger(
                 start_dt,
                 protocol.Portfolio(start_dt, run_setup.capital),
-                protocol.Account()
-            ),
+                protocol.Account(),
+                protocol.Positions()),
             run_setup.capital,
             data_frequency,
             self._emission_rate,
@@ -661,20 +659,12 @@ class Controllable(ABC):
             metrics_tracker,
             self._emission_rate)
 
-        # todo: assets must be restricted to the provided exchanges
-        # self._restrictions.set_exchanges(exchanges/calendars)
         current_data = self._current_data
 
         # todo: this is where we update everything (ledger etc.)
-        new_transactions, closed_orders = blotter.transactions_per_order(current_data)
-        i = 0
+        closed_orders = []
 
         for order, transaction, commission in self._transactions:
-            if new_transactions[i]['transaction'].amount != transaction.amount:
-                print(new_transactions[i]['transaction'].amount, transaction.amount, dt)
-
-            i += 1
-
             order.filled += transaction.amount
             order.commission += commission
 
@@ -735,7 +725,7 @@ class Controllable(ABC):
                     ct.commission))
 
         # for commission in broker_data.commissions:
-        #     order = conversions.to_zp_order(commission.order)
+        #     order = conversions.to_zp_order(commisupdate_sion.order)
         #     order_id = order.id
         #     o = orders.get(order_id, None)
         #     if o:

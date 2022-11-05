@@ -7,7 +7,7 @@ from protos import controllable_pb2_grpc as cbl
 from pluto.control.processes import processes
 
 
-class LocalProcess(process_factory.Process):
+class LocalProcess(process_factory.StrategyStub):
     def __init__(self,
                  framework_url,
                  session_id,

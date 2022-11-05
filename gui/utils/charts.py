@@ -6,9 +6,9 @@ from PyQt6.QtCore import Qt
 from PyQt6 import QtCore
 
 
-class TimeSeries(QtCharts.QChart):
+class TimeSeriesChart(QtCharts.QChart):
     def __init__(self):
-        super(TimeSeries, self).__init__()
+        super(TimeSeriesChart, self).__init__()
 
         self._series = []
 
@@ -21,6 +21,22 @@ class TimeSeries(QtCharts.QChart):
         self.addAxis(x, Qt.AlignmentFlag.AlignBottom)
         self.addAxis(y, Qt.AlignmentFlag.AlignLeft)
 
+    def set_plotting_period(
+            self,
+            start_dt: QtCore.QDateTime,
+            end_dt: QtCore.QDateTime):
+
+        x = self.x_axis
+
+        x.setMin(start_dt)
+        x.setMax(end_dt)
+
+    def set_plotting_range(self, low, high):
+        y = self.y_axis
+
+        y.setMin(low)
+        y.setMax(high)
+
     @property
     def x_axis(self):
         return self._x_axis
@@ -30,7 +46,7 @@ class TimeSeries(QtCharts.QChart):
         return self._y_axis
 
     def addSeries(self, series: QAbstractSeries) -> None:
-        super(TimeSeries, self).addSeries(series)
+        super(TimeSeriesChart, self).addSeries(series)
 
         series.attachAxis(self._x_axis)
         series.attachAxis(self._y_axis)

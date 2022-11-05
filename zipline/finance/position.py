@@ -43,7 +43,7 @@ log = logbook.Logger('Performance')
 
 
 class Position(object):
-    __slots__ = 'inner_position', 'protocol_position'
+    __slots__ = 'inner_position', 'protocol_position', '_calls'
 
     def __init__(self,
                  asset,

@@ -29,14 +29,14 @@ from zipline.data.bcolz_daily_bars import BcolzDailyBarReader
 from zipline.testing import test_resource_path
 
 from pluto.trading_calendars import calendar_utils
-from pluto.data.bundles.core import AbstractBundle
+from pluto.data.bundles.core import AbstractBundleIngester, AbstractBundleLoader
 from pluto.data.equity_pricing.daily_bar_writer import ClickHouseDailyBarWriter
 from pluto.data.equity_pricing import daily_bar_writer as dbw
 from pluto.data.equity_pricing import readers
 from pluto.configuration import configuration
 
 
-class TestBundle(AbstractBundle):
+class TestBundle(AbstractBundleIngester):
     def __init__(self, root_dir, environ=None):
         super(TestBundle, self).__init__('test', root_dir, 'NYSE')
 
@@ -45,7 +45,7 @@ class TestBundle(AbstractBundle):
         self._environ.setdefault(
             'ZIPLINE_ROOT',
             path.join(
-                self._root.path,
+                root_dir.path,
                 'example_data/root'))
 
         core.register('test', lambda *args: None)
@@ -54,7 +54,29 @@ class TestBundle(AbstractBundle):
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(root_dir.path)
 
-    def _load(self, name):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        core.unregister('test')
+
+
+class TestBundleLoader(AbstractBundleLoader):
+    def __init__(self, dir_interface, environ=None):
+        self._environ = environ if environ else {}
+
+        root_dir = dir_interface.get_directory('data').get_directory('test')
+
+        self._environ.setdefault(
+            'ZIPLINE_ROOT',
+            path.join(
+                root_dir.path,
+                'example_data/root'))
+
+        core.register('test', lambda *args: None)
+
+    def _load(self):
+        name = 'test'
         timestamp = pd.Timestamp.utcnow()
         environ = self._environ
 
@@ -75,14 +97,8 @@ class TestBundle(AbstractBundle):
             )
         )
 
-    def __enter__(self):
-        return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        core.unregister('test')
-
-
-class ClickHouseTestBundle(AbstractBundle):
+class ClickHouseTestBundle(AbstractBundleIngester):
     def __init__(self, root_dir, cache, environ=None):
         super(ClickHouseTestBundle, self).__init__(
             'click_house_test',

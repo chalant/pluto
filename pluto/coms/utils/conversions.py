@@ -261,6 +261,15 @@ def to_proto_position(zp_position):
     )
 
 
+def to_proto_positions(zp_positions):
+    return pr.Positions(
+        positions=[
+            pr.AssetPositionPair(
+                key=to_proto_asset(asset),
+                position=to_proto_position(position))
+            for asset, position in zp_positions.items()],
+    )
+
 def to_proto_portfolio(zp_portfolio):
     """
 
@@ -279,11 +288,6 @@ def to_proto_portfolio(zp_portfolio):
         pnl=zp_portfolio.pnl,
         returns=zp_portfolio.returns,
         cash=zp_portfolio.cash,
-        positions=[
-            pr.AssetPositionPair(
-                key=to_proto_asset(asset),
-                position=to_proto_position(position))
-            for asset, position in zp_portfolio.positions.items()],
         start_date=to_proto_timestamp(zp_portfolio.start_date),
         positions_value=zp_portfolio.positions_value,
         positions_exposure=zp_portfolio.positions_exposure)

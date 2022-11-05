@@ -164,14 +164,18 @@ class TestUniverse(AbstractUniverse):
         #     root_dir,
         #     data_cache)
 
-        self._bundle = bundle = test.TestBundle(root_dir)
+        self._bundle = bundle = test.TestBundleLoader(root_dir)
 
         self._bundle_data = bundle.load()
 
         self._equity_daily_bar_reader = self._bundle_data.equity_daily_bar_reader
-        self._environ = environ
+        self._environ = environ if environ else bundle._environ
 
         calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
+
+    @property
+    def environ(self):
+        return self._environ
 
     @property
     def country_code(self):
@@ -222,8 +226,7 @@ class TestUniverse(AbstractUniverse):
 
     @property
     def benchmark(self):
-        return bm.ZiplineBenchmark(
-            environ=self._environ)
+        return bm.ZiplineBenchmark(environ=self._environ)
 
     @property
     def trading_calendar(self):
@@ -297,7 +300,7 @@ def with_cache(cache):
 
 
 @with_cache(_CACHE)
-def get_universe(name, root_dir, data_cache, environ, calendar_cache=True) -> AbstractUniverse:
+def get_universe(name, root_dir, data_cache, environ=None, calendar_cache=True) -> AbstractUniverse:
     """
 
     Parameters

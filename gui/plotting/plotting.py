@@ -1,197 +1,68 @@
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtCore import Qt
 
-from pluto.coms.utils import conversions
-
-from protos import controller_pb2
-
 from dev import events
-
-from gui.plotting import cumulative_risk
 
 events.add_event('plotter.closed')
 events.add_event('plotter.add')
-# todo: we the list of fields (note: by default, we plot the returns and the benchmark returns)
 
+# todo: we the list of fields (note: by default, we plot the returns and the benchmark returns)
 # todo: we need to be able to add plotters... (combo box?)
 
 
-class PlottingHandler(QtWidgets.QWidget):
-    def __init__(self, parent, layout):
-        super(PlottingHandler, self).__init__(parent)
+class SplitterView(QtWidgets.QWidget):
+    def __init__(self, parent):
+        super(SplitterView, self).__init__(parent)
 
-        self._plotters = {}
+        self._data_handlers = {}
 
-        self._layout = layout
+        layout = QtWidgets.QHBoxLayout()
+
+        self.setLayout(layout)
 
         self._splitter = QtWidgets.QSplitter(
             parent=self,
             orientation=Qt.Orientation.Vertical)
 
-        # self._layout.addWidget(self._splitter)
         layout.addWidget(self._splitter)
 
-        # self._splitter.setMinimumWidth(parent.width())
-        # self._splitter.setMinimumHeight(parent.height())
-        # self._splitter.
-
-        self._data_frequency = 'daily'
-        self._emission_rate = 'minute'
         self._plotting_range = (QtCore.QDateTime.currentDateTime().addYears(-1), QtCore.QDateTime.currentDateTime())
 
-        self._perf_field = 'daily_perf' if self._data_frequency == 'daily' else 'minute_perf'
-
-        events.subscribe('plotter.closed', self._remove_plotter)
-        events.subscribe('plotter.add', self._create_plotter)
-
-        self._parent = parent
-
     def reset(self):
-        for plotter in self._plotters.values():
+        for plotter in self._data_handlers.values():
             plotter.reset()
 
-    def set_plotting_setup(self, **kwargs):
-        self._data_frequency = kwargs['data_frequency']
-        self._emission_rate = kwargs['emission_rate']
+    def start_of_session(self, dt, ledger):
+        dt2 = QtCore.QDateTime(dt.to_pydatetime()).toMSecsSinceEpoch()
 
-        x, y = kwargs['plotting_range']
+        for handler in self._data_handlers.values():
+            handler.end_of_session(dt2, ledger)
 
-        t1 = QtCore.QDateTime(x.to_pydatetime())
-        t2 = QtCore.QDateTime(y.to_pydatetime())
+    def end_of_bar(self, dt, ledger):
+        dt2 = QtCore.QDateTime(dt.to_pydatetime()).toMSecsSinceEpoch()
 
-        self._plotting_range = (
-            QtCore.QDateTime(x.to_pydatetime()),
-            QtCore.QDateTime(y.to_pydatetime()))
+        for handler in self._data_handlers.values():
+            handler.end_of_bar(dt2, ledger)
 
-        for plotter in self._plotters.values():
-            plotter.set_plotting_period(t1, t2)
+    def end_of_session(self, dt, ledger):
+        dt2 = QtCore.QDateTime(dt.to_pydatetime()).toMSecsSinceEpoch()
 
-        self._perf_field = 'daily_perf' if self._data_frequency == 'daily' else 'minute_perf'
+        for handler in self._data_handlers.values():
+            handler.end_of_session(dt2, ledger)
 
-    def performance_update(self, packet):
-        # todo: need to append performance so that when we add a plotter, we plot
-        #  starting from some point.
-
-        # print("Update!")
-
-        perf = controller_pb2.PerformancePacket()
-        perf.ParseFromString(packet.packet)
-
-        perf = conversions.from_proto_performance_packet(perf)
-
-        period = perf[self._perf_field]
-
-        dt1 = QtCore.QDateTime(period['period_open'].to_pydatetime()).toMSecsSinceEpoch()
-        dt2 = QtCore.QDateTime(period['period_close'].to_pydatetime()).toMSecsSinceEpoch()
-
-        for plotter in self._plotters.values():
-            plotter.performance_update(dt1, dt2, perf)
-
-        if packet.end:
-            events.post_event("backtesting.ended", None)
-
-    def _add_plotter(self, plotter):
+    def _add_component(self, name, component):
         dock = QtWidgets.QDockWidget(self)
-        dock.setWidget(plotter)
+        dock.setWidget(component)
 
-        dock.setWindowTitle(plotter.name)
+        dock.setWindowTitle(name)
 
-        dock.setFeatures(dock.features().DockWidgetClosable)
+        dock.setFeatures(dock.features().NoDockWidgetFeatures)
 
-        self._plotters[plotter.name] = plotter
+        self._data_handlers[name] = component
 
         self._splitter.addWidget(dock)
 
         dock.show()
 
-    def _create_plotter(self, name):
-        t1, t2 = self._plotting_range
-
-        if name == 'Performance':
-            plotter = cumulative_risk.PerformancePlotter(self)
-            self._add_plotter(plotter)
-
-            # size = self._layout.sizeHint()
-            #
-            # plotter.setGeometry(0, 0, size.width(), size.height())
-            plotter.set_plotting_period(t1, t2)
-
-        elif name == 'Leverage':
-            plotter = cumulative_risk.MaxLeverage(self)
-            self._add_plotter(plotter)
-
-            plotter.set_plotting_period(t1, t2)
-
-    def _remove_plotter(self, name):
-        self._plotters.pop(name)
-
-
-class DailyPerformancePlotter(object):
-    def performance_update(self, packet):
-        # append until end...
-
-        perf = controller_pb2.PerformancePacket()
-        perf.ParseFromString(packet.packet)
-
-        perf = conversions.from_proto_performance_packet(perf)
-
-        # todo: we also need minute updates...
-        # todo:
-
-        daily_perf = perf.get('daily_perf', None)
-        daily_perf.update(perf['cumulative_risk_metrics']),
-
-        cum_perf = perf['cumulative_perf']
-        cum_perf.pop('period_close')
-        cum_perf.pop('period_open')
-        cum_perf.pop('capital_used')
-        cum_perf.pop('starting_exposure')
-        cum_perf.pop('ending_exposure')
-        cum_perf.pop('starting_value')
-        cum_perf.pop('starting_cash')
-        cum_perf.pop('returns')
-        cum_perf.pop('pnl')
-
-        # todo: plot returns as they come
-        # todo: append results...
-
-        daily_perf.update(cum_perf)
-
-        if packet.end:
-            events.post_event("backtesting.ended", None)
-
-
-# todo
-class MinutePerformancePlotter(object):
-    def performance_update(self, packet):
-        # append until end...
-
-        perf = controller_pb2.PerformancePacket()
-        perf.ParseFromString(packet.packet)
-
-        perf = conversions.from_proto_performance_packet(perf)
-
-        # todo: we also need minute updates...
-        # todo:
-
-        daily_perf = perf.get('daily_perf', None)
-        daily_perf.update(perf['cumulative_risk_metrics']),
-
-        cum_perf = perf['cumulative_perf']
-        cum_perf.pop('period_close')
-        cum_perf.pop('period_open')
-        cum_perf.pop('capital_used')
-        cum_perf.pop('starting_exposure')
-        cum_perf.pop('ending_exposure')
-        cum_perf.pop('starting_value')
-        cum_perf.pop('starting_cash')
-        cum_perf.pop('returns')
-        cum_perf.pop('pnl')
-
-        # todo: plot returns as they come
-        # todo: append results...
-
-        daily_perf.update(cum_perf)
-
-        if packet.end:
-            events.post_event("backtesting.ended", None)
+    def add_component(self, name, component):
+        self._add_component(name, component)

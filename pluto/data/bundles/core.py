@@ -1,7 +1,8 @@
+import abc
 from abc import abstractmethod, ABC
 
 
-class AbstractBundle(ABC):
+class AbstractBundleIngester(ABC):
     def __init__(self,
                  name,
                  root_dir,
@@ -21,13 +22,15 @@ class AbstractBundle(ABC):
     def ingest(self):
         self._ingest(self._root)
 
-    def load(self):
-        return self._load(self.name)
-
     @abstractmethod
     def _ingest(self, root_dir):
         pass
 
+
+class AbstractBundleLoader(ABC):
+    def load(self):
+        return self._load()
+
     @abstractmethod
-    def _load(self, name):
+    def _load(self):
         pass

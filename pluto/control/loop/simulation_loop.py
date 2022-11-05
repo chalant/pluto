@@ -12,11 +12,7 @@ from protos import clock_pb2
 
 
 class SimulationLoop(object):
-    def __init__(
-            self,
-            start_dt,
-            end_dt,
-            frequency='daily'):
+    def __init__(self, start_dt, end_dt, frequency='daily'):
 
         self._start_dt = start_dt
         self._end_dt = end_dt
@@ -52,6 +48,7 @@ class SimulationLoop(object):
         # self._add_clock(calendar_name)
 
         calendar = self._calendar
+        clocks = self._clocks.values()
 
         for ts, global_event in get_generator(
                 calendar,
@@ -60,51 +57,53 @@ class SimulationLoop(object):
 
             # acquire lock so that no further commands are executed here
             # while this block is being executed
-            with self._execution_lock:
-                # process any cached values
-                # call for any update that needs to be done before
-                # anything else
+            # with self._execution_lock:
+            # process any cached values
+            # call for any update that needs to be done before
+            # anything else
 
-                # aggregate the signals into a single signal.
+            # aggregate the signals into a single signal.
 
-                signals = []
+            signals = []
 
-                for cl in self._clocks.values():
-                    res = cl.update(ts)
+            for cl in clocks:
+                res = cl.update(ts)
 
-                    if res:
-                        cts, evt = res
+                if res:
+                    cts, evt = res
 
-                        signals.append((cts, evt, cl.calendar))
+                    signals.append((cts, evt, cl.calendar))
 
-                        # events.post_event(
-                        #     'clock.controller_update',
-                        #     {'ts': cts, 'evt': evt, 'calendar': cl.calendar_name}
-                        # )
+                    # events.post_event(
+                    #     'clock.controller_update',
+                    #     {'ts': cts, 'evt': evt, 'calendar': cl.calendar_name}
+                    # )
 
 
 
-                #
-                # for cl in self._clocks.values():
-                #     # todo: how do we know the clock has ended?
-                #     signal = cl.update(ts)
-                #
-                #     if signal:
-                #         sts, s_evt, calendar = signal
-                #         signal = clock_pb2.Signal(
-                #             timestamp=conversions.to_proto_timestamp(sts),
-                #             event=evt,
-                #             exchange=calendar)
-                #
-                #         signals.append(signal)
+            #
+            # for cl in self._clocks.values():
+            #     # todo: how do we know the clock has ended?
+            #     signal = cl.update(ts)
+            #
+            #     if signal:
+            #         sts, s_evt, calendar = signal
+            #         signal = clock_pb2.Signal(
+            #             timestamp=conversions.to_proto_timestamp(sts),
+            #             event=evt,
+            #             exchange=calendar)
+            #
+            #         signals.append(signal)
 
-                #
-                # signal_handler.update(ts, evt, signals)
-                # # process cached commands
-                # signal_handler.process(ts)
-                # # continue execution
-                # signal_handler.clock_update(ts, evt, signals)
-                process.clock_update(ts, global_event, signals)
+            #
+            # signal_handler.update(ts, evt, signals)
+            # # process cached commands
+            # signal_handler.process(ts)
+            # # continue execution
+            # signal_handler.clock_update(ts, evt, signals)
+            process.clock_update(ts, global_event, signals)
+
+            yield 0
 
     def execute(self, command):
         with self._execution_lock:

@@ -225,7 +225,7 @@ def _run(dir_, example_name, expected_perf, environ):
         path_
     )
 
-    manager.add_process(process)
+    manager.add_strategy(process)
 
     tester = test.StrategyTester(
         process,

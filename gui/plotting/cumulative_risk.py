@@ -6,12 +6,10 @@ from gui.plotting import plotter, time_series
 
 
 class MaxLeverage(plotter.AbstractPlotter):
-    def __init__(self,
-                 container: QtWidgets.QWidget):
-        super(MaxLeverage, self).__init__(
-            container, 'Leverage')
+    def __init__(self, container: QtWidgets.QWidget):
+        super(MaxLeverage, self).__init__(container, 'Leverage')
 
-        self._chart = ts = time_series.TimeSeries()
+        self._chart = ts = time_series.TimeSeriesChart()
 
         ts.y_axis.setMin(0)
         ts.y_axis.setMax(4)
@@ -78,7 +76,7 @@ class PerformancePlotter(plotter.AbstractPlotter):
             container,
             'Performance')
 
-        self._chart = ts = time_series.TimeSeries()
+        self._chart = ts = time_series.TimeSeriesChart()
 
         self._strategy_returns = algo_ret = QtCharts.QLineSeries(self)
         self._benchmark_returns = bench_ret = QtCharts.QLineSeries(self)
