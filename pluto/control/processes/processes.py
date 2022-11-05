@@ -44,18 +44,23 @@ class ProcessFactory(abc.ABC):
 # todo: should there be a limit for recovery attempts?
 # todo: recovery must not block
 
-class Process(object):
-    __slots__ = ['_process_id', '_controllable', '_data_frequency']
+class StrategyStub(object):
+    __slots__ = ['_process_id', '_controllable', '_data_frequency', '_capital']
 
-    def __init__(self, process_id, controllable):
+    def __init__(self, process_id, controllable, capital):
         self._process_id = process_id
         self._controllable = controllable
+        self._capital = capital
 
         try:
             event_name = 'monitor.{}'.format(self._process_id)
             events.add_event(event_name)
         except KeyError:
             pass
+
+    @property
+    def capital(self):
+        return self._capital
 
     @property
     def data_frequency(self):
@@ -163,7 +168,7 @@ class ProcessInitializer(object):
                 id=process_id,
                 session_id=session_id,
                 capital=setup.capital,
-                leverage=setup.leverage,
+                leverage=setup.max_leverage,
                 start=conversions.to_proto_timestamp(setup.start),
                 end=conversions.to_proto_timestamp(setup.end),
                 engine_setup=cbl.EngineSetup(
@@ -187,9 +192,7 @@ class ProcessInitializer(object):
                 clear_perf=setup.clear_perf),
             ())
 
-        return Process(
-            process_id,
-            self._controllable)
+        return StrategyStub(process_id, self._controllable, setup.capital)
 
     # def recover(self):
     #     self._controllable = self._create_controllable(

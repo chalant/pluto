@@ -280,7 +280,7 @@ class ControlCommandHandler(object):
                 max_leverage=max_leverage,
                 mode=mode)
 
-            manager.add_process(process)
+            manager.add_strategy(process)
 
         return calendars
 

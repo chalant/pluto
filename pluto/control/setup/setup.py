@@ -21,11 +21,25 @@ class StrategyLoader(object):
             return f.read()
 
 
-class StrategySetup(object):
-    __slots__ = ['capital']
+class LauncherSetup(object):
+    __slots__ = ['capital', 'max_leverage']
 
     def __init__(self):
-        self.capital = 0
+        self.capital = 0.0
+        self.max_leverage = 0
+
+
+class StrategySetup(object):
+    def __init__(self, launcher_setup, main_setup):
+        self._launcher_setup = launcher_setup
+        self._main_setup = main_setup
+
+    def __getattr__(self, item):
+        if hasattr(self._launcher_setup, item):
+            return getattr(self._launcher_setup, item)
+        elif hasattr(self._main_setup, item):
+            return getattr(self._main_setup, item)
+        return
 
 
 class StrategyStore(object):
@@ -48,7 +62,7 @@ class StrategyStore(object):
                 connection,
                 name)
 
-            st = StrategySetup()
+            st = LauncherSetup()
 
             self._strategies.append((
                 st,

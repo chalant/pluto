@@ -13,13 +13,14 @@ from zipline.finance.slippage import (
 
 
 class RunSetup(object):
-    def __init__(self, session_id):
+    def __init__(self, session_id, environ=None):
         self.start = None
         self.end = None
 
         self.broker = ""
         self.capital = 100000.0
         self.leverage = 1.0
+        self.intraday_leverage = 1.0
         self.trading_universe = ""
         self.data_frequency = ""
         self.emission_rate = "daily"
@@ -47,6 +48,7 @@ class RunSetup(object):
         self.session_id = session_id
         self.clear_perf = False
         self.remote_cache = False
+        self.environ = None
 
 
 def load_run_setup(dir_, session_id):

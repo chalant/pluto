@@ -1,8 +1,5 @@
 import pandas as pd
-
-from zipline import protocol
-
-from dev import events
+import logbook
 
 import pluto.control.controller.process_manager
 
@@ -18,21 +15,30 @@ from protos.clock_pb2 import (
 
 from protos import broker_pb2
 
+log = logbook.Logger("Controller")
+
 
 class Controller(object):
-    def __init__(self, process_manager: pluto.control.controller.process_manager.StrategyManager):
-        self._process_manager = process_manager
+    def __init__(
+            self,
+            strategy_manager: pluto.control.controller.process_manager.StrategyManager,
+            metrics_tracker):
+
+        self._metrics_tracker = metrics_tracker
+        self._strategy_manager = strategy_manager
         self._orders = 0
 
     def clock_update(self, ts, evt, signals):
-        controllable_manager = self._process_manager
+        strategy_manager = self._strategy_manager
 
-        processes = self._process_manager.processes
+        strategies = strategy_manager.strategies
 
-        broker_states = self._process_manager.broker_states
+        broker_states = strategy_manager.broker_states
 
         # set timestamp ahead of time so that we know which events to wait for...
-        controllable_manager.set_global_timestamp(ts)
+        strategy_manager.set_global_timestamp(ts)
+
+        metrics_tracker = self._metrics_tracker
 
         # populate broker state to send to controllables
         for cts, c_evt, calendar in signals:
@@ -44,13 +50,14 @@ class Controller(object):
 
             calendar_name = calendar.name
 
-            controllable_manager.set_calendar_timestamp(calendar_name, cts)
+            strategy_manager.set_calendar_timestamp(calendar_name, cts)
 
             # bar events
             if c_evt == BAR:
                 # fetch executed transactions, commissions etc.
 
-                transactions, closed_orders = controllable_manager.get_transactions(
+                # todo: need to apply tax models...
+                transactions, closed_orders = strategy_manager.get_transactions(
                     calendar_name, 'minute')
 
                 # update states
@@ -60,16 +67,18 @@ class Controller(object):
 
                     bs = broker_states[order.session_id]
 
-                    controllable_manager.process_transaction(
+                    strategy_manager.process_transaction(
                         calendar_name,
                         transaction['transaction'])
 
                     if transaction['commission'] > 0:
-                        controllable_manager.process_commission({
-                            'asset': order.asset,
-                            'order': order.to_dict(),
-                            'cost': transaction['commission']
-                        })
+                        strategy_manager.process_commission(
+                            calendar_name,
+                            {
+                                'asset': order.asset,
+                                'order': order.to_dict(),
+                                'cost': transaction['commission']
+                            })
 
                     bs.transactions.append(
                         broker_pb2.TransactionCommission(
@@ -77,19 +86,25 @@ class Controller(object):
                             commission=transaction['commission']
                         ))
 
-                controllable_manager.prune_orders(
+                strategy_manager.prune_orders(
                     calendar_name,
                     closed_orders)
 
+            elif c_evt == MINUTE_END:
+                metrics_tracker.end_of_bar(
+                    cts,
+                    calendar_name,
+                    strategy_manager.get_ledger(calendar_name))
+
             elif c_evt == TRADE_END:
                 # update for all data frequencies...
-                for df in controllable_manager.get_frequencies(calendar_name):
-                    transactions, closed_orders = controllable_manager.get_transactions(
+                for df in strategy_manager.get_frequencies(calendar_name):
+                    transactions, closed_orders = strategy_manager.get_transactions(
                         calendar_name, df)
 
                     # update states
 
-                    controllable_manager.prune_orders(
+                    strategy_manager.prune_orders(
                         calendar_name,
                         closed_orders)
 
@@ -98,16 +113,18 @@ class Controller(object):
 
                         bs = broker_states[order.session_id]
 
-                        controllable_manager.process_transaction(
+                        strategy_manager.process_transaction(
                             calendar_name,
                             transaction['transaction'])
 
                         if transaction['commission'] > 0:
-                            controllable_manager.process_commission({
-                                'asset': order.asset,
-                                'order': order.to_dict(),
-                                'cost': transaction['commission']
-                            })
+                            strategy_manager.process_commission(
+                                calendar_name,
+                                {
+                                    'asset': order.asset,
+                                    'order': order.to_dict(),
+                                    'cost': transaction['commission']
+                                })
 
                         bs.transactions.append(
                             broker_pb2.TransactionCommission(
@@ -118,23 +135,28 @@ class Controller(object):
                         # for commission in order_transactions.commissions:
                         #     controllable_manager.process_commission(commission)
                         #     bs.commissions.append(conversions.to_proto_commission(commission))
-                    data_portal = controllable_manager.get_data_portal(calendar_name)
+                    data_portal = strategy_manager.get_data_portal(calendar_name)
 
-                    controllable_manager.sync_last_sale_prices(
+                    strategy_manager.sync_last_sale_prices(
+                        calendar_name,
                         cts, data_portal, df
                     )
 
             elif c_evt == SESSION_START:
-                data_portal = controllable_manager.get_data_portal(calendar_name)
+                # todo: each session start check if leverage have changed
+                ledger = strategy_manager.get_ledger(calendar_name)
 
-                controllable_manager.process_dividends(
+                data_portal = strategy_manager.get_data_portal(calendar_name)
+
+                strategy_manager.process_dividends(
                     cts,
+                    calendar_name,
                     data_portal.adjustment_reader)
 
-                positions = set(controllable_manager.get_positions(calendar_name))
-                open_orders = controllable_manager.get_open_orders(calendar_name)
+                positions = set(strategy_manager.get_positions(calendar_name))
+                open_orders = strategy_manager.get_open_orders(calendar_name)
 
-                controllable_manager.handle_market_open(ts, calendar_name)
+                strategy_manager.handle_market_open(ts, calendar_name)
 
                 assets_we_care_about = positions | open_orders.keys()
 
@@ -144,41 +166,73 @@ class Controller(object):
                         cts)
 
                     if splits:
-                        controllable_manager.process_splits(
+                        strategy_manager.process_splits(
                             calendar_name,
                             splits)
+
+                # ledger.start_of_session(0)
+
+                metrics_tracker.start_of_session(
+                    cts,
+                    calendar_name,
+                    ledger)
 
             elif c_evt == SESSION_END:
                 # open_orders = controllable_manager.get_open_orders(calendar_name)
 
-                for df in controllable_manager.get_frequencies(calendar_name):
-                    controllable_manager.cleanup_expired_assets(
+                for df in strategy_manager.get_frequencies(calendar_name):
+                    strategy_manager.cleanup_expired_assets(
                         calendar_name, cts, df)
+
+                metrics_tracker.end_of_bar(
+                    cts,
+                    calendar_name,
+                    strategy_manager.get_ledger(calendar_name))
+
+                account = strategy_manager.account
 
         # fixme: a process might crash, and we would be waiting for too long...
         # update all processes
-        for process in processes:
-            process.account_update(broker_states[process.process_id])
+        for strategy in strategies:
+            strategy.account_update(broker_states[strategy.process_id])
 
         # advance all processes
-        for process in processes:
-            process.clock_update(ts, evt)
+        for strategy in strategies:
+            strategy.clock_update(ts, evt)
 
-        # for process in processes:
-        #     process.clock_update(ts, evt)
-
-        # blocks until all processes have placed orders
-
-        # if evt == BAR or evt == TRADE_END:
-        # if running > 0:
         # print("Waiting for orders", ts)
-        new_orders = controllable_manager.get_orders()
+        new_orders = strategy_manager.get_orders()
+
+        # todo: catch any account control errors here...
+        #  given the new orders and the current portfolio and
+        #  the current open orders and the last sale price, determine
+        #  if we go above the maximum leverage
+
+        log.error(
+
+        )
+
+        # check if strategies don't go above allocated capital and leverage
+
+        # new_orders_batches = strategy_manager.get_orders_batches()
+        #
+        # for ts, cts, calendar in signals:
+        #     for batch in new_orders_batches:
+        #         portfolio = batch.portfolio
+        #         positions = batch.positions
+        #         open_orders = batch.open_orders
+
+
+        # todo: call the controller script
+        # self._controller_script.update()
 
         # todo: put some additional logic for leverage control, portfolio
         #  optimization here...
-        controllable_manager.place_orders(new_orders)
+        strategy_manager.place_orders(new_orders)
         # clear all variables
-        controllable_manager.clear()
+        strategy_manager.clear()
+
+        return 1
 
         # todo: process the orders.
         # self._process_orders(new_orders)
@@ -189,7 +243,3 @@ class Controller(object):
 
         # once all the processes have made an order, we can process the orders.
         # this must be done asap! so we do not wait for the next loop!
-
-    def watch(self, handler):
-        pass
-

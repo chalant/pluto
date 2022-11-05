@@ -59,18 +59,13 @@ class Stop(Command):
         raise StopExecution
 
 
-class CapitalUpdate(Command):
-    def __init__(self, controllable, request):
-        super(CapitalUpdate, self).__init__(controllable, request)
-
+class ParametersUpdate(Command):
     def _execute(self, controllable, request):
-        raise NotImplementedError
+        controllable.capital = request.capital
+        controllable.max_leverage = request.max_leverage
 
 
 class AccountUpdate(Command):
-    def __init__(self, controllable, request):
-        super(AccountUpdate, self).__init__(controllable, request)
-
     def _execute(self, controllable, request):
         controllable.update_blotter(request)
 

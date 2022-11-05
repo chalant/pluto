@@ -13,10 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from warnings import warn
+from collections import OrderedDict
 
 import pandas as pd
 
-from .assets import Asset
+from .assets import Asset, Equity
 from .utils.enum import enum
 from ._protocol import BarData, InnerPosition  # noqa
 
@@ -393,7 +394,7 @@ class _DeprecatedSidLookupPosition(object):
     )
 
 
-class Positions(dict):
+class Positions(OrderedDict):
     """A dict-like object containing the algorithm's current positions.
     """
 

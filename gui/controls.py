@@ -26,6 +26,9 @@ class BacktestingControl(QtWidgets.QWidget):
         events.subscribe('backtesting.started', self._started)
         events.subscribe('backtesting.ended', self._ended)
 
+        self.backtest_button = ui.backtesting_button
+        self.stop_button = ui.backtesting_stop_button
+
     def _start(self):
         events.post_event('backtesting.start', None)
 
@@ -41,5 +44,15 @@ class BacktestingControl(QtWidgets.QWidget):
     def _ended(self, data):
         ui = self._ui
 
+        ui.backtesting_button.setEnabled(True)
+        ui.backtesting_stop_button.setEnabled(False)
+
+    def start(self):
+        ui = self._ui
+        ui.backtesting_button.setEnabled(False)
+        ui.backtesting_stop_button.setEnabled(True)
+
+    def stop(self):
+        ui = self._ui
         ui.backtesting_button.setEnabled(True)
         ui.backtesting_stop_button.setEnabled(False)

@@ -70,7 +70,9 @@ class TestWatcher(monitor.AbstractWatcher):
         self._benchmark_period_return = (np.cumprod(1 + benchmark_returns.values) - 1)
         self._benchmark_volatility = (benchmark_returns.expanding(2).std(ddof=1) * np.sqrt(252)).values
         self._benchmark_returns = benchmark_returns.values
-    def _check_is_nan(self, value):
+
+    @staticmethod
+    def _check_is_nan(value):
         if np.isnan(value):
             return 0.0
         return value
@@ -205,9 +207,10 @@ class StrategyTester(object):
         # # subscribe to clock events
         # events.subscribe('clock.update', self._process.clock_update)
 
+        # todo: add metrics tracker
+
         loop.start(controller.Controller(
-            self._process_manager
-        ))
+            self._process_manager))
 
 
 class TestClient(object):

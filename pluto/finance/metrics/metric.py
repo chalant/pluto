@@ -160,6 +160,7 @@ class BenchmarkReturnsAndVolatility(Metric):
 
         benchmark_source = kwargs['benchmark_source']
         r = benchmark_source.cumulative_returns
+
         if np.isnan(r):
             r = None
         packet['cumulative_risk_metrics']['benchmark_period_return'] = r
@@ -197,10 +198,11 @@ class PNL(Metric):
 
 
 class CashFlow(Metric):
-    def initialization(self, **kwargs):
+    def __init__(self):
         self._previous_cash_flow = 0.0
-        self._p = 0.0
-        self._cash_flow = 0.0
+
+    def initialization(self, **kwargs):
+        pass
 
     def end_of_bar(self, **kwargs):
         cash_flow = kwargs['ledger'].portfolio.cash_flow
@@ -212,12 +214,9 @@ class CashFlow(Metric):
         cash_flow = kwargs['ledger'].portfolio.cash_flow
         packet = kwargs['packet']
         packet['daily_perf']['capital_used'] = p = cash_flow - self._previous_cash_flow
-        self._cash_flow = p
-        # assert round(p, 2) != round(-937.989990234375, 2)
-        #     raise NotImplementedError(self._p)
+
         packet['cumulative_perf']['capital_used'] = cash_flow
         self._previous_cash_flow = cash_flow
-        self._p = p
 
 
 class Orders(Metric):

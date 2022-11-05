@@ -384,7 +384,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
             elif evt_type == 'parameter':
                 for request in evt.requests:
                     if request.session_id == session_id:
-                        commands.CapitalUpdate(
+                        commands.ParametersUpdate(
                             controllable,
                             evt)()
                         break
@@ -426,7 +426,7 @@ class ControllableService(cbl_rpc.ControllableServicer):
     @service_access.framework
     def UpdateParameters(self, request, context):
         self._running_behavior.execute(
-            commands.CapitalUpdate(
+            commands.ParametersUpdate(
                 self._controllable,
                 request
             )

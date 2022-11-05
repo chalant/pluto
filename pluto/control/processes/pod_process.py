@@ -1,6 +1,6 @@
 from pluto.control.processes import processes
 
-class PodProcess(process_factory.Process):
+class PodProcess(process_factory.StrategyStub):
     pass
 
 class PodProcessFactory(process_factory.ProcessFactory):

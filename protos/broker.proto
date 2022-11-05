@@ -35,6 +35,8 @@ message OrderBatch {
     google.protobuf.Timestamp ts = 1;
     repeated Order orders = 2;
     bool ended = 3;
+    Portfolio portfolio = 4;
+    Positions positions = 5;
 }
 
 message Commission {

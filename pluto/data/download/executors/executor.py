@@ -5,6 +5,7 @@ from logbook import Logger
 
 log = Logger('Executor')
 
+
 class _RequestExecutor(ABC):
     def __init__(self, name, request_counter):
         self._cool_down = self._cool_down_time()

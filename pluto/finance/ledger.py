@@ -31,12 +31,12 @@ class PositionTracker(object):
     data_frequency : {'daily', 'minute'}
         The data frequency of the simulation.
     """
-    def __init__(self):
+    def __init__(self, positions):
         self.positions = OrderedDict()
 
         self._unpaid_dividends = {}
         self._unpaid_stock_dividends = {}
-        self._positions_store = protocol.Positions()
+        self._positions_store = positions
 
         # cache the stats until something alters our positions
         self._dirty_stats = True
@@ -296,10 +296,8 @@ class PositionTracker(object):
 
 
 class Ledger(object):
-    def __init__(self, start_date, portfolio, account):
+    def __init__(self, start_date, portfolio, account, positions):
         # metric only uses array
-        self.daily_returns_array = collections.deque()
-
         self._positions = None
 
         self._immutable_account = account
@@ -310,7 +308,7 @@ class Ledger(object):
 
         self._portfolio = protocol.MutableView(ip)
 
-        self._position_tracker = PositionTracker()
+        self._position_tracker = PositionTracker(positions)
 
         self._processed_transactions = {}
 
@@ -328,7 +326,7 @@ class Ledger(object):
 
         self._last_checkpoint = None
 
-        self._previous_total_returns = 0
+        self._previous_total_returns = 0.0
 
     @property
     def position_tracker(self):
@@ -353,10 +351,6 @@ class Ledger(object):
     def portfolio(self):
         self._update_portfolio()
         return self._immutable_portfolio
-
-    @property
-    def daily_returns(self):
-        return np.array(self.daily_returns_array)
 
     @property
     def account(self):

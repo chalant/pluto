@@ -12,6 +12,7 @@ from zipline.finance.execution import (
 
 from pluto.setup import run_setup as rs
 from pluto.data.universes import universes
+from pluto.data import caching
 from pluto.finance.broker import broker_setup as bks
 
 from gui.fields import fields
@@ -186,7 +187,10 @@ class Setup(QtWidgets.QWidget):
     def __init__(self, container):
         super(Setup, self).__init__(container)
 
-        self._layout = QtWidgets.QVBoxLayout(self)
+        self._layout = layout = QtWidgets.QHBoxLayout(self)
+
+        # self._layout = QtWidgets.QVBoxLayout(self)
+        # splitter.setLayout(self._layout)
 
         self._container = container
         self._width = 0
@@ -205,18 +209,17 @@ class Setup(QtWidgets.QWidget):
 
         # widget.setParent(dock)
         # widget.setParent(self)
-
         self._layout.addWidget(widget)
+
+        # width = self._width
+
+        # if width < widget.width():
+        #     self.setFixedWidth(widget.width())
+        #     width = widget.width()
+        #     self._width = width
         #
-        width = self._width
-
-        if width < widget.width():
-            self.setFixedWidth(widget.width())
-            width = widget.width()
-            self._width = width
-
-        else:
-            widget.setFixedWidth(width)
+        # else:
+        #     widget.setFixedWidth(width)
 
     # def fit(self):
     #     self._container.setFixedWidth(self._layout.sizeHint().width())
@@ -271,15 +274,22 @@ class BacktestSetup(QtWidgets.QWidget):
         events.subscribe('setup.start_date', self._set_start)
         events.subscribe('setup.end_date', self._set_end)
 
-        events.subscribe('strategy.loaded', self._activate)
-        events.subscribe('strategy.new', self._activate)
+        # events.subscribe('strategy.loaded', self._activate)
+        # events.subscribe('strategy.new', self._activate)
 
         self._datetime_setup = BackTestPeriod(frame)
 
-        layout.addWidget(self._datetime_setup)
+        self._data_frequency = combobox.ComboBox(frame)
 
-        #
+        layout.addWidget(fields.Field(
+            frame,
+            'Data Frequency',
+            self._data_frequency))
+
+        self._data_frequency.setDisabled(True)
+
         self._universes = uni = combobox.ComboBox(frame)
+        uni.set_item_store(Universes())
         # universes.set_item_store(Universes())
 
         # self._set_universe(universes.value)
@@ -289,6 +299,7 @@ class BacktestSetup(QtWidgets.QWidget):
             'Universe',
             uni))
 
+        layout.addWidget(self._datetime_setup)
         self._capital_slider = slider = QtWidgets.QSlider(
             orientation=Qt.Orientation.Horizontal)
 
@@ -302,15 +313,6 @@ class BacktestSetup(QtWidgets.QWidget):
             slider))
 
         slider.valueChanged.connect(self._capital_value)
-
-        self._data_frequency = combobox.ComboBox(frame)
-
-        layout.addWidget(fields.Field(
-            frame,
-            'Data Frequency',
-            self._data_frequency))
-
-        self._data_frequency.setDisabled(True)
 
         parent.setFixedWidth(self._layout.sizeHint().width())
 
@@ -327,7 +329,8 @@ class BacktestSetup(QtWidgets.QWidget):
     def _set_universe(self, name):
         uni = universes.get_universe(
             name,
-            self._directory)
+            self._directory,
+            caching.InMemoryCache())
 
         events.post_event('universe.loaded', uni)
 

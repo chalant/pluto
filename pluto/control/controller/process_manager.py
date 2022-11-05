@@ -20,23 +20,37 @@ from protos import broker_pb2_grpc as brk_rpc
 from protos import broker_pb2
 
 
+class OrderBatch(object):
+    def __init__(self, portfolio, account, orders):
+        self.portfolio = portfolio
+        self.account = account
+        self.orders = orders
+
+
 class StrategyManager(brk_rpc.BrokerServicer):
     def __init__(self,
                  asset_finder,
-                 start_dt,
-                 capital,
-                 emission_rate='minute'):
+                 stp):
 
         self._processes = {}
 
         self._last_sync_dt = None
 
-        self._asset_finder = asset_finder
-        self._ledger = ledger.Ledger(
-            start_dt,
-            protocol.Portfolio(start_dt, capital),
-            emission_rate)
+        self._setup = stp
 
+        self._start_dt = stp.start
+
+        self._portfolio = protocol.Portfolio(stp.start, stp.capital)
+        self._positions = protocol.Positions()
+        self._account = protocol.Account()
+        self._asset_finder = asset_finder
+
+        # self._ledger = ledger.Ledger(
+        #     start_dt,
+        #     portfolio,
+        #     emission_rate)
+
+        self._ledgers = {}
         self._bar_data_dict = {}
         self._blotters = {}
         self._data_portals = {}
@@ -44,10 +58,12 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._global_ts = None
 
         self._per_calendar_dt = {}
+        self._sync_times = {}
 
         self._broker_states = {}
 
         self._new_orders = []
+        self._orders_batches = []
 
         self._calendar_frequencies = defaultdict(list)
 
@@ -61,6 +77,22 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._active_processes = 0
 
     @property
+    def max_leverage(self):
+        return self._setup.max_leverage
+
+    @max_leverage.setter
+    def max_leverage(self, value):
+        self._setup.leverage = value
+
+    @property
+    def portfolio(self):
+        return self._portfolio
+
+    @property
+    def account(self):
+        return self._account
+
+    @property
     def session_ids(self):
         return self._processes
 
@@ -69,7 +101,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         return self._broker_states
 
     @property
-    def processes(self):
+    def strategies(self):
         return self._processes.values()
 
     @service_access.framework
@@ -88,13 +120,21 @@ class StrategyManager(brk_rpc.BrokerServicer):
         batch = broker_pb2.OrderBatch()
         batch.ParseFromString(bytes_)
 
+        orders_batches = self._orders_batches
+
         # todo: handle cases where the controllable fails, also add a timeout in case
         #  it is a hardware crash...
 
+        processes = self._processes
+
+        # todo: get portfolio and account data
         # check if it is the event we are waiting for...
         if conversions.to_datetime(batch.ts) == self._global_ts:
-            if session_id in self._processes:
+            if session_id in processes:
                 self._order_counter += 1
+
+            if batch.orders:
+                orders_batches.append(batch)
 
             for order in batch.orders:
                 # yield conversions.to_proto_order(
@@ -161,17 +201,23 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._per_calendar_dt[calendar_name] = ts
 
     def sync_last_sale_prices(
-            self, dt, data_portal,
-            data_frequency, handle_non_market_minutes=False):
+            self,
+            calendar_name,
+            dt,
+            data_portal,
+            data_frequency,
+            handle_non_market_minutes=False):
 
-        if dt != self._last_sync_dt:
-            self._ledger.sync_last_sale_prices(
+        ledger_ = self._ledgers[calendar_name]
+
+        if dt != self._sync_times[calendar_name]:
+            ledger_.sync_last_sale_prices(
                 dt,
                 data_portal,
                 data_frequency,
                 handle_non_market_minutes)
 
-            self._last_sync_dt = dt
+            self._sync_times[calendar_name] = dt
 
     def get_orders(self):
         # with self._lock:
@@ -206,46 +252,43 @@ class StrategyManager(brk_rpc.BrokerServicer):
             self._bar_data_dict[calendar_name + data_frequency])
 
     def get_positions(self, calendar_name):
-        aliases = self._aliases
-
-        for position in self._ledger.position_tracker.get_positions():
-            if aliases[position.exchange] == calendar_name:
-                yield position
+        for position in self._ledgers[calendar_name].position_tracker.get_positions():
+            yield position
 
     def get_open_orders(self, calendar_name):
         return self._blotters[calendar_name].open_orders
 
     def handle_market_open(self, gts, calendar_name):
-        self._ledger.start_of_session(
-            gts)
+        self._ledgers[calendar_name].start_of_session(gts)
 
     def process_transaction(self, calendar_name, transaction):
-        ledger = self._ledger
+        ledger_ = self._ledgers[calendar_name]
+
         blotter = self._blotters[calendar_name]
         orders = blotter.orders
 
-        ledger.process_transaction(transaction)
-        ledger.process_order(orders[transaction.order_id])
+        ledger_.process_transaction(transaction)
+        ledger_.process_order(orders[transaction.order_id])
 
-    def process_commission(self, commission):
-        self._ledger.process_commission(commission)
+    def process_commission(self, calendar_name, commission):
+        self._ledgers[calendar_name].process_commission(commission)
 
     def process_splits(self, calendar_name, splits):
         self._blotters[calendar_name].process_splits(splits)
-        self._ledger.process_splits(splits)
+        self._ledgers[calendar_name].process_splits(splits)
 
     def prune_orders(self, calendar_name, closed_orders):
         self._blotters[calendar_name].prune_orders(
             closed_orders)
 
-    def process_dividends(self, cts, adjustment_reader):
-        self._ledger.process_dividends(
+    def process_dividends(self, cts, calendar_name, adjustment_reader):
+        self._ledgers[calendar_name].process_dividends(
             cts,
             self._asset_finder,
             adjustment_reader
         )
 
-    def add_process(self, process):
+    def add_strategy(self, process):
         process_id = process.process_id
 
         self._processes[process_id] = process
@@ -284,11 +327,27 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def add_blotter(self, calendar_name, blotter):
         self._blotters[calendar_name] = blotter
 
+    def add_ledger(self, calendar_name):
+        self._ledgers[calendar_name] = ledger.Ledger(
+            self._start_dt,
+            self._portfolio,
+            self._account,
+            self._positions
+        )
+
+        self._sync_times[calendar_name] = None
+
     def get_frequencies(self, calendar_name):
         return self._calendar_frequencies[calendar_name]
 
+    def get_ledger(self, calendar_name):
+        return self._ledgers[calendar_name]
+
     def execute_orders(self, orders):
         pass
+
+    def get_orders_batches(self):
+        return self._orders_batches
 
     def cleanup_expired_assets(self, calendar_name, dt, data_frequency):
 
@@ -309,26 +368,17 @@ class StrategyManager(brk_rpc.BrokerServicer):
         blotter = self._blotters[calendar_name]
 
         data_portal = self._data_portals[calendar_name]
-        ledger = self._ledger
-
-        # get all positions for the calendar
-        aliases = self._aliases
+        ledger_ = self._ledgers[calendar_name]
 
         # todo: check if this block of code works with real-time data...
 
-        position_assets = self._asset_finder.retrieve_all([
-            position['sid']
-            for position in self._ledger.positions
-            if aliases[position['sid'].exchange] == calendar_name
-        ])
+        position_assets = self._asset_finder.retrieve_all([position['sid'] for position in ledger_.positions])
 
         # Remove positions in any sids that have reached their auto_close date.
-        assets_to_clear = [
-            asset for asset in position_assets
-            if past_auto_close_date(asset)]
+        assets_to_clear = [asset for asset in position_assets if past_auto_close_date(asset)]
 
         for asset in assets_to_clear:
-            ledger.close_position(
+            ledger_.close_position(
                 asset,
                 dt,
                 data_portal,
@@ -350,7 +400,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # iterated over.
         for order in blotter.new_orders.copy():
             if order.status == ORDER_STATUS.CANCELLED:
-                ledger.process_order(order)
+                ledger_.process_order(order)
                 blotter.new_orders.remove(order)
 
     def _get_current_dt(self, calendar_name):

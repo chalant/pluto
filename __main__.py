@@ -11,11 +11,13 @@ import sys
 from os import path
 
 from PyQt6 import QtWidgets
-from gui import backtesting
+
+import logbook
 
 import click
 
-from directory import utils
+from gui import backtesting
+from gui import qtlogger
 
 from dev import strategy_store
 
@@ -46,11 +48,7 @@ def install_examples():
         except FileExistsError:
             pass
 
-    test_bundle = test.TestBundle(
-        root_dir)
-
-    # ingest data...
-    test_bundle.ingest()
+    test.TestBundle(root_dir).ingest()
 
     print("Done")
 
@@ -66,10 +64,20 @@ def backtester(script_name):
 
     app = QtWidgets.QApplication(sys.argv)
 
-    bk = backtesting.BackTesting(utils.DirectoryInterface(pluto_setup.create_directory(
-        path.expanduser('~/.pluto'))),
+    bk = backtesting.BackTesting(pluto_setup.create_directory(
+        path.expanduser('~/.pluto')),
         script_name
     )
+
+    text_emitter = qtlogger.Emitter()
+    text_emitter.text_written.connect(bk.logger.write)
+
+    logbook.StreamHandler(text_emitter).push_application()
+
+    bk.setMinimumWidth(1366)
+    bk.setMinimumHeight(768)
+
+    bk.setWindowTitle(script_name)
 
     bk.show()
     sys.exit(app.exec())
@@ -77,7 +85,7 @@ def backtester(script_name):
 
 @main.command()
 @click.argument('name')
-def add_setup(name):
+def add_manager(name):
     root_dir = pluto_setup.create_directory(path.expanduser('~/.pluto'))
 
     launchers = root_dir.get_directory('launchers')

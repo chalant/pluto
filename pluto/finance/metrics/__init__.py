@@ -16,7 +16,7 @@ from .metric import (
     _ConstantCumulativeRiskMetric
 )
 
-import empyrical
+# import empyrical
 
 
 def pluto_metrics():
