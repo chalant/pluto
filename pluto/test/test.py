@@ -29,7 +29,7 @@ from pluto.strategies import schema
 
 from pluto.interface import monitor
 
-from pluto.data.universes import universes
+from pluto.data.universes import core
 
 from protos import controller_pb2
 

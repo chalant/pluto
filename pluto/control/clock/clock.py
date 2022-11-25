@@ -2,7 +2,7 @@ from datetime import time
 
 import pandas as pd
 
-from pluto.data.universes import universes
+from pluto.data.universes import core
 from pluto.control.clock.utils import get_generator
 from pluto.trading_calendars import calendar_utils as cu
 

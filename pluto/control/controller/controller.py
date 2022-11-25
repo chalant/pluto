@@ -1,8 +1,9 @@
-import pandas as pd
+import typing
+
 import logbook
+import pandas
 
 import pluto.control.controller.process_manager
-
 from pluto.coms.utils import conversions
 
 from protos.clock_pb2 import (
@@ -18,54 +19,76 @@ from protos import broker_pb2
 log = logbook.Logger("Controller")
 
 
+class NullDataIngester(object):
+    def ingest_bar_data(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
+        pass
+
+    def update_asset_database(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
+        pass
+
+
 class Controller(object):
     def __init__(
             self,
             strategy_manager: pluto.control.controller.process_manager.StrategyManager,
-            metrics_tracker):
+            market,
+            metrics_tracker,
+            data_ingester=None):
 
         self._metrics_tracker = metrics_tracker
         self._strategy_manager = strategy_manager
         self._orders = 0
 
+        self._update_flag = True
+        self._data_ingester = data_ingester if data_ingester else NullDataIngester()
+        self._market = market
+
     def clock_update(self, ts, evt, signals):
         strategy_manager = self._strategy_manager
+        market = self._market
 
         strategies = strategy_manager.strategies
-
         broker_states = strategy_manager.broker_states
-
         # set timestamp ahead of time so that we know which events to wait for...
         strategy_manager.set_global_timestamp(ts)
 
         metrics_tracker = self._metrics_tracker
 
-        # populate broker state to send to controllables
+        to_update = [
+            (ts, cts, calendar.name)
+            for cts, c_evt, calendar in signals
+            if c_evt == BAR or c_evt == TRADE_END]
+
+        # ingest data at each start of bar event
+        # ingestion writes streamed data in the database in a format that
+        # can be red by the readers.
+        # we have a separate process that stores streamed data.
+        # we then call ingest to create bar data of the most recent stored data.
+
+        data_ingester = self._data_ingester
+
+        if to_update:
+            data_ingester.ingest_bar_data(to_update)
+
+        # populate broker state to send to controllable
         for cts, c_evt, calendar in signals:
-            # set current datetime
-
-            # # skip
-            # if calendar_name not in self._base_calendars:
-            #     continue
-
             calendar_name = calendar.name
-
-            strategy_manager.set_calendar_timestamp(calendar_name, cts)
+            market.set_calendar_timestamp(calendar_name, cts)
 
             # bar events
-            if c_evt == BAR:
+            if c_evt == BAR or c_evt == TRADE_END:
                 # fetch executed transactions, commissions etc.
-
                 # todo: need to apply tax models...
-                transactions, closed_orders = strategy_manager.get_transactions(
-                    calendar_name, 'minute')
+                blotter = strategy_manager.get_blotter(calendar_name)
+
+                transactions, closed_orders = market.get_transactions(
+                    calendar_name, blotter)
+
+                # transactions, closed_orders = strategy_manager.get_transactions(calendar_name)
 
                 # update states
-
                 for transaction in transactions:
                     order = transaction['order']
-
-                    bs = broker_states[order.session_id]
 
                     strategy_manager.process_transaction(
                         calendar_name,
@@ -80,67 +103,20 @@ class Controller(object):
                                 'cost': transaction['commission']
                             })
 
-                    bs.transactions.append(
+                    broker_states[order.session_id].transactions.append(
                         broker_pb2.TransactionCommission(
                             transaction=conversions.to_proto_transaction(transaction['transaction'].to_dict()),
                             commission=transaction['commission']
                         ))
 
-                strategy_manager.prune_orders(
-                    calendar_name,
-                    closed_orders)
+                blotter.prune_orders(closed_orders)
+                strategy_manager.sync_last_sale_prices(calendar_name, cts)
 
             elif c_evt == MINUTE_END:
                 metrics_tracker.end_of_bar(
                     cts,
                     calendar_name,
                     strategy_manager.get_ledger(calendar_name))
-
-            elif c_evt == TRADE_END:
-                # update for all data frequencies...
-                for df in strategy_manager.get_frequencies(calendar_name):
-                    transactions, closed_orders = strategy_manager.get_transactions(
-                        calendar_name, df)
-
-                    # update states
-
-                    strategy_manager.prune_orders(
-                        calendar_name,
-                        closed_orders)
-
-                    for transaction in transactions:
-                        order = transaction['order']
-
-                        bs = broker_states[order.session_id]
-
-                        strategy_manager.process_transaction(
-                            calendar_name,
-                            transaction['transaction'])
-
-                        if transaction['commission'] > 0:
-                            strategy_manager.process_commission(
-                                calendar_name,
-                                {
-                                    'asset': order.asset,
-                                    'order': order.to_dict(),
-                                    'cost': transaction['commission']
-                                })
-
-                        bs.transactions.append(
-                            broker_pb2.TransactionCommission(
-                                transaction=conversions.to_proto_transaction(transaction['transaction'].to_dict()),
-                                commission=transaction['commission']
-                            ))
-
-                        # for commission in order_transactions.commissions:
-                        #     controllable_manager.process_commission(commission)
-                        #     bs.commissions.append(conversions.to_proto_commission(commission))
-                    data_portal = strategy_manager.get_data_portal(calendar_name)
-
-                    strategy_manager.sync_last_sale_prices(
-                        calendar_name,
-                        cts, data_portal, df
-                    )
 
             elif c_evt == SESSION_START:
                 # todo: each session start check if leverage have changed
@@ -161,9 +137,7 @@ class Controller(object):
                 assets_we_care_about = positions | open_orders.keys()
 
                 if assets_we_care_about:
-                    splits = data_portal.get_splits(
-                        assets_we_care_about,
-                        cts)
+                    splits = data_portal.get_splits(assets_we_care_about, cts)
 
                     if splits:
                         strategy_manager.process_splits(
@@ -179,17 +153,12 @@ class Controller(object):
 
             elif c_evt == SESSION_END:
                 # open_orders = controllable_manager.get_open_orders(calendar_name)
-
-                for df in strategy_manager.get_frequencies(calendar_name):
-                    strategy_manager.cleanup_expired_assets(
-                        calendar_name, cts, df)
+                strategy_manager.cleanup_expired_assets(calendar_name, cts)
 
                 metrics_tracker.end_of_bar(
                     cts,
                     calendar_name,
                     strategy_manager.get_ledger(calendar_name))
-
-                account = strategy_manager.account
 
         # fixme: a process might crash, and we would be waiting for too long...
         # update all processes
@@ -208,10 +177,6 @@ class Controller(object):
         #  the current open orders and the last sale price, determine
         #  if we go above the maximum leverage
 
-        log.error(
-
-        )
-
         # check if strategies don't go above allocated capital and leverage
 
         # new_orders_batches = strategy_manager.get_orders_batches()
@@ -222,15 +187,27 @@ class Controller(object):
         #         positions = batch.positions
         #         open_orders = batch.open_orders
 
-
         # todo: call the controller script
         # self._controller_script.update()
 
         # todo: put some additional logic for leverage control, portfolio
         #  optimization here...
-        strategy_manager.place_orders(new_orders)
+        market.place_orders(new_orders, strategy_manager)
+        # strategy_manager.place_orders(new_orders)
         # clear all variables
         strategy_manager.clear()
+
+        to_update = [
+            (ts, cts, calendar.name)
+            for cts, c_evt, calendar in signals
+            if c_evt == SESSION_END]
+
+        # update assets database at the end of session.
+        if to_update:
+            data_ingester.update_assets_database(to_update)
+
+        # reset update flag
+        self._update_flag = True
 
         return 1
 

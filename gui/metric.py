@@ -21,7 +21,6 @@ class BenchmarkReturnsAndVolatility(object):
         self._benchmark_returns = benchmark_returns.values
 
         self._session_index = 0
-        self._minute_index = 0
 
     def end_of_session(self):
         self._session_index += 1
@@ -264,7 +263,7 @@ class BacktestingMetrics(object):
         dash = self._dashboard
         # benchmark_source = self._benchmark_sources[calendar_name]
         #
-        # benchmark_series = self._benchmark_series[calendar_name]
+        benchmark_series = self._benchmark_sources[calendar_name]
 
         portfolio = ledger.portfolio
         account = ledger.account
@@ -273,14 +272,16 @@ class BacktestingMetrics(object):
 
         returns = dash.returns
         cumulative_returns = dash.cumulative_returns
+        benchmark_returns = dash.benchmark_returns
         leverage = dash.leverage_line
         exposure = dash.long_exposure
         cash = dash.cash
 
         dash.positions.end_of_bar(portfolio.positions)
-
-        # todo: the order history shouldn't entirely be saved in the ledger
         dash.orders_and_fills.end_of_bar(ledger.orders(dt))
+
+        # todo: if two benchmark points overlap, take the highest of the two and plot
+        #  that.
 
         # append only when the datetime changes.
         if dt > self._current_dt:
@@ -297,7 +298,8 @@ class BacktestingMetrics(object):
             self._previous_total_returns = portfolio.returns
 
             cumulative_returns.append(qdt, portfolio.returns)
-            returns.append(qdt, r)
+            benchmark_returns.append(qdt, benchmark_series.cumulative_returns)
+            # returns.append(qdt, r)
             leverage.append(qdt, account.leverage)
             exposure.append(qdt, portfolio.positions_exposure)
             cash.append(qdt, portfolio.cash)
@@ -306,6 +308,8 @@ class BacktestingMetrics(object):
             cumulative_returns.replace_point(qdt, portfolio.returns)
             leverage.replace_point(qdt, account.leverage)
             exposure.replace_point(qdt, account.total_positions_exposure)
+
+        benchmark_series.end_of_session()
 
     def end_of_session(self, dt, calendar_name, ledger):
         self.end_of_bar(dt, calendar_name, ledger)
@@ -316,9 +320,7 @@ class BacktestingMetrics(object):
     def set_benchmark_source(self, calendar_name, benchmark_source):
         if calendar_name not in self._benchmark_sources:
             self._benchmark_sources[calendar_name] = BenchmarkReturnsAndVolatility(benchmark_source)
-            self._benchmark_series[calendar_name] = timeseries.LineTimeSeries(
-                self._dashboard.performance,
-                calendar_name)
+
 
         # self._statistics.add_item(tables.Item())
 

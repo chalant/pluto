@@ -870,8 +870,7 @@ class BcolzMinuteBarTestCase(WithTradingCalendars,
         sids = [1, 2]
         data_1 = DataFrame(
             data={
-                'open': [
-                    15.0, 15.1, 15.2],
+                'open': [15.0, 15.1, 15.2],
                 'high': [17.0, 17.1, 17.2],
                 'low': [11.0, 11.1, 11.3],
                 'close': [14.0, 14.1, 14.2],

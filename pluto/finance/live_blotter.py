@@ -70,6 +70,9 @@ class LiveBlotter(blotter.Blotter):
     def get_transactions(self, bar_data):
         return self._transactions, self._commissions, self._closed_orders
 
+    def get_transactions_per_order(self, bar_data):
+        pass
+
     @property
     def orders(self):
         return self._orders

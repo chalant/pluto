@@ -5,7 +5,7 @@ from sqlalchemy import text, func
 
 from pluto.strategies import sessions
 
-from pluto.data.universes import universes
+from pluto.data.universes import core
 
 _ADD_STRATEGY = text(
     """

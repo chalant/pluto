@@ -11,7 +11,7 @@ from zipline.finance.execution import (
     MarketOrder)
 
 from pluto.setup import run_setup as rs
-from pluto.data.universes import universes
+from pluto.data.universes import core
 from pluto.data import caching
 from pluto.finance.broker import broker_setup as bks
 

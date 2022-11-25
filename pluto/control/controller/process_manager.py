@@ -1,17 +1,15 @@
 import threading
+import typing
 
 from collections import defaultdict
-
-from functools import partial
 
 from trading_calendars import calendar_utils
 
 from zipline import protocol
-from zipline.protocol import BarData
 from zipline.finance.order import ORDER_STATUS
 
 from pluto.finance import ledger
-from pluto.finance.metrics import tracker
+from pluto.setup import run_setup
 
 from pluto.coms.utils import conversions
 from pluto.interface.utils import service_access
@@ -28,9 +26,7 @@ class OrderBatch(object):
 
 
 class StrategyManager(brk_rpc.BrokerServicer):
-    def __init__(self,
-                 asset_finder,
-                 stp):
+    def __init__(self, asset_finder, stp: run_setup.RunSetup):
 
         self._processes = {}
 
@@ -45,6 +41,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._account = protocol.Account()
         self._asset_finder = asset_finder
 
+        self._data_frequency = stp.data_frequency
+
         # self._ledger = ledger.Ledger(
         #     start_dt,
         #     portfolio,
@@ -57,7 +55,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         self._global_ts = None
 
-        self._per_calendar_dt = {}
         self._sync_times = {}
 
         self._broker_states = {}
@@ -78,7 +75,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     @property
     def max_leverage(self):
-        return self._setup.max_leverage
+        return self._setup.leverage
 
     @max_leverage.setter
     def max_leverage(self, value):
@@ -191,30 +188,27 @@ class StrategyManager(brk_rpc.BrokerServicer):
         #     blotter.
         pass
 
+    def sync_broker_data(self, to_update: typing.List[typing.Tuple]):
+        # todo: this fetches data from a broker and updates our internal data.
+        #  (Blotter, Ledger, Portfolio, Account, ...)
+        for ts, cts, calendar_name in to_update:
+            pass
+
     def set_asset_finder(self, asset_finder):
         self._asset_finder = asset_finder
 
     def set_global_timestamp(self, ts):
         self._global_ts = ts
 
-    def set_calendar_timestamp(self, calendar_name, ts):
-        self._per_calendar_dt[calendar_name] = ts
-
-    def sync_last_sale_prices(
-            self,
-            calendar_name,
-            dt,
-            data_portal,
-            data_frequency,
-            handle_non_market_minutes=False):
+    def sync_last_sale_prices(self, calendar_name, dt, handle_non_market_minutes=False):
 
         ledger_ = self._ledgers[calendar_name]
 
         if dt != self._sync_times[calendar_name]:
             ledger_.sync_last_sale_prices(
                 dt,
-                data_portal,
-                data_frequency,
+                self._data_portals[calendar_name],
+                self._setup.data_frequency,
                 handle_non_market_minutes)
 
             self._sync_times[calendar_name] = dt
@@ -247,9 +241,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def get_data_portal(self, calendar_name):
         return self._data_portals[calendar_name]
 
-    def get_transactions(self, calendar_name, data_frequency):
-        return self._blotters[calendar_name].transactions_per_order(
-            self._bar_data_dict[calendar_name + data_frequency])
+    # def get_transactions(self, calendar_name):
+    #     return self._blotters[calendar_name].transactions_per_order(self._bar_data_dict[calendar_name])
 
     def get_positions(self, calendar_name):
         for position in self._ledgers[calendar_name].position_tracker.get_positions():
@@ -285,8 +278,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._ledgers[calendar_name].process_dividends(
             cts,
             self._asset_finder,
-            adjustment_reader
-        )
+            adjustment_reader)
 
     def add_strategy(self, process):
         process_id = process.process_id
@@ -296,30 +288,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         self._active_processes += 1
 
-    def add_bar_data(
-            self,
-            data_frequency,
-            data_portal,
-            asset_restrictions):
-
-        trading_calendar = data_portal.trading_calendar
-        calendar_name = trading_calendar.name
-        key = calendar_name + data_frequency
-
-        if key not in self._bar_data_dict:
-            calendar_frequencies = self._calendar_frequencies[calendar_name]
-
-            calendar_frequencies.append(data_frequency)
-
-            # todo: refactor bar data class such that we only have one bar data object
-            #  per calendar.
-
-            self._bar_data_dict[key] = self._create_bar_data(
-                calendar_name,
-                data_frequency,
-                data_portal,
-                asset_restrictions
-            )
+    def get_blotter(self, calendar_name):
+        return self._blotters[calendar_name]
 
     def add_data_portal(self, calendar_name, data_portal):
         self._data_portals[calendar_name] = data_portal
@@ -337,19 +307,13 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         self._sync_times[calendar_name] = None
 
-    def get_frequencies(self, calendar_name):
-        return self._calendar_frequencies[calendar_name]
-
     def get_ledger(self, calendar_name):
         return self._ledgers[calendar_name]
-
-    def execute_orders(self, orders):
-        pass
 
     def get_orders_batches(self):
         return self._orders_batches
 
-    def cleanup_expired_assets(self, calendar_name, dt, data_frequency):
+    def cleanup_expired_assets(self, calendar_name, dt):
 
         """
         Clear out any assets that have expired before starting a new sim day.
@@ -377,12 +341,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # Remove positions in any sids that have reached their auto_close date.
         assets_to_clear = [asset for asset in position_assets if past_auto_close_date(asset)]
 
+        data_frequency = self._data_frequency
+
         for asset in assets_to_clear:
-            ledger_.close_position(
-                asset,
-                dt,
-                data_portal,
-                data_frequency)
+            ledger_.close_position(asset, dt, data_portal, data_frequency)
 
         # Remove open orders for any sids that have reached their auto close
         # date. These orders get processed immediately because otherwise they
@@ -402,23 +364,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
             if order.status == ORDER_STATUS.CANCELLED:
                 ledger_.process_order(order)
                 blotter.new_orders.remove(order)
-
-    def _get_current_dt(self, calendar_name):
-        return self._per_calendar_dt[calendar_name]
-
-    def _create_bar_data(
-            self,
-            calendar_name,
-            data_frequency,
-            data_portal,
-            asset_restrictions):
-
-        return BarData(
-            data_portal=data_portal,
-            simulation_dt_func=partial(self._get_current_dt, calendar_name=calendar_name),
-            data_frequency=data_frequency,
-            trading_calendar=data_portal.trading_calendar,
-            restrictions=asset_restrictions)
 
     def clear(self):
         self._order_counter = 0

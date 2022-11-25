@@ -30,9 +30,10 @@ from zipline.testing import test_resource_path
 
 from pluto.trading_calendars import calendar_utils
 from pluto.data.bundles.core import AbstractBundleIngester, AbstractBundleLoader
-from pluto.data.equity_pricing.daily_bar_writer import ClickHouseDailyBarWriter
-from pluto.data.equity_pricing import daily_bar_writer as dbw
+from pluto.data.equity_pricing.bar_writer import ClickHouseDataWriter, DailyBars
+from pluto.data.equity_pricing import bar_writer as dbw
 from pluto.data.equity_pricing import readers
+
 from pluto.configuration import configuration
 
 
@@ -102,8 +103,7 @@ class ClickHouseTestBundle(AbstractBundleIngester):
     def __init__(self, root_dir, cache, environ=None):
         super(ClickHouseTestBundle, self).__init__(
             'click_house_test',
-            root_dir,
-            'XNYS')
+            root_dir)
 
         self._environ = environ if environ else {}
 
@@ -135,7 +135,7 @@ class ClickHouseTestBundle(AbstractBundleIngester):
 
         core.register('click_house_test', lambda *args: None)
 
-    def _ingest(self, root_dir):
+    def _ingest(self, root_dir, *args, **kwargs):
         # writes example data into clickhouse database
         timestamp = pd.Timestamp.utcnow()
 
@@ -150,10 +150,7 @@ class ClickHouseTestBundle(AbstractBundleIngester):
                 password=db_config['password']) as cl:
 
             # delete any previous table
-            dbw.drop_table(
-                cl,
-                name
-            )
+            dbw.drop_table(cl, name)
 
         tmp = tempdirectory.TempDirectory(
             'example_data')
@@ -180,10 +177,7 @@ class ClickHouseTestBundle(AbstractBundleIngester):
         )
 
         # copy adjustment database
-        shutil.copy2(core.adjustment_db_path(
-            name,
-            timestr,
-            environ), adjustment_path)
+        shutil.copy2(core.adjustment_db_path(name, timestr, environ), adjustment_path)
 
         asset_finder = assets.AssetFinder(assets_path)
 
@@ -193,9 +187,10 @@ class ClickHouseTestBundle(AbstractBundleIngester):
                 timestr,
                 environ=environ))
 
-        writer = ClickHouseDailyBarWriter(
+        writer = ClickHouseDataWriter(
             db_config,
-            name)
+            name,
+            DailyBars())
 
         cal = calendar_utils.get_calendar_in_range(
             'XNYS',

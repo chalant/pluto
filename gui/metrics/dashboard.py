@@ -163,6 +163,7 @@ class DashBoard(QtWidgets.QWidget):
         exposure.setMinimumHeight(300)
 
         self.cumulative_returns = timeseries.LineTimeSeries(ts, 'Cumulative Returns')
+        self.benchmark_returns = timeseries.LineTimeSeries(ts, 'Benchmark Returns')
         self.leverage_line = timeseries.LineTimeSeries(leverage, 'Leverage')
         self.long_exposure = timeseries.LineTimeSeries(exposure, 'Exposure')
         self.cash = timeseries.LineTimeSeries(exposure, 'Cash')

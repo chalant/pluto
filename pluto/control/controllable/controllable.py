@@ -25,7 +25,7 @@ from pluto.finance import ledger
 from pluto.finance.metrics import tracker
 from pluto.finance.broker import broker_setup as brs
 
-from pluto.data.universes import universes
+from pluto.data.universes import core
 
 from pluto.control.clock import clock
 

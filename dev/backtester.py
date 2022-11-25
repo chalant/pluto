@@ -20,7 +20,7 @@ from pluto.finance import ledger
 from pluto.strategies import strategies
 from pluto.strategies import schema
 
-from pluto.data.universes import universes
+from pluto.data.universes import core
 
 from pluto.setup import run_setup
 from pluto.setup import engine_setup
