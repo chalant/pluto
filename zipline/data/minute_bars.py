@@ -473,8 +473,7 @@ class BcolzMinuteBarWriter(object):
         self._start_session = start_session
         self._end_session = end_session
         self._calendar = calendar
-        slicer = (
-            calendar.schedule.index.slice_indexer(start_session, end_session))
+        slicer = (calendar.schedule.index.slice_indexer(start_session, end_session))
         self._schedule = calendar.schedule[slicer]
         self._session_labels = self._schedule.index
         self._minutes_per_day = minutes_per_day

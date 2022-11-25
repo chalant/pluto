@@ -16,6 +16,7 @@ from pluto.control.setup import setup as ctp
 from pluto.control.setup import account
 from pluto.control import script_handler
 from pluto.sources import benchmark_source
+from pluto.finance import market_simulation
 
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.finance.blotter import simulation_blotter
@@ -36,7 +37,7 @@ events.add_event('backtesting.started')
 events.add_event('backtesting.ended')
 
 
-class Backtester(QtCore.QThread):
+class Backtester(QtCore.QObject):
     started = QtCore.pyqtSignal()
     stopped = QtCore.pyqtSignal()
 
@@ -55,151 +56,150 @@ class Backtester(QtCore.QThread):
 
     def run(self) -> None:
         def start():
+            # try:
+            self._stopped = False
+
+            dir_ = self._directory
+            stp = self._run_setup
+            metrics_view = self._metrics_view
+
+            metrics_view.reset()
+
+            stg_store = ctp.StrategyStore(self._directory)
+
+            # todo: create account class
+            script_stp = ctp.Setup(
+                stg_store,
+                account.AccountSetup(
+                    stp.capital,
+                    stp.leverage))
+
+            scripts_dir = dir_.get_directory('launchers')
+
             try:
-                self._stopped = False
+                handler = script_handler.load(
+                    scripts_dir.get_file(self._script_name, 'py').path,
+                    stp,
+                    stg_store)
+                # run setup function of the script
+                handler.setup(script_stp)
 
-                dir_ = self._directory
-                stp = self._run_setup
-                metrics_view = self._metrics_view
-
-                metrics_view.reset()
-
-                stg_store = ctp.StrategyStore(self._directory)
-
-                # todo: create account class
-                script_stp = ctp.Setup(
-                    stg_store,
-                    account.AccountSetup(
-                        stp.capital,
-                        stp.leverage))
-
-                scripts_dir = dir_.get_directory('launchers')
-
-                try:
-                    handler = script_handler.load(
-                        scripts_dir.get_file(self._script_name, 'py').path,
-                        stp,
-                        stg_store)
-                    # run setup function of the script
-                    handler.setup(script_stp)
-
-                except FileNotFoundError or ValueError:
-                    return
-
-                self.started.emit()
-
-                # todo: calendars are determined by strategy setup...
-                #  (domain etc.)
-
-                # todo: the universe contains all the available data
-                #  strategies that request data not in the universe will crash
-
-                uni = self._universe
-                stp.environ = uni.environ
-
-                self._process_manager = pm = process_manager.StrategyManager(uni.asset_finder, stp)
-
-                restrictions = asset_restrictions.NoRestrictions()
-
-                # todo we need the directory
-
-                eng_stp = engine_setup.EngineSetup()
-                eng_stp.slippage_models = stp.commission_models
-
-                eng_stp.slippage_models = {
-                    Equity: stp.slippage_models['equity'],
-                    Future: stp.slippage_models['futures']
-                }
-
-                eng_stp.commission_models = {
-                    Equity: stp.commission_models['equity'],
-                    Future: stp.commission_models['futures']
-                }
-
-                loop = simulation_loop.SimulationLoop(
-                    stp.start,
-                    stp.end,
-                    stp.data_frequency)
-
-                for bc in uni.base_calendars:
-                    # todo: create bar data using setup and add it...
-                    calendar = cu.get_calendar_in_range(
-                        bc,
-                        stp.start,
-                        stp.end)
-
-                    last_session = calendar.last_session
-
-                    dp = data_portal.DataPortal(
-                        asset_finder=uni.asset_finder,
-                        trading_calendar=calendar,
-                        first_trading_day=calendar.first_session,
-                        equity_minute_reader=uni.equity_minute_bar_reader,
-                        equity_daily_reader=uni.equity_daily_bar_reader,
-                        adjustment_reader=uni.adjustment_reader,
-                        last_available_session=last_session,
-                        last_available_minute=calendar.minutes_for_session(last_session)[-1]
-                    )
-
-                    # todo: build trading domain of each strategy
-                    #  this will be used to determine which clocks to instanciate
-
-                    # todo: pass the capital in the process initialize method
-                    # create strategy processes
-                    for s, loader in stg_store.strategies:
-                        controllable = in_memory.InMemoryControllableStub(
-                            self._directory,
-                            'backtesting',
-                            pm,
-                            running_behavior.NonBlocking())
-
-                        pi = processes.ProcessInitializer(controllable)
-
-                        # todo: need a better way for setting up the strategies
-
-                        stg_stp = pi.initialize(
-                            stp,
-                            loader.strategy_name)
-
-                        pm.add_bar_data(
-                            stg_stp.data_frequency,
-                            dp,
-                            restrictions)
-
-                        pm.add_strategy(pi.start(ctp.StrategySetup(s, stp)))
-
-                    # add blotter for the base calendar...
-                    pm.add_blotter(bc, simulation_blotter.SimulationBlotter(eng_stp))
-                    pm.add_data_portal(bc, dp)
-                    pm.add_ledger(bc)
-
-                    # metrics_view.set_benchmark_source(
-                    #     bc,
-                    #     benchmark_source.SimulationBenchmarkSource(
-                    #         calendar,
-                    #         calendar.all_sessions,
-                    #         uni.benchmark,
-                    #         150))
-
-                    loop.add_clock(bc)
-
-                # todo: we need a plotting manager...
-                # todo: we need a plotting setup...
-
-                # todo: need emission rate from plotting control ?
-                metrics_view.initialize(stp.start, stp.end)
-
-                # todo: check if the stop button was clicked at each iteration
-
-                for _ in loop.start(controller.Controller(pm, metrics_view)):
-                    if self._stopped:
-                        break
-
-                self.stopped.emit()
-
-            except Exception as e:
-                print(e)
+            except FileNotFoundError or ValueError:
                 return
+
+            self.started.emit()
+
+            # todo: calendars are determined by strategy setup...
+            #  (domain etc.)
+
+            # todo: the universe contains all the available data
+            #  strategies that request data not in the universe will crash
+
+            uni = self._universe
+            stp.environ = uni.environ
+
+            self._process_manager = pm = process_manager.StrategyManager(uni.asset_finder, stp)
+
+            restrictions = asset_restrictions.NoRestrictions()
+
+            # todo we need the directory
+
+            eng_stp = engine_setup.EngineSetup()
+            eng_stp.slippage_models = stp.commission_models
+
+            eng_stp.slippage_models = {
+                Equity: stp.slippage_models['equity'],
+                Future: stp.slippage_models['futures']
+            }
+
+            eng_stp.commission_models = {
+                Equity: stp.commission_models['equity'],
+                Future: stp.commission_models['futures']
+            }
+
+            loop = simulation_loop.SimulationLoop(
+                stp.start,
+                stp.end,
+                stp.data_frequency)
+
+            market = market_simulation.MarketSimulation(eng_stp, stp.data_frequency)
+
+            for bc in uni.base_calendars:
+                # todo: create bar data using setup and add it...
+                calendar = cu.get_calendar_in_range(
+                    bc,
+                    stp.start,
+                    stp.end)
+
+                last_session = calendar.last_session
+
+                dp = data_portal.DataPortal(
+                    asset_finder=uni.asset_finder,
+                    trading_calendar=calendar,
+                    first_trading_day=calendar.first_session,
+                    equity_minute_reader=uni.equity_minute_bar_reader,
+                    equity_daily_reader=uni.equity_daily_bar_reader,
+                    adjustment_reader=uni.adjustment_reader,
+                    last_available_session=last_session,
+                    last_available_minute=calendar.minutes_for_session(last_session)[-1]
+                )
+
+                # todo: build trading domain of each strategy
+                #  this will be used to determine which clocks to instanciate
+
+                # todo: pass the capital in the process initialize method
+                # create strategy processes
+                for s, loader in stg_store.strategies:
+                    controllable = in_memory.InMemoryControllableStub(
+                        self._directory,
+                        'backtesting',
+                        pm,
+                        running_behavior.NonBlocking())
+
+                    pi = processes.ProcessInitializer(controllable)
+
+                    # todo: need a better way for setting up the strategies
+
+                    stg_stp = pi.initialize(
+                        stp,
+                        loader.strategy_name)
+
+                    pm.add_strategy(pi.start(ctp.StrategySetup(s, stp)))
+
+                # add blotter for the base calendar...
+                pm.add_blotter(bc, simulation_blotter.SimulationBlotter(eng_stp))
+
+                pm.add_data_portal(bc, dp)
+                pm.add_ledger(bc)
+                # pm.add_bar_data(dp, restrictions)
+                market.add_bar_data(dp, restrictions)
+
+                metrics_view.set_benchmark_source(
+                    bc,
+                    benchmark_source.SimulationBenchmarkSource(
+                        calendar,
+                        calendar.all_sessions,
+                        uni.benchmark,
+                        150))
+
+                loop.add_clock(bc)
+
+            # todo: need emission rate from plotting control ?
+            metrics_view.initialize(stp.start, stp.end)
+
+            # todo: check if the stop button was clicked at each iteration
+
+            for _ in loop.start(controller.Controller(pm, market, metrics_view)):
+
+                if self._stopped:
+                    break
+
+            self.stopped.emit()
+
+            # except Exception as e:
+            #     print("Failed!")
+            #     print(e)
+            #     return
 
         thread = threading.Thread(target=start)
         thread.start()

@@ -8,9 +8,6 @@ from zipline.finance.cancel_policy import NeverCancel
 from zipline.finance.order import Order
 from zipline.utils.input_validation import expect_types
 
-from pluto.finance.blotter.controller_blotter import OrderTransactions
-
-
 log = Logger('Blotter')
 warning_logger = Logger('AlgoWarning')
 
@@ -38,14 +35,11 @@ class SimulationBlotter(blotter.Blotter):
     def __repr__(self):
         return """
     {class_name}(
-        slippage_models={slippage_models},
-        commission_models={commission_models},
         open_orders={open_orders},
         orders={orders},
         new_orders={new_orders},
         current_dt={current_dt})
     """.strip().format(class_name=self.__class__.__name__,
-                       engine_setup=self.engine_setup,
                        open_orders=self._open_orders,
                        orders=self.orders,
                        new_orders=self.new_orders,
@@ -436,17 +430,6 @@ class SimulationBlotter(blotter.Blotter):
                 asset_orders.remove(order)
             except ValueError:
                 continue
-
-            # if order in asset_orders:
-            #     print("Removing!", order)
-            #     asset_orders.remove(order)
-
-            # self._open_orders[asset] = asset_orders
-
-            # s2 = set(asset_orders)
-
-            # print("After!", [order.id for order in asset_orders])
-            # print("Difference", s1.difference(s2))
 
         # now clear out the assets from our open_orders dict that have
         # zero open orders

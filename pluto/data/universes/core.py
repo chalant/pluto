@@ -178,11 +178,11 @@ class TestUniverse(AbstractUniverse):
         return self._environ
 
     @property
-    def country_code(self):
-        return CountryCode.UNITED_STATES
+    def country_codes(self):
+        return (CountryCode.UNITED_STATES,)
 
     @property
-    def start_date(self):
+    def start_date(self): 
         return self._equity_daily_bar_reader.first_trading_day
 
     @property

@@ -48,7 +48,7 @@ from pluto.setup import engine_setup
 
 
 from pluto.data.bundles import test as tb
-from pluto.data.universes import universes
+from pluto.data.universes import core
 from pluto.data import caching
 
 from pluto.trading_calendars import calendar_utils as cu
