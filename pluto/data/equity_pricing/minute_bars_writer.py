@@ -1,37 +1,108 @@
 import typing
+import json
 
-import numpy
+import numpy as np
 import pandas
+import pandas as pd
 import trading_calendars
 
+import directory.directory
+
 from pluto.data.equity_pricing import bar_writer
+from pluto.data import utils
 
 OHLC_RATIO = 1000
 
-_INSERT = """INSERT INTO minute_bars (sid, open, high, low, close, volume, timestamp) VALUES """
+
+class Lifetimes(object):
+    create = """
+    CREATE TABLE IF NOT EXISTS lifetimes
+    (
+        sid UInt32,
+        start_session DateTime64(8, 'UTC')
+        end_session DateTime64(8, 'UTC')
+        sign Int8
+    )
+    
+    ENGINE = CollapsingMergeTree(sign)
+    ORDER BY (sid, end_session)
+    """
+
+    insert = """
+    INSERT INTO lifetimes (sid, start_session, end_session, sign) VALUES
+    """
+    drop = """
+    DROP TABLE IF EXISTS lifetimes
+    """
+
+    get_assets_for_session = """
+    SELECT 
+    """
+
+    get_assets = """
+    SELECT sid FROM lifetimes WHERE sign = 1
+    """
+
+
+_GET_SIDS_FOR_SESSION = '''
+    SELECT sid FROM minute_bars
+    WHERE dt = %(dt)s ORDER BY (sid, dt)
+'''
+
+_GET_MINUTE_BARS_IN_RANGE = '''
+    SELECT sid, dt, open, high, low, close FROM minute_bars
+    WHERE dt BETWEEN %(open)s and %(close)s ORDER BY (sid, dt)
+'''
+
+
+class ClickHouseOverWriteError(Exception):
+    pass
+
+
+class ClickHouseWriteError(Exception):
+    pass
 
 
 class ClickHouseMinuteBarWriter(object):
     def __init__(self,
                  db_config: dict,
                  bundle_name: str,
+                 root_dir: directory.directory.Directory,
                  trading_calendar: trading_calendars.TradingCalendar,
                  start_dt: pandas.Timestamp,
                  end_dt: pandas.Timestamp):
-        """
-
-        Parameters
-        ----------
-        db_config
-        bundle_name
-        trading_calendar: trading_calendars.TradingCalendar
-        """
         self._db_writer = bar_writer.ClickHouseDataWriter(
             db_config,
             bundle_name,
             bar_writer.MinuteBars())
 
         self._trading_calendar = trading_calendar
+        self._root_dir = root_dir
+
+        data_dir = root_dir.get_directory('data').add_directory('pluto')
+
+        # create metadata file
+        try:
+            file = data_dir.add_file('metadata', 'json')
+            file.touch()
+            self._metadata = {
+                trading_calendar.name: {
+                    'first_session': start_dt,
+                    'last_session': end_dt,
+                    'bars_written': False,
+                    'lifetimes_written': False
+                }
+            }
+
+            with open(file.path, 'a') as f:
+                json.dump(self._metadata, f)
+        except FileExistsError:
+            file = data_dir.get_file('metadata', 'json')
+
+        with open(file.path, 'a') as f:
+            self._metadata = json.load(f)
+
+        self._metadata_file = file
 
         self._start_dt = start_dt
         self._end_dt = end_dt
@@ -40,63 +111,116 @@ class ClickHouseMinuteBarWriter(object):
             self._start_dt,
             self._end_dt)
 
-        self._written = False
+        self._db_config = db_config
+        self._bundle_name = bundle_name
+
+    @staticmethod
+    def _convert_to_int(value: float):
+        if np.isnan(value):
+            return 0
+        return np.int(round((OHLC_RATIO * value)))
 
     def write_cols(self,
                    sid: int,
                    dts: pandas.DatetimeIndex,
-                   cols: typing.Dict[str, numpy.array]):
+                   cols: typing.Dict[str, np.array]):
 
-        if self._written:
-            return
+        minutes = self._minutes_in_range.tz_localize(None)
 
-        minutes = self._minutes_in_range
+        # fm = minutes[0]
+        # lm = minutes[-1]
 
-        is_in = minutes.isin(dts)
+        # fs = self._metadata['first_session']
+        # ls = self._metadata['last_session']
+        #
+        # if fm > fs and lm < ls:
+        #     # minutes to run are within already written data
+        #     raise ClickHouseOverWriteError("Cannot overwrite already written data")
+        #
+        # elif fm > fs and lm > ls:
+        #     # todo: write from ls to lm
+        #     pass
+        #
+        # elif fm < fs and lm < ls:
+        #     # todo: write from fm to fs
+        #     pass
+        #
+        # elif fm < fs and lm > ls:
+        #     # todo write from fm to fs and from ls to lm
+        #     pass
+
+        dts = dts.tz_localize(None)
+
+        # remove invalid minutes
+        # drops elements that are in dts but not in minutes
+        to_drop = dts.difference(minutes)
+        index_to_drop = dts.asof_locs(to_drop, np.array([True] * len(dts)))
+        dts = dts.drop(to_drop)
 
         # minutes to skip
         sl = dts.slice_locs(minutes[0], minutes[-1])
-        dts = dts[sl[0]:sl[1]]
 
-        # fill any missing minutes
-        extended = dts.union(minutes)
+        # dts = dts[sl[0]:sl[1]]
+        # is_in = minutes.isin(dts)
+        #
+        # # todo: don't store missing data between minutes.
+        #
+        # # fill any missing minutes
+        # extended = dts.union(minutes)
 
-        opens = cols['open']
-        highs = cols['high']
-        lows = cols['low']
-        closes = cols['close']
-        volumes = cols['volume']
+        # drop invalid data
+        opens = np.delete(cols['open'], index_to_drop)
+        highs = np.delete(cols['high'], index_to_drop)
+        lows = np.delete(cols['low'], index_to_drop)
+        closes = np.delete(cols['close'], index_to_drop)
+        volumes = np.delete(cols['volume'], index_to_drop)
 
         def data_generator():
             i = 0
 
-            for dt, has in zip(extended, is_in):
+            for dt in dts:
                 # skipped minutes have no data...
-                if not has:
-                    yield {
-                        'open': 0,
-                        'high': 0,
-                        'low': 0,
-                        'close': 0,
-                        'volume': 0,
-                        'sid': sid,
-                        'dt': dt
-                    }
-                else:
-                    yield {
-                        'open': int(opens[i] * OHLC_RATIO),
-                        'high': int(highs[i] * OHLC_RATIO),
-                        'low': int(lows[i] * OHLC_RATIO),
-                        'close': int(closes[i] * OHLC_RATIO),
-                        'volume': int(volumes[i]),
-                        'sid': sid,
-                        'dt': dt
-                    }
+                # if not has:
+                #     yield {
+                #         'open': 0,
+                #         'high': 0,
+                #         'low': 0,
+                #         'close': 0,
+                #         'volume': 0,
+                #         'sid': sid,
+                #         'dt': dt
+                #     }
+                # else:
 
-                    i += 1
+                # if has:
+                yield {
+                    'open': self._convert_to_int(opens[i]),
+                    'high': self._convert_to_int(highs[i]),
+                    'low': self._convert_to_int(lows[i]),
+                    'close': self._convert_to_int(closes[i]),
+                    'volume': int(volumes[i]),
+                    'sid': sid,
+                    'dt': dt
+                }
+
+                i += 1
 
         self._db_writer.write(data_generator())
-        self._written = True
+
+        metadata = self._metadata[self._trading_calendar.name]
+
+        first = pd.Timestamp(metadata['first_session'])
+        last = pd.Timestamp(metadata['last_session'])
+
+        if minutes[0] < first:
+            metadata['first_session'] = minutes[0]
+
+        if minutes[-1] > last:
+            metadata['last_session'] = minutes[-1]
+
+        metadata['bars_written'] = True
+
+        self.flush()
 
     def advance(self, end_dt: pandas.Timestamp):
         cal = self._trading_calendar
@@ -124,7 +248,6 @@ class ClickHouseMinuteBarWriter(object):
         self._minutes_in_range = self._trading_calendar.minutes_in_range(
             self._start_dt,
             self._end_dt)
-        self._written = False
 
     def write_sid(self, sid: int, df: pandas.DataFrame):
         cols = {
@@ -138,3 +261,146 @@ class ClickHouseMinuteBarWriter(object):
         dts = df.index
 
         self.write_cols(sid, dts, cols)
+
+    def write_lifetimes(self, ):
+        if not self._metadata[self._trading_calendar.name]['bars_written']:
+            raise ClickHouseWriteError('Bars data table have not been initialized')
+
+        # todo: we need an initial write for asset lifetimes
+        # we iterate each sid from minute_bars, we get the first dt, and last dt from minutes bars
+
+        self._metadata[self._trading_calendar.name]['lifetimes_written'] = True
+        self.flush()
+
+    def update_lifetimes(self, session: pd.Timestamp):
+        if not self._metadata[self._trading_calendar.name]['lifetimes_written']:
+            raise ClickHouseWriteError('Lifetimes table have not been initialized')
+
+        if not self._metadata[self._trading_calendar.name]['bars_written']:
+            raise ClickHouseWriteError('Bars data table have not been initialized')
+
+        # if we have any minute data for a given asset for the given session,
+        # then the asset was alive for that session.
+
+        # todo: we need to first aggregate daily data, then update lifetimes.
+        #  because if we aggregate daily data, we can always either have nothing
+        #  or something for that session.
+
+        # note: we assume that we've already written bar data.
+        # so we query assets with data corresponding to the session
+
+        session = session.tz_localize(None)
+
+        def generator():
+            with utils.get_client(
+                    self._db_config,
+                    self._bundle_name) as clt:
+
+                with utils.get_client(
+                        self._db_config,
+                        self._bundle_name) as inner:
+
+                    lifetimes_iter = iter(inner.execute_iter(Lifetimes.get_assets, chunk_size=10000))
+                    lft_sid, start_session, end_session = next(lifetimes_iter)
+
+                    for res in clt.execute_iter(
+                            _GET_SIDS_FOR_SESSION,
+                            {'dt': session},
+                            chunk_size=10000):
+
+                        while True:
+                            if res == lft_sid:
+                                i = 0
+                                sess = end_session
+                                sign = -1
+
+                                while i < 2:
+                                    yield {
+                                        'sid': lft_sid,
+                                        'start_session': start_session,
+                                        'end_session': sess,
+                                        'sign': sign
+                                    }
+
+                                    sess = session
+                                    sign += 2
+
+                            try:
+                                lft_sid, start_session, end_session = next(lifetimes_iter)
+
+                                if lft_sid > res:
+                                    break
+
+                            except StopIteration:
+                                break
+
+        with utils.get_client(self._db_config, self._bundle_name) as outer:
+            outer.execute_iter(Lifetimes.insert, generator())
+
+    def aggregate_daily(self, sessions):
+        # aggregates minute bars into daily bars.
+        def daily_bar_generator():
+            with utils.get_client(self._db_config, self._bundle_name) as cl:
+                trading_calendar = self._trading_calendar
+
+                for session in sessions:
+                    open_dt, close_dt = trading_calendar.open_and_close_for_session(session)
+
+                    itr = iter(cl.execute_iter(_GET_MINUTE_BARS_IN_RANGE, {'open': open_dt, 'close': close_dt}))
+                    sid, dt, open_, high, low, close, vol = next(itr)
+
+                    op = open_
+                    hh = high
+                    ll = low
+
+                    tot_vol = vol
+
+                    while True:
+                        try:
+                            nsid, ndt, nopen, nhigh, nlow, nclose, nvol = next(itr)
+
+                            if nsid == sid:
+                                if hh < nhigh:
+                                    hh = nhigh
+                                if ll > nlow:
+                                    ll = nlow
+
+                                tot_vol += nvol
+                            else:
+                                yield {
+                                    'sid': sid,
+                                    'open': op,
+                                    'high': hh,
+                                    'low': ll,
+                                    'close': nclose,
+                                    'volume': tot_vol,
+                                    'dt': close_dt
+                                }
+
+                                # reset values
+                                hh = nhigh
+                                ll = nlow
+                                sid = nsid
+                                tot_vol = nvol
+                                op = nopen
+
+                        except StopIteration:
+                            break
+
+        # write aggregated bars
+        bar_writer.write(
+            daily_bar_generator(),
+            self._db_config,
+            self._bundle_name,
+            bar_writer.DailyBars)
+
+    def flush(self):
+        # over-write metadata
+        with open(self._metadata_file.path, 'w') as f:
+            json.dump(self._metadata, f)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.flush()

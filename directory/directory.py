@@ -120,10 +120,6 @@ class Directory(object):
         ----------
         name
         extension
-
-        Returns
-        -------
-        Fileimport datetime
         """
 
         id_ = _file_id(name, extension)

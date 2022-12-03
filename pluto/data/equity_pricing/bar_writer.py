@@ -1,3 +1,5 @@
+import typing
+
 import clickhouse_driver
 
 
@@ -36,7 +38,7 @@ class MinuteBars(object):
                 high UInt32,
                 low UInt32,
                 close UInt32,
-                volume UInt32,
+                volume UInt32
                 dt DateTime64(8, 'UTC')
             )
             ENGINE = MergeTree()
@@ -44,6 +46,40 @@ class MinuteBars(object):
         """
     drop = """DROP TABLE IF EXISTS minute_bars"""
 
+
+def write(
+        data_generator: typing.Generator,
+        db_config: dict,
+        bundle_name: str,
+        db_table: typing.Union[typing.Type[MinuteBars], typing.Type[DailyBars]]):
+
+    insert = db_table.insert
+
+    with clickhouse_driver.Client(
+            db_config['host'],
+            db_config['port'],
+            settings={
+                'use_client_time_zone': False
+            },
+            password=db_config['password'],
+            database=bundle_name) as clt:
+        with clt.disconnect_on_error(insert, None):
+            clt.connection.send_query(insert, query_id=None)
+            clt.connection.send_external_tables(None)
+            # note this blocks if we don't send external tables...
+
+            sample_block = clt.receive_sample_block()
+            rv = None
+
+            if sample_block:
+                columns = [x[0] for x in sample_block.columns_with_types]
+
+                # def generator():
+                #     for df in data:
+                #         yield [df[column] for column in columns]
+
+                rv = clt.send_data(sample_block, data_generator)
+                clt.receive_end_of_query()
 
 class ClickHouseDataWriter(object):
     def __init__(self, db_config, bundle_name, db_table):
