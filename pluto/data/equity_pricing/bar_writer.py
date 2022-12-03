@@ -47,22 +47,51 @@ class MinuteBars(object):
     drop = """DROP TABLE IF EXISTS minute_bars"""
 
 
+class Lifetimes(object):
+    create = """
+    CREATE TABLE IF NOT EXISTS lifetimes
+    (
+        sid UInt32,
+        start_date DateTime64(8, 'UTC')
+        end_date DateTime64(8, 'UTC')
+        sign Int8
+    )
+
+    ENGINE = CollapsingMergeTree(sign)
+    ORDER BY (sid, end_date)
+    """
+
+    insert = """
+    INSERT INTO lifetimes (sid, start_date, end_date, sign) VALUES
+    """
+    drop = """
+    DROP TABLE IF EXISTS lifetimes
+    """
+
+    get_assets = """
+        SELECT sid FROM lifetimes WHERE sign = 1
+        """
+
+
 def write(
         data_generator: typing.Generator,
         db_config: dict,
         bundle_name: str,
-        db_table: typing.Union[typing.Type[MinuteBars], typing.Type[DailyBars]]):
+        db_table: typing.Union[
+            typing.Type[MinuteBars],
+            typing.Type[DailyBars],
+            typing.Type[Lifetimes]
+        ]):
 
     insert = db_table.insert
 
     with clickhouse_driver.Client(
             db_config['host'],
             db_config['port'],
-            settings={
-                'use_client_time_zone': False
-            },
+            settings={'use_client_time_zone': False},
             password=db_config['password'],
             database=bundle_name) as clt:
+
         with clt.disconnect_on_error(insert, None):
             clt.connection.send_query(insert, query_id=None)
             clt.connection.send_external_tables(None)
@@ -80,6 +109,7 @@ def write(
 
                 rv = clt.send_data(sample_block, data_generator)
                 clt.receive_end_of_query()
+
 
 class ClickHouseDataWriter(object):
     def __init__(self, db_config, bundle_name, db_table):
