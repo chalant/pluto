@@ -14,36 +14,6 @@ from pluto.data import utils
 OHLC_RATIO = 1000
 
 
-class Lifetimes(object):
-    create = """
-    CREATE TABLE IF NOT EXISTS lifetimes
-    (
-        sid UInt32,
-        start_session DateTime64(8, 'UTC')
-        end_session DateTime64(8, 'UTC')
-        sign Int8
-    )
-    
-    ENGINE = CollapsingMergeTree(sign)
-    ORDER BY (sid, end_session)
-    """
-
-    insert = """
-    INSERT INTO lifetimes (sid, start_session, end_session, sign) VALUES
-    """
-    drop = """
-    DROP TABLE IF EXISTS lifetimes
-    """
-
-    get_assets_for_session = """
-    SELECT 
-    """
-
-    get_assets = """
-    SELECT sid FROM lifetimes WHERE sign = 1
-    """
-
-
 _GET_SIDS_FOR_SESSION = '''
     SELECT sid FROM minute_bars
     WHERE dt = %(dt)s ORDER BY (sid, dt)
@@ -53,6 +23,134 @@ _GET_MINUTE_BARS_IN_RANGE = '''
     SELECT sid, dt, open, high, low, close FROM minute_bars
     WHERE dt BETWEEN %(open)s and %(close)s ORDER BY (sid, dt)
 '''
+
+_GET_ALL_SIDS_AND_DT_DAILY = '''
+    SELECT sid, dt FROM daily_bars ORDER BY (sid, dt)
+'''
+
+
+def daily_bar_generator(
+        sessions: pd.DatetimeIndex,
+        trading_calendar: trading_calendars.TradingCalendar,
+        db_config: dict,
+        bundle_name: str):
+
+    with utils.get_client(db_config, bundle_name) as cl:
+        for session in sessions:
+            open_dt, close_dt = trading_calendar.open_and_close_for_session(session)
+
+            itr = iter(cl.execute_iter(
+                _GET_MINUTE_BARS_IN_RANGE,
+                {'open': open_dt, 'close': close_dt},
+                chunk_size=10000))
+            sid, dt, open_, high, low, close, vol = next(itr)
+
+            op = open_
+            hh = high
+            ll = low
+
+            tot_vol = vol
+
+            while True:
+                try:
+                    nsid, ndt, nopen, nhigh, nlow, nclose, nvol = next(itr)
+
+                    if nsid == sid:
+                        if hh < nhigh:
+                            hh = nhigh
+                        if ll > nlow:
+                            ll = nlow
+
+                        tot_vol += nvol
+                    else:
+                        yield {
+                            'sid': sid,
+                            'open': op,
+                            'high': hh,
+                            'low': ll,
+                            'close': nclose,
+                            'volume': tot_vol,
+                            'dt': close_dt
+                        }
+
+                        # reset values
+                        hh = nhigh
+                        ll = nlow
+                        sid = nsid
+                        tot_vol = nvol
+                        op = nopen
+
+                except StopIteration:
+                    break
+
+
+def lifetimes_generator(db_config, bundle_name):
+    with utils.get_client(db_config, bundle_name) as cl:
+        itr = iter(cl.execute_iter(
+            _GET_ALL_SIDS_AND_DT_DAILY,
+            chunk_size=10000))
+
+        sid, dt = next(itr)
+
+        while True:
+            try:
+                nsid, ndt = next(itr)
+
+                if sid != nsid:
+                    yield {
+                        'sid': sid,
+                        'start_date': dt,
+                        'end_date': ndt,
+                        'sign': 1}
+
+                    # reset values
+                    sid = nsid
+                    dt = ndt
+
+            except StopIteration:
+                break
+
+
+def lifetimes_update_generator(
+        session: pd.Timestamp,
+        db_config: dict,
+        bundle_name: str):
+    with utils.get_client(db_config, bundle_name) as clt:
+        with utils.get_client(db_config, bundle_name) as inner:
+
+            lifetimes_iter = iter(inner.execute_iter(bar_writer.Lifetimes.get_assets, chunk_size=10000))
+            lft_sid, start_session, end_session = next(lifetimes_iter)
+
+            for res in clt.execute_iter(
+                    _GET_SIDS_FOR_SESSION,
+                    {'dt': session},
+                    chunk_size=10000):
+
+                while True:
+                    if res == lft_sid:
+                        i = 0
+                        sess = end_session
+                        sign = -1
+
+                        while i < 2:
+                            yield {
+                                'sid': lft_sid,
+                                'start_session': start_session,
+                                'end_session': sess,
+                                'sign': sign
+                            }
+
+                            sess = session
+                            sign += 2
+
+                    try:
+                        lft_sid, start_session, end_session = next(lifetimes_iter)
+
+                        if lft_sid > res:
+                            break
+
+                    except StopIteration:
+                        break
 
 
 class ClickHouseOverWriteError(Exception):
@@ -85,6 +183,7 @@ class ClickHouseMinuteBarWriter(object):
         try:
             file = data_dir.add_file('metadata', 'json')
             file.touch()
+
             self._metadata = {
                 trading_calendar.name: {
                     'first_session': start_dt,
@@ -276,9 +375,6 @@ class ClickHouseMinuteBarWriter(object):
         if not self._metadata[self._trading_calendar.name]['lifetimes_written']:
             raise ClickHouseWriteError('Lifetimes table have not been initialized')
 
-        if not self._metadata[self._trading_calendar.name]['bars_written']:
-            raise ClickHouseWriteError('Bars data table have not been initialized')
-
         # if we have any minute data for a given asset for the given session,
         # then the asset was alive for that session.
 
@@ -291,108 +387,48 @@ class ClickHouseMinuteBarWriter(object):
 
         session = session.tz_localize(None)
 
-        def generator():
-            with utils.get_client(
-                    self._db_config,
-                    self._bundle_name) as clt:
+        db_config = self._db_config
+        bundle_name = self._bundle_name
 
-                with utils.get_client(
-                        self._db_config,
-                        self._bundle_name) as inner:
-
-                    lifetimes_iter = iter(inner.execute_iter(Lifetimes.get_assets, chunk_size=10000))
-                    lft_sid, start_session, end_session = next(lifetimes_iter)
-
-                    for res in clt.execute_iter(
-                            _GET_SIDS_FOR_SESSION,
-                            {'dt': session},
-                            chunk_size=10000):
-
-                        while True:
-                            if res == lft_sid:
-                                i = 0
-                                sess = end_session
-                                sign = -1
-
-                                while i < 2:
-                                    yield {
-                                        'sid': lft_sid,
-                                        'start_session': start_session,
-                                        'end_session': sess,
-                                        'sign': sign
-                                    }
-
-                                    sess = session
-                                    sign += 2
-
-                            try:
-                                lft_sid, start_session, end_session = next(lifetimes_iter)
-
-                                if lft_sid > res:
-                                    break
-
-                            except StopIteration:
-                                break
-
-        with utils.get_client(self._db_config, self._bundle_name) as outer:
-            outer.execute_iter(Lifetimes.insert, generator())
+        bar_writer.write(
+            lifetimes_update_generator(session, db_config, bundle_name),
+            db_config,
+            bundle_name,
+            bar_writer.Lifetimes
+        )
 
     def aggregate_daily(self, sessions):
         # aggregates minute bars into daily bars.
-        def daily_bar_generator():
-            with utils.get_client(self._db_config, self._bundle_name) as cl:
-                trading_calendar = self._trading_calendar
 
-                for session in sessions:
-                    open_dt, close_dt = trading_calendar.open_and_close_for_session(session)
+        trading_calendar = self._trading_calendar
 
-                    itr = iter(cl.execute_iter(_GET_MINUTE_BARS_IN_RANGE, {'open': open_dt, 'close': close_dt}))
-                    sid, dt, open_, high, low, close, vol = next(itr)
+        meta = self._metadata[trading_calendar.name]
+        lifetimes_written = meta['lifetimes_written']
 
-                    op = open_
-                    hh = high
-                    ll = low
-
-                    tot_vol = vol
-
-                    while True:
-                        try:
-                            nsid, ndt, nopen, nhigh, nlow, nclose, nvol = next(itr)
-
-                            if nsid == sid:
-                                if hh < nhigh:
-                                    hh = nhigh
-                                if ll > nlow:
-                                    ll = nlow
-
-                                tot_vol += nvol
-                            else:
-                                yield {
-                                    'sid': sid,
-                                    'open': op,
-                                    'high': hh,
-                                    'low': ll,
-                                    'close': nclose,
-                                    'volume': tot_vol,
-                                    'dt': close_dt
-                                }
-
-                                # reset values
-                                hh = nhigh
-                                ll = nlow
-                                sid = nsid
-                                tot_vol = nvol
-                                op = nopen
-
-                        except StopIteration:
-                            break
+        db_config = self._db_config
+        bundle_name = self._bundle_name
 
         # write aggregated bars
         bar_writer.write(
-            daily_bar_generator(),
-            self._db_config,
-            self._bundle_name,
+            daily_bar_generator(
+                sessions,
+                trading_calendar,
+                db_config,
+                bundle_name),
+            db_config,
+            bundle_name,
             bar_writer.DailyBars)
+
+        if not lifetimes_written:
+            # populate initial lifetimes table.
+            bar_writer.write(
+                lifetimes_generator(db_config, bundle_name),
+                db_config,
+                bundle_name,
+                bar_writer.Lifetimes)
+
+            meta['lifetimes_written'] = True
+            self.flush()
 
     def flush(self):
         # over-write metadata
