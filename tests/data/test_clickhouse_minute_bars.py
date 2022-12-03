@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from os import path
 from datetime import timedelta
-import os
 
 from numpy import (
     arange,
@@ -37,15 +37,7 @@ from pandas import (
 
 from clickhouse_driver import client
 
-from zipline.data.bar_reader import NoDataForSid, NoDataOnDate
-from zipline.data.minute_bars import (
-    BcolzMinuteBarMetadata,
-    BcolzMinuteBarWriter,
-    BcolzMinuteBarReader,
-    BcolzMinuteOverlappingData,
-    US_EQUITIES_MINUTES_PER_DAY,
-    BcolzMinuteWriterColumnMismatch,
-)
+from zipline.data.bar_reader import NoDataOnDate
 
 from zipline.testing.fixtures import (
     WithAssetFinder,
@@ -53,9 +45,13 @@ from zipline.testing.fixtures import (
     ZiplineTestCase,
 )
 
+from directory import utils
+
 from pluto.data.equity_pricing.minute_bar_reader import ClickHouseMinuteBarReader
 from pluto.data.equity_pricing.minute_bars_writer import ClickHouseMinuteBarWriter
 from pluto.data.equity_pricing.bar_writer import MinuteBars
+
+from pluto.setup import directory_setup as ds
 from pluto.configuration import configuration
 
 # Calendar is set to cover several half days, to check a case where half
@@ -82,14 +78,12 @@ class TMPDatabase(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         conf = self._db_config
 
-        # with client.Client(
-        #     conf['host'],
-        #     conf['port'],
-        #     password=conf['password'],
-        #     database='minute_test') as cl:
-        #     cl.execute("""
-        #     DROP DATABASE minute_test
-        #     """)
+        with client.Client(
+            conf['host'],
+            conf['port'],
+            password=conf['password'],
+            database='minute_test') as cl:
+            cl.execute("""DROP DATABASE minute_test""")
 
 
 class ClickHouseMinuteBarTestCase(WithTradingCalendars,
@@ -109,19 +103,23 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         self.instance_tmp_database = self.enter_instance_context(
             TMPDatabase(MinuteBars(), self.db_config))
 
+        self.root_dir = self.enter_instance_context(utils.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp'))))
+
         self.writer = ClickHouseMinuteBarWriter(
             self.db_config,
             'minute_test',
+            self.root_dir,
             self.trading_calendar,
             TEST_CALENDAR_START,
             TEST_CALENDAR_STOP)
 
-        self.reader = self._create_bar_reader()
+        self.reader = self.enter_instance_context(self._create_bar_reader())
 
     def _create_bar_reader(self):
         return ClickHouseMinuteBarReader(
             self.db_config,
             'minute_test',
+            self.root_dir,
             self.trading_calendar)
 
     @classmethod
@@ -148,7 +146,7 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
     def test_no_minute_bars_for_sid(self):
         minute = self.market_opens[self.test_calendar_start]
-        with self.assertRaises(NoDataForSid):
+        with self.assertRaises(NoDataOnDate):
             self.reader.get_value(1337, minute, 'close')
 
     def test_write_one_ohlcv(self):
@@ -167,23 +165,23 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(10.0, open_price)
+        self.assertEqual(10.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(20.0, high_price)
+        self.assertEqual(20.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(30.0, low_price)
+        self.assertEqual(30.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(40.0, close_price)
+        self.assertEqual(40.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(50.0, volume_price)
+        self.assertEqual(50.0, volume_price)
 
     def test_precision_after_scaling(self):
         '''For numbers that don't have an exact float representation,
@@ -203,60 +201,61 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         self.writer.write_sid(sid, data)
 
         open_price = self.reader.get_value(sid, minute, 'open')
-        self.assertEquals(130.23, open_price)
+        self.assertEqual(130.23, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
-        self.assertEquals(130.23, high_price)
+        self.assertEqual(130.23, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
-        self.assertEquals(130.23, low_price)
+        self.assertEqual(130.23, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
-        self.assertEquals(130.23, close_price)
+        self.assertEqual(130.23, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
-        self.assertEquals(1000, volume_price)
+        self.assertEqual(1000, volume_price)
 
-    def test_write_one_ohlcv_with_ratios(self):
-        minute = self.market_opens[self.test_calendar_start]
-        sid = 1
-        data = DataFrame(
-            data={
-                'open': [10.0],
-                'high': [20.0],
-                'low': [30.0],
-                'close': [40.0],
-                'volume': [50.0],
-            },
-            index=[minute],
-        )
-
-        # Create a new writer with `ohlc_ratios_per_sid` defined.
-        writer_with_ratios = BcolzMinuteBarWriter(
-            self.dest,
-            self.trading_calendar,
-            TEST_CALENDAR_START,
-            TEST_CALENDAR_STOP,
-            US_EQUITIES_MINUTES_PER_DAY,
-            ohlc_ratios_per_sid={sid: 25},
-        )
-        writer_with_ratios.write_sid(sid, data)
-        reader = self._create_bar_reader()
-
-        open_price = reader.get_value(sid, minute, 'open')
-        self.assertEquals(10.0, open_price)
-
-        high_price = reader.get_value(sid, minute, 'high')
-        self.assertEquals(20.0, high_price)
-
-        low_price = reader.get_value(sid, minute, 'low')
-        self.assertEquals(30.0, low_price)
-
-        close_price = reader.get_value(sid, minute, 'close')
-        self.assertEquals(40.0, close_price)
-
-        volume_price = reader.get_value(sid, minute, 'volume')
-        self.assertEquals(50.0, volume_price)
+    # def test_write_one_ohlcv_with_ratios(self):
+    #     minute = self.market_opens[self.test_calendar_start]
+    #     sid = 1
+    #     data = DataFrame(
+    #         data={
+    #             'open': [10.0],
+    #             'high': [20.0],
+    #             'low': [30.0],
+    #             'close': [40.0],
+    #             'volume': [50.0],
+    #         },
+    #         index=[minute],
+    #     )
+    #
+    #     # Create a new writer with `ohlc_ratios_per_sid` defined.
+    #     writer_with_ratios = ClickHouseMinuteBarWriter(
+    #         self.db_config,
+    #         'minute_test',
+    #         self.trading_calendar,
+    #         TEST_CALENDAR_START,
+    #         TEST_CALENDAR_STOP,
+    #         US_EQUITIES_MINUTES_PER_DAY,
+    #         ohlc_ratios_per_sid={sid: 25},
+    #     )
+    #     writer_with_ratios.write_sid(sid, data)
+    #     reader = self._create_bar_reader()
+    #
+    #     open_price = reader.get_value(sid, minute, 'open')
+    #     self.assertEquals(10.0, open_price)
+    #
+    #     high_price = reader.get_value(sid, minute, 'high')
+    #     self.assertEquals(20.0, high_price)
+    #
+    #     low_price = reader.get_value(sid, minute, 'low')
+    #     self.assertEquals(30.0, low_price)
+    #
+    #     close_price = reader.get_value(sid, minute, 'close')
+    #     self.assertEquals(40.0, close_price)
+    #
+    #     volume_price = reader.get_value(sid, minute, 'volume')
+    #     self.assertEquals(50.0, volume_price)
 
     def test_write_two_bars(self):
         minute_0 = self.market_opens[self.test_calendar_start]
@@ -275,43 +274,43 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         open_price = self.reader.get_value(sid, minute_0, 'open')
 
-        self.assertEquals(10.0, open_price)
+        self.assertEqual(10.0, open_price)
 
         high_price = self.reader.get_value(sid, minute_0, 'high')
 
-        self.assertEquals(20.0, high_price)
+        self.assertEqual(20.0, high_price)
 
         low_price = self.reader.get_value(sid, minute_0, 'low')
 
-        self.assertEquals(30.0, low_price)
+        self.assertEqual(30.0, low_price)
 
         close_price = self.reader.get_value(sid, minute_0, 'close')
 
-        self.assertEquals(40.0, close_price)
+        self.assertEqual(40.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute_0, 'volume')
 
-        self.assertEquals(50.0, volume_price)
+        self.assertEqual(50.0, volume_price)
 
         open_price = self.reader.get_value(sid, minute_1, 'open')
 
-        self.assertEquals(11.0, open_price)
+        self.assertEqual(11.0, open_price)
 
         high_price = self.reader.get_value(sid, minute_1, 'high')
 
-        self.assertEquals(21.0, high_price)
+        self.assertEqual(21.0, high_price)
 
         low_price = self.reader.get_value(sid, minute_1, 'low')
 
-        self.assertEquals(31.0, low_price)
+        self.assertEqual(31.0, low_price)
 
         close_price = self.reader.get_value(sid, minute_1, 'close')
 
-        self.assertEquals(41.0, close_price)
+        self.assertEqual(41.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute_1, 'volume')
 
-        self.assertEquals(51.0, volume_price)
+        self.assertEqual(51.0, volume_price)
 
     def test_write_on_second_day(self):
         second_day = self.test_calendar_start + 1
@@ -330,23 +329,23 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(10.0, open_price)
+        self.assertEqual(10.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(20.0, high_price)
+        self.assertEqual(20.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(30.0, low_price)
+        self.assertEqual(30.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(40.0, close_price)
+        self.assertEqual(40.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(50.0, volume_price)
+        self.assertEqual(50.0, volume_price)
 
     def test_write_empty(self):
         minute = self.market_opens[self.test_calendar_start]
@@ -409,62 +408,62 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(10.0, open_price)
+        self.assertEqual(10.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(20.0, high_price)
+        self.assertEqual(20.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(30.0, low_price)
+        self.assertEqual(30.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(40.0, close_price)
+        self.assertEqual(40.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(50.0, volume_price)
+        self.assertEqual(50.0, volume_price)
 
         minute = minutes[1]
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(11.0, open_price)
+        self.assertEqual(11.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(21.0, high_price)
+        self.assertEqual(21.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(31.0, low_price)
+        self.assertEqual(31.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(41.0, close_price)
+        self.assertEqual(41.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(51.0, volume_price)
+        self.assertEqual(51.0, volume_price)
 
-    def test_no_overwrite(self):
-        minute = self.market_opens[TEST_CALENDAR_START]
-        sid = 1
-        data = DataFrame(
-            data={
-                'open': [10.0],
-                'high': [20.0],
-                'low': [30.0],
-                'close': [40.0],
-                'volume': [50.0]
-            },
-            index=[minute])
-        self.writer.write_sid(sid, data)
-
-        with self.assertRaises(BcolzMinuteOverlappingData):
-            self.writer.write_sid(sid, data)
+    # def test_no_overwrite(self):
+    #     minute = self.market_opens[TEST_CALENDAR_START]
+    #     sid = 1
+    #     data = DataFrame(
+    #         data={
+    #             'open': [10.0],
+    #             'high': [20.0],
+    #             'low': [30.0],
+    #             'close': [40.0],
+    #             'volume': [50.0]
+    #         },
+    #         index=[minute])
+    #     self.writer.write_sid(sid, data)
+    #
+    #     with self.assertRaises(BcolzMinuteOverlappingData):
+    #         self.writer.write_sid(sid, data)
 
     def test_append_to_same_day(self):
         """
@@ -482,6 +481,8 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'volume': [50.0]
             },
             index=[first_minute])
+
+        self.writer.set_range(first_minute, first_minute)
         self.writer.write_sid(sid, data)
 
         # Write data in the same day as the previous minute
@@ -495,18 +496,19 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'volume': [10.0]
             },
             index=[second_minute])
+        self.writer.set_range(second_minute, second_minute)
         self.writer.write_sid(sid, new_data)
 
         open_price = self.reader.get_value(sid, second_minute, 'open')
-        self.assertEquals(5.0, open_price)
+        self.assertEqual(5.0, open_price)
         high_price = self.reader.get_value(sid, second_minute, 'high')
-        self.assertEquals(10.0, high_price)
+        self.assertEqual(10.0, high_price)
         low_price = self.reader.get_value(sid, second_minute, 'low')
-        self.assertEquals(3.0, low_price)
+        self.assertEqual(3.0, low_price)
         close_price = self.reader.get_value(sid, second_minute, 'close')
-        self.assertEquals(7.0, close_price)
+        self.assertEqual(7.0, close_price)
         volume_price = self.reader.get_value(sid, second_minute, 'volume')
-        self.assertEquals(10.0, volume_price)
+        self.assertEqual(10.0, volume_price)
 
     def test_append_on_new_day(self):
         sid = 1
@@ -529,57 +531,49 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         cday = self.trading_calendar.schedule.index.freq
         new_end_session = TEST_CALENDAR_STOP + cday
 
+        # writer = ClickHouseMinuteBarWriter(
+        #     self.db_config,
+        #     'minute_test',
+        #     self.trading_calendar,
+        #     dt,
+        #     new_end_session)
+
+        next_day_minute = dt + cday
+
         writer = ClickHouseMinuteBarWriter(
             self.db_config,
             'minute_test',
             self.trading_calendar,
             dt,
-            new_end_session)
+            next_day_minute)
 
-        next_day_minute = dt + cday
         new_data = DataFrame(
             data=ohlcv,
             index=[next_day_minute])
 
         writer.write_sid(sid, new_data)
         # Get a new reader to test updated calendar.
-        reader = self._create_bar_reader()
+        with self._create_bar_reader() as reader:
+            second_minute = dt + Timedelta(minutes=1)
 
-        second_minute = dt + Timedelta(minutes=1)
+            # The second minute should have been padded with zeros
+            for col in ('open', 'high', 'low', 'close'):
+                assert_almost_equal(
+                    nan, reader.get_value(sid, second_minute, col))
+            self.assertEqual(
+                0, reader.get_value(sid, second_minute, 'volume'))
 
-        # The second minute should have been padded with zeros
-        for col in ('open', 'high', 'low', 'close'):
-            assert_almost_equal(
-                nan, reader.get_value(sid, second_minute, col))
-        self.assertEqual(
-            0, reader.get_value(sid, second_minute, 'volume'))
-
-        # The next day minute should have data.
-        for col in ('open', 'high', 'low', 'close', 'volume'):
-            assert_almost_equal(
-                ohlcv[col],
-                reader.get_value(sid, next_day_minute, col))
+            # The next day minute should have data.
+            for col in ('open', 'high', 'low', 'close', 'volume'):
+                assert_almost_equal(
+                    ohlcv[col],
+                    reader.get_value(sid, next_day_minute, col))
 
     def test_write_multiple_sids(self):
         """
         Test writing multiple sids.
-
-        Tests both that the data is written to the correct sid, as well as
-        ensuring that the logic for creating the subdirectory path to each sid
-        does not cause issues from attempts to recreate existing paths.
-        (Calling out this coverage, because an assertion of that logic does not
-        show up in the test itself, but is exercised by the act of attempting
-        to write two consecutive sids, which would be written to the same
-        containing directory, `00/00/000001.bcolz` and `00/00/000002.bcolz)
-
-        Before applying a check to make sure the path writing did not
-        re-attempt directory creation an OSError like the following would
-        occur:
-
-        ```
-        OSError: [Errno 17] File exists: '/tmp/tmpR7yzzT/minute_bars/00/00'
-        ```
         """
+
         minute = self.market_opens[TEST_CALENDAR_START]
         sids = [1, 2]
         data = DataFrame(
@@ -608,58 +602,58 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(15.0, open_price)
+        self.assertEqual(15.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(17.0, high_price)
+        self.assertEqual(17.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(11.0, low_price)
+        self.assertEqual(11.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(15.0, close_price)
+        self.assertEqual(15.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(100.0, volume_price)
+        self.assertEqual(100.0, volume_price)
 
         sid = sids[1]
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(25.0, open_price)
+        self.assertEqual(25.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(27.0, high_price)
+        self.assertEqual(27.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(21.0, low_price)
+        self.assertEqual(21.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(25.0, close_price)
+        self.assertEqual(25.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(200.0, volume_price)
+        self.assertEqual(200.0, volume_price)
 
     def test_pad_data(self):
         """
         Test writing empty data.
         """
         sid = 1
-        last_date = self.writer.last_date_in_output_for_sid(sid)
-        self.assertIs(last_date, NaT)
-
-        self.writer.pad(sid, TEST_CALENDAR_START)
-
-        last_date = self.writer.last_date_in_output_for_sid(sid)
-        self.assertEqual(last_date, TEST_CALENDAR_START)
+        # last_date = self.writer.last_date_in_output_for_sid(sid)
+        # self.assertIs(last_date, NaT)
+        #
+        # self.writer.pad(sid, TEST_CALENDAR_START)
+        #
+        # last_date = self.writer.last_date_in_output_for_sid(sid)
+        # self.assertEqual(last_date, TEST_CALENDAR_START)
 
         freq = self.market_opens.index.freq
         day = TEST_CALENDAR_START + freq
@@ -678,45 +672,45 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        self.assertEquals(15.0, open_price)
+        self.assertEqual(15.0, open_price)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        self.assertEquals(17.0, high_price)
+        self.assertEqual(17.0, high_price)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        self.assertEquals(11.0, low_price)
+        self.assertEqual(11.0, low_price)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        self.assertEquals(15.0, close_price)
+        self.assertEqual(15.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(100.0, volume_price)
+        self.assertEqual(100.0, volume_price)
 
-        # Check that if we then pad the rest of this day, we end up with
-        # 2 days worth of minutes.
-        self.writer.pad(sid, day)
-
-        self.assertEqual(
-            len(self.writer._ensure_ctable(sid)),
-            self.writer._minutes_per_day * 2,
-        )
+        # # Check that if we then pad the rest of this day, we end up with
+        # # 2 days worth of minutes.
+        # self.writer.pad(sid, day)
+        #
+        # self.assertEqual(
+        #     len(self.writer._ensure_ctable(sid)),
+        #     self.writer._minutes_per_day * 2,
+        # )
 
     def test_nans(self):
         """
         Test writing empty data.
         """
         sid = 1
-        last_date = self.writer.last_date_in_output_for_sid(sid)
-        self.assertIs(last_date, NaT)
-
-        self.writer.pad(sid, TEST_CALENDAR_START)
-
-        last_date = self.writer.last_date_in_output_for_sid(sid)
-        self.assertEqual(last_date, TEST_CALENDAR_START)
+        # last_date = self.writer.last_date_in_output_for_sid(sid)
+        # self.assertIs(last_date, NaT)
+        #
+        # self.writer.pad(sid, TEST_CALENDAR_START)
+        #
+        # last_date = self.writer.last_date_in_output_for_sid(sid)
+        # self.assertEqual(last_date, TEST_CALENDAR_START)
 
         freq = self.market_opens.index.freq
         minute = self.market_opens[TEST_CALENDAR_START + freq]
@@ -749,13 +743,13 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         Also test nans of differing values/construction.
         """
         sid = 1
-        last_date = self.writer.last_date_in_output_for_sid(sid)
-        self.assertIs(last_date, NaT)
-
-        self.writer.pad(sid, TEST_CALENDAR_START)
-
-        last_date = self.writer.last_date_in_output_for_sid(sid)
-        self.assertEqual(last_date, TEST_CALENDAR_START)
+        # last_date = self.writer.last_date_in_output_for_sid(sid)
+        # self.assertIs(last_date, NaT)
+        #
+        # self.writer.pad(sid, TEST_CALENDAR_START)
+        #
+        # last_date = self.writer.last_date_in_output_for_sid(sid)
+        # self.assertEqual(last_date, TEST_CALENDAR_START)
 
         freq = self.market_opens.index.freq
         minute = self.market_opens[TEST_CALENDAR_START + freq]
@@ -788,7 +782,7 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 assert_array_equal(zeros(9), ohlcv_window[i][0])
 
     def test_write_cols(self):
-        minute_0 = self.market_opens[self.test_calendar_start]
+        minute_0 = self.market_opens[self.test_calendar_start].tz_localize(None)
         minute_1 = minute_0 + timedelta(minutes=1)
         sid = 1
         cols = {
@@ -798,52 +792,56 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
             'close': array([40.0, 41.0]),
             'volume': array([50.0, 51.0])
         }
-        dts = DatetimeIndex(array([minute_0, minute_1], dtype='datetime64[s]'))
+        dts = DatetimeIndex(array([minute_0, minute_1.tz_localize(None)], dtype='datetime64[s]'))
         self.writer.write_cols(sid, dts, cols)
 
         open_price = self.reader.get_value(sid, minute_0, 'open')
 
-        self.assertEquals(10.0, open_price)
+        self.assertEqual(10.0, open_price)
 
         high_price = self.reader.get_value(sid, minute_0, 'high')
 
-        self.assertEquals(20.0, high_price)
+        self.assertEqual(20.0, high_price)
 
         low_price = self.reader.get_value(sid, minute_0, 'low')
 
-        self.assertEquals(30.0, low_price)
+        self.assertEqual(30.0, low_price)
 
         close_price = self.reader.get_value(sid, minute_0, 'close')
 
-        self.assertEquals(40.0, close_price)
+        self.assertEqual(40.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute_0, 'volume')
 
-        self.assertEquals(50.0, volume_price)
+        self.assertEqual(50.0, volume_price)
 
         open_price = self.reader.get_value(sid, minute_1, 'open')
 
-        self.assertEquals(11.0, open_price)
+        self.assertEqual(11.0, open_price)
 
         high_price = self.reader.get_value(sid, minute_1, 'high')
 
-        self.assertEquals(21.0, high_price)
+        self.assertEqual(21.0, high_price)
 
         low_price = self.reader.get_value(sid, minute_1, 'low')
 
-        self.assertEquals(31.0, low_price)
+        self.assertEqual(31.0, low_price)
 
         close_price = self.reader.get_value(sid, minute_1, 'close')
 
-        self.assertEquals(41.0, close_price)
+        self.assertEqual(41.0, close_price)
 
         volume_price = self.reader.get_value(sid, minute_1, 'volume')
 
-        self.assertEquals(51.0, volume_price)
+        self.assertEqual(51.0, volume_price)
 
     def test_write_cols_mismatch_length(self):
+        """
+        should only write the first two elements of each field.
+
+        """
         dts = date_range(self.market_opens[self.test_calendar_start],
-                         periods=2, freq='min').asi8.astype('datetime64[s]')
+                         periods=2, freq='min')
         sid = 1
         cols = {
             'open': array([10.0, 11.0, 12.0]),
@@ -852,8 +850,21 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
             'close': array([40.0, 41.0]),
             'volume': array([50.0, 51.0, 52.0])
         }
-        with self.assertRaises(BcolzMinuteWriterColumnMismatch):
-            self.writer.write_cols(sid, dts, cols)
+        self.writer.write_cols(sid, dts, cols)
+
+        with self._create_bar_reader() as reader:
+
+            columns = ['open', 'high', 'low', 'close', 'volume']
+            sids = [sid]
+            arrays = list(map(transpose, reader.load_raw_arrays(
+                columns, dts[0], dts[-1], sids,
+            )))
+
+            data = {sid: cols}
+
+            for i, col in enumerate(columns):
+                for j, sid in enumerate(sids):
+                    assert_almost_equal(data[sid][col][:2], arrays[i][j])
 
     def test_unadjusted_minutes(self):
         """
@@ -873,6 +884,7 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'volume': [1000, 0, 1001]
             },
             index=minutes)
+        self.writer.set_range(minutes[0], minutes[-1])
         self.writer.write_sid(sids[0], data_1)
 
         data_2 = DataFrame(
@@ -887,20 +899,19 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
 
         self.writer.write_sid(sids[1], data_2)
 
-        # todo
-        reader = self._create_bar_reader()
+        with self._create_bar_reader() as reader:
 
-        columns = ['open', 'high', 'low', 'close', 'volume']
-        sids = [sids[0], sids[1]]
-        arrays = list(map(transpose, reader.load_raw_arrays(
-            columns, minutes[0], minutes[-1], sids,
-        )))
+            columns = ['open', 'high', 'low', 'close', 'volume']
+            sids = [sids[0], sids[1]]
+            arrays = list(map(transpose, reader.load_raw_arrays(
+                columns, minutes[0], minutes[-1], sids,
+            )))
 
-        data = {sids[0]: data_1, sids[1]: data_2}
+            data = {sids[0]: data_1, sids[1]: data_2}
 
-        for i, col in enumerate(columns):
-            for j, sid in enumerate(sids):
-                assert_almost_equal(data[sid][col], arrays[i][j])
+            for i, col in enumerate(columns):
+                for j, sid in enumerate(sids):
+                    assert_almost_equal(data[sid][col], arrays[i][j])
 
     def test_unadjusted_minutes_early_close(self):
         """
@@ -926,6 +937,7 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'volume': [1000, 1001, 1002],
             },
             index=minutes)
+        self.writer.set_range(minutes[0], minutes[-1])
         self.writer.write_sid(sids[0], data_1)
 
         data_2 = DataFrame(
@@ -939,28 +951,27 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
             index=minutes)
         self.writer.write_sid(sids[1], data_2)
 
-        reader = self._create_bar_reader()
+        with self._create_bar_reader() as reader:
+            columns = ['open', 'high', 'low', 'close', 'volume']
+            sids = [sids[0], sids[1]]
+            arrays = list(map(transpose, reader.load_raw_arrays(
+                columns, minutes[0], minutes[-1], sids,
+            )))
 
-        columns = ['open', 'high', 'low', 'close', 'volume']
-        sids = [sids[0], sids[1]]
-        arrays = list(map(transpose, reader.load_raw_arrays(
-            columns, minutes[0], minutes[-1], sids,
-        )))
+            data = {sids[0]: data_1, sids[1]: data_2}
 
-        data = {sids[0]: data_1, sids[1]: data_2}
+            start_minute_loc = \
+                self.trading_calendar.all_minutes.get_loc(minutes[0])
+            minute_locs = [
+                self.trading_calendar.all_minutes.get_loc(minute)
+                - start_minute_loc
+                for minute in minutes
+            ]
 
-        start_minute_loc = \
-            self.trading_calendar.all_minutes.get_loc(minutes[0])
-        minute_locs = [
-            self.trading_calendar.all_minutes.get_loc(minute)
-            - start_minute_loc
-            for minute in minutes
-        ]
-
-        for i, col in enumerate(columns):
-            for j, sid in enumerate(sids):
-                assert_almost_equal(data[sid].loc[minutes, col],
-                                    arrays[i][j][minute_locs])
+            for i, col in enumerate(columns):
+                for j, sid in enumerate(sids):
+                    assert_almost_equal(data[sid].loc[minutes, col],
+                                        arrays[i][j][minute_locs])
 
     def test_adjust_non_trading_minutes(self):
         start_day = Timestamp('2015-06-01', tz='UTC')
@@ -1020,6 +1031,7 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
             'close': arange(1, 601),
             'volume': arange(1, 601)
         }
+
         dts = self.trading_calendar.minutes_for_sessions_in_range(
                 self.trading_calendar.minute_to_session_label(start_day),
                 self.trading_calendar.minute_to_session_label(end_day))
@@ -1039,12 +1051,12 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'open'),
             600)
 
-        self.assertEqual(
+        # no data should be written since it is an early close
+        with self.assertRaises(NoDataOnDate):
             self.reader.get_value(
                 sid,
                 Timestamp('2015-11-27 18:01:00', tz='UTC'),
-                'open'),
-            210)
+                'open')
 
         with self.assertRaises(NoDataOnDate):
             self.reader.get_value(
@@ -1060,127 +1072,132 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'open'
             )
 
-    def test_set_sid_attrs(self):
-        """Confirm that we can set the attributes of a sid's file correctly.
-        """
+    # def test_set_sid_attrs(self):
+    #     """Confirm that we can set the attributes of a sid's file correctly.
+    #     """
+    #
+    #     sid = 1
+    #     start_day = Timestamp('2015-11-27', tz='UTC')
+    #     end_day = Timestamp('2015-06-02', tz='UTC')
+    #     attrs = {
+    #         'start_day': start_day.value / int(1e9),
+    #         'end_day': end_day.value / int(1e9),
+    #         'factor': 100,
+    #     }
+    #
+    #     # Write the attributes
+    #     self.writer.set_sid_attrs(sid, **attrs)
+    #     # Read the attributes
+    #     for k, v in attrs.items():
+    #         self.assertEqual(self.reader.get_sid_attr(sid, k), v)
 
-        sid = 1
-        start_day = Timestamp('2015-11-27', tz='UTC')
-        end_day = Timestamp('2015-06-02', tz='UTC')
-        attrs = {
-            'start_day': start_day.value / int(1e9),
-            'end_day': end_day.value / int(1e9),
-            'factor': 100,
-        }
+    # def test_truncate_between_data_points(self):
+    #
+    #     tds = self.market_opens.index
+    #     days = tds[tds.slice_indexer(
+    #         start=self.test_calendar_start + 1,
+    #         end=self.test_calendar_start + 3
+    #     )]
+    #     minutes = DatetimeIndex([
+    #         self.market_opens[days[0]] + timedelta(minutes=60),
+    #         self.market_opens[days[1]] + timedelta(minutes=120),
+    #     ])
+    #     sid = 1
+    #     data = DataFrame(
+    #         data={
+    #             'open': [10.0, 11.0],
+    #             'high': [20.0, 21.0],
+    #             'low': [30.0, 31.0],
+    #             'close': [40.0, 41.0],
+    #             'volume': [50.0, 51.0]
+    #         },
+    #         index=minutes)
+    #     self.writer.write_sid(sid, data)
+    #
+    #     # Open a new writer to cover `open` method, also truncating only
+    #     # applies to an existing directory.
+    #     writer = ClickHouseMinuteBarWriter(
+    #         self.db_config,
+    #         'minute_test',
+    #         self.trading_calendar,
+    #         TEST_CALENDAR_START,
+    #         TEST_CALENDAR_STOP)
+    #
+    #     # Truncate to first day with data.
+    #     writer.truncate(days[0])
+    #
+    #     # Refresh the reader since truncate update the metadata.
+    #     # todo
+    #     self.reader = self._create_bar_reader()
+    #
+    #     self.assertEqual(self.writer.last_date_in_output_for_sid(sid), days[0])
+    #
+    #     cal = self.trading_calendar
+    #     _, last_close = cal.open_and_close_for_session(days[0])
+    #     self.assertEqual(self.reader.last_available_dt, last_close)
+    #
+    #     minute = minutes[0]
+    #
+    #     open_price = self.reader.get_value(sid, minute, 'open')
+    #
+    #     self.assertEquals(10.0, open_price)
+    #
+    #     high_price = self.reader.get_value(sid, minute, 'high')
+    #
+    #     self.assertEquals(20.0, high_price)
+    #
+    #     low_price = self.reader.get_value(sid, minute, 'low')
+    #
+    #     self.assertEquals(30.0, low_price)
+    #
+    #     close_price = self.reader.get_value(sid, minute, 'close')
+    #
+    #     self.assertEquals(40.0, close_price)
+    #
+    #     volume_price = self.reader.get_value(sid, minute, 'volume')
+    #
+    #     self.assertEquals(50.0, volume_price)
 
-        # Write the attributes
-        self.writer.set_sid_attrs(sid, **attrs)
-        # Read the attributes
-        for k, v in attrs.items():
-            self.assertEqual(self.reader.get_sid_attr(sid, k), v)
-
-    def test_truncate_between_data_points(self):
-
-        tds = self.market_opens.index
-        days = tds[tds.slice_indexer(
-            start=self.test_calendar_start + 1,
-            end=self.test_calendar_start + 3
-        )]
-        minutes = DatetimeIndex([
-            self.market_opens[days[0]] + timedelta(minutes=60),
-            self.market_opens[days[1]] + timedelta(minutes=120),
-        ])
-        sid = 1
-        data = DataFrame(
-            data={
-                'open': [10.0, 11.0],
-                'high': [20.0, 21.0],
-                'low': [30.0, 31.0],
-                'close': [40.0, 41.0],
-                'volume': [50.0, 51.0]
-            },
-            index=minutes)
-        self.writer.write_sid(sid, data)
-
-        # Open a new writer to cover `open` method, also truncating only
-        # applies to an existing directory.
-        writer = BcolzMinuteBarWriter.open(self.dest)
-
-        # Truncate to first day with data.
-        writer.truncate(days[0])
-
-        # Refresh the reader since truncate update the metadata.
-        # todo
-        self.reader = self._create_bar_reader()
-
-        self.assertEqual(self.writer.last_date_in_output_for_sid(sid), days[0])
-
-        cal = self.trading_calendar
-        _, last_close = cal.open_and_close_for_session(days[0])
-        self.assertEqual(self.reader.last_available_dt, last_close)
-
-        minute = minutes[0]
-
-        open_price = self.reader.get_value(sid, minute, 'open')
-
-        self.assertEquals(10.0, open_price)
-
-        high_price = self.reader.get_value(sid, minute, 'high')
-
-        self.assertEquals(20.0, high_price)
-
-        low_price = self.reader.get_value(sid, minute, 'low')
-
-        self.assertEquals(30.0, low_price)
-
-        close_price = self.reader.get_value(sid, minute, 'close')
-
-        self.assertEquals(40.0, close_price)
-
-        volume_price = self.reader.get_value(sid, minute, 'volume')
-
-        self.assertEquals(50.0, volume_price)
-
-    def test_truncate_all_data_points(self):
-
-        tds = self.market_opens.index
-        days = tds[tds.slice_indexer(
-            start=self.test_calendar_start + 1,
-            end=self.test_calendar_start + 3
-        )]
-        minutes = DatetimeIndex([
-            self.market_opens[days[0]] + timedelta(minutes=60),
-            self.market_opens[days[1]] + timedelta(minutes=120),
-        ])
-        sid = 1
-        data = DataFrame(
-            data={
-                'open': [10.0, 11.0],
-                'high': [20.0, 21.0],
-                'low': [30.0, 31.0],
-                'close': [40.0, 41.0],
-                'volume': [50.0, 51.0]
-            },
-            index=minutes)
-        self.writer.write_sid(sid, data)
-
-        # Truncate to first day in the calendar, a day before the first
-        # day with minute data.
-        self.writer.truncate(self.test_calendar_start)
-
-        # Refresh the reader since truncate update the metadata.
-        # todo
-        self.reader = self._create_bar_reader()
-
-        self.assertEqual(
-            self.writer.last_date_in_output_for_sid(sid),
-            self.test_calendar_start,
-        )
-
-        cal = self.trading_calendar
-        _, last_close = cal.open_and_close_for_session(
-            self.test_calendar_start)
-        self.assertEqual(self.reader.last_available_dt, last_close)
+    # def test_truncate_all_data_points(self):
+    #
+    #     tds = self.market_opens.index
+    #     days = tds[tds.slice_indexer(
+    #         start=self.test_calendar_start + 1,
+    #         end=self.test_calendar_start + 3
+    #     )]
+    #     minutes = DatetimeIndex([
+    #         self.market_opens[days[0]] + timedelta(minutes=60),
+    #         self.market_opens[days[1]] + timedelta(minutes=120),
+    #     ])
+    #     sid = 1
+    #     data = DataFrame(
+    #         data={
+    #             'open': [10.0, 11.0],
+    #             'high': [20.0, 21.0],
+    #             'low': [30.0, 31.0],
+    #             'close': [40.0, 41.0],
+    #             'volume': [50.0, 51.0]
+    #         },
+    #         index=minutes)
+    #     self.writer.write_sid(sid, data)
+    #
+    #     # Truncate to first day in the calendar, a day before the first
+    #     # day with minute data.
+    #     self.writer.truncate(self.test_calendar_start)
+    #
+    #     # Refresh the reader since truncate update the metadata.
+    #     # todo
+    #     self.reader = self._create_bar_reader()
+    #
+    #     self.assertEqual(
+    #         self.writer.last_date_in_output_for_sid(sid),
+    #         self.test_calendar_start,
+    #     )
+    #
+    #     cal = self.trading_calendar
+    #     _, last_close = cal.open_and_close_for_session(
+    #         self.test_calendar_start)
+    #     self.assertEqual(self.reader.last_available_dt, last_close)
 
     def test_early_market_close(self):
         # Date to test is 2015-11-30 9:31
@@ -1197,12 +1214,12 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         # Test condition where there is data written after the market
         # close (ideally, this should not occur in datasets, but guards
         # against consumers of the minute bar writer, which do not filter
-        # out after close minutes.
+        # out after close minutes.)
         minutes = [
             before_early_close,
             after_early_close,
-            minute,
-        ]
+            minute]
+
         sid = 1
         data = DataFrame(
             data={
@@ -1213,32 +1230,34 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
                 'volume': [50, 51, 0]
             },
             index=minutes)
+        self.writer.set_range(before_early_close, minute)
         self.writer.write_sid(sid, data)
 
         open_price = self.reader.get_value(sid, minute, 'open')
 
-        assert_almost_equal(nan, open_price)
+        assert_almost_equal(open_price, nan)
 
         high_price = self.reader.get_value(sid, minute, 'high')
 
-        assert_almost_equal(nan, high_price)
+        assert_almost_equal(high_price, nan)
 
         low_price = self.reader.get_value(sid, minute, 'low')
 
-        assert_almost_equal(nan, low_price)
+        assert_almost_equal(low_price, nan)
 
         close_price = self.reader.get_value(sid, minute, 'close')
 
-        assert_almost_equal(nan, close_price)
+        assert_almost_equal(close_price, nan)
 
         volume = self.reader.get_value(sid, minute, 'volume')
 
-        self.assertEquals(0, volume)
+        self.assertEqual(0, volume)
 
         asset = self.asset_finder.retrieve_asset(sid)
         last_traded_dt = self.reader.get_last_traded_dt(asset, minute)
 
-        self.assertEquals(last_traded_dt, before_early_close,
-                          "The last traded dt should be before the early "
-                          "close, even when data is written between the early "
-                          "close and the next open.")
+        self.assertEqual(
+            last_traded_dt, before_early_close,
+            "The last traded dt should be before the early "
+            "close, even when data is written between the early "
+            "close and the next open.")

@@ -239,15 +239,13 @@ def _run(dir_, example_name, expected_perf, environ):
         calendar,
         calendar.all_sessions,
         uni.benchmark,
-        150
-    )
+        150)
 
     tester.run(
         loop,
         expected_perf,
         benchmark_source,
-        sessions
-    )
+        sessions)
 
     # capital = 1e7
 

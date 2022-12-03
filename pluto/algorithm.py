@@ -557,6 +557,9 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             sessions.get_loc(sim_end_session)
         )
 
+        # todo: the end session must be the session one day before the current
+        # session, or until chunk size
+
         end_session = sessions[end_loc]
 
         return (
