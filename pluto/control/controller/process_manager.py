@@ -5,10 +5,11 @@ from collections import defaultdict
 
 from trading_calendars import calendar_utils
 
+import pluto.assets.assets
 from zipline import protocol
 from zipline.finance.order import ORDER_STATUS
 
-from pluto.finance import ledger
+from pluto.finance import ledger, position_tracker
 from pluto.setup import run_setup
 
 from pluto.coms.utils import conversions
@@ -26,7 +27,7 @@ class OrderBatch(object):
 
 
 class StrategyManager(brk_rpc.BrokerServicer):
-    def __init__(self, asset_finder, stp: run_setup.RunSetup):
+    def __init__(self, asset_finder: pluto.assets.assets.AssetFinder, stp: run_setup.RunSetup):
 
         self._processes = {}
 
@@ -37,9 +38,14 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._start_dt = stp.start
 
         self._portfolio = protocol.Portfolio(stp.start, stp.capital)
-        self._positions = protocol.Positions()
+        self._positions = positions = protocol.Positions()
         self._account = protocol.Account()
         self._asset_finder = asset_finder
+
+        # todo: we need to change the sync last sale prices function
+        #  the price should be injected externally by the controller.
+        #  the controller sends the sale prices to the controllables.
+        self._position_tracker = ledger.PositionTracker(positions)
 
         self._data_frequency = stp.data_frequency
 
@@ -49,6 +55,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         #     emission_rate)
 
         self._ledgers = {}
+        self._position_trackers = {}
         self._bar_data_dict = {}
         self._blotters = {}
         self._data_portals = {}
@@ -200,18 +207,28 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def set_global_timestamp(self, ts):
         self._global_ts = ts
 
-    def sync_last_sale_prices(self, calendar_name, dt, handle_non_market_minutes=False):
+    def sync_last_sale_prices(self, calendar_name, prices, dt):
 
         ledger_ = self._ledgers[calendar_name]
+        tracker = self._position_trackers[calendar_name]
 
-        if dt != self._sync_times[calendar_name]:
-            ledger_.sync_last_sale_prices(
-                dt,
-                self._data_portals[calendar_name],
-                self._setup.data_frequency,
-                handle_non_market_minutes)
+        for sid, price in prices:
+            position = tracker.positions[sid].inner_position
+            position.last_sale_price = price
+            position.last_sale_date = dt
 
-            self._sync_times[calendar_name] = dt
+        # mark portfolio as dirty so that we can recompute read only portfolio
+        ledger_._dirty_portfolio = True
+
+        # if dt != self._sync_times[calendar_name]:
+        #
+        #     ledger_.sync_last_sale_prices(
+        #         dt,
+        #         self._data_portals[calendar_name],
+        #         self._setup.data_frequency,
+        #         handle_non_market_minutes)
+        #
+        #     self._sync_times[calendar_name] = dt
 
     def get_orders(self):
         # with self._lock:
@@ -245,7 +262,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
     #     return self._blotters[calendar_name].transactions_per_order(self._bar_data_dict[calendar_name])
 
     def get_positions(self, calendar_name):
-        for position in self._ledgers[calendar_name].position_tracker.get_positions():
+        for position in self._position_trackers[calendar_name].get_positions():
             yield position
 
     def get_open_orders(self, calendar_name):
@@ -298,11 +315,14 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._blotters[calendar_name] = blotter
 
     def add_ledger(self, calendar_name):
+        self._position_trackers[calendar_name] = tracker = position_tracker.PositionTracker(
+            self._positions)
+
         self._ledgers[calendar_name] = ledger.Ledger(
             self._start_dt,
             self._portfolio,
             self._account,
-            self._positions
+            tracker
         )
 
         self._sync_times[calendar_name] = None

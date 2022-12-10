@@ -20,10 +20,11 @@ from protos import finance_pb2 as protos_dot_finance__pb2
 from protos import data_pb2 as protos_dot_data__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13protos/broker.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x11protos/data.proto\"\x85\x01\n\x0b\x42rokerState\x12,\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x16.TransactionCommission\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"N\n\x15TransactionCommission\x12!\n\x0btransaction\x18\x01 \x01(\x0b\x32\x0c.Transaction\x12\x12\n\ncommission\x18\x02 \x01(\x02\"[\n\nOrderBatch\x12&\n\x02ts\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x02 \x03(\x0b\x32\x06.Order\x12\r\n\x05\x65nded\x18\x03 \x01(\x08\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t2\xe6\x01\n\x06\x42roker\x12/\n\x0bPlaceOrders\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12\x39\n\x07Stopped\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x39\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x16.google.protobuf.Emptyb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13protos/broker.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x11protos/data.proto\"(\n\nAssetPrice\x12\x0b\n\x03sid\x18\x01 \x01(\r\x12\r\n\x05price\x18\x02 \x01(\x02\"\xc1\x01\n\x0b\x42rokerState\x12,\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x16.TransactionCommission\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bnot_running\x18\x04 \x01(\r\x12%\n\x10last_sale_prices\x18\x05 \x03(\x0b\x32\x0b.AssetPrice\"N\n\x15TransactionCommission\x12!\n\x0btransaction\x18\x01 \x01(\x0b\x32\x0c.Transaction\x12\x12\n\ncommission\x18\x02 \x01(\x02\"\x99\x01\n\nOrderBatch\x12&\n\x02ts\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x02 \x03(\x0b\x32\x06.Order\x12\r\n\x05\x65nded\x18\x03 \x01(\x08\x12\x1d\n\tportfolio\x18\x04 \x01(\x0b\x32\n.Portfolio\x12\x1d\n\tpositions\x18\x05 \x01(\x0b\x32\n.Positions\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t2\xe6\x01\n\x06\x42roker\x12/\n\x0bPlaceOrders\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12\x39\n\x07Stopped\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x39\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x16.google.protobuf.Emptyb\x06proto3')
 
 
 
+_ASSETPRICE = DESCRIPTOR.message_types_by_name['AssetPrice']
 _BROKERSTATE = DESCRIPTOR.message_types_by_name['BrokerState']
 _TRANSACTIONCOMMISSION = DESCRIPTOR.message_types_by_name['TransactionCommission']
 _ORDERBATCH = DESCRIPTOR.message_types_by_name['OrderBatch']
@@ -31,6 +32,13 @@ _COMMISSION = DESCRIPTOR.message_types_by_name['Commission']
 _WARNINGMESSAGE = DESCRIPTOR.message_types_by_name['WarningMessage']
 _ORDERPARAMS = DESCRIPTOR.message_types_by_name['OrderParams']
 _CANCELREQUEST = DESCRIPTOR.message_types_by_name['CancelRequest']
+AssetPrice = _reflection.GeneratedProtocolMessageType('AssetPrice', (_message.Message,), {
+  'DESCRIPTOR' : _ASSETPRICE,
+  '__module__' : 'protos.broker_pb2'
+  # @@protoc_insertion_point(class_scope:AssetPrice)
+  })
+_sym_db.RegisterMessage(AssetPrice)
+
 BrokerState = _reflection.GeneratedProtocolMessageType('BrokerState', (_message.Message,), {
   'DESCRIPTOR' : _BROKERSTATE,
   '__module__' : 'protos.broker_pb2'
@@ -84,20 +92,22 @@ _BROKER = DESCRIPTOR.services_by_name['Broker']
 if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
-  _BROKERSTATE._serialized_start=171
-  _BROKERSTATE._serialized_end=304
-  _TRANSACTIONCOMMISSION._serialized_start=306
-  _TRANSACTIONCOMMISSION._serialized_end=384
-  _ORDERBATCH._serialized_start=386
-  _ORDERBATCH._serialized_end=477
-  _COMMISSION._serialized_start=479
-  _COMMISSION._serialized_end=551
-  _WARNINGMESSAGE._serialized_start=553
-  _WARNINGMESSAGE._serialized_end=586
-  _ORDERPARAMS._serialized_start=589
-  _ORDERPARAMS._serialized_end=782
-  _CANCELREQUEST._serialized_start=784
-  _CANCELREQUEST._serialized_end=817
-  _BROKER._serialized_start=820
-  _BROKER._serialized_end=1050
+  _ASSETPRICE._serialized_start=170
+  _ASSETPRICE._serialized_end=210
+  _BROKERSTATE._serialized_start=213
+  _BROKERSTATE._serialized_end=406
+  _TRANSACTIONCOMMISSION._serialized_start=408
+  _TRANSACTIONCOMMISSION._serialized_end=486
+  _ORDERBATCH._serialized_start=489
+  _ORDERBATCH._serialized_end=642
+  _COMMISSION._serialized_start=644
+  _COMMISSION._serialized_end=716
+  _WARNINGMESSAGE._serialized_start=718
+  _WARNINGMESSAGE._serialized_end=751
+  _ORDERPARAMS._serialized_start=754
+  _ORDERPARAMS._serialized_end=947
+  _CANCELREQUEST._serialized_start=949
+  _CANCELREQUEST._serialized_end=982
+  _BROKER._serialized_start=985
+  _BROKER._serialized_end=1215
 # @@protoc_insertion_point(module_scope)

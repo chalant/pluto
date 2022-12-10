@@ -1,9 +1,9 @@
-import typing
+import collections
 
 import logbook
-import pandas
 
 import pluto.control.controller.process_manager
+from pluto.data import data_source as ds
 from pluto.coms.utils import conversions
 
 from protos.clock_pb2 import (
@@ -19,28 +19,20 @@ from protos import broker_pb2
 log = logbook.Logger("Controller")
 
 
-class NullDataIngester(object):
-    def ingest_bar_data(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
-        pass
-
-    def update_asset_database(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
-        pass
-
-
 class Controller(object):
     def __init__(
             self,
             strategy_manager: pluto.control.controller.process_manager.StrategyManager,
             market,
             metrics_tracker,
-            data_ingester=None):
+            data_source: ds.AbstractDataSource):
 
         self._metrics_tracker = metrics_tracker
         self._strategy_manager = strategy_manager
         self._orders = 0
 
         self._update_flag = True
-        self._data_ingester = data_ingester if data_ingester else NullDataIngester()
+        self._data_source = data_source
         self._market = market
 
     def clock_update(self, ts, evt, signals):
@@ -54,10 +46,10 @@ class Controller(object):
 
         metrics_tracker = self._metrics_tracker
 
-        to_update = [
-            (ts, cts, calendar.name)
-            for cts, c_evt, calendar in signals
-            if c_evt == BAR or c_evt == TRADE_END]
+        # to_update = [
+        #     (ts, cts, calendar.name)
+        #     for cts, c_evt, calendar in signals
+        #     if c_evt == BAR]
 
         # ingest data at each start of bar event
         # ingestion writes streamed data in the database in a format that
@@ -65,10 +57,18 @@ class Controller(object):
         # we have a separate process that stores streamed data.
         # we then call ingest to create bar data of the most recent stored data.
 
-        data_ingester = self._data_ingester
+        data_source = self._data_source
 
-        if to_update:
-            data_ingester.ingest_bar_data(to_update)
+        # if to_update:
+        #     data_ingester.ingest_bar_data(to_update)
+
+        # todo: if the event is bar, download all quotes data for all our
+        #  current positions and open orders...
+        #  if event is session_end, download historical data for all assets.
+
+        last_sale_prices = data_source.get_last_sale_prices([
+            (ts, cts, calendar.name, strategy_manager.get_positions(calendar.name))
+            for cts, c_evt, calendar in signals if c_evt == BAR or c_evt == MINUTE_END or c_evt == SESSION_END])
 
         # populate broker state to send to controllable
         for cts, c_evt, calendar in signals:
@@ -110,7 +110,8 @@ class Controller(object):
                         ))
 
                 blotter.prune_orders(closed_orders)
-                strategy_manager.sync_last_sale_prices(calendar_name, cts)
+                # note: here we force synchronization of sale prices
+                strategy_manager.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
 
             elif c_evt == MINUTE_END:
                 metrics_tracker.end_of_bar(
@@ -160,10 +161,20 @@ class Controller(object):
                     calendar_name,
                     strategy_manager.get_ledger(calendar_name))
 
+        # flatten last sale prices to send to
+        values = []
+
+        for pairs in last_sale_prices.values():
+            values.extend([broker_pb2.AssetPrice(sid, price) for sid, price in pairs])
+
+        # todo: send last sale prices here (in the broker state)
         # fixme: a process might crash, and we would be waiting for too long...
+
         # update all processes
         for strategy in strategies:
-            strategy.account_update(broker_states[strategy.process_id])
+            brs = broker_states[strategy.process_id]
+            brs.last_sale_prices = values
+            strategy.account_update(brs)
 
         # advance all processes
         for strategy in strategies:
@@ -203,8 +214,8 @@ class Controller(object):
             if c_evt == SESSION_END]
 
         # update assets database at the end of session.
-        if to_update:
-            data_ingester.update_assets_database(to_update)
+        # if to_update:
+        #     data_source.update_assets_database(to_update)
 
         # reset update flag
         self._update_flag = True

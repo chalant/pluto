@@ -49,8 +49,8 @@ for f in os.listdir(os.path.dirname(__file__)):
     modname = f[:-len('.py')]
 
     mod = import_module('pluto.examples.{}'.format(modname))
-    if modname == 'buyapple':
-        EXAMPLE_MODULES[modname] = (mod._test_args(), mod.__spec__.origin)
+    # if modname == 'buyapple':
+    EXAMPLE_MODULES[modname] = (mod._test_args(), mod.__spec__.origin)
 
     # Remove noise from loop variables.
     del f, modname, mod

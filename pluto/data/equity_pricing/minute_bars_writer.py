@@ -13,9 +13,8 @@ from pluto.data import utils
 
 OHLC_RATIO = 1000
 
-
 _GET_SIDS_FOR_SESSION = '''
-    SELECT sid FROM minute_bars
+    SELECT sid FROM daily_bars
     WHERE dt = %(dt)s ORDER BY (sid, dt)
 '''
 
@@ -34,7 +33,6 @@ def daily_bar_generator(
         trading_calendar: trading_calendars.TradingCalendar,
         db_config: dict,
         bundle_name: str):
-
     with utils.get_client(db_config, bundle_name) as cl:
         for session in sessions:
             open_dt, close_dt = trading_calendar.open_and_close_for_session(session)
@@ -113,8 +111,12 @@ def lifetimes_generator(db_config, bundle_name):
 
 def lifetimes_update_generator(
         session: pd.Timestamp,
+        trading_calendar: trading_calendars.TradingCalendar,
         db_config: dict,
         bundle_name: str):
+
+    close_dt = trading_calendar.closes(session)
+
     with utils.get_client(db_config, bundle_name) as clt:
         with utils.get_client(db_config, bundle_name) as inner:
 
@@ -123,7 +125,7 @@ def lifetimes_update_generator(
 
             for res in clt.execute_iter(
                     _GET_SIDS_FOR_SESSION,
-                    {'dt': session},
+                    {'dt': close_dt},
                     chunk_size=10000):
 
                 while True:
@@ -140,7 +142,7 @@ def lifetimes_update_generator(
                                 'sign': sign
                             }
 
-                            sess = session
+                            sess = close_dt
                             sign += 2
 
                     try:
@@ -169,11 +171,6 @@ class ClickHouseMinuteBarWriter(object):
                  trading_calendar: trading_calendars.TradingCalendar,
                  start_dt: pandas.Timestamp,
                  end_dt: pandas.Timestamp):
-        self._db_writer = bar_writer.ClickHouseDataWriter(
-            db_config,
-            bundle_name,
-            bar_writer.MinuteBars())
-
         self._trading_calendar = trading_calendar
         self._root_dir = root_dir
 
@@ -304,7 +301,11 @@ class ClickHouseMinuteBarWriter(object):
 
                 i += 1
 
-        self._db_writer.write(data_generator())
+        bar_writer.write(
+            data_generator(),
+            self._db_config,
+            self._bundle_name,
+            bar_writer.MinuteBars)
 
         metadata = self._metadata[self._trading_calendar.name]
 
@@ -391,7 +392,11 @@ class ClickHouseMinuteBarWriter(object):
         bundle_name = self._bundle_name
 
         bar_writer.write(
-            lifetimes_update_generator(session, db_config, bundle_name),
+            lifetimes_update_generator(
+                session,
+                self._trading_calendar,
+                db_config,
+                bundle_name),
             db_config,
             bundle_name,
             bar_writer.Lifetimes

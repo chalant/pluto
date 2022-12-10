@@ -17,6 +17,7 @@ from pluto.control.setup import account
 from pluto.control import script_handler
 from pluto.sources import benchmark_source
 from pluto.finance import market_simulation
+from pluto.data import data_source
 
 from pluto.trading_calendars import calendar_utils as cu
 from pluto.finance.blotter import simulation_blotter
@@ -123,6 +124,7 @@ class Backtester(QtCore.QObject):
                 stp.data_frequency)
 
             market = market_simulation.MarketSimulation(eng_stp, stp.data_frequency)
+            ds = data_source.SimulationDataSource()
 
             for bc in uni.base_calendars:
                 # todo: create bar data using setup and add it...
@@ -166,6 +168,8 @@ class Backtester(QtCore.QObject):
 
                     pm.add_strategy(pi.start(ctp.StrategySetup(s, stp)))
 
+                ds.add_data_portal(bc, dp)
+
                 # add blotter for the base calendar...
                 pm.add_blotter(bc, simulation_blotter.SimulationBlotter(eng_stp))
 
@@ -189,8 +193,7 @@ class Backtester(QtCore.QObject):
 
             # todo: check if the stop button was clicked at each iteration
 
-            for _ in loop.start(controller.Controller(pm, market, metrics_view)):
-
+            for _ in loop.start(controller.Controller(pm, market, metrics_view, ds)):
                 if self._stopped:
                     break
 

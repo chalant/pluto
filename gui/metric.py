@@ -4,10 +4,12 @@ import operator as op
 import empyrical as ep
 
 import numpy as np
+import pandas
 
 from PyQt6 import QtCore
 from PyQt6 import QtWidgets
 
+import pluto.finance.ledger
 from gui.utils import timeseries, charts
 from gui.metrics import dashboard
 
@@ -258,7 +260,7 @@ class BacktestingMetrics(object):
         # self._previous_total_returns = ledger.portfolio.returns
         pass
 
-    def end_of_bar(self, dt, calendar_name, ledger):
+    def end_of_bar(self, dt: pandas.Timestamp, calendar_name: str, ledger: pluto.finance.ledger.Ledger):
         # todo: update positions, order, fills, etc.
         dash = self._dashboard
         # benchmark_source = self._benchmark_sources[calendar_name]
@@ -320,8 +322,6 @@ class BacktestingMetrics(object):
     def set_benchmark_source(self, calendar_name, benchmark_source):
         if calendar_name not in self._benchmark_sources:
             self._benchmark_sources[calendar_name] = BenchmarkReturnsAndVolatility(benchmark_source)
-
-
         # self._statistics.add_item(tables.Item())
 
     def reset(self):

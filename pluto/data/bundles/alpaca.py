@@ -95,6 +95,8 @@ class AlpacaBundleIngester(core.AbstractBundleIngester):
         # else, download data.
         # todo: all active assets, download from last successful datetime...
         # todo: query assets where datetime < now
+        # todo: we will use alpaca's asset id and map it to our sid system, such
+        #  that we consistently update our database
 
         mode = kwargs['mode']
         client = self._rest_client
@@ -132,6 +134,32 @@ class AlpacaBundleIngester(core.AbstractBundleIngester):
                 # download one stock at a time...
 
             # downloads starting from last ingestion time...
+
+            # todo: download from polygon.io
+            #  problem: we only get 15 minute delayed data for the starter data...
+
+            # download minute data, aggregate, compute asset lifetimes, update asset database
+
+            # note: each minute we only download data for which we have positions...
+            #  so we could switch to the alpaca free minute data
+            # note: we only need data for a single minute for each ticker.
+            #  but we only need to download minute data for assets for which we have positions.
+            # at each end of session, we download data for all tickers, update the database etc.
+            # note: with 15 minutes delayed data, we can wait 20 minutes, to get complete data...
+
+            # so: we use alpaca realtime iex data for positions we have and use polygon.io for
+            # historical data, with an offset of 20 minutes after session end of the calendar...
+            # note: this should not block since other strategies may run on different calendars.
+
+            # todo: we need to store the price data of the tracked assets in the database.
+            # todo: we need quotes of the tracked positions...
+            #  the historical prices (minutes etc.) are stored in the database...
+            #  we need a way for the strategies to retrieve quotes...
+            #  sync last sale prices uses this.
+
+            # todo: could we use snapshots to get the most up-to-date quotes etc?
+            # seems like its cheaper... (it's only for crypto in polygon.io)
+            # we can get snapshots from alpaca... this would let update data at each iteration.
 
             client.get_bars_iter(
                 symbols,
