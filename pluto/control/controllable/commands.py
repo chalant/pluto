@@ -67,7 +67,7 @@ class ParametersUpdate(Command):
 
 class AccountUpdate(Command):
     def _execute(self, controllable, request):
-        controllable.update_blotter(request)
+        controllable.update_blotter_and_positions(request)
 
 
 class ClockUpdate(Command):

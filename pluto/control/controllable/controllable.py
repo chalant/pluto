@@ -13,15 +13,15 @@ from zipline.finance.order import ORDER_STATUS
 
 from zipline.data import data_portal as dp
 
-from zipline.protocol import BarData
 from zipline import protocol
+from zipline.protocol import BarData
 
 from zipline.utils import api_support
 
 from pluto.pipeline import domain
 from pluto.coms.utils import conversions
 
-from pluto.finance import ledger
+from pluto.finance import ledger, position_tracker
 from pluto.finance.metrics import tracker
 from pluto.finance.broker import broker_setup as brs
 
@@ -138,6 +138,7 @@ class Controllable(ABC):
         # script namespace
         self._namespace = {}
 
+        self._positions_tracker = None
         self._calendar = None
         self._universe = None
         self._benchmark = None
@@ -147,6 +148,7 @@ class Controllable(ABC):
         self._sessions = pd.Series()
         self._sessions_array = deque()
 
+        self._name = None
         self._session_id = None
         self._start_dt = None
         self._end_dt = None
@@ -348,7 +350,7 @@ class Controllable(ABC):
 
         self._name = strategy_setup.strategy_id
 
-        uni = universes.get_universe(
+        uni = core.get_universe(
             run_setup.trading_universe,
             directory,
             data_cache,
@@ -430,7 +432,9 @@ class Controllable(ABC):
         self._data_portal = data_portal = dp.DataPortal(
             asset_finder=asset_finder,
             trading_calendar=calendar,
-            first_trading_day=max(bundle.first_trading_day, calendar.all_sessions[0]),
+            first_trading_day=max(
+                bundle.first_trading_day,
+                calendar.all_sessions[0]),
             equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader,
@@ -444,13 +448,17 @@ class Controllable(ABC):
         #     self._look_back,
         #     self._emission_rate)
 
+        self._positions_tracker = pos_tracker = position_tracker.PositionTracker(
+            protocol.Positions()
+        )
+
         # todo: metrics tracker should not take a benchmark source
         self._metrics_tracker = metrics_tracker = tracker.MetricsTracker(
             ledger.Ledger(
                 start_dt,
                 protocol.Portfolio(start_dt, run_setup.capital),
                 protocol.Account(),
-                protocol.Positions()),
+                pos_tracker),
             run_setup.capital,
             data_frequency,
             self._emission_rate,
@@ -707,9 +715,9 @@ class Controllable(ABC):
 
         return blotter
 
-    def update_blotter(self, broker_data):
+    def update_blotter_and_positions(self, broker_data):
         # self._update_blotter(self._blotter, broker_data)
-
+        ts = broker_data.timestamp
         transactions = self._transactions
 
         orders = self._blotter.orders
@@ -723,6 +731,18 @@ class Controllable(ABC):
                     order_,
                     conversions.to_zp_transaction(ct.transaction),
                     ct.commission))
+
+        pos_tracker = self._positions_tracker
+
+        for asset_price in broker_data.last_sale_prices:
+            sid = asset_price.sid
+            price = asset_price.price
+
+            pos = pos_tracker.positions[sid].inner_position
+            pos.last_sale_price = price
+            pos.last_sale_date = ts
+
+        self._metrics_tracker.ledger._dirty_portfolio = True
 
         # for commission in broker_data.commissions:
         #     order = conversions.to_zp_order(commisupdate_sion.order)
@@ -927,12 +947,12 @@ class Controllable(ABC):
         Get a perf message for the given datetime.
         """
 
-        self._sync_last_sale_prices(metrics_tracker, dt)
+        # self._sync_last_sale_prices(metrics_tracker, dt)
         perf_message = metrics_tracker.handle_market_close(
             dt,
             data_portal
         )
-        perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
+        # perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
         return perf_message
 
     def _get_minute_message(self,
@@ -957,15 +977,15 @@ class Controllable(ABC):
         Get a perf message for the given datetime.
         """
 
-        self._sync_last_sale_prices(metrics_tracker, dt)
-        rvars = algo.recorded_vars
+        # self._sync_last_sale_prices(metrics_tracker, dt)
+        # rvars = algo.recorded_vars
 
         minute_message = metrics_tracker.handle_minute_close(
             dt,
             data_portal
         )
 
-        minute_message['minute_perf']['recorded_vars'] = rvars
+        # minute_message['minute_perf']['recorded_vars'] = rvars
         return minute_message
 
     def get_current_dt(self):

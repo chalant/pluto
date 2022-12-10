@@ -16,7 +16,6 @@ from trading_calendars import calendar_utils
 
 from directory import utils as tdr
 
-
 from zipline.testing import test_resource_path, core
 from zipline.data import data_portal
 from zipline.utils import cache
@@ -33,25 +32,25 @@ from pluto.test import test
 
 from pluto.sources import benchmark_source as source
 
-from pluto.finance import ledger
 from pluto.finance.blotter import simulation_blotter
 from pluto.finance.broker import broker_setup as bks
+from pluto.finance import market_simulation
 
 from pluto.control.processes import in_memory
 from pluto.control.controller import process_manager
 from pluto.control.controllable import running_behavior
 from pluto.control.loop import simulation_loop
 
+from pluto.data.bundles import test as tb
+from pluto.data.universes import core as uni_core
+from pluto.data import caching
+from pluto.data import data_source as ds
+
+from pluto.trading_calendars import calendar_utils as cu
+
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as ds
 from pluto.setup import engine_setup
-
-
-from pluto.data.bundles import test as tb
-from pluto.data.universes import core
-from pluto.data import caching
-
-from pluto.trading_calendars import calendar_utils as cu
 
 
 def _build_data_frame(mon, process_id):
@@ -148,21 +147,19 @@ def _run(dir_, example_name, expected_perf, environ):
         Future: stp.commission_models['futures']
     }
 
-    uni = universes.get_universe(
+    uni = uni_core.get_universe(
         stp.trading_universe,
         dir_,
         caching.InMemoryCache(),
         stp.environ
     )
 
-    manager = process_manager.StrategyManager(
-        uni.asset_finder,
-        stp.start,
-        stp.capital,
-        stp.emission_rate
-    )
+    manager = process_manager.StrategyManager(uni.asset_finder, stp)
 
     restrictions = asset_restrictions.NoRestrictions()
+
+    market = market_simulation.MarketSimulation(eng_stp, stp.data_frequency)
+    data_source = ds.SimulationDataSource()
 
     loop = simulation_loop.SimulationLoop(
         stp.start,
@@ -190,24 +187,16 @@ def _run(dir_, example_name, expected_perf, environ):
         last_available_minute=calendar.minutes_for_session(last_session)[-1]
     )
 
-    manager.add_data_portal(
-        calendar_name,
-        dp)
+    market.add_bar_data(dp, restrictions)
 
-    manager.add_bar_data(
-        'daily',
-        dp,
-        restrictions)
+    data_source.add_data_portal(calendar_name, dp)
 
+    manager.add_data_portal(calendar_name, dp)
+    manager.add_ledger(calendar_name)
     manager.add_blotter(
         calendar_name,
         simulation_blotter.SimulationBlotter(
             eng_stp))
-
-    # manager.add_metrics_tracker(
-    #     calendar_name,
-    #     'daily'
-    # )
 
     loop.add_clock(calendar_name)
 
@@ -245,7 +234,9 @@ def _run(dir_, example_name, expected_perf, environ):
         loop,
         expected_perf,
         benchmark_source,
-        sessions)
+        sessions,
+        market,
+        data_source)
 
     # capital = 1e7
 
