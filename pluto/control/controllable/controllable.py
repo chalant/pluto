@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from copy import copy
-
+import numpy as np
 from collections import deque
 
 import pandas as pd
@@ -500,9 +500,7 @@ class Controllable(ABC):
 
         # sst.state = sst.out_session
         self._run_state = self._ready
-        algo.set_pipeline_domain(domain.Domain(
-            uni.country_code,
-            calendar))
+        algo.set_pipeline_domain(dom)
 
         api_support.set_algo_instance(algo)
         algo.on_dt_changed(start_dt)
@@ -703,7 +701,7 @@ class Controllable(ABC):
 
         # handle_data is not called while in recovery
         self._run_state.handle_data(algo, current_data, dt)
-        self._sync_last_sale_prices(metrics_tracker, dt)
+        # self._sync_last_sale_prices(metrics_tracker, dt)
 
         # grab any new orders from the blotter, then clear the list.
         # this includes cancelled orders.
@@ -738,11 +736,13 @@ class Controllable(ABC):
             sid = asset_price.sid
             price = asset_price.price
 
-            pos = pos_tracker.positions[sid].inner_position
-            pos.last_sale_price = price
-            pos.last_sale_date = ts
+            if not np.isnan(price):
+                pos = pos_tracker.positions[sid].inner_position
+                pos.last_sale_price = price
+                pos.last_sale_date = conversions.to_pandas_timestamp(ts)
 
         self._metrics_tracker.ledger._dirty_portfolio = True
+        self._positions_tracker._dirty_stats = True
 
         # for commission in broker_data.commissions:
         #     order = conversions.to_zp_order(commisupdate_sion.order)

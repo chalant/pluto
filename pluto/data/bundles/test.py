@@ -39,7 +39,7 @@ from pluto.configuration import configuration
 
 class TestBundle(AbstractBundleIngester):
     def __init__(self, root_dir, environ=None):
-        super(TestBundle, self).__init__('test', root_dir, 'NYSE')
+        super(TestBundle, self).__init__('test', root_dir)
 
         self._environ = environ if environ else {}
 
@@ -51,7 +51,7 @@ class TestBundle(AbstractBundleIngester):
 
         core.register('test', lambda *args: None)
 
-    def _ingest(self, root_dir):
+    def _ingest(self, root_dir, *args, **kwargs):
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(root_dir.path)
 

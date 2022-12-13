@@ -203,19 +203,21 @@ class PositionTracker(object):
         if not self.positions.get(asset):
             return None
 
-        amount = self.positions.get(asset).amount
-        price = data_portal.get_spot_value(
-            asset, 'price', dt, data_frequency)
+        position = self.positions.get(asset)
 
-        # Get the last traded price if price is no longer available
-        if isnan(price):
-            price = self.positions.get(asset).last_sale_price
+        # amount = position.amount
+        # price = data_portal.get_spot_value(
+        #     asset, 'price', dt, data_frequency)
+        #
+        # # Get the last traded price if price is no longer available
+        # if isnan(price):
+        # price = position.last_sale_price
 
         return transaction.Transaction(
             asset=asset,
-            amount=-amount,
+            amount=-position.amount,
             dt=dt,
-            price=price,
+            price=position.last_sale_price,
             order_id=None,
         )
 
@@ -242,9 +244,6 @@ class PositionTracker(object):
                               data_frequency,
                               handle_non_market_minutes=False):
         self._dirty_stats = True
-
-        # todo: remove this, we will update this externally with the
-        #  the controller.
 
         if handle_non_market_minutes:
             previous_minute = data_portal.trading_calendar.previous_minute(dt)

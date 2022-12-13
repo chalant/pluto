@@ -41,8 +41,8 @@ def to_datetime(proto_ts):
     return Timestamp(proto_ts.ToDatetime(), tz='UTC')
 
 
-def to_pandas_timestamp(protos_ts, tz=None):
-    return Timestamp(to_datetime(protos_ts)).tz_localize(tz)
+def to_pandas_timestamp(protos_ts):
+    return Timestamp(to_datetime(protos_ts))
 
 
 def to_proto_commission(zp_commission):

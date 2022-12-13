@@ -9,9 +9,6 @@ from pluto.coms.utils import conversions as cv
 from protos import ledger_state_pb2 as acc
 
 
-from pluto.finance.position_tracker import PositionTracker
-
-
 class Ledger(object):
     def __init__(self, start_date, portfolio, account, position_tracker):
         # metric only uses array
