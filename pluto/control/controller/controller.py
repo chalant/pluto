@@ -1,8 +1,8 @@
 import collections
 
 import logbook
-import numpy as np
 
+from pluto.finance.markets import core
 import pluto.control.controller.process_manager
 from pluto.data import data_source as ds
 from pluto.coms.utils import conversions
@@ -24,7 +24,7 @@ class Controller(object):
     def __init__(
             self,
             strategy_manager: pluto.control.controller.process_manager.StrategyManager,
-            market,
+            market: core.AbstractMarket,
             metrics_tracker,
             data_source: ds.AbstractDataSource):
 

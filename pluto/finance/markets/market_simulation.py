@@ -2,8 +2,10 @@ from functools import partial
 
 from zipline.protocol import BarData
 
+from pluto.finance.markets import core
 
-class MarketSimulation(object):
+
+class MarketSimulation(core.AbstractMarket):
     def __init__(self, engine_setup, data_frequency):
         self.engine_setup = engine_setup
         self._data_frequency = data_frequency
