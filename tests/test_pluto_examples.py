@@ -34,7 +34,7 @@ from pluto.sources import benchmark_source as source
 
 from pluto.finance.blotter import simulation_blotter
 from pluto.finance.broker import broker_setup as bks
-from pluto.finance import market_simulation
+from pluto.finance.markets import market_simulation
 
 from pluto.control.processes import in_memory
 from pluto.control.controller import process_manager
