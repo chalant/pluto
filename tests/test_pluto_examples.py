@@ -40,6 +40,7 @@ from pluto.control.processes import in_memory
 from pluto.control.controller import process_manager
 from pluto.control.controllable import running_behavior
 from pluto.control.loop import simulation_loop
+from pluto.control.setup import setup as ctp
 
 from pluto.data.bundles import test as tb
 from pluto.data.universes import core as uni_core
@@ -49,7 +50,7 @@ from pluto.data import data_source as ds
 from pluto.trading_calendars import calendar_utils as cu
 
 from pluto.setup import run_setup
-from pluto.setup import directory_setup as ds
+from pluto.setup import directory_setup as dsp
 from pluto.setup import engine_setup
 
 
@@ -80,20 +81,21 @@ def _build_data_frame(mon, process_id):
     return daily_stats
 
 
-def _run(dir_, example_name, expected_perf, environ):
+def _run(dir_, example_name, expected_perf, environ_):
     args, path_ = examples.EXAMPLE_MODULES[example_name]
 
     # setup strategy...
 
     stp = run_setup.RunSetup('test')
 
-    stp.environ = environ
+    stp.environ = environ_
 
     # stp.broker = 'none'
     stp.trading_universe = 'test'
     stp.capital = args['capital_base']
 
     stp.leverage = args['max_leverage']
+    stp.max_leverage = args['max_leverage']
     stp.look_back = args['look_back']
     stp.data_frequency = args['data_frequency']
     stp.start = args['start']
@@ -159,7 +161,7 @@ def _run(dir_, example_name, expected_perf, environ):
     restrictions = asset_restrictions.NoRestrictions()
 
     market = market_simulation.MarketSimulation(eng_stp, stp.data_frequency)
-    data_source = ds.SimulationDataSource()
+    data_source = ds.SimulationDataSource(stp.data_frequency)
 
     loop = simulation_loop.SimulationLoop(
         stp.start,
@@ -236,7 +238,8 @@ def _run(dir_, example_name, expected_perf, environ):
         benchmark_source,
         sessions,
         market,
-        data_source)
+        data_source,
+        stp.capital)
 
     # capital = 1e7
 
@@ -307,7 +310,7 @@ class PlutoExamplesTests(unittest.TestCase):
         cls._thread_pool = stack.enter_context(
             futures.ThreadPoolExecutor(10))
 
-        root_dir = tdr.TempDirectory(ds.create_directory(path.expanduser('~/pluto_tmp')))
+        root_dir = tdr.TempDirectory(dsp.create_directory(path.expanduser('~/pluto_tmp')))
 
         # ingest test bundle
         # test_bundle = stack.enter_context(tb.ClickHouseTestBundle(

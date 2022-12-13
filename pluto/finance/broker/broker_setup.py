@@ -66,6 +66,9 @@ class BrokerSetup(object):
         fts = self.fractional_trade_setup
         order_type = type(order_style).__name__
 
+        # if np.isnan(amount):
+        #     print(asset, order_style, current_data.current(asset, 'price'))
+
         if not self.fractional:
             return _can_order_whole(
                 self.trade_setup,

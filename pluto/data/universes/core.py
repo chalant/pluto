@@ -21,7 +21,7 @@ _CACHE = {}
 class AbstractUniverse(abc.ABC):
     @property
     @abc.abstractmethod
-    def country_code(self):
+    def country_codes(self):
         return
 
     @property
@@ -179,7 +179,11 @@ class TestUniverse(AbstractUniverse):
 
     @property
     def country_codes(self):
-        return (CountryCode.UNITED_STATES,)
+        return CountryCode.UNITED_STATES,
+
+    @property
+    def country_code(self):
+        return CountryCode.UNITED_STATES
 
     @property
     def start_date(self): 

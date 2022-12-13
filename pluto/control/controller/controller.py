@@ -1,6 +1,7 @@
 import collections
 
 import logbook
+import numpy as np
 
 import pluto.control.controller.process_manager
 from pluto.data import data_source as ds
@@ -68,7 +69,9 @@ class Controller(object):
 
         last_sale_prices = data_source.get_last_sale_prices([
             (ts, cts, calendar.name, strategy_manager.get_positions(calendar.name))
-            for cts, c_evt, calendar in signals if c_evt == BAR or c_evt == MINUTE_END or c_evt == SESSION_END])
+            for cts, c_evt, calendar in signals
+            if c_evt == BAR or c_evt == MINUTE_END or c_evt == SESSION_END or c_evt == BEFORE_TRADING_START]
+        )
 
         # populate broker state to send to controllable
         for cts, c_evt, calendar in signals:
@@ -77,6 +80,7 @@ class Controller(object):
 
             # bar events
             if c_evt == BAR or c_evt == TRADE_END:
+                strategy_manager.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
                 # fetch executed transactions, commissions etc.
                 # todo: need to apply tax models...
                 blotter = strategy_manager.get_blotter(calendar_name)
@@ -111,9 +115,14 @@ class Controller(object):
 
                 blotter.prune_orders(closed_orders)
                 # note: here we force synchronization of sale prices
-                strategy_manager.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
+                # strategy_manager.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
 
             elif c_evt == MINUTE_END:
+                strategy_manager.sync_last_sale_prices(
+                    calendar_name,
+                    last_sale_prices[calendar_name],
+                    cts)
+
                 metrics_tracker.end_of_bar(
                     cts,
                     calendar_name,
@@ -153,27 +162,37 @@ class Controller(object):
                     ledger)
 
             elif c_evt == SESSION_END:
-                # open_orders = controllable_manager.get_open_orders(calendar_name)
+                strategy_manager.sync_last_sale_prices(
+                    calendar_name,
+                    last_sale_prices[calendar_name],
+                    cts)
                 strategy_manager.cleanup_expired_assets(calendar_name, cts)
 
-                metrics_tracker.end_of_bar(
+                metrics_tracker.end_of_session(
                     cts,
                     calendar_name,
                     strategy_manager.get_ledger(calendar_name))
+
+            elif c_evt == BEFORE_TRADING_START:
+                strategy_manager.sync_last_sale_prices(
+                    calendar_name,
+                    last_sale_prices[calendar_name],
+                    cts)
 
         # flatten last sale prices to send to
         values = []
 
         for pairs in last_sale_prices.values():
-            values.extend([broker_pb2.AssetPrice(sid, price) for sid, price in pairs])
+            values.extend([
+                broker_pb2.AssetPrice(sid=sid, price=price)
+                for sid, price in pairs])
 
         # todo: send last sale prices here (in the broker state)
         # fixme: a process might crash, and we would be waiting for too long...
-
         # update all processes
         for strategy in strategies:
             brs = broker_states[strategy.process_id]
-            brs.last_sale_prices = values
+            brs.last_sale_prices.extend(values)
             strategy.account_update(brs)
 
         # advance all processes
@@ -208,10 +227,10 @@ class Controller(object):
         # clear all variables
         strategy_manager.clear()
 
-        to_update = [
-            (ts, cts, calendar.name)
-            for cts, c_evt, calendar in signals
-            if c_evt == SESSION_END]
+        # to_update = [
+        #     (ts, cts, calendar.name)
+        #     for cts, c_evt, calendar in signals
+        #     if c_evt == SESSION_END]
 
         # update assets database at the end of session.
         # if to_update:

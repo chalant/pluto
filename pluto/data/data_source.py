@@ -3,6 +3,7 @@ import typing
 import collections
 
 import pandas
+import numpy as np
 
 
 from zipline.data import data_portal
@@ -18,7 +19,6 @@ class AbstractDataSource(abc.ABC):
                                     pandas.Timestamp,
                                     str,
                                     typing.List[Asset]]],
-                             data_frequency,
                              handle_non_market_minutes=False) -> typing.Dict[
             str,
             typing.List[typing.Tuple[int, float]]]:
@@ -26,8 +26,9 @@ class AbstractDataSource(abc.ABC):
 
 
 class SimulationDataSource(AbstractDataSource):
-    def __init__(self):
+    def __init__(self, data_frequency):
         self._data_portals = {}
+        self._data_frequency = data_frequency
 
     def get_last_sale_prices(self, targets: typing.List[
         typing.Tuple[
@@ -35,11 +36,11 @@ class SimulationDataSource(AbstractDataSource):
             pandas.Timestamp,
             str,
             typing.List[Asset]]],
-            data_frequency,
             handle_non_market_minutes=False) -> typing.Dict[str, typing.List[typing.Tuple[int, float]]]:
 
         dp = self._data_portals
         res = collections.defaultdict(list)
+        data_frequency = self._data_frequency
 
         for ts, cts, cal, assets in targets:
             portal = dp[cal]
@@ -56,11 +57,8 @@ class SimulationDataSource(AbstractDataSource):
                         asset,
                         field='price',
                         dt=cts,
-                        data_frequency=data_frequency
-                    )
-
+                        data_frequency=data_frequency)
                 res[cal].append((asset.sid, price))
-
         return res
 
     def ingest_bar_data(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):

@@ -9,6 +9,7 @@ import numpy as np
 
 import empyrical as ep
 
+import pluto.control.loop.simulation_loop
 from dev import strategy_store, events
 
 from pluto import examples
@@ -188,11 +189,13 @@ class TestWatcher(monitor.AbstractWatcher):
 class TestMetricsTracker(object):
     def __init__(
             self,
+            name,
             benchmark_source,
             trading_sessions,
             expected_df,
             capital_base):
 
+        self._name = name
         self._benchmark_source = benchmark_source
         self._trading_sessions = trading_sessions
 
@@ -225,7 +228,12 @@ class TestMetricsTracker(object):
 
         self._metrics = mtr.pluto_metrics()
         self._first_session = trading_sessions[0]
+        self._first_open_session = None
         self._capital_base = capital_base
+
+        self._initialized = False
+
+        self._num_sessions = len(trading_sessions)
 
     @staticmethod
     def _check_is_nan(value):
@@ -234,13 +242,20 @@ class TestMetricsTracker(object):
         return value
 
     def start_of_session(self, ts, calendar_name, ledger):
-        pass
+        self._first_open_session = ts
 
-    def on_market_open(self, ts, calendar_name, ledger):
-        pass
+        if not self._initialized:
+            for metric in self._metrics:
+                metric.initialization(
+                    first_session=ts,
+                    ledger=ledger)
+            self._initialized = True
 
-    def on_minute_close(self, ts, calendar_name, ledger):
-        pass
+        for metric in self._metrics:
+            metric.start_of_session(
+                dt=ts,
+                session=ts,
+                ledger=ledger)
 
     def end_of_bar(self, ts, calendar_name, ledger):
         daily_perfs = self._daily_perfs
@@ -252,7 +267,7 @@ class TestMetricsTracker(object):
             'period_start': first_session,
             'period_end': ts,
             'capital_base': self._capital_base,
-            'minute_perf': {
+            'daily_perf': {
                 'period_open': self._first_open_session,
                 'period_close': ts,
             },
@@ -265,7 +280,8 @@ class TestMetricsTracker(object):
         }
 
         for metric in self._metrics:
-            metric.end_of_bar(
+            metric.end_of_session(
+                dt=ts,
                 packet=perf,
                 ledger=ledger)
 
@@ -314,7 +330,59 @@ class TestMetricsTracker(object):
         daily_perfs.append(daily_perf)
 
     def end_of_session(self, ts, calendar_name, ledger):
-        pass
+        if self._session_idx < self._num_sessions:
+            self.end_of_bar(ts, calendar_name, ledger)
+
+    def validate(self):
+        daily_perfs = self._daily_perfs
+        expected_perf = self._expected_df
+
+        daily_dts = pd.DatetimeIndex([p['period_close'] for p in daily_perfs], tz='UTC')
+
+        daily_stats = pd.DataFrame(daily_perfs, index=daily_dts)[examples._cols_to_check]
+
+        errors = 0
+        tests = 0
+        idx = 0
+
+        # for i, j in zip(expected_perf['capital_used'], daily_stats['capital_used']):
+        #     if abs(round(i, 2) - round(j, 2)) > 0:
+        #         print(idx, i, j, len(self._benchmark_returns), daily_dts[idx], daily_stats['capital_used'][idx - 1],
+        #               expected_perf['capital_used'][idx + 1], expected_perf['capital_used'][idx - 1])
+        #
+        #     idx += 1
+
+        for l, r in zip(expected_perf.items(), daily_stats.items()):
+            tests += 1
+
+            des = l[1]
+            act = r[1]
+
+            try:
+                testing.assert_allclose(
+                    np.nan_to_num(des.values),
+                    act.values,
+                    rtol=0.001,
+                    atol=0.02,
+                    equal_nan=False)
+
+            except AssertionError as e:
+                errors += 1
+
+                print('Name: {}\nError: {}'.format(l[0], e))
+
+            except TypeError:
+                # try:
+                #     pd.testing.assert_series_equal(act, des, check_less_precise=3)
+                # except AssertionError as e:
+                #     logging.warning('\nName: {}\nError: {}'.format(l[0], e))
+                pass
+
+        if errors > 0:
+            raise AssertionError('{} failed {} out of {}'.format(
+                self._name,
+                errors,
+                tests))
 
 
 class StrategyTester(object):
@@ -324,31 +392,42 @@ class StrategyTester(object):
         self._name = name
         self._process_manager = process_manager
 
-    def run(self, loop, expected_perf, benchmark_source, trading_sessions, market, data_source):
-        def on_error(message):
-            raise AssertionError(message)
-
+    def run(self,
+            loop: pluto.control.loop.simulation_loop.SimulationLoop,
+            expected_perf,
+            benchmark_source,
+            trading_sessions,
+            market,
+            data_source,
+            capital_base):
         # todo: instead of a watcher make a metrics tracker
 
-        tracker = TestMetricsTracker()
-
-        watcher = TestWatcher(
-            self._process.process_id,
-            expected_perf,
+        tracker = TestMetricsTracker(
             self._name,
-            trading_sessions,
             benchmark_source,
-            on_error)
+            trading_sessions,
+            expected_perf,
+            capital_base)
 
-        self._process.watch(watcher)
-
-        # # subscribe to clock events
-        # events.subscribe('clock.update', self._process.clock_update)
+        # watcher = TestWatcher(
+        #     self._process.process_id,
+        #     expected_perf,
+        #     self._name,
+        #     trading_sessions,
+        #     benchmark_source,
+        #     on_error)
+        #
+        # self._process.watch(watcher)
 
         # todo: add metrics tracker
+        for _ in loop.start(controller.Controller(
+                self._process_manager,
+                market,
+                tracker,
+                data_source)):
+            pass
 
-        loop.start(controller.Controller(
-            self._process_manager, market, data_source))
+        tracker.validate()
 
 
 class TestClient(object):

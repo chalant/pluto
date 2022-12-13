@@ -63,7 +63,6 @@ class SimulationLoop(object):
             # anything else
 
             # aggregate the signals into a single signal.
-
             signals = []
 
             for cl in clocks:

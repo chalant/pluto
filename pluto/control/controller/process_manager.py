@@ -3,6 +3,7 @@ import typing
 
 from collections import defaultdict
 
+import numpy as np
 from trading_calendars import calendar_utils
 
 import pluto.assets.assets
@@ -45,7 +46,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # todo: we need to change the sync last sale prices function
         #  the price should be injected externally by the controller.
         #  the controller sends the sale prices to the controllables.
-        self._position_tracker = ledger.PositionTracker(positions)
+        self._position_tracker = position_tracker.PositionTracker(positions)
 
         self._data_frequency = stp.data_frequency
 
@@ -208,17 +209,20 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._global_ts = ts
 
     def sync_last_sale_prices(self, calendar_name, prices, dt):
-
         ledger_ = self._ledgers[calendar_name]
         tracker = self._position_trackers[calendar_name]
 
+        ledger_._dirty_portfolio = True
+        tracker._dirty_stats = True
+
         for sid, price in prices:
             position = tracker.positions[sid].inner_position
-            position.last_sale_price = price
-            position.last_sale_date = dt
+
+            if not np.isnan(price):
+                position.last_sale_price = price
+                position.last_sale_date = dt
 
         # mark portfolio as dirty so that we can recompute read only portfolio
-        ledger_._dirty_portfolio = True
 
         # if dt != self._sync_times[calendar_name]:
         #

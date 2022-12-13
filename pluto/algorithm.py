@@ -131,12 +131,12 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
     @property
     def account(self):
-        self._controllable.sync_last_sale_prices()
+        # self._controllable.sync_last_sale_prices()
         return self._metrics_tracker.account
 
     @property
     def portfolio(self):
-        self._controllable.sync_last_sale_prices()
+        # self._controllable.sync_last_sale_prices()
         return self._metrics_tracker.portfolio
 
     def set_trading_calendar(self, calendar):
@@ -444,6 +444,9 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         current_data = controllable.current_data
 
         style = self._convert_style(asset, amount)
+
+        if np.isnan(amount):
+            print(self.datetime, amount)
 
         amount, can_order = br_stp.can_order(
             asset,
