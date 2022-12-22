@@ -88,7 +88,7 @@ OHLCVP_FIELDS = frozenset([
     "open", "high", "low", "close", "volume", "price"
 ])
 
-HISTORY_FREQUENCIES = set(["1m", "1d"])
+HISTORY_FREQUENCIES = {"1m", "1d"}
 
 DEFAULT_MINUTE_HISTORY_PREFETCH = 1560
 DEFAULT_DAILY_HISTORY_PREFETCH = 40

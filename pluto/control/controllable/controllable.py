@@ -176,6 +176,7 @@ class Controllable(ABC):
         self._ended = False
 
         self._transactions = []
+        self._watchlist = set()
 
     @property
     def not_running(self):
@@ -268,6 +269,14 @@ class Controllable(ABC):
     @property
     def current_data(self):
         return self._current_data
+
+    @property
+    def watchlist(self):
+        return self._watchlist
+
+    @watchlist.setter
+    def watchlist(self, assets):
+        self._watchlist = set(assets)
 
     def set_broker(self, broker):
         self._broker = broker
@@ -648,8 +657,7 @@ class Controllable(ABC):
         self._current_dt = dt
         algo.on_dt_changed(dt)
 
-        # fixme: should we do this here ?
-        api_support.set_algo_instance(algo)
+        # api_support.set_algo_instance(algo)
         self._run_state.before_trading_starts(algo, self._current_data)
 
     def bar(self, dt):

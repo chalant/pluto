@@ -1,9 +1,8 @@
-import collections
-
 import logbook
 
 from pluto.finance.markets import core
 import pluto.control.controller.process_manager
+from pluto.control.controller import behavior as bv
 from pluto.data import data_source as ds
 from pluto.coms.utils import conversions
 
@@ -26,19 +25,19 @@ class Controller(object):
             strategy_manager: pluto.control.controller.process_manager.StrategyManager,
             market: core.AbstractMarket,
             metrics_tracker,
-            data_source: ds.AbstractDataSource):
+            data_source: ds.AbstractDataSource,
+            behavior: bv.AbstractControllerBehavior):
 
-        self._metrics_tracker = metrics_tracker
         self._strategy_manager = strategy_manager
-        self._orders = 0
-
-        self._update_flag = True
-        self._data_source = data_source
+        self._metrics_tracker = metrics_tracker
         self._market = market
+        self._data_source = data_source
+        self._behavior = behavior
 
     def clock_update(self, ts, evt, signals):
         strategy_manager = self._strategy_manager
         market = self._market
+        behavior = self._behavior
 
         strategies = strategy_manager.strategies
         broker_states = strategy_manager.broker_states
@@ -47,31 +46,18 @@ class Controller(object):
 
         metrics_tracker = self._metrics_tracker
 
-        # to_update = [
-        #     (ts, cts, calendar.name)
-        #     for cts, c_evt, calendar in signals
-        #     if c_evt == BAR]
-
-        # ingest data at each start of bar event
-        # ingestion writes streamed data in the database in a format that
-        # can be red by the readers.
-        # we have a separate process that stores streamed data.
-        # we then call ingest to create bar data of the most recent stored data.
-
         data_source = self._data_source
-
-        # if to_update:
-        #     data_ingester.ingest_bar_data(to_update)
-
-        # todo: if the event is bar, download all quotes data for all our
-        #  current positions and open orders...
-        #  if event is session_end, download historical data for all assets.
 
         last_sale_prices = data_source.get_last_sale_prices([
             (ts, cts, calendar.name, strategy_manager.get_positions(calendar.name))
             for cts, c_evt, calendar in signals
-            if c_evt == BAR or c_evt == MINUTE_END or c_evt == SESSION_END or c_evt == BEFORE_TRADING_START]
-        )
+            if c_evt == BAR or
+               c_evt == MINUTE_END or
+               c_evt == TRADE_END or
+               c_evt == SESSION_END or
+               c_evt == BEFORE_TRADING_START])
+
+        behavior.ingest_watchlist_bar_data(ts, data_source, signals)
 
         # populate broker state to send to controllable
         for cts, c_evt, calendar in signals:
@@ -161,6 +147,12 @@ class Controller(object):
                     calendar_name,
                     ledger)
 
+            elif c_evt == BEFORE_TRADING_START:
+                strategy_manager.sync_last_sale_prices(
+                    calendar_name,
+                    last_sale_prices[calendar_name],
+                    cts)
+
             elif c_evt == SESSION_END:
                 strategy_manager.sync_last_sale_prices(
                     calendar_name,
@@ -173,11 +165,10 @@ class Controller(object):
                     calendar_name,
                     strategy_manager.get_ledger(calendar_name))
 
-            elif c_evt == BEFORE_TRADING_START:
-                strategy_manager.sync_last_sale_prices(
-                    calendar_name,
-                    last_sale_prices[calendar_name],
-                    cts)
+        behavior.ingest_bar_data(
+            ts,
+            data_source,
+            signals)
 
         # flatten last sale prices to send to
         values = []
@@ -187,9 +178,7 @@ class Controller(object):
                 broker_pb2.AssetPrice(sid=sid, price=price)
                 for sid, price in pairs])
 
-        # todo: send last sale prices here (in the broker state)
-        # fixme: a process might crash, and we would be waiting for too long...
-        # update all processes
+        # update all strategies state
         for strategy in strategies:
             brs = broker_states[strategy.process_id]
             brs.last_sale_prices.extend(values)
@@ -199,8 +188,15 @@ class Controller(object):
         for strategy in strategies:
             strategy.clock_update(ts, evt)
 
-        # print("Waiting for orders", ts)
+        # fixme: a process might crash, and we would be waiting forever in the strategy manager
+        #  a solution would be to fix a maximum waiting time (timeout)
+        #  this shouldn't be a problem in local network, if a strategy crashed due to some
+        #  bug or error, everything should crash.
+        # retrieve new orders
         new_orders = strategy_manager.get_orders()
+
+        # process watchlist from strategies
+        behavior.update_watchlist(strategy_manager)
 
         # todo: catch any account control errors here...
         #  given the new orders and the current portfolio and
@@ -209,44 +205,11 @@ class Controller(object):
 
         # check if strategies don't go above allocated capital and leverage
 
-        # new_orders_batches = strategy_manager.get_orders_batches()
-        #
-        # for ts, cts, calendar in signals:
-        #     for batch in new_orders_batches:
-        #         portfolio = batch.portfolio
-        #         positions = batch.positions
-        #         open_orders = batch.open_orders
-
         # todo: call the controller script
         # self._controller_script.update()
 
-        # todo: put some additional logic for leverage control, portfolio
-        #  optimization here...
+        # todo: we should call the manager script to handle new orders here, before placing new orders.
         market.place_orders(new_orders, strategy_manager)
-        # strategy_manager.place_orders(new_orders)
-        # clear all variables
+
+        # clear all events
         strategy_manager.clear()
-
-        # to_update = [
-        #     (ts, cts, calendar.name)
-        #     for cts, c_evt, calendar in signals
-        #     if c_evt == SESSION_END]
-
-        # update assets database at the end of session.
-        # if to_update:
-        #     data_source.update_assets_database(to_update)
-
-        # reset update flag
-        self._update_flag = True
-
-        return 1
-
-        # todo: process the orders.
-        # self._process_orders(new_orders)
-
-        # problem: when should we execute the new orders? (the controllables
-        # will place an empty order (or a pass) to indicate that they are not making
-        # and order.
-
-        # once all the processes have made an order, we can process the orders.
-        # this must be done asap! so we do not wait for the next loop!

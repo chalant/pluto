@@ -6,10 +6,11 @@ from collections import defaultdict
 import numpy as np
 from trading_calendars import calendar_utils
 
-import pluto.assets.assets
+import zipline
 from zipline import protocol
 from zipline.finance.order import ORDER_STATUS
 
+import pluto.assets.assets
 from pluto.finance import ledger, position_tracker
 from pluto.setup import run_setup
 
@@ -70,7 +71,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._new_orders = []
         self._orders_batches = []
 
-        self._calendar_frequencies = defaultdict(list)
+        self._watchlist_counter = 0
+        self._watchlist = set()
+
+        self._watchlist_complete = threading.Event()
 
         self._aliases = calendar_utils._default_calendar_aliases
 
@@ -125,8 +129,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
         batch = broker_pb2.OrderBatch()
         batch.ParseFromString(bytes_)
 
-        orders_batches = self._orders_batches
-
         # todo: handle cases where the controllable fails, also add a timeout in case
         #  it is a hardware crash...
 
@@ -137,9 +139,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
         if conversions.to_datetime(batch.ts) == self._global_ts:
             if session_id in processes:
                 self._order_counter += 1
-
-            if batch.orders:
-                orders_batches.append(batch)
 
             for order in batch.orders:
                 # yield conversions.to_proto_order(
@@ -196,11 +195,35 @@ class StrategyManager(brk_rpc.BrokerServicer):
         #     blotter.
         pass
 
-    def sync_broker_data(self, to_update: typing.List[typing.Tuple]):
-        # todo: this fetches data from a broker and updates our internal data.
-        #  (Blotter, Ledger, Portfolio, Account, ...)
-        for ts, cts, calendar_name in to_update:
-            pass
+    @service_access.framework
+    @service_access.per_session
+    def SetWatchList(self, request_iterator, session_id):
+
+        bytes_ = b''
+
+        for chunk in request_iterator:
+            bytes_ += chunk.data
+
+        watchlist = broker_pb2.WatchList()
+        watchlist.ParseFromString(bytes_)
+
+        ts = conversions.to_datetime(watchlist.ts)
+
+        processes = self._processes
+
+        # strategies call this at each clock event,
+
+        if ts == self._global_ts:
+            if session_id in processes:
+                self._watchlist_counter += 1
+
+            # use set to remove redundant assets
+            if watchlist.assets:
+                self._watchlist = set(self._watchlist) | set([conversions.to_zp_asset(asset)
+                                                              for asset in watchlist.assets])
+
+            if self._watchlist_counter == len(self._processes):
+                self._watchlist_complete.set()
 
     def set_asset_finder(self, asset_finder):
         self._asset_finder = asset_finder
@@ -243,6 +266,16 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._orders_complete.wait()
 
         return self._new_orders
+
+    def get_watchlist(self) -> typing.Dict[str, typing.List[zipline.assets.Asset]]:
+        self._watchlist_complete.wait()
+
+        watchlist = defaultdict(list)
+
+        for asset in self._watchlist:
+            watchlist[self._aliases[asset.exchange]].append(asset)
+
+        return watchlist
 
     def place_orders(self, orders):
 
@@ -391,9 +424,12 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     def clear(self):
         self._order_counter = 0
+        self._watchlist_counter = 0
 
         self._orders_complete.clear()
+        self._watchlist_complete.clear()
         self._new_orders.clear()
+        self._watchlist.clear()
 
         broker_states = self._broker_states
 

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from pluto import api
+from pluto.api import *
 
 from zipline.finance import commission
 from zipline.finance import slippage
@@ -33,10 +33,14 @@ def initialize(context):
     # context.set_slippage(slippage.VolumeShareSlippage())
 
 
+def before_trading_start(context, data):
+    set_watchlist([symbol(stock) for stock in context.stocks])
+
+
 def handle_data(context, data):
     if not context.has_ordered:
         for stock in context.stocks:
-            api.order(api.symbol(stock), 100)
+            order(symbol(stock), 100)
         context.has_ordered = True
 
 

@@ -31,14 +31,7 @@ class DataPortalLive(DataPortal):
 	def get_spot_value(self, assets, field, dt, data_frequency):
 		return self.broker.get_spot_value(assets, field, dt, data_frequency)
 
-	def get_history_window(self,
-						   assets,
-						   end_dt,
-						   bar_count,
-						   frequency,
-						   field,
-						   data_frequency,
-						   ffill=True):
+	def get_history_window(self, assets, end_dt, bar_count, frequency, field, data_frequency, ffill=True):
 		# This method is responsible for merging the ingested historical data
 		# with the real-time collected data through the Broker.
 		# DataPortal.get_history_window() is called with ffill=False to mark

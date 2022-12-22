@@ -104,6 +104,8 @@ class ClockUpdate(Command):
     def _execute(self, controllable, request):
         broker = self._broker
 
+        watchlist = broker_pb2.WatchList(
+            ts=request.timestamp)
         batch = broker_pb2.OrderBatch(
             ts=request.timestamp,
             ended=False)
@@ -120,6 +122,8 @@ class ClockUpdate(Command):
                 controllable.session_start(ts)
 
             elif e == BEFORE_TRADING_START:
+                # todo: collect watchlist from the controllable here!
+                watchlist.assets.extend([conversions.to_proto_asset(asset) for asset in controllable.watchlist])
                 controllable.before_trading_starts(ts)
 
             elif e == SESSION_END:
@@ -159,6 +163,7 @@ class ClockUpdate(Command):
 
         # print("Placed orders", request.timestamp)
         # if request.event == BAR or request.event == TRADE_END:
+        broker.SetWatchList(watchlist.SerializeToString(), ())
         broker.PlaceOrders(batch.SerializeToString(), ())
 
         if controllable.ended:
