@@ -70,6 +70,9 @@ class BrokerStub(broker_stub.BrokerStub):
             request,
             FakeContext(metadata))
 
+    def _set_watchlist(self, request, metadata):
+        self._servicer.SetWatchList(request, FakeContext(metadata))
+
 
 class InMemoryControllableFactory(factory.ControllableFactory):
     def __init__(self, broker):

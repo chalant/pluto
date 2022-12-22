@@ -14,14 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pluto import api
+from pluto.api import *
 
 from zipline.finance import commission
 from zipline.finance import slippage
 
 
 def initialize(context):
-    context.asset = api.symbol('AAPL')
+    context.asset = symbol('AAPL')
 
     # Explicitly set the commission/slippage to the "old" value until we can
     # rebuild example data.
@@ -32,9 +32,13 @@ def initialize(context):
     # context.set_slippage(slippage.VolumeShareSlippage())
 
 
+def before_trading_start(context, data):
+    set_watchlist([context.asset])
+
+
 def handle_data(context, data):
-    api.order(context.asset, 10)
-    api.record(AAPL=data.current(context.asset, 'price'))
+    order(context.asset, 10)
+    # record(AAPL=data.current(context.asset, 'price'))
 
 
 def _test_args():

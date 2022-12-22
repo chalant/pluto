@@ -218,7 +218,12 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                 """
         # Make the first chunk smaller to get more immediate results:
         # (one week, then every half year)
-        chunks = repeat(5)
+        if chunks is None:
+            # Make the first chunk smaller to get more immediate results:
+            # (one week, then every half year)
+            chunks = chain([5], repeat(126))
+        elif isinstance(chunks, int):
+            chunks = repeat(chunks)
 
         if name in self._pipelines:
             raise DuplicatePipelineName(name=name)
@@ -270,8 +275,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                 frequency,
                 field,
                 controllable.data_frequency,
-                ffill,
-            )
+                ffill)
         else:
             # If we are in before_trading_start, we need to get the window
             # as of the previous market minute
@@ -287,8 +291,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                 frequency,
                 field,
                 controllable.data_frequency,
-                ffill,
-            )
+                ffill)
 
             # Get the adjustments between the last market minute and the
             # current before_trading_start dt and apply to the window
@@ -445,9 +448,6 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
         style = self._convert_style(asset, amount)
 
-        if np.isnan(amount):
-            print(self.datetime, amount)
-
         amount, can_order = br_stp.can_order(
             asset,
             style,
@@ -465,16 +465,6 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             amount,
             style,
             self._session_id)
-
-    # @api_method
-    # @disallowed_in_before_trading_start(OrderInBeforeTradingStart())
-    # def order_target_value(self,
-    #                        asset,
-    #                        target,
-    #                        limit_price=None,
-    #                        stop_price=None,
-    #                        style=None):
-    #     pass
 
     def _convert_style(self, asset, amount,
                        limit_price=None, stop_price=None, style=None):
@@ -520,8 +510,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                     " {1}.".format(asset.symbol, asset.end_date)
             )
         else:
-            last_price = \
-                self._controllable.current_data.current(asset, "price")
+            last_price = self._controllable.current_data.current(asset, "price")
 
             if np.isnan(last_price):
                 raise CannotOrderDelistedAsset(
@@ -587,6 +576,10 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
     def set_commission(self, us_equities=None, us_futures=None):
         # disable setting commission this will be set externally
         pass
+
+    @api_method
+    def set_watchlist(self, assets):
+        self._controllable.watchlist = assets
 
 
 class LiveTradingAlgorithm(TradingAlgorithm):

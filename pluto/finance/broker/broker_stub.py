@@ -41,6 +41,11 @@ class BrokerStub(abc.ABC):
     def Stopped(self, request, metadata):
         return self._stopped(request, metadata)
 
+    @service_access.framework_method
+    @service_access.session_method
+    def SetWatchList(self, request, metadata):
+        self._set_watchlist(stream.chunk_bytes(request), metadata)
+
     @abc.abstractmethod
     def _execute_cancel_policy(self, request, metadata):
         raise NotImplementedError
@@ -59,6 +64,10 @@ class BrokerStub(abc.ABC):
 
     @abc.abstractmethod
     def _stopped(self, request, metadata):
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def _set_watchlist(self, request, metadata):
         raise NotImplementedError
 
 

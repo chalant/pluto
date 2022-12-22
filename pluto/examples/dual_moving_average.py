@@ -22,14 +22,14 @@ its shares once the averages cross again (indicating downwards
 momentum).
 """
 
-from pluto import api
+from pluto.api import *
 
 from zipline.finance import commission
 from zipline.finance import slippage
 
 
 def initialize(context):
-    context.sym = api.symbol('AAPL')
+    context.sym = symbol('AAPL')
     context.i = 0
 
     # Explicitly set the commission/slippage to the "old" value until we can
@@ -38,6 +38,10 @@ def initialize(context):
     # rebuild_example_data#L105
     # context.set_commission(commission.PerShare(cost=.0075, min_trade_cost=1.0))
     # context.set_slippage(slippage.VolumeShareSlippage())
+
+
+def before_trading_start(context, data):
+    set_watchlist([context.sym])
 
 
 def handle_data(context, data):
@@ -55,9 +59,9 @@ def handle_data(context, data):
     if short_mavg > long_mavg:
         # order_target orders as many shares as needed to
         # achieve the desired number of shares.
-        api.order_target(context.sym, 100)
+        order_target(context.sym, 100)
     elif short_mavg < long_mavg:
-        api.order_target(context.sym, 0)
+        order_target(context.sym, 0)
 
     # Save values for later inspection
     # api.record(AAPL=data.current(context.sym, "price"),

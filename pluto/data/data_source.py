@@ -3,8 +3,6 @@ import typing
 import collections
 
 import pandas
-import numpy as np
-
 
 from zipline.data import data_portal
 from zipline.assets import Asset
@@ -22,6 +20,10 @@ class AbstractDataSource(abc.ABC):
                              handle_non_market_minutes=False) -> typing.Dict[
             str,
             typing.List[typing.Tuple[int, float]]]:
+        pass
+
+    @abc.abstractmethod
+    def get_bar_data(self, ts: pandas.Timestamp, assets):
         pass
 
 
@@ -60,6 +62,9 @@ class SimulationDataSource(AbstractDataSource):
                         data_frequency=data_frequency)
                 res[cal].append((asset.sid, price))
         return res
+
+    def get_bar_data(self, ts: pandas.Timestamp, assets):
+        return
 
     def ingest_bar_data(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
         pass

@@ -54,15 +54,6 @@ class SimulationLoop(object):
                 calendar,
                 calendar.all_sessions,
                 frequency=self._frequency):
-
-            # acquire lock so that no further commands are executed here
-            # while this block is being executed
-            # with self._execution_lock:
-            # process any cached values
-            # call for any update that needs to be done before
-            # anything else
-
-            # aggregate the signals into a single signal.
             signals = []
 
             for cl in clocks:
@@ -73,40 +64,9 @@ class SimulationLoop(object):
 
                     signals.append((cts, evt, cl.calendar))
 
-                    # events.post_event(
-                    #     'clock.controller_update',
-                    #     {'ts': cts, 'evt': evt, 'calendar': cl.calendar_name}
-                    # )
-
-
-
-            #
-            # for cl in self._clocks.values():
-            #     # todo: how do we know the clock has ended?
-            #     signal = cl.update(ts)
-            #
-            #     if signal:
-            #         sts, s_evt, calendar = signal
-            #         signal = clock_pb2.Signal(
-            #             timestamp=conversions.to_proto_timestamp(sts),
-            #             event=evt,
-            #             exchange=calendar)
-            #
-            #         signals.append(signal)
-
-            #
-            # signal_handler.update(ts, evt, signals)
-            # # process cached commands
-            # signal_handler.process(ts)
-            # # continue execution
-            # signal_handler.clock_update(ts, evt, signals)
             process.clock_update(ts, global_event, signals)
 
             yield 0
-
-    def execute(self, command):
-        with self._execution_lock:
-            command(self._get_clocks)
 
     def add_clock(self, calendar_name):
         self._clocks[calendar_name] = self._create_clock(

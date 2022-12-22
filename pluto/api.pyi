@@ -1,4 +1,6 @@
 import collections
+import typing
+
 from zipline.assets import Asset, Equity, Future
 from zipline.assets.futures import FutureChain
 from zipline.finance.asset_restrictions import Restrictions
@@ -9,7 +11,7 @@ from zipline.utils.security_list import SecurityList
 
 from pluto.pipeline import Pipeline
 
-def attach_pipeline(pipeline, name, chunks=None, eager=True):
+def attach_pipeline(pipeline: Pipeline, name: str, chunks=None, eager=True):
     """Register a pipeline to be computed at the start of each day.
 
     Parameters
@@ -812,3 +814,14 @@ def symbols(*args):
     :func:`zipline.api.set_symbol_lookup_date`
     """
 
+def set_watchlist(assets: typing.Iterable[Asset]) -> None:
+    """
+
+    Parameters
+    ----------
+    assets: typing.Iterable[Asset]
+
+    Returns
+    -------
+
+    """

@@ -3,6 +3,7 @@
 A simple Pipeline algorithm that longs the top 3 stocks by RSI and shorts
 the bottom 3 each day.
 """
+import typing
 
 from pluto.api import *
 from pluto.pipeline import Pipeline
@@ -31,7 +32,7 @@ def rebalance(context, data):
     longs = all_assets[pipeline_data.longs]
     shorts = all_assets[pipeline_data.shorts]
 
-    record(universe_size=len(all_assets))
+    # record(universe_size=len(all_assets))
 
     # Build a 2x-leveraged, equal-weight, long-short portfolio.
     one_third = 1.0 / 3.0
@@ -70,6 +71,14 @@ def initialize(context):
 
 def before_trading_start(context, data):
     context.pipeline_data = pipeline_output('my_pipeline')
+    pipeline_data = context.pipeline_data
+    # set the assets we want to follow each bar event
+    all_assets = pipeline_data.index
+
+    longs = all_assets[pipeline_data.longs]
+    shorts = all_assets[pipeline_data.shorts]
+
+    set_watchlist(longs | shorts)
 
 
 def _test_args():

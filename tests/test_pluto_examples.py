@@ -20,15 +20,11 @@ from zipline.testing import test_resource_path, core
 from zipline.data import data_portal
 from zipline.utils import cache
 from zipline.assets.assets import Equity, Future
-from zipline.finance.execution import (
-    StopOrder,
-    LimitOrder,
-    StopLimitOrder,
-    MarketOrder)
+from zipline.finance.execution import (StopOrder, LimitOrder, StopLimitOrder, MarketOrder)
 from zipline.finance import asset_restrictions
 
 from pluto import examples
-from pluto.test import test
+from pluto.test_utils import test_utils
 
 from pluto.sources import benchmark_source as source
 
@@ -40,12 +36,11 @@ from pluto.control.processes import in_memory
 from pluto.control.controller import process_manager
 from pluto.control.controllable import running_behavior
 from pluto.control.loop import simulation_loop
-from pluto.control.setup import setup as ctp
 
-from pluto.data.bundles import test as tb
-from pluto.data.universes import core as uni_core
 from pluto.data import caching
 from pluto.data import data_source as ds
+from pluto.data.bundles import test as tb
+from pluto.data.universes import core as uni_core
 
 from pluto.trading_calendars import calendar_utils as cu
 
@@ -202,7 +197,7 @@ def _run(dir_, example_name, expected_perf, environ_):
 
     loop.add_clock(calendar_name)
 
-    client = test.TestClient(
+    client = test_utils.TestClient(
         dir_,
         in_memory.InMemoryControllableStub(
             dir_,
@@ -218,7 +213,7 @@ def _run(dir_, example_name, expected_perf, environ_):
 
     manager.add_strategy(process)
 
-    tester = test.StrategyTester(
+    tester = test_utils.StrategyTester(
         process,
         uni,
         example_name,
