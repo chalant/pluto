@@ -2,7 +2,8 @@ import inspect
 from operator import attrgetter
 from textwrap import dedent
 
-from zipline import api, TradingAlgorithm
+from pluto import api
+from pluto.algorithm import TradingAlgorithm
 
 
 def main():
@@ -16,7 +17,7 @@ def main():
         from zipline.assets.futures import FutureChain
         from zipline.finance.asset_restrictions import Restrictions
         from zipline.finance.cancel_policy import CancelPolicy
-        from zipline.pipeline import Pipeline
+        from pluto.pipeline import Pipeline
         from zipline.protocol import Order
         from zipline.utils.events import EventRule
         from zipline.utils.security_list import SecurityList
