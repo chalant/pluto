@@ -21,7 +21,7 @@ from zipline.utils import api_support
 from pluto.pipeline import domain
 from pluto.coms.utils import conversions
 
-from pluto.finance import ledger, position_tracker
+from pluto.finance import ledger, position_tracker, asset_restrictions
 from pluto.finance.metrics import tracker
 from pluto.finance.broker import broker_setup as brs
 
@@ -166,8 +166,8 @@ class Controllable(ABC):
         self._clock = clock.ExplodingClock()
 
         self._sync_state_tracker = None
-        # todo: asset restrictions are also loaded per session
-        self._restrictions = asset_restrictions.NoRestrictions()
+
+        self._restrictions = asset_restrictions.WatchList(self)
 
         self._mode = None
         self.flag = False
@@ -176,7 +176,7 @@ class Controllable(ABC):
         self._ended = False
 
         self._transactions = []
-        self._watchlist = set()
+        self._watchlist = frozenset()
 
     @property
     def not_running(self):
@@ -276,7 +276,7 @@ class Controllable(ABC):
 
     @watchlist.setter
     def watchlist(self, assets):
-        self._watchlist = set(assets)
+        self._watchlist = frozenset(assets)
 
     def set_broker(self, broker):
         self._broker = broker
@@ -668,14 +668,14 @@ class Controllable(ABC):
         algo.on_dt_changed(dt)
         blotter = self._blotter
 
-        capital_changes = self._calculate_minute_capital_changes(
-            dt,
-            metrics_tracker,
-            self._emission_rate)
+        # capital_changes = self._calculate_minute_capital_changes(
+        #     dt,
+        #     metrics_tracker,
+        #     self._emission_rate)
 
         current_data = self._current_data
 
-        # todo: this is where we update everything (ledger etc.)
+        # this is where we update everything (ledger etc.)
         closed_orders = []
 
         for order, transaction, commission in self._transactions:
