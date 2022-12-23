@@ -244,8 +244,7 @@ cdef class BarData:
         dt = self.simulation_dt_func()
 
         if self._adjust_minutes:
-            dt = \
-                self.data_portal.trading_calendar.previous_minute(dt)
+            dt = self.data_portal.trading_calendar.previous_minute(dt)
 
         if self._daily_mode:
             # if we're in daily mode, take the given dt (which is the last

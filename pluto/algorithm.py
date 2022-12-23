@@ -441,6 +441,10 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         if not self._can_order_asset(asset):
             return None
 
+        # can't trade assets that are not in the watchlist.
+        if asset not in self._controllable.watchlist:
+            return None
+
         controllable = self._controllable
 
         br_stp = controllable.broker_setup
