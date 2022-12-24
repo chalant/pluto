@@ -176,12 +176,12 @@ class TestMetricsTracker(object):
         tests = 0
         idx = 0
 
-        for i, j in zip(expected_perf['capital_used'], daily_stats['capital_used']):
-            if abs(round(i, 2) - round(j, 2)) > 0:
-                print(idx, i, j, len(self._benchmark_returns), daily_dts[idx], daily_stats['capital_used'][idx - 1],
-                      expected_perf['capital_used'][idx + 1], expected_perf['capital_used'][idx - 1])
-
-            idx += 1
+        # for i, j in zip(expected_perf['capital_used'], daily_stats['capital_used']):
+        #     if abs(round(i, 2) - round(j, 2)) > 0:
+        #         print(idx, i, j, len(self._benchmark_returns), daily_dts[idx], daily_stats['capital_used'][idx - 1],
+        #               expected_perf['capital_used'][idx + 1], expected_perf['capital_used'][idx - 1])
+        #
+        #     idx += 1
 
         for l, r in zip(expected_perf.items(), daily_stats.items()):
             tests += 1

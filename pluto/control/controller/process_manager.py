@@ -21,13 +21,6 @@ from protos import broker_pb2_grpc as brk_rpc
 from protos import broker_pb2
 
 
-class OrderBatch(object):
-    def __init__(self, portfolio, account, orders):
-        self.portfolio = portfolio
-        self.account = account
-        self.orders = orders
-
-
 class StrategyManager(brk_rpc.BrokerServicer):
     def __init__(self, asset_finder: pluto.assets.assets.AssetFinder, stp: run_setup.RunSetup):
 
@@ -81,7 +74,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._order_counter = 0
         self._orders_complete = threading.Event()
 
-        self._lock = threading.Lock()
+        self._order_lock = threading.Lock()
+        self._watchlist_lock = threading.Lock()
 
         self._active_processes = 0
 
@@ -137,25 +131,26 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # todo: get portfolio and account data
         # check if it is the event we are waiting for...
         if conversions.to_datetime(batch.ts) == self._global_ts:
-            if session_id in processes:
-                self._order_counter += 1
+            with self._order_lock:
+                if session_id in processes:
+                    self._order_counter += 1
 
-            for order in batch.orders:
-                # yield conversions.to_proto_order(
-                #     broker.order(
-                #         session_id,
-                #         conversions.to_zp_order(order)).to_dict())
+                for order in batch.orders:
+                    # yield conversions.to_proto_order(
+                    #     broker.order(
+                    #         session_id,
+                    #         conversions.to_zp_order(order)).to_dict())
 
-                new_orders.append(conversions.to_zp_order(order))
+                    new_orders.append(conversions.to_zp_order(order))
 
-            # trigger the event!
-            if self._order_counter == len(self._processes):
-                self._orders_complete.set()
+                # trigger the event!
+                if self._order_counter == len(self._processes):
+                    self._orders_complete.set()
 
     @service_access.framework
     @service_access.per_session
     def Stopped(self, request, session_id):
-        with self._lock:
+        with self._order_lock:
             self._active_processes -= 1
 
             if self._active_processes == 0:
@@ -214,16 +209,17 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # strategies call this at each clock event,
 
         if ts == self._global_ts:
-            if session_id in processes:
-                self._watchlist_counter += 1
+            with self._watchlist_lock:
+                if session_id in processes:
+                    self._watchlist_counter += 1
 
-            # use set to remove redundant assets
-            if watchlist.assets:
-                self._watchlist = set(self._watchlist) | set([conversions.to_zp_asset(asset)
-                                                              for asset in watchlist.assets])
+                # use set to remove redundant assets
+                if watchlist.assets:
+                    self._watchlist = set(self._watchlist) | set([conversions.to_zp_asset(asset)
+                                                                  for asset in watchlist.assets])
 
-            if self._watchlist_counter == len(self._processes):
-                self._watchlist_complete.set()
+                if self._watchlist_counter == len(self._processes):
+                    self._watchlist_complete.set()
 
     def set_asset_finder(self, asset_finder):
         self._asset_finder = asset_finder
@@ -299,8 +295,12 @@ class StrategyManager(brk_rpc.BrokerServicer):
     #     return self._blotters[calendar_name].transactions_per_order(self._bar_data_dict[calendar_name])
 
     def get_positions(self, calendar_name):
-        for position in self._position_trackers[calendar_name].get_positions():
+        for asset, position in self._position_trackers[calendar_name].get_positions().items():
             yield position
+
+    def get_position_assets(self, calendar_name):
+        for asset, position in self._position_trackers[calendar_name].get_positions().items():
+            yield asset
 
     def get_open_orders(self, calendar_name):
         return self._blotters[calendar_name].open_orders

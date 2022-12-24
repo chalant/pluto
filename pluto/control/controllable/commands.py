@@ -122,7 +122,6 @@ class ClockUpdate(Command):
                 controllable.session_start(ts)
 
             elif e == BEFORE_TRADING_START:
-                # todo: collect watchlist from the controllable here!
                 watchlist.assets.extend([conversions.to_proto_asset(asset) for asset in controllable.watchlist])
                 controllable.before_trading_starts(ts)
 

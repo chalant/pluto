@@ -1,6 +1,6 @@
 import pandas as pd
 
-from zipline.finance.asset_restrictions import Restrictions
+from zipline.finance.asset_restrictions import *
 from zipline.utils.numpy_utils import vectorized_is_element
 from zipline.assets import Asset
 

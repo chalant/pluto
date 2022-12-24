@@ -8,7 +8,6 @@ import pandas as pd
 import logbook
 
 from zipline.finance import trading
-from zipline.finance import asset_restrictions
 from zipline.finance.order import ORDER_STATUS
 
 from zipline.data import data_portal as dp
@@ -167,7 +166,7 @@ class Controllable(ABC):
 
         self._sync_state_tracker = None
 
-        self._restrictions = asset_restrictions.WatchList(self)
+        self._restrictions = asset_restrictions.NoRestrictions()
 
         self._mode = None
         self.flag = False
@@ -739,6 +738,7 @@ class Controllable(ABC):
                     ct.commission))
 
         pos_tracker = self._positions_tracker
+        # make a copy of the previous positions
 
         for asset_price in broker_data.last_sale_prices:
             sid = asset_price.sid
