@@ -48,6 +48,8 @@ class Controller(object):
 
         data_source = self._data_source
 
+        # todo: launch data fetches in parallel and wait.
+
         last_sale_prices = data_source.get_last_sale_prices([
             (ts, cts, calendar.name, strategy_manager.get_positions(calendar.name))
             for cts, c_evt, calendar in signals
@@ -57,9 +59,14 @@ class Controller(object):
                c_evt == SESSION_END or
                c_evt == BEFORE_TRADING_START])
 
-        behavior.ingest_watchlist_bar_data(ts, data_source, signals)
+        # todo: we also need to ingest data for open positions.
+        behavior.ingest_watchlist_bar_data(ts, data_source, strategy_manager, signals)
+        # ingests bar data at session end events
+        behavior.ingest_bar_data(ts, data_source, signals)
 
-        # populate broker state to send to controllable
+        # end wait here.
+
+        # populate broker state to send to controllableWe need to update positions before calling handle_data
         for cts, c_evt, calendar in signals:
             calendar_name = calendar.name
             market.set_calendar_timestamp(calendar_name, cts)
@@ -125,7 +132,10 @@ class Controller(object):
                     calendar_name,
                     data_portal.adjustment_reader)
 
-                positions = set(strategy_manager.get_positions(calendar_name))
+                positions = set([position.asset
+                                 for position in strategy_manager.get_positions(calendar_name)
+                                 if position.amount != 0])
+
                 open_orders = strategy_manager.get_open_orders(calendar_name)
 
                 strategy_manager.handle_market_open(ts, calendar_name)
@@ -164,11 +174,6 @@ class Controller(object):
                     cts,
                     calendar_name,
                     strategy_manager.get_ledger(calendar_name))
-
-        behavior.ingest_bar_data(
-            ts,
-            data_source,
-            signals)
 
         # flatten last sale prices to send to
         values = []

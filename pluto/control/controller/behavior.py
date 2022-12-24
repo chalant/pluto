@@ -23,17 +23,15 @@ class AbstractControllerBehavior(ABC):
             self,
             ts: pd.Timestamp,
             data_source: ds.AbstractDataSource,
+            manager: pm.StrategyManager,
             signals) -> None:
-        # [self._watchlist[calendar.name]
-        #  for cts, c_evt, calendar in signals
-        #  if c_evt == BAR or
-        #  c_evt == TRADE_END]
         """
         should ingest data for the watchlist in the live database
         Parameters
         ----------
         ts
         data_source
+        manager
         signals
 
         Returns
@@ -71,6 +69,7 @@ class SimulationControllerBehavior(AbstractControllerBehavior):
             self,
             ts: pd.Timestamp,
             data_source: ds.AbstractDataSource,
+            manager: pm.StrategyManager,
             signals) -> None:
         pass
 
@@ -113,17 +112,34 @@ class LiveControllerBehavior(AbstractControllerBehavior):
             self,
             ts: pd.Timestamp,
             data_source: ds.AbstractDataSource,
+            manager: pm.StrategyManager,
             signals) -> None:
 
-        if self._watchlist:
-            # filter assets we need data from.
-            to_download = [
-                self._watchlist[calendar.name]
-                for cts, c_evt, calendar in signals
-                if c_evt == BAR or c_evt == TRADE_END]
+        # ingest data for positions and watchlist
 
+        assets = []
+
+        # retrieve assets for which we have positions
+        for cts, c_evt, calendar in signals:
+            if c_evt == BAR or c_evt == TRADE_END:
+                for position in manager.get_positions(calendar.name):
+                    assets.append(position.asset)
+
+        assets = set(assets)
+
+        watchlist = self._watchlist
+
+        if watchlist:
+            # filter assets we need data from.
+
+            assets = assets | set([
+                watchlist[calendar.name]
+                for cts, c_evt, calendar in signals
+                if c_evt == BAR or c_evt == TRADE_END])
+
+        if assets:
             # todo: write in the live database...
-            for bar in data_source.get_bar_data(ts, to_download):
+            for bar in data_source.get_bar_data(ts, assets):
                 pass
 
     def ingest_bar_data(

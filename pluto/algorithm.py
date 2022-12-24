@@ -442,8 +442,9 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
             return None
 
         # can't trade assets that are not in the watchlist.
-        if asset not in self._controllable.watchlist:
-            return None
+        # if asset not in self._controllable.watchlist:
+        #     raise ValueError("Not In watchlist!")
+        #     # return None
 
         controllable = self._controllable
 

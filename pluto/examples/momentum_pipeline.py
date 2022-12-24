@@ -48,7 +48,7 @@ def rebalance(context, data):
 
     for asset in set(positions.keys()) - set(portfolio_assets):
         # This will fail if the asset was removed from our portfolio because it
-        # was delisted.
+        # was de-listed.
         if data.can_trade(asset):
             order_target_percent(asset, 0)
 
