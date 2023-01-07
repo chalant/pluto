@@ -69,11 +69,5 @@ class SimulationDataSource(AbstractDataSource):
     def get_bar_data(self, ts: pandas.Timestamp, assets):
         return
 
-    def ingest_bar_data(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
-        pass
-
-    def update_asset_database(self, arr: typing.List[typing.Tuple[pandas.Timestamp, pandas.Timestamp, str]]):
-        pass
-
     def add_data_portal(self, calendar_name: str, dp: data_portal.DataPortal):
         self._data_portals[calendar_name] = dp

@@ -108,10 +108,13 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         self.writer = ClickHouseMinuteBarWriter(
             self.db_config,
             'minute_test',
-            self.root_dir,
-            self.trading_calendar,
-            TEST_CALENDAR_START,
-            TEST_CALENDAR_STOP)
+            {
+                'first_session': TEST_CALENDAR_START,
+                'last_session': TEST_CALENDAR_STOP,
+                'bars_written': False,
+                'lifetimes_written': False
+            },
+            self.trading_calendar)
 
         self.reader = self.enter_instance_context(self._create_bar_reader())
 
@@ -543,9 +546,13 @@ class ClickHouseMinuteBarTestCase(WithTradingCalendars,
         writer = ClickHouseMinuteBarWriter(
             self.db_config,
             'minute_test',
-            self.trading_calendar,
-            dt,
-            next_day_minute)
+            {
+                'first_session': dt,
+                'last_session': next_day_minute,
+                'bars_written': False,
+                'lifetimes_written': False
+            },
+            self.trading_calendar)
 
         new_data = DataFrame(
             data=ohlcv,

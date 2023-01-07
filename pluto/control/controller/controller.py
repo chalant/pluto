@@ -3,7 +3,7 @@ import logbook
 from pluto.finance.markets import core
 import pluto.control.controller.process_manager
 from pluto.control.controller import behavior as bv
-from pluto.data import data_source as ds
+from pluto.data.data_sources import data_source as ds
 from pluto.coms.utils import conversions
 
 from protos.clock_pb2 import (
