@@ -1,7 +1,7 @@
 from abc import ABC
 
 from pluto.data.universes import core
-from pluto.data.bundles import alpaca
+from pluto.data.bundles import pluto
 
 
 class AlpacaUniverse(core.AbstractUniverse):

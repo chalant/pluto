@@ -167,45 +167,14 @@ class ClickHouseMinuteBarWriter(object):
     def __init__(self,
                  db_config: dict,
                  bundle_name: str,
-                 root_dir: directory.directory.Directory,
-                 trading_calendar: trading_calendars.TradingCalendar,
-                 start_dt: pandas.Timestamp,
-                 end_dt: pandas.Timestamp):
+                 metadata,
+                 trading_calendar: trading_calendars.TradingCalendar):
+
         self._trading_calendar = trading_calendar
-        self._root_dir = root_dir
 
-        data_dir = root_dir.get_directory('data').add_directory('pluto')
+        self._metadata = metadata
 
-        # create metadata file
-        try:
-            file = data_dir.add_file('metadata', 'json')
-            file.touch()
-
-            self._metadata = {
-                trading_calendar.name: {
-                    'first_session': start_dt,
-                    'last_session': end_dt,
-                    'bars_written': False,
-                    'lifetimes_written': False
-                }
-            }
-
-            with open(file.path, 'a') as f:
-                json.dump(self._metadata, f)
-        except FileExistsError:
-            file = data_dir.get_file('metadata', 'json')
-
-        with open(file.path, 'a') as f:
-            self._metadata = json.load(f)
-
-        self._metadata_file = file
-
-        self._start_dt = start_dt
-        self._end_dt = end_dt
-
-        self._minutes_in_range = trading_calendar.minutes_in_range(
-            self._start_dt,
-            self._end_dt)
+        self._minutes_in_range = None
 
         self._db_config = db_config
         self._bundle_name = bundle_name
@@ -220,8 +189,6 @@ class ClickHouseMinuteBarWriter(object):
                    sid: int,
                    dts: pandas.DatetimeIndex,
                    cols: typing.Dict[str, np.array]):
-
-        minutes = self._minutes_in_range.tz_localize(None)
 
         # fm = minutes[0]
         # lm = minutes[-1]
@@ -246,6 +213,8 @@ class ClickHouseMinuteBarWriter(object):
         #     pass
 
         dts = dts.tz_localize(None)
+
+        minutes = self._trading_calendar.minutes_in_range(dts[0], dts[-1]).tz_localize(None)
 
         # remove invalid minutes
         # drops elements that are in dts but not in minutes
@@ -309,45 +278,46 @@ class ClickHouseMinuteBarWriter(object):
 
         metadata = self._metadata[self._trading_calendar.name]
 
-        first = pd.Timestamp(metadata['first_session'])
-        last = pd.Timestamp(metadata['last_session'])
+        if metadata['first_session'] and metadata['last_session']:
+            first = pd.Timestamp(metadata['first_session'])
+            last = pd.Timestamp(metadata['last_session'])
 
-        if minutes[0] < first:
+            if minutes[0] < first:
+                metadata['first_session'] = minutes[0]
+
+            if minutes[-1] > last:
+                metadata['last_session'] = minutes[-1]
+        else:
             metadata['first_session'] = minutes[0]
-
-        if minutes[-1] > last:
             metadata['last_session'] = minutes[-1]
 
         metadata['bars_written'] = True
 
         self.flush()
 
-    def advance(self, end_dt: pandas.Timestamp):
-        cal = self._trading_calendar
-        start_dt = cal.next_minute(self._end_dt)
-
-        if start_dt > end_dt:
-            raise ValueError()
-
-        self.set_range(start_dt, end_dt)
-
-    def move_back(self, dt):
-        cal = self._trading_calendar
-
-        end_dt = cal.previous_minute(self._start_dt)
-
-        if end_dt < dt:
-            raise ValueError()
-
-        self.set_range(dt, end_dt)
+    # def advance(self, end_dt: pandas.Timestamp):
+    #     cal = self._trading_calendar
+    #     start_dt = cal.next_minute(self._end_dt)
+    #
+    #     if start_dt > end_dt:
+    #         raise ValueError()
+    #
+    #     self.set_range(start_dt, end_dt)
+    #
+    # def move_back(self, dt):
+    #     cal = self._trading_calendar
+    #
+    #     end_dt = cal.previous_minute(self._start_dt)
+    #
+    #     if end_dt < dt:
+    #         raise ValueError()
+    #
+    #     self.set_range(dt, end_dt)
 
     def set_range(self, start_dt: pandas.Timestamp, end_dt: pandas.Timestamp):
-        self._start_dt = start_dt
-        self._end_dt = end_dt
-
         self._minutes_in_range = self._trading_calendar.minutes_in_range(
-            self._start_dt,
-            self._end_dt)
+            start_dt,
+            end_dt)
 
     def write_sid(self, sid: int, df: pandas.DataFrame):
         cols = {
@@ -362,7 +332,7 @@ class ClickHouseMinuteBarWriter(object):
 
         self.write_cols(sid, dts, cols)
 
-    def write_lifetimes(self, ):
+    def write_lifetimes(self):
         if not self._metadata[self._trading_calendar.name]['bars_written']:
             raise ClickHouseWriteError('Bars data table have not been initialized')
 
@@ -437,8 +407,9 @@ class ClickHouseMinuteBarWriter(object):
 
     def flush(self):
         # over-write metadata
-        with open(self._metadata_file.path, 'w') as f:
-            json.dump(self._metadata, f)
+        # with open(self._metadata_file.path, 'w') as f:
+        #     json.dump(self._metadata, f)
+        pass
 
     def __enter__(self):
         return self

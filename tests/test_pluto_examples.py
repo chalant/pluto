@@ -38,7 +38,7 @@ from pluto.control.controllable import running_behavior
 from pluto.control.loop import simulation_loop
 
 from pluto.data import caching
-from pluto.data import data_source as ds
+from pluto.data.data_sources import data_source as ds
 from pluto.data.bundles import test as tb
 from pluto.data.universes import core as uni_core
 
