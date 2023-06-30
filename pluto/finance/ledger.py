@@ -84,12 +84,8 @@ class Ledger(object):
             account.accrued_interest = 0.0
             account.buying_power = np.inf
             account.equity_with_loan = portfolio_value
-            account.total_positions_value = (
-                    portfolio_value - portfolio.cash
-            )
-            account.total_positions_exposure = (
-                portfolio.positions_exposure
-            )
+            account.total_positions_value = (portfolio_value - portfolio.cash)
+            account.total_positions_exposure = portfolio.positions_exposure
             account.regt_equity = portfolio.cash
             account.regt_margin = np.inf
             account.initial_margin_requirement = 0.0
@@ -373,22 +369,16 @@ class Ledger(object):
             cash_dividends = adjustment_reader.get_dividends_with_ex_date(
                 held_sids,
                 next_session,
-                asset_finder
-            )
+                asset_finder)
             stock_dividends = (
                 adjustment_reader.get_stock_dividends_with_ex_date(
                     held_sids,
                     next_session,
-                    asset_finder
-                )
-            )
+                    asset_finder))
 
             # Earning a dividend just marks that we need to get paid out on
             # the dividend's pay-date. This does not affect our cash yet.
-            position_tracker.earn_dividends(
-                cash_dividends,
-                stock_dividends,
-            )
+            position_tracker.earn_dividends(cash_dividends, stock_dividends,)
 
         # Pay out the dividends whose pay-date is the next session. This does
         # affect out cash.

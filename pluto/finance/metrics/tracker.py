@@ -26,22 +26,17 @@ class MetricsTracker(object):
         """
         # self._benchmark_source = benchmark_source
         self._ledger = ledger_
-
         # self._returns_tracker = returns.ReturnsTracker(
         #     self._ledger,
         #     look_back)
 
         self._first_open_session = None
-
         self._capital_base = capital
         self._data_frequency = data_frequency
         self._emission_rate = emission_rate
-
         self._metrics = mtr.pluto_metrics()
-
         self._first_session = start_dt
         self._last_sync = None
-
         for metric in self._metrics:
             metric.initialization(
                 first_session=start_dt,

@@ -110,6 +110,9 @@ class StrategyManager(brk_rpc.BrokerServicer):
     @service_access.framework
     @service_access.per_session
     def PlaceOrders(self, request_iterator, session_id):
+        # todo: instead of using a locking mechanism for the strategy manager, we should have multiple
+        #  channels, one per strategy, where they can write there states.
+
         # broker = self._broker
         # todo: we receive a single batch of orders per session that contains
         #  the process id

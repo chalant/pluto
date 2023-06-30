@@ -226,7 +226,7 @@ class ClickHouseDailyBarReader(session_bars.CurrencyAwareSessionBarReader):
         ------
         NoDataOnDate
             If the given dt is not a valid market minute (in minute mode) or
-            session (in daily mode) according to this reader's tradingcalendar.
+            session (in daily mode) according to this reader's trading calendar.
         """
 
         clt = self._client
