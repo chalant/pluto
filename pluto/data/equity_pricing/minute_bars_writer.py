@@ -27,7 +27,6 @@ _GET_ALL_SIDS_AND_DT_DAILY = '''
     SELECT sid, dt FROM daily_bars ORDER BY (sid, dt)
 '''
 
-
 def daily_bar_generator(
         sessions: pd.DatetimeIndex,
         trading_calendar: trading_calendars.TradingCalendar,
@@ -218,46 +217,37 @@ class ClickHouseMinuteBarWriter(object):
 
         # remove invalid minutes
         # drops elements that are in dts but not in minutes
-        to_drop = dts.difference(minutes)
-        index_to_drop = dts.asof_locs(to_drop, np.array([True] * len(dts)))
-        dts = dts.drop(to_drop)
-
-        # minutes to skip
-        sl = dts.slice_locs(minutes[0], minutes[-1])
-
-        # dts = dts[sl[0]:sl[1]]
-        # is_in = minutes.isin(dts)
+        # to_drop = dts.difference(minutes)
+        # index_to_drop = dts.asof_locs(to_drop, np.array([True] * len(dts)))
+        # dts = dts.drop(to_drop)
         #
-        # # todo: don't store missing data between minutes.
+        # # minutes to skip
+        # sl = dts.slice_locs(minutes[0], minutes[-1])
         #
-        # # fill any missing minutes
-        # extended = dts.union(minutes)
+        # # dts = dts[sl[0]:sl[1]]
+        # # is_in = minutes.isin(dts)
+        # #
+        # # # todo: don't store missing data between minutes.
+        # #
+        # # # fill any missing minutes
+        # # extended = dts.union(minutes)
+        #
+        # # drop invalid data
+        # opens = np.delete(cols['open'], index_to_drop)
+        # highs = np.delete(cols['high'], index_to_drop)
+        # lows = np.delete(cols['low'], index_to_drop)
+        # closes = np.delete(cols['close'], index_to_drop)
+        # volumes = np.delete(cols['volume'], index_to_drop)
 
-        # drop invalid data
-        opens = np.delete(cols['open'], index_to_drop)
-        highs = np.delete(cols['high'], index_to_drop)
-        lows = np.delete(cols['low'], index_to_drop)
-        closes = np.delete(cols['close'], index_to_drop)
-        volumes = np.delete(cols['volume'], index_to_drop)
+        opens = cols['open']
+        highs = cols['high']
+        lows = cols['low']
+        closes = cols['close']
+        volumes = cols['volume']
 
         def data_generator():
             i = 0
-
             for dt in dts:
-                # skipped minutes have no data...
-                # if not has:
-                #     yield {
-                #         'open': 0,
-                #         'high': 0,
-                #         'low': 0,
-                #         'close': 0,
-                #         'volume': 0,
-                #         'sid': sid,
-                #         'dt': dt
-                #     }
-                # else:
-
-                # if has:
                 yield {
                     'open': self._convert_to_int(opens[i]),
                     'high': self._convert_to_int(highs[i]),

@@ -12,9 +12,9 @@ from zipline.protocol import Position
 class AbstractDataSource(abc.ABC):
     @abc.abstractmethod
     def get_last_sale_prices(self,
+                             ts,
                              targets: typing.List[
                                 typing.Tuple[
-                                    pandas.Timestamp,
                                     pandas.Timestamp,
                                     str,
                                     typing.List[Position]]],
@@ -33,9 +33,8 @@ class SimulationDataSource(AbstractDataSource):
         self._data_portals = {}
         self._data_frequency = data_frequency
 
-    def get_last_sale_prices(self, targets: typing.List[
+    def get_last_sale_prices(self, ts, targets: typing.List[
         typing.Tuple[
-            pandas.Timestamp,
             pandas.Timestamp,
             str,
             typing.List[Position]]],
@@ -45,7 +44,7 @@ class SimulationDataSource(AbstractDataSource):
         res = collections.defaultdict(list)
         data_frequency = self._data_frequency
 
-        for ts, cts, cal, positions in targets:
+        for cts, cal, positions in targets:
             portal = dp[cal]
 
             for position in positions:

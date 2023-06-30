@@ -50,37 +50,8 @@ exchanges = sa.Table(
     sa.Column('currency', sa.Text, nullable=False)
 )
 
-calendars = sa.Table(
-    'calendars',
-    metadata,
-    sa.Column(
-        'calendar_name',
-        sa.Text,
-        unique=True,
-        nullable=True,
-        primary_key=True),
-    sa.Column(
-        'exchange',
-        sa.Text,
-        sa.ForeignKey(exchanges.c.exchange)))
-
-asset_types = sa.Table(
-    'asset_types',
-    sa.Column(
-        'asset_type',
-        sa.Text,
-        unique=True,
-        nullable=False,
-        primary_key=True)
-)
-
-exchange_asset_types = sa.Table(
-    'exchange_asset_types',
-    sa.Column('asset_type', sa.Text, sa.ForeignKey(asset_types.c.asset_type)),
-    sa.Column('exchange', sa.Text, sa.ForeignKey(exchanges.c.exchange)))
-
-equity_assets = sa.Table(
-    'equity_assets',
+equities = sa.Table(
+    'equities',
     metadata,
     sa.Column(
         'sid',
@@ -89,8 +60,11 @@ equity_assets = sa.Table(
         nullable=False,
         primary_key=True,
     ),
-    sa.Column('symbol', sa.Text, unique=True, nullable=False),
-    sa.Column('asset_type', sa.Text, sa.ForeignKey(asset_types.c.asset_type)),
+    sa.Column('asset_name', sa.Text),
+    sa.Column('start_date', sa.Integer, default=0, nullable=False),
+    sa.Column('end_date', sa.Integer, nullable=False),
+    sa.Column('first_traded', sa.Integer),
+    sa.Column('auto_close_date', sa.Integer),
     sa.Column('exchange', sa.Text, sa.ForeignKey(exchanges.c.exchange)),
 )
 
@@ -98,27 +72,7 @@ equity_data_frequencies = sa.Table(
     'equity_data_frequencies',
     metadata,
     sa.Column('data_frequency', sa.Text, sa.ForeignKey(data_frequencies.c.data_frequency)),
-    sa.Column('sid', sa.Text, sa.ForeignKey(equity_assets.c.sid)),
-)
-
-# this is used for tracking symbol changes
-equity_asset_symbols = sa.Table(
-    'equity_asset_symbols',
-    sa.Column('sid', sa.Integer, sa.ForeignKey(equity_assets.c.sid)),
-    sa.Column('symbol', sa.Text, nullable=False),
-    sa.Column('as_of', sa.Integer, nullable=False)
-)
-
-equities = sa.Table(
-    'equities',
-    metadata,
-    sa.Column('sid', sa.Integer, sa.ForeignKey(equity_assets.c.sid)),
-    sa.Column('asset_name', sa.Text),
-    sa.Column('start_date', sa.Integer, default=0, nullable=False),
-    sa.Column('end_date', sa.Integer, nullable=False),
-    sa.Column('first_traded', sa.Integer),
-    sa.Column('auto_close_date', sa.Integer),
-    sa.Column('exchange', sa.Text, sa.ForeignKey(exchanges.c.exchange)),
+    sa.Column('sid', sa.Text, sa.ForeignKey(equities.c.sid)),
 )
 
 equity_symbol_mappings = sa.Table(
