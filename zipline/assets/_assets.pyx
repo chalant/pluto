@@ -300,7 +300,7 @@ cdef class Equity(Asset):
             return self.asset_name
 
 cdef class FractionalEquity(Equity):
-    
+    pass
 
 @cython.embedsignature(True)
 cdef class Future(Asset):
