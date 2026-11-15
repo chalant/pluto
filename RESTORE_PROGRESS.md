@@ -39,12 +39,21 @@ No `~/.pluto_config.toml` is needed for the in-memory path (see M1).
   - [x] `test_utils.StrategyTester.run(..., controller_behavior, capital)`; the test builds the behaviour with the data portal
   - [x] `set_algo_instance` in `Controllable.before_trading_starts` and `bar`
   - [x] evidence: 4/5 pass (Blocking); same 4/5 with `NonBlocking` (worker thread); without the `set_algo_instance` fix NonBlocking raises `RuntimeError: pluto api method set_watchlist must be called during a run.` and hangs (timeout 120 s)
-- [ ] **M3** alignment: 5/5 vs stored results; `momentum_pipeline` alpha root cause; Zipline-vs-Pluto oracle
+- [x] **M3** alignment: 5/5 vs stored results; `momentum_pipeline` alpha root cause; Zipline-vs-Pluto oracle
   - [x] alpha root cause found (empyrical version, see Evidence) → env pinned to `empyrical==0.5.2`
   - [x] zipline's own run path restored (needed for the oracle), 6/6 zipline examples equal the stored results on every numeric column
   - [x] 5/5 Pluto examples pass (`pytest tests/test_pluto_examples.py`, 6 consecutive runs + 15 runs with PYTHONHASHSEED=1..15)
   - [x] intermittent failure explained: fixed `~/pluto_tmp` kept the strategy store of an interrupted run → test now uses fresh temp dirs
-  - [ ] oracle test `tests/test_pluto_zipline_oracle.py`
+  - [x] oracle `tests/test_pluto_zipline_oracle.py`: 5/5 pass, 37 common columns per example. On the way it found
+    and the branch fixes: placed orders missing from Pluto's daily `orders` (controller ledger never got
+    `process_order` at placement), cancelled orders with `dt=None` (controller blotter date never set),
+    universe cache shared across root directories (stale readers → zipline loader tried a download).
+    Not reconciled, compared at session level: `period_open` (Pluto stamps the session label, zipline the
+    execution open; the execution-open code is commented out in Pluto's trackers). Not comparable:
+    recorded variables (Pluto's example ports have `record()` commented out; no recorded-vars channel on
+    the controller side). Reference used: the fork's own zipline (`zipline/`), restored; upstream
+    `bbf92210` was not needed because the fork's zipline reproduces the stored results exactly.
+  - [x] `pytest tests/test_pluto_examples.py tests/test_pluto_zipline_oracle.py`: 10 passed in one session
 - [ ] **M4** Pluto test files classified / passing
 - [ ] **M5** isolation test (no `gui`/`styx`), lazy GUI import in `__main__.py`, README, fresh-clone run, diff summary
 
