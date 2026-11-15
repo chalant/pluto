@@ -269,7 +269,7 @@ class PNL(object):
         self._previous_pnl = 0.0
 
     def start_of_session(self, ledger, session, data_portal):
-        self._previous_pnl = ledger.portfolio.pnlself._previous_pnl = ledger.portfolio.pnl
+        self._previous_pnl = ledger.portfolio.pnl
 
     def _end_of_period(self, field, packet, ledger):
         pnl = ledger.portfolio.pnl
