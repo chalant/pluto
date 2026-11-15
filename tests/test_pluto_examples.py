@@ -228,7 +228,7 @@ def _run(dir_, example_name, expected_perf, environ_):
         uni.benchmark,
         150)
 
-    tester.run(
+    return tester.run(
         loop,
         expected_perf,
         benchmark_source,

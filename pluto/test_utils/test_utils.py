@@ -164,13 +164,18 @@ class TestMetricsTracker(object):
         if self._session_idx < self._num_sessions:
             self.end_of_bar(ts, calendar_name, ledger)
 
-    def validate(self):
+    def frame(self):
+        """The daily packets as a DataFrame indexed by period_close."""
         daily_perfs = self._daily_perfs
-        expected_perf = self._expected_df
 
         daily_dts = pd.DatetimeIndex([p['period_close'] for p in daily_perfs], tz='UTC')
 
-        daily_stats = pd.DataFrame(daily_perfs, index=daily_dts)[examples._cols_to_check]
+        return pd.DataFrame(daily_perfs, index=daily_dts)
+
+    def validate(self):
+        expected_perf = self._expected_df
+
+        daily_stats = self.frame()[examples._cols_to_check]
 
         errors = 0
         tests = 0
@@ -248,6 +253,8 @@ class StrategyTester(object):
 
         # validate results
         tracker.validate()
+
+        return tracker
 
 
 class TestClient(object):
