@@ -34,11 +34,11 @@ from pluto.finance.markets import market_simulation
 
 from pluto.control.processes import in_memory
 from pluto.control.controller import process_manager
+from pluto.control.controller import simulation_behavior
 from pluto.control.controllable import running_behavior
 from pluto.control.loop import simulation_loop
 
 from pluto.data import caching
-from pluto.data.data_sources import data_source as ds
 from pluto.data.bundles import test as tb
 from pluto.data.universes import core as uni_core
 
@@ -156,7 +156,7 @@ def _run(dir_, example_name, expected_perf, environ_):
     restrictions = asset_restrictions.NoRestrictions()
 
     market = market_simulation.MarketSimulation(eng_stp, stp.data_frequency)
-    data_source = ds.SimulationDataSource(stp.data_frequency)
+    controller_behavior = simulation_behavior.SimulationControllerBehavior(stp.data_frequency)
 
     loop = simulation_loop.SimulationLoop(
         stp.start,
@@ -186,7 +186,7 @@ def _run(dir_, example_name, expected_perf, environ_):
 
     market.add_bar_data(dp, restrictions)
 
-    data_source.add_data_portal(calendar_name, dp)
+    controller_behavior.add_data_portal(calendar_name, dp)
 
     manager.add_data_portal(calendar_name, dp)
     manager.add_ledger(calendar_name)
@@ -233,7 +233,7 @@ def _run(dir_, example_name, expected_perf, environ_):
         benchmark_source,
         sessions,
         market,
-        data_source,
+        controller_behavior,
         stp.capital)
 
     # capital = 1e7
