@@ -49,9 +49,12 @@ EOF
 # (zipline/country.py raises KeyError); tqdm, testfixtures, toml and
 # clickhouse-driver are imported by the core path but not declared in
 # etc/requirements.txt.
+# empyrical 0.5.2: the stored expected results (alpha column) were computed with
+# the linear annualisation mean(alpha)*252 of empyrical <= 0.5.2; 0.5.3+
+# compounds ((1+mean)**252 - 1). See RESTORE_PROGRESS.md (M3).
 "$ENV_DIR/bin/pip" install -c "$CONSTRAINTS" \
     alembic==1.7.7 mako==1.1.6 iso3166==1.0.1 iso4217 \
-    trading-calendars==1.11.1 empyrical==0.5.5 python-interface==1.6.1 \
+    trading-calendars==1.11.1 empyrical==0.5.2 python-interface==1.6.1 \
     tqdm==4.64.1 testfixtures==6.18.5 clickhouse-driver==0.2.5 ntplib \
     nose==1.3.7 nose-parameterized==0.6.0 parameterized==0.8.1 mock responses \
     pytest==7.0.1 "matplotlib<3.4"
