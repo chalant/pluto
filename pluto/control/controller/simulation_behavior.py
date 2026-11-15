@@ -57,10 +57,17 @@ class SimulationControllerBehavior(AbstractControllerBehavior):
                     res[cal].append((asset.sid, price))
         return res
 
-    def update_watchlist(self, manager: pm.StrategyManager):
+    # in simulation all the data is already in the bundle: nothing to ingest.
+    def update_watchlist(self, ts, manager: pm.StrategyManager):
         pass
 
     def update_data(self, ts, manager, signals):
+        pass
+
+    def ingest_watchlist_data(self, ts, manager, signals):
+        pass
+
+    def ingest_all_data(self, ts, manager, signals):
         pass
 
     def add_data_portal(self, calendar_name: str, dp: data_portal.DataPortal):

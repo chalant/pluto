@@ -12,7 +12,7 @@ from pluto import examples
 from pluto.control.loop import simulation_loop
 from pluto.control.processes import processes
 from pluto.control.controller import controller
-from pluto.control.controller import behavior
+from pluto.control.controller import behavior as bv
 
 from pluto.finance import metrics as mtr
 
@@ -229,7 +229,7 @@ class StrategyTester(object):
             benchmark_source,
             trading_sessions,
             market,
-            data_source,
+            controller_behavior: bv.AbstractControllerBehavior,
             capital_base):
 
         tracker = TestMetricsTracker(
@@ -243,8 +243,7 @@ class StrategyTester(object):
                 self._process_manager,
                 market,
                 tracker,
-                data_source,
-                behavior.SimulationControllerBehavior())):
+                controller_behavior)):
             pass
 
         # validate results
