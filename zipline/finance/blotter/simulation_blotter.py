@@ -93,7 +93,7 @@ class SimulationBlotter(Blotter):
                    current_dt=self.current_dt)
 
     @expect_types(asset=Asset)
-    def order(self, asset, amount, style, session_id, order_id=None):
+    def order(self, asset, amount, style, session_id='', order_id=None):
         """Place an order.
 
         Parameters
@@ -106,6 +106,9 @@ class SimulationBlotter(Blotter):
             this is the number of shares to sell or short.
         style : zipline.finance.execution.ExecutionStyle
             The execution style for the order.
+        session_id : str, optional
+            Suffix of the order id (pluto strategy session). Empty when
+            zipline's own TradingAlgorithm places the order.
         order_id : str, optional
             The unique identifier for this order.
 
@@ -146,7 +149,7 @@ class SimulationBlotter(Blotter):
             amount=amount,
             stop=style.get_stop_price(is_buy),
             limit=style.get_limit_price(is_buy),
-            id=order_id
+            id_=order_id
         )
 
         self.open_orders[order.asset].append(order)
