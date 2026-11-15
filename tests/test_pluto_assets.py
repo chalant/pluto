@@ -95,6 +95,10 @@ from zipline.testing.fixtures import (
 )
 from zipline.utils.range import range
 
+# helper used by test_lookup_generic, left behind when this file was copied
+# from tests/test_assets.py
+from tests.test_assets import build_lookup_generic_cases
+
 
 Case = namedtuple('Case', 'finder inputs as_of country_code expected')
 
