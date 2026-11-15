@@ -656,7 +656,7 @@ class Controllable(ABC):
         self._current_dt = dt
         algo.on_dt_changed(dt)
 
-        # api_support.set_algo_instance(algo)
+        api_support.set_algo_instance(algo)
         self._run_state.before_trading_starts(algo, self._current_data)
 
     def bar(self, dt):
@@ -665,6 +665,7 @@ class Controllable(ABC):
 
         algo = self._algo
         algo.on_dt_changed(dt)
+        api_support.set_algo_instance(algo)
         blotter = self._blotter
 
         # capital_changes = self._calculate_minute_capital_changes(
