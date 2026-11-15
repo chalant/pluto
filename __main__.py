@@ -10,14 +10,9 @@ import sys
 
 from os import path
 
-from PyQt6 import QtWidgets
-
 import logbook
 
 import click
-
-from gui import backtesting
-from gui import qtlogger
 
 from dev import strategy_store
 
@@ -61,6 +56,11 @@ def backtester(script_name):
     #  files.
 
     # logbook.StderrHandler()
+
+    # the GUI (PyQt6, gui/) is only needed by this command
+    from PyQt6 import QtWidgets
+    from gui import backtesting
+    from gui import qtlogger
 
     app = QtWidgets.QApplication(sys.argv)
 
