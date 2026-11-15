@@ -281,15 +281,19 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # todo: send orders to the broker service...
 
         blotters = self._blotters
+        ledgers = self._ledgers
         aliases = self._aliases
 
         for order in orders:
             # fixme: find a better way of getting calendar names (from disk ?)
-            blotter = blotters[aliases[order.asset.exchange]]
+            calendar_name = aliases[order.asset.exchange]
+            blotter = blotters[calendar_name]
 
             blotter.open_orders[order.asset].append(order)
             blotter.orders[order.id] = order
-            blotter.new_orders.append(order)
+            # record the order in the period it was placed (as zipline's
+            # AlgorithmSimulator does with metrics_tracker.process_order)
+            ledgers[calendar_name].process_order(order)
 
     def get_data_portal(self, calendar_name):
         return self._data_portals[calendar_name]

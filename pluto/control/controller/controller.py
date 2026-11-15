@@ -70,6 +70,9 @@ class Controller(object):
 		for cts, c_evt, calendar in signals:
 			calendar_name = calendar.name
 			market.set_calendar_timestamp(calendar_name, cts)
+			# as zipline's algo.on_dt_changed: orders the blotter cancels
+			# (expired assets, cancel policies) get stamped with this time
+			strategy_manager.get_blotter(calendar_name).set_date(cts)
 
 			# bar events
 			if c_evt == BAR or c_evt == TRADE_END:
