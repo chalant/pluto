@@ -2,6 +2,7 @@ import unittest
 import contextlib2 as ctx
 from os import path, environ
 import tarfile
+import tempfile
 import logging
 from concurrent import futures
 
@@ -305,7 +306,10 @@ class PlutoExamplesTests(unittest.TestCase):
         cls._thread_pool = stack.enter_context(
             futures.ThreadPoolExecutor(10))
 
-        root_dir = tdr.TempDirectory(dsp.create_directory(path.expanduser('~/pluto_tmp')))
+        # fresh directories each run: a fixed path (~/pluto_tmp) kept the
+        # strategy store of an interrupted run and the next run failed with
+        # FileExistsError: Strategy of name ... already exists
+        root_dir = tdr.TempDirectory(dsp.create_directory(tempfile.mkdtemp(prefix='pluto_tmp_')))
 
         # ingest test bundle
         # test_bundle = stack.enter_context(tb.ClickHouseTestBundle(
@@ -322,8 +326,7 @@ class PlutoExamplesTests(unittest.TestCase):
 
         # bundles.register('test', lambda *args: None)
 
-        cls._zpl_tempdir = dir_ = stack.enter_context(
-            core.tmp_dir(path=path.expanduser('~/tmp/zipline')))
+        cls._zpl_tempdir = dir_ = stack.enter_context(core.tmp_dir())
 
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path)
