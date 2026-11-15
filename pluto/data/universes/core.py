@@ -291,13 +291,16 @@ class TestUniverse(AbstractUniverse):
 
 def with_cache(cache):
     def decorator(fn):
-        def wrapper(name, *args, **kwargs):
-            if name not in cache:
-                uni = fn(name, *args, **kwargs)
-                cache[name] = uni
+        def wrapper(name, root_dir, *args, **kwargs):
+            # one universe per (name, root directory): a universe keeps the
+            # readers and environ of the directory it was loaded from.
+            key = (name, getattr(root_dir, 'path', root_dir))
+            if key not in cache:
+                uni = fn(name, root_dir, *args, **kwargs)
+                cache[key] = uni
                 return uni
 
-            return cache[name]
+            return cache[key]
 
         return wrapper
     return decorator
