@@ -414,7 +414,8 @@ class TradingAlgorithm(object):
         if get_loader is not None:
             self.engine = SimplePipelineEngine(
                 get_loader,
-                self.asset_finder,
+                # the fork's engine reads `.asset_finder` from this object
+                self,
                 self.default_pipeline_domain(self.trading_calendar),
             )
         else:

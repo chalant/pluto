@@ -190,7 +190,12 @@ class EquityCalendarDomain(Domain):
 
     @lazyval
     def calendar(self):
-        return calendar_utils.get_calendar(self.calendar_name)
+        try:
+            # pluto caches the calendar instance it runs on
+            return calendar_utils.get_calendar(self.calendar_name)
+        except RuntimeError:
+            # nothing cached (zipline's own run path): upstream behaviour
+            return get_calendar(self.calendar_name)
 
     def all_sessions(self):
         return self.calendar.all_sessions

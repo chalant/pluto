@@ -167,7 +167,7 @@ class AlgorithmSimulator(object):
             # handle any splits that impact any positions or any open orders.
             assets_we_care_about = (
                     viewkeys(metrics_tracker.positions) |
-                    viewkeys(algo.blotter._open_orders)
+                    viewkeys(algo.blotter.open_orders)
             )
 
             if assets_we_care_about:
@@ -225,7 +225,7 @@ class AlgorithmSimulator(object):
                 elif action == BEFORE_TRADING_START_BAR:
                     self.simulation_dt = dt
                     algo.on_dt_changed(dt)
-                    algo.before_trading_start(self.current_data)
+                    algo.before_trading_start(algo, self.current_data)
                 elif action == MINUTE_END:
                     minute_msg = self._get_minute_message(
                         dt,
@@ -271,7 +271,7 @@ class AlgorithmSimulator(object):
         # would not be processed until the first bar of the next day.
         blotter = algo.blotter
         assets_to_cancel = [
-            asset for asset in blotter._open_orders
+            asset for asset in blotter.open_orders
             if past_auto_close_date(asset)
         ]
         for asset in assets_to_cancel:

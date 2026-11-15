@@ -17,6 +17,7 @@ from zipline.utils.compat import wraps
 from zipline.utils.algo_instance import get_algo_instance, set_algo_instance
 
 from pluto import api
+import zipline.api as zipline_api
 
 
 class ZiplineAPI(object):
@@ -55,9 +56,11 @@ def api_method(f):
                 % f.__name__
             )
         return getattr(algo_instance, f.__name__)(*args, **kwargs)
-    # Add functor to pluto.api
-    setattr(api, f.__name__, wrapped)
-    api.__all__.append(f.__name__)
+    # Add functor to pluto.api, and to zipline.api so that zipline's own
+    # run path (zipline/examples, run_algorithm) keeps working
+    for module in (api, zipline_api):
+        setattr(module, f.__name__, wrapped)
+        module.__all__.append(f.__name__)
     f.is_api_method = True
     return f
 
