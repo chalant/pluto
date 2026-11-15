@@ -58,12 +58,14 @@ No `~/.pluto_config.toml` is needed for the in-memory path (see M1).
   - [x] `pytest tests/test_pluto_examples.py tests/test_pluto_zipline_oracle.py`: 10 passed in one session
 - [x] **M4** Pluto test files classified / passing (table in Evidence); Pluto suite: **35 passed**
   (`tests/test_pluto_examples.py tests/test_pluto_zipline_oracle.py tests/test_pluto_isolation.py tests/test_pluto_assets.py`)
-- [ ] **M5** hygiene and docs
+- [x] **M5** hygiene and docs
   - [x] isolation test `tests/test_pluto_isolation.py` (gui, styx, PyQt6, PySide6 blocked in a child interpreter): pass
   - [x] `__main__.py` imports PyQt6/gui only in `backtester`; `install-examples` ran with gui/styx/PyQt6 blocked and no config file
   - [x] `dev/README.md` (the restored path, environment, tests, scope)
-  - [ ] fresh-clone run (`git clone --branch restore-sim`, `dev/setup_env.sh` into a new env, build, tests)
-  - [ ] `git diff origin/dev --stat` with one line per file
+  - [x] fresh-clone run: `git clone --branch restore-sim` at `18821305` into a scratch dir, `HOME=<scratch>
+    dev/setup_env.sh <scratch>/env36` (rc=0, 1 min 18 s, 18 extensions built), then the Pluto suite:
+    **35 passed** in 36.6 s; `git status` of the clone clean afterwards (build artefacts ignored). Scratch deleted.
+  - [x] `git diff origin/dev --stat` summary (below)
 
 ## Evidence
 
@@ -160,7 +162,38 @@ pipeline engine takes a controllable), `TypeError: __init__() missing ... 'sessi
   (and ClickHouse writers/readers) at module level. No server is contacted on the
   in-memory path. Making it lazy would mean editing the ClickHouse data layer (out of scope).
 
+## Diff against `origin/dev` (25 files, +668 / −48)
+
+| File | Why |
+|---|---|
+| `zipline/assets/_assets.pyx` | `pass` in the empty `FractionalEquity` class: the Cython build failed |
+| `tests/__init__.py` | dropped `from zipline import setup, teardown` (removed by the fork): no test could be collected |
+| `pluto/configuration.py` | config file optional, `PLUTO_CONFIG` override: import failed without `~/.pluto_config.toml` |
+| `pluto/control/controller/behavior.py` | abstract behaviour declares the hooks `Controller.clock_update` calls |
+| `pluto/control/controller/simulation_behavior.py` | simulation implements those hooks (no-ops) |
+| `pluto/test_utils/test_utils.py` | `StrategyTester.run` takes the behaviour, 4-arg `Controller`; `frame()`; returns the tracker |
+| `tests/test_pluto_examples.py` | builds `SimulationControllerBehavior`; fresh temp dirs; `_run` returns the tracker |
+| `pluto/control/controllable/controllable.py` | `set_algo_instance` in `before_trading_starts` and `bar` (thread-local API instance) |
+| `pluto/control/controller/process_manager.py` | placed orders recorded in the controller ledger (were missing from `orders`) |
+| `pluto/control/controller/controller.py` | controller blotter date set per event (cancelled orders had `dt=None`) |
+| `pluto/data/universes/core.py` | universe cache keyed by (name, root directory) (stale readers across directories) |
+| `pluto/assets/assets.py` | removed the empty `AssetFinder.__init__` (ClickHouse WIP) that broke `zipline.data.bundles.load` |
+| `zipline/utils/api_support.py` | api methods also registered on `zipline.api` (zipline examples could not import) |
+| `zipline/gens/tradesimulation.py` | `blotter.open_orders`, `before_trading_start(algo, data)` (fork signatures) |
+| `zipline/finance/blotter/simulation_blotter.py` | `session_id=''` default, `Order(id_=...)` (fork's renamed parameter) |
+| `zipline/algorithm.py` | the fork's pipeline engine gets an object with `.asset_finder` (the algorithm) |
+| `zipline/pipeline/domain.py` | calendar falls back to `trading_calendars.get_calendar` when Pluto cached none |
+| `zipline/finance/metrics/metric.py` | pasted duplicate in `PNL.start_of_session` |
+| `__main__.py` | PyQt6 and `gui` imported only in the `backtester` command |
+| `tests/test_pluto_zipline_oracle.py` | new: Zipline-vs-Pluto oracle |
+| `tests/test_pluto_isolation.py` | new: path runs with gui/styx/PyQt6 blocked |
+| `tests/test_pluto_assets.py` | import of the missing helper `build_lookup_generic_cases` |
+| `dev/setup_env.sh` | new: reproducible environment (pins) and build |
+| `dev/README.md` | new: the restored path for the next person |
+| `RESTORE_PROGRESS.md` | this file |
+
 ## Next step
 
-M5: fresh clone of `restore-sim` into a scratch dir, `dev/setup_env.sh` into a new env, run the
-Pluto suite; then the `git diff origin/dev --stat` summary below; then the final report.
+All milestones done. Open items for the owner: re-baseline or keep `empyrical==0.5.2`; `period_open`
+convention (session label vs execution open); recorded variables on the Pluto side; the out-of-scope
+areas listed in `dev/README.md`.
