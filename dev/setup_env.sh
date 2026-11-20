@@ -7,7 +7,7 @@
 # Uses a static micromamba binary (downloaded next to ENV_DIR, no system
 # packages, no root) for the compiled scientific stack from conda-forge, then
 # pip for the pure-python packages. Versions are the ones the test path was
-# verified with (see RESTORE_PROGRESS.md). Set WITH_GUI=1 to also install PyQt6.
+# verified with (see RESTORE_PROGRESS.md).
 #
 # Why Python 3.6: etc/requirements.txt pins pandas<=0.22 and the stored expected
 # results (tests/resources/example_data.tar.gz) exist only for pandas 0.18.1,
@@ -46,22 +46,17 @@ grpcio==1.33.2
 EOF
 
 # alembic 1.8 and mako >= 1.2 need python >= 3.7; iso3166 >= 2 renamed TURKEY
-# (zipline/country.py raises KeyError); tqdm, testfixtures, toml and
-# clickhouse-driver are imported by the core path but not declared in
-# etc/requirements.txt.
+# (zipline/country.py raises KeyError); tqdm, testfixtures and toml are
+# imported by the core path but not declared in etc/requirements.txt.
 # empyrical 0.5.2: the stored expected results (alpha column) were computed with
 # the linear annualisation mean(alpha)*252 of empyrical <= 0.5.2; 0.5.3+
 # compounds ((1+mean)**252 - 1). See RESTORE_PROGRESS.md (M3).
 "$ENV_DIR/bin/pip" install -c "$CONSTRAINTS" \
     alembic==1.7.7 mako==1.1.6 iso3166==1.0.1 iso4217 \
     trading-calendars==1.11.1 empyrical==0.5.2 python-interface==1.6.1 \
-    tqdm==4.64.1 testfixtures==6.18.5 clickhouse-driver==0.2.5 ntplib \
+    tqdm==4.64.1 testfixtures==6.18.5 ntplib \
     nose==1.3.7 nose-parameterized==0.6.0 parameterized==0.8.1 mock responses \
     pytest==7.0.1 "matplotlib<3.4"
-
-if [ "${WITH_GUI:-0}" = "1" ]; then
-    "$ENV_DIR/bin/pip" install -c "$CONSTRAINTS" PyQt6==6.2.3 PyQt6-Charts==6.2.0
-fi
 
 (cd "$REPO" && "$ENV_DIR/bin/python" setup.py build_ext --inplace -j 8)
 echo "environment ready: $ENV_DIR"

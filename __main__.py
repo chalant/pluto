@@ -6,11 +6,7 @@
 '''
 
 
-import sys
-
 from os import path
-
-import logbook
 
 import click
 
@@ -46,41 +42,6 @@ def install_examples():
     test.TestBundle(root_dir).ingest()
 
     print("Done")
-
-
-@main.command()
-@click.argument('script_name')
-def backtester(script_name):
-
-    # todo: need to walk down the directory tree to get already existing
-    #  files.
-
-    # logbook.StderrHandler()
-
-    # the GUI (PyQt6, gui/) is only needed by this command
-    from PyQt6 import QtWidgets
-    from gui import backtesting
-    from gui import qtlogger
-
-    app = QtWidgets.QApplication(sys.argv)
-
-    bk = backtesting.BackTesting(pluto_setup.create_directory(
-        path.expanduser('~/.pluto')),
-        script_name
-    )
-
-    text_emitter = qtlogger.Emitter()
-    text_emitter.text_written.connect(bk.logger.write)
-
-    logbook.StreamHandler(text_emitter).push_application()
-
-    bk.setMinimumWidth(1366)
-    bk.setMinimumHeight(768)
-
-    bk.setWindowTitle(script_name)
-
-    bk.show()
-    sys.exit(app.exec())
 
 
 @main.command()
