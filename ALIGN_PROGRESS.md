@@ -192,8 +192,7 @@ only in the field types). Left 32-bit (not on the compared path; owner item): `P
 ### F. Determinism
 
 Logs: `/home/yves/.cache/hades-pluto-dev/diag-align/det/`. Runs 1-6: 55 passed each.
-PYTHONHASHSEED 1-4: 55 passed each; seeds 5-10 were still running when the run budget ended
-(the summary file there has the final lines).
+PYTHONHASHSEED 1-10: 55 passed each (53-57 s).
 
 ## Owner items (design questions, not changed)
 
@@ -218,4 +217,4 @@ PYTHONHASHSEED 1-4: 55 passed each; seeds 5-10 were still running when the run b
 
 ## Next step
 
-All steps done. If continuing: confirm PYTHONHASHSEED 5-10 in the determinism logs; owner items above.
+All steps done; owner items above.
