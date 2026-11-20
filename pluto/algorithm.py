@@ -451,7 +451,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         br_stp = controllable.broker_setup
         current_data = controllable.current_data
 
-        style = self._convert_style(asset, amount)
+        style = self._convert_style(asset, amount, limit_price, stop_price, style)
 
         amount, can_order = br_stp.can_order(
             asset,
