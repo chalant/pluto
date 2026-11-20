@@ -312,11 +312,6 @@ class PlutoExamplesTests(unittest.TestCase):
         root_dir = tdr.TempDirectory(dsp.create_directory(tempfile.mkdtemp(prefix='pluto_tmp_')))
 
         # ingest test bundle
-        # test_bundle = stack.enter_context(tb.ClickHouseTestBundle(
-        #     root_dir,
-        #     caching.InMemoryCache()
-        # ))
-
         test_bundle = stack.enter_context(tb.TestBundle(root_dir))
 
         # ingest the test bundle

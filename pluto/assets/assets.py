@@ -6,13 +6,6 @@ from zipline.assets import asset_writer
 from zipline.assets import assets
 from zipline.utils.numpy_utils import as_column
 
-from pluto.data import utils
-
-_GET_ASSET_LIFETIMES = '''
-    SELECT * FROM lifetimes 
-    WHERE start_date >= %(start_date)s AND end_date <= %(end_date)s 
-'''
-
 
 class AssetDBWriter(asset_writer.AssetDBWriter):
     #todo: we need to recompute asset lifetimes each start of session
@@ -22,7 +15,6 @@ class AssetDBWriter(asset_writer.AssetDBWriter):
         #todo: append data to the asset_db_writer
         pass
 
-# todo: lifetimes are loaded from clickhouse database
 
 class AssetFinder(assets.AssetFinder):
     def lifetimes(self, dates, include_start_date, country_codes):
@@ -50,8 +42,6 @@ class AssetFinder(assets.AssetFinder):
         ).execute().fetchall()
         if results:
             sids, starts, ends = zip(*results)
-
-        # todo: load asset lifetimes from clickhouse database...
 
         sid = np.array(sids, dtype='i8')
         start = np.array(starts, dtype='f8')
