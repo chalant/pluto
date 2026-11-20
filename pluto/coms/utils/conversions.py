@@ -192,7 +192,7 @@ def to_zp_order(proto_order):
     stop = proto_order.stop
     limit = proto_order.limit
 
-    return Order(
+    order = Order(
         session_id=proto_order.session_id,
         dt=to_datetime(proto_order.dt),
         asset=to_zp_asset(proto_order.asset),
@@ -203,6 +203,9 @@ def to_zp_order(proto_order):
         commission=proto_order.commission,
         id_=proto_order.id
     )
+    # protocol.proto's Order.Status has zipline's ORDER_STATUS values
+    order.status = proto_order.status
+    return order
 
 
 def to_zp_transaction(proto_transaction):
@@ -329,6 +332,7 @@ def to_proto_order(zp_order):
         ),
         filled=zp_order['filled'],
         commission=zp_order['commission'],
+        status=zp_order['status'],
         id=zp_order['id']
     )
 

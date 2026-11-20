@@ -6,8 +6,8 @@ import "protos/assets.proto";
 
 message Transaction {
     Asset asset = 1;
-    float amount = 2;
+    double amount = 2;
     google.protobuf.Timestamp dt = 3;
-    float price = 4;
+    double price = 4;
     string order_id = 5;
 }

@@ -289,6 +289,19 @@ class StrategyManager(brk_rpc.BrokerServicer):
             calendar_name = aliases[order.asset.exchange]
             blotter = blotters[calendar_name]
 
+            if order.status == ORDER_STATUS.CANCELLED:
+                # a cancellation relayed by the strategy's blotter
+                # (cancel_order, cancel policy): cancel the controller's copy,
+                # as zipline's blotter.cancel; an order placed and cancelled
+                # in the same bar is only recorded.
+                if order.id in blotter.orders:
+                    blotter.cancel(order.id, relay_status=False)
+                    order = blotter.orders[order.id]
+                else:
+                    blotter.orders[order.id] = order
+                ledgers[calendar_name].process_order(order)
+                continue
+
             blotter.open_orders[order.asset].append(order)
             blotter.orders[order.id] = order
             # record the order in the period it was placed (as zipline's

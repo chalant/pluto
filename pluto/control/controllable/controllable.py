@@ -509,6 +509,9 @@ class Controllable(ABC):
         # sst.state = sst.out_session
         self._run_state = self._ready
         algo.set_pipeline_domain(dom)
+        # schedule_function binds its rules to this calendar (week_start,
+        # month_start... need one); it was only set on a live calendar update
+        algo.set_trading_calendar(calendar)
 
         api_support.set_algo_instance(algo)
         algo.on_dt_changed(start_dt)
@@ -677,6 +680,7 @@ class Controllable(ABC):
 
         # this is where we update everything (ledger etc.)
         closed_orders = []
+        commissions = []
 
         for order, transaction, commission in self._transactions:
             order.filled += transaction.amount
@@ -692,7 +696,7 @@ class Controllable(ABC):
             metrics_tracker.process_order(order)
 
             if commission > 0:
-                metrics_tracker.process_commission(
+                commissions.append(
                     {
                         'asset': order.asset,
                         'order': order,
@@ -702,8 +706,10 @@ class Controllable(ABC):
 
         # todo: add tax handling here!
 
-        # for commission in new_commissions:
-        #     metrics_tracker.process_commission(commission)
+        # all the transactions first, then all the commissions, as zipline's
+        # AlgorithmSimulator (the order changes the floating-point cash)
+        for commission in commissions:
+            metrics_tracker.process_commission(commission)
 
         blotter.prune_orders(closed_orders)
 
