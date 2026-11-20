@@ -1,6 +1,7 @@
-"""The in-memory simulation path must not depend on the packages that will be
-superseded (gui/, styx/) nor on the GUI toolkit. A child interpreter blocks them
-and runs the example backtests; it fails if any of them gets imported."""
+"""The in-memory simulation path must not import the third-party packages that
+only removed code needed (they may still be installed in an older environment).
+A child interpreter blocks them and runs the example backtests; it fails if any
+of them gets imported."""
 import os
 import subprocess
 import sys
@@ -10,7 +11,7 @@ _CHILD = r'''
 import sys
 import unittest
 
-BLOCKED = ('gui', 'styx', 'PyQt6', 'PySide6')
+BLOCKED = ('clickhouse_driver', 'PyQt6', 'PySide6')
 
 
 class Blocker(object):
@@ -37,7 +38,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class InMemoryPathIsolationTest(unittest.TestCase):
-    def test_examples_run_without_gui_and_styx(self):
+    def test_examples_run_without_removed_packages(self):
         env = dict(os.environ, PYTHONPATH=_ROOT)
         proc = subprocess.run(
             [sys.executable, '-c', _CHILD],

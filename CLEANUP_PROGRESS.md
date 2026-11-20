@@ -57,7 +57,12 @@ also a submodule or a module-level name of `m`; star imports accepted), and writ
   `sitecustomize.py` (`cleanup/noch/`, on `PYTHONPATH`) that makes `clickhouse_driver`, `PyQt6`, `PySide6` raise
   ImportError; importing `pluto.data.bundles.test`, `zipline.data.bundles.core`, `pluto.assets.assets`,
   `pluto.data.universes.core` under it loads none of them (`loaded: []`). Real absence: fresh environment (below).
-- [ ] mentions, docs, requirements, isolation test (commit), same checks
+- [x] mentions (commit "cleanup: isolation test and dev/README.md without the removed components"):
+  `tests/test_pluto_isolation.py` now blocks only `clickhouse_driver`, `PyQt6`, `PySide6` (see Decisions);
+  `dev/README.md` rewritten (removed vs remaining, no names of removed packages); `setup.py` extras,
+  `etc/requirements*.txt`, Dockerfiles, CI had nothing to remove (inventory). 35 passed (34.93 s);
+  `import pluto` ok; `install-examples` rc=0. Negative control: the test's child code run after
+  `import clickhouse_driver` prints `blocked packages loaded: ['clickhouse_driver', ...]` and exits rc=1.
 - [ ] import scan after: unresolved ⊆ baseline
 - [ ] fresh environment from `dev/setup_env.sh` under `/home/yves/.cache/hades-pluto-dev/scratch-cleanup/`: 35 tests, `pip list` without PyQt6/PySide6/clickhouse-driver; scratch deleted
 - [ ] final grep; `dev/README.md`; diff stat; worktree removed, head hash recorded
@@ -215,14 +220,29 @@ zipline/test_algorithms.py zipline.api:sid
 
 ## Evidence
 
-(per step, below)
+Per step in the checklist. Scans, fresh environment and final grep: below once done.
 
 ## Decisions
 
-(below)
+- **Isolation test** kept as a child-interpreter test but its block list changed from
+  `('gui', 'styx', 'PyQt6', 'PySide6')` to `('clickhouse_driver', 'PyQt6', 'PySide6')`: the two first-party
+  packages no longer exist (any import of them now fails every example test), while the third-party
+  packages may still be installed in an older environment (env36 has `clickhouse-driver` 0.2.5 and PyQt6
+  6.2.3), so blocking them still proves the path does not import them. Cost: this one line is a residual
+  hit of the final grep. Asked Main whether a name-free variant (allow-list of imported third-party
+  packages, brittle across environments) is wanted instead; default kept.
+- **Borderline items kept** (owner to decide): see the "Used by a removed area and by a kept area" table.
+- **`defaultdict` and `os.path` imports** in `pluto/data/bundles/test.py` were already unused before the
+  cleanup; left as they are (not part of the removed code).
+- **Accident, repaired**: the first edit of `__main__.py` was applied with a relative path to the main
+  checkout (`/home/yves/Documents/coding-projects/pluto`) instead of the worktree; that checkout was clean
+  apart from its untracked folders, so `git checkout -- __main__.py` there restored it exactly
+  (`git status` afterwards: only `?? notes/ tsgraph-kernel-spec/ tsgraph-spec/`, as before). All later
+  edits use absolute worktree paths.
 
 ## Next step
 
-Mentions step: `tests/test_pluto_isolation.py` (block the third-party packages only, see Decisions),
-`dev/README.md` (removed vs remaining), then `check.sh`, commit; then the import scan after, the fresh
-environment, the final grep.
+Import scan after (`import_scan.py $WT after.json`, compare its `unresolved` pairs with the baseline list
+above), then the fresh environment (`HOME=/home/yves/.cache/hades-pluto-dev/scratch-cleanup/home
+dev/setup_env.sh /home/yves/.cache/hades-pluto-dev/scratch-cleanup/env36` from a fresh clone of the
+branch), then the final grep and the diff stat.
