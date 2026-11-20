@@ -63,9 +63,21 @@ also a submodule or a module-level name of `m`; star imports accepted), and writ
   `etc/requirements*.txt`, Dockerfiles, CI had nothing to remove (inventory). 35 passed (34.93 s);
   `import pluto` ok; `install-examples` rc=0. Negative control: the test's child code run after
   `import clickhouse_driver` prints `blocked packages loaded: ['clickhouse_driver', ...]` and exits rc=1.
-- [ ] import scan after: unresolved ⊆ baseline
-- [ ] fresh environment from `dev/setup_env.sh` under `/home/yves/.cache/hades-pluto-dev/scratch-cleanup/`: 35 tests, `pip list` without PyQt6/PySide6/clickhouse-driver; scratch deleted
-- [ ] final grep; `dev/README.md`; diff stat; worktree removed, head hash recorded
+- [x] import scan after (at `5b4a3a20`): 64 unresolved pairs, **new = [] , gone = []** against the baseline;
+  0 imports into removed paths; 0 `clickhouse_driver`/`PyQt*`/`PySide*` imports; same pre-existing parse error.
+  Scanner sanity check: on a detached `b2a8dfdf` checkout with `gui/` and `pluto/data/equity_pricing/` deleted
+  (code unedited) it reports 9 new pairs (`__main__.py gui:backtesting`, `gui:qtlogger`,
+  `pluto/data/bundles/test.py pluto.data.equity_pricing…` ×4, the ClickHouse test ×3); that checkout was removed.
+- [x] fresh environment: `git clone --branch cleanup-superseded` (`5b4a3a20`) into
+  `/home/yves/.cache/hades-pluto-dev/scratch-cleanup/pluto`, `HOME=<scratch>/home dev/setup_env.sh <scratch>/env36`:
+  rc=0 in 73 s, 18 extensions. Pluto suite there: **35 passed** in 38.32 s. `pip list` (90 lines) has no
+  clickhouse/PyQt/PySide/Qt/sip/tzlocal entry; `import clickhouse_driver|PyQt6|PySide6` → ModuleNotFoundError.
+  Compared with env36, the fresh env lacks exactly `clickhouse-driver` and its dependencies `tzlocal`,
+  `backports.zoneinfo`, `pytz-deprecation-shim`, `tzdata`, and `pyqt6`, `pyqt6-charts`, `pyqt6-charts-qt6`,
+  `pyqt6-qt6`, `pyqt6-sip`. `install-examples` rc=0, `import pluto` ok, clone `git status` clean.
+  Scratch (1.4 GB) deleted.
+- [x] final grep, `dev/README.md`, diff stat (Evidence below); worktree removed after the last commit (the
+  branch head is the commit that last changed this file)
 
 ## Inventory (at `b2a8dfdf`)
 
@@ -220,7 +232,26 @@ zipline/test_algorithms.py zipline.api:sid
 
 ## Evidence
 
-Per step in the checklist. Scans, fresh environment and final grep: below once done.
+### Final grep (at `5b4a3a20`)
+
+`git grep -i -E "gui|styx|clickhouse|pyqt|pyside" -- ':!RESTORE_PROGRESS.md' ':!CLEANUP_PROGRESS.md'`:
+19 files. Words in text files: `guide`/`Guide`/`guidelines`/`Guidelines` (23), `distinguish` (8),
+and the one deliberate line `BLOCKED = ('clickhouse_driver', 'PyQt6', 'PySide6')` in
+`tests/test_pluto_isolation.py` (Decisions). Binary matches: base64 images in
+`docs/notebooks/tutorial.ipynb`, `zipline/examples/buyapple.ipynb`, compressed bytes in
+`tests/resources/example_data.tar.gz`. Wider terms: `qthelp` in `docs/Makefile`, `docs/make.bat` (Sphinx's Qt
+Help output format of the Zipline docs, not the removed window), `qty`, `QtrEstimates`, `backtester` in the
+`setup.py` description and `dev/backtester.py` (`BackTester`, kept, borderline).
+
+### Diff `master..HEAD` (without `CLEANUP_PROGRESS.md`)
+
+| Commit | Files | + / − |
+|---|---|---|
+| GUI (`1e22da3d`) | 57 | +1 / −4127 (`gui/` 4063, root `ui_*.py` 16, `__main__.py` 39, `dev/setup_env.sh`, `.gitignore`) |
+| styx (`19ea7d80`) | 18 | +0 / −2027 |
+| ClickHouse (`fbff142b`) | 16 | +5 / −2932 (`equity_pricing/` 1107, ClickHouse test 1270, schemas 271, `bundles/test.py` 237, utils 12, compound calendar 10, `assets.py` 10, comments, `setup_env.sh`) |
+| mentions (`5b4a3a20`) | 2 | +22 / −14 (`dev/README.md`, `tests/test_pluto_isolation.py`) |
+| total at `5b4a3a20` | 93 incl. this file (22 kept-or-deleted paths outside `gui/`, `styx/`) | +276 / −9100 |
 
 ## Decisions
 
@@ -242,7 +273,6 @@ Per step in the checklist. Scans, fresh environment and final grep: below once d
 
 ## Next step
 
-Import scan after (`import_scan.py $WT after.json`, compare its `unresolved` pairs with the baseline list
-above), then the fresh environment (`HOME=/home/yves/.cache/hades-pluto-dev/scratch-cleanup/home
-dev/setup_env.sh /home/yves/.cache/hades-pluto-dev/scratch-cleanup/env36` from a fresh clone of the
-branch), then the final grep and the diff stat.
+None: all steps done. Open items for the owner: the borderline table in the inventory (launchers,
+`add-manager`, `dev/backtester.py`, `SimulationDataSource`, `pluto/data/schema.py`,
+`tests/data/test_pluto_minute_bars.py`), the isolation-test variant (Decisions).
