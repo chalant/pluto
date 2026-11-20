@@ -263,6 +263,12 @@ class TestUniverse(AbstractUniverse):
             # as-well as associated data-sets and domains
             if column in eq.columns:
                 return loader
+            # EquityPricing specialised to another domain of this country
+            # (USEquityPricing = EquityPricing<US_EQUITIES>): same data. The
+            # engine runs such a pipeline on that domain, as zipline does.
+            if (column.unspecialize() in equity_pricing.EquityPricing.columns
+                    and column.domain.country_code == domain.country_code):
+                return loader
             raise ValueError(
                 "No PipelineLoader registered for column %s." % column)
 
