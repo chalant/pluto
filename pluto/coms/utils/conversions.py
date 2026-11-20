@@ -228,20 +228,21 @@ def to_zp_position(proto_position):
 
 
 def to_zp_portfolio(proto_portfolio):
-    portfolio = protocol.MutableView(protocol.Portfolio(to_datetime(proto_portfolio.start_date)))
-    portfolio.cash = proto_portfolio.cash
-    portfolio.cash_flow = proto_portfolio.cash_flow
-    portfolio.starting_cash = proto_portfolio.starting_cash
-    portfolio.pnl = proto_portfolio.pnl
-    portfolio.portfolio_value = proto_portfolio.portfolio_value
-    portfolio.returns = proto_portfolio.returns
-    portfolio.positions = {position.key: to_zp_position(position) for position in proto_portfolio.position}
-    portfolio.positions_value = proto_portfolio.positions_value
-    portfolio.positions_exposure = proto_portfolio.positions_exposure
+    """A zipline Portfolio with the values of ``proto_portfolio``; its
+    positions are empty (they are restored in the position tracker)."""
+    portfolio = protocol.Portfolio(to_datetime(proto_portfolio.start_date))
+    view = protocol.MutableView(portfolio)
+    for field in _PORTFOLIO_FIELDS:
+        setattr(view, field, getattr(proto_portfolio, field))
+    return portfolio
 
 
 def to_zp_account(proto_account):
-    pass
+    account = protocol.Account()
+    view = protocol.MutableView(account)
+    for field in _ACCOUNT_FIELDS:
+        setattr(view, field, getattr(proto_account, field))
+    return account
 
 
 def to_proto_position(zp_position):
@@ -256,12 +257,16 @@ def to_proto_position(zp_position):
 
 
     """
-    return pr.Position(
+    last_sale_date = zp_position.get('last_sale_date')
+    position = pr.Position(
         asset=to_proto_asset(zp_position['sid']),
         amount=zp_position['amount'],
         cost_basis=zp_position['cost_basis'],
         last_sale_price=zp_position['last_sale_price']
     )
+    if last_sale_date is not None:
+        position.last_sale_date.CopyFrom(to_proto_timestamp(last_sale_date))
+    return position
 
 
 def to_proto_positions(zp_positions):
@@ -272,6 +277,38 @@ def to_proto_positions(zp_positions):
                 position=to_proto_position(position))
             for asset, position in zp_positions.items()],
     )
+
+# the numeric fields of protocol.proto's Portfolio and Account that zipline's
+# protocol.Portfolio and protocol.Account have
+_PORTFOLIO_FIELDS = (
+    'cash_flow',
+    'starting_cash',
+    'portfolio_value',
+    'pnl',
+    'returns',
+    'cash',
+    'positions_value',
+    'positions_exposure')
+
+_ACCOUNT_FIELDS = (
+    'settled_cash',
+    'accrued_interest',
+    'buying_power',
+    'equity_with_loan',
+    'total_positions_value',
+    'total_positions_exposure',
+    'regt_equity',
+    'regt_margin',
+    'initial_margin_requirement',
+    'maintenance_margin_requirement',
+    'available_funds',
+    'excess_liquidity',
+    'cushion',
+    'day_trades_remaining',
+    'leverage',
+    'net_leverage',
+    'net_liquidation')
+
 
 def to_proto_portfolio(zp_portfolio):
     """
@@ -309,8 +346,7 @@ def to_proto_account(zp_account):
     """
 
     return pr.Account(
-
-    )
+        **{field: getattr(zp_account, field) for field in _ACCOUNT_FIELDS})
 
 
 def to_proto_order(zp_order):

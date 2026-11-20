@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-import "protocol.proto";
+import "protos/protocol.proto";
 import "google/protobuf/timestamp.proto";
 
 
@@ -12,9 +12,14 @@ message LedgerState {
     google.protobuf.Timestamp first_session = 5;
     repeated Return daily_returns = 6;
     int32 session_count = 7;
+    repeated Position positions = 8;
+    // format of the saved state (pluto.finance.ledger.STATE_VERSION); 0
+    // (absent): written by the modules with 32-bit fields, which these
+    // modules cannot read (their float values parse as unknown fields)
+    uint32 version = 9;
 }
 
 message Return {
     google.protobuf.Timestamp timestamp = 1;
-    float value = 2;
+    double value = 2;
 }
