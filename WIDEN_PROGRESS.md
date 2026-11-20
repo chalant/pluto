@@ -31,7 +31,14 @@ Diagnostics (outside the repo, not committed): `/home/yves/.cache/hades-pluto-de
   a `ValueError`; `tests/test_pluto_state.py` 5 passed.
 - [x] **6 Docs**: `dev/README.md` (environment, regeneration, `--force` rebuild, compatibility,
   tests, known differences).
-- [ ] **5 Proof**: whole set 3 consecutive runs, fresh clone with `dev/setup_env.sh`.
+- [x] **5 Proof** (on `14cae7b5`, code identical to the head): whole set (61 tests: the 55
+  original, `pipeline_us_equity_pricing`, 5 in `tests/test_pluto_state.py`) 3 consecutive runs in the
+  worktree: **61 passed** each (56.1 s, 57.7 s, 62.9 s; logs `diag-widen/det/`). Fresh clone:
+  `git clone --branch usequity-widen` into `/home/yves/.cache/hades-pluto-dev/scratch-widen/`,
+  `HOME=<scratch> dev/setup_env.sh <scratch>/env36` rc=0 in 76 s (extensions built), whole set
+  **61 passed** in 57.9 s, `import pluto` ok, `install-examples` rc=0, clone `git status` clean
+  before and after. Scratch deleted. `git diff --stat master`: 26 files, +1400 -507 (most in
+  regenerated `*_pb2.py`). Later commits only touch this file.
 
 ## Evidence
 
@@ -169,4 +176,6 @@ the slippage parameter files, which nothing in the tree writes).
 
 ## Next step
 
-Step 5: three consecutive runs of the whole set, then the fresh clone.
+All steps done. Owner items: fractional trading on the in-memory path (no oracle; `StrategySetup.fractional`
+never set); `ControllableState` restore not implemented; `hub_pb2`/`monitor_pb2` do not import
+(pre-existing, unchanged).
