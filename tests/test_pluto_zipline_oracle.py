@@ -73,7 +73,10 @@ def compare_frames(zipline_perf, pluto_perf, rtol=RTOL, atol=ATOL):
             set(pluto_perf.columns) - set(zipline_perf.columns))
 
 
-class PlutoZiplineOracleTests(unittest.TestCase):
+class ZiplinePlutoFixture(unittest.TestCase):
+    """Pluto test bundle ingested in a temp root, zipline example data
+    extracted in another; shared with tests/test_pluto_scenarios.py."""
+
     @classmethod
     def setUpClass(cls):
         cls._exit_stack = stack = ctx.ExitStack()
@@ -103,6 +106,8 @@ class PlutoZiplineOracleTests(unittest.TestCase):
     def tearDownClass(cls):
         cls._exit_stack.close()
 
+
+class PlutoZiplineOracleTests(ZiplinePlutoFixture):
     @parameterized.expand(sorted(pluto_examples.EXAMPLE_MODULES))
     def test_zipline_and_pluto_agree(self, example_name):
         zipline_perf = zipline_examples.run_example(example_name, environ=self._environ)

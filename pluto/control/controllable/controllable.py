@@ -509,6 +509,9 @@ class Controllable(ABC):
         # sst.state = sst.out_session
         self._run_state = self._ready
         algo.set_pipeline_domain(dom)
+        # schedule_function binds its rules to this calendar (week_start,
+        # month_start... need one); it was only set on a live calendar update
+        algo.set_trading_calendar(calendar)
 
         api_support.set_algo_instance(algo)
         algo.on_dt_changed(start_dt)
