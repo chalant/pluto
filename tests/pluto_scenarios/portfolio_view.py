@@ -2,7 +2,8 @@
 must be Zipline's: the limit prices of these orders are computed from it, and
 the orders column compares them exactly. Covers cash, portfolio_value,
 positions_value, cost_basis (with commissions) and last_sale_price on the
-strategy side, after several fills per bar."""
+strategy side, after several fills per bar, with a capital base that is not
+exactly representable in 32 bits."""
 from pluto.api import *
 
 from tests.pluto_scenarios import common
@@ -37,4 +38,4 @@ def handle_data(context, data):
 def _test_args():
     return common.test_args(
         common.default_commission, common.default_slippage,
-        '2014-01-02', '2014-02-28')
+        '2014-01-02', '2014-02-28', capital_base=123456.78)
