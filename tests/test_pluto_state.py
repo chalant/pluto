@@ -27,6 +27,8 @@ from pluto.finance import ledger, position_tracker
 from pluto.finance.metrics import tracker
 
 from protos import controller_pb2
+from protos import ledger_state_pb2
+from protos import tracker_state_pb2
 
 CAPITAL = 123456.78
 START = pd.Timestamp('2014-01-02', tz='UTC')
@@ -190,6 +192,37 @@ class StateRoundTripTest(unittest.TestCase):
 
         # and the restored tracker writes the same state again
         self.assertEqual(restored.get_state(DT), state)
+
+
+# LedgerState(portfolio=Portfolio(cash=1000.5, portfolio_value=1234.5,
+# starting_cash=1000.5), session_count=3) serialised by the modules of master
+# dd2e9623 (32-bit float fields, no version)
+OLD_LEDGER_STATE = b'\n\x0f\x15\x00 zD\x1d\x00P\x9aD5\x00 zD8\x03'
+
+
+class OldStateTest(unittest.TestCase):
+    """State saved with the 32-bit modules is refused with a clear error
+    instead of being read as zeros."""
+
+    def test_old_values_would_be_lost(self):
+        # why the version check: the widened fields do not parse
+        state = ledger_state_pb2.LedgerState.FromString(OLD_LEDGER_STATE)
+        self.assertEqual(state.session_count, 3)
+        self.assertEqual(state.portfolio.cash, 0.0)
+        self.assertEqual(state.version, 0)
+
+    def test_ledger_refuses_old_state(self):
+        with self.assertRaisesRegex(ValueError, 'format version 0'):
+            _metrics_tracker().ledger.restore_state(OLD_LEDGER_STATE)
+
+    def test_tracker_refuses_old_state(self):
+        state = tracker_state_pb2.TrackerState(
+            first_open_session=conversions.to_proto_timestamp(SESSION),
+            ledger_state=OLD_LEDGER_STATE,
+            last_checkpoint=conversions.to_proto_timestamp(DT))
+        with self.assertRaisesRegex(ValueError, 'format version 0'):
+            _metrics_tracker().restore_state(state.SerializeToString())
+
 
 
 class PerformancePacketTest(unittest.TestCase):

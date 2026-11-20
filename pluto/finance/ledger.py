@@ -8,6 +8,12 @@ from pluto.coms.utils import conversions as cv
 
 from protos import ledger_state_pb2 as acc
 
+# format of the saved state (ledger_state.proto LedgerState.version):
+# 1: 64-bit (double) values and positions. State without a version was
+# written by the modules with 32-bit fields: its values would parse as
+# unknown fields (silently 0), so it is refused.
+STATE_VERSION = 1
+
 
 class Ledger(object):
     def __init__(self, start_date, portfolio, account, position_tracker):
@@ -495,6 +501,7 @@ class Ledger(object):
         portfolio = self.portfolio
         account = self.account
         state = acc.LedgerState(
+            version=STATE_VERSION,
             session_count=self._session_count,
             portfolio=cv.to_proto_portfolio(portfolio),
             account=cv.to_proto_account(account),
@@ -516,6 +523,12 @@ class Ledger(object):
 
         l = acc.LedgerState()
         l.ParseFromString(state)
+        if l.version != STATE_VERSION:
+            raise ValueError(
+                'cannot restore the ledger state: format version {}, expected'
+                ' {}. State saved before the protobuf fields were widened to'
+                ' 64 bits (no version) cannot be read: its 32-bit values would'
+                ' be lost.'.format(l.version, STATE_VERSION))
 
         position_tracker = self._position_tracker
         for position in l.positions:
