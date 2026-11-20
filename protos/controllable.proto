@@ -41,7 +41,7 @@ message EngineSetup{
 }
 
 message FractionalTradeSetup {
-    float minimum_purchase = 1;
+    double minimum_purchase = 1;
     int32 minimal_fraction = 2;
     repeated string order_types = 3;
     repeated string asset_types = 4;
@@ -72,8 +72,8 @@ message RunRequest {
     string id = 1;
     string session_id = 2;
 
-    float capital = 3;
-    float leverage = 4;
+    double capital = 3;
+    double leverage = 4;
 
     google.protobuf.Timestamp start = 5;
     google.protobuf.Timestamp end = 6;

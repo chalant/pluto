@@ -680,6 +680,7 @@ class Controllable(ABC):
 
         # this is where we update everything (ledger etc.)
         closed_orders = []
+        commissions = []
 
         for order, transaction, commission in self._transactions:
             order.filled += transaction.amount
@@ -695,7 +696,7 @@ class Controllable(ABC):
             metrics_tracker.process_order(order)
 
             if commission > 0:
-                metrics_tracker.process_commission(
+                commissions.append(
                     {
                         'asset': order.asset,
                         'order': order,
@@ -705,8 +706,10 @@ class Controllable(ABC):
 
         # todo: add tax handling here!
 
-        # for commission in new_commissions:
-        #     metrics_tracker.process_commission(commission)
+        # all the transactions first, then all the commissions, as zipline's
+        # AlgorithmSimulator (the order changes the floating-point cash)
+        for commission in commissions:
+            metrics_tracker.process_commission(commission)
 
         blotter.prune_orders(closed_orders)
 
