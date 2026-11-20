@@ -2,9 +2,15 @@
 
 This branch (`restore-sim`, from `origin/dev` `816ecbc2`) restores one path of Pluto to a
 working, tested state: **daily backtests of a strategy through Pluto's own
-controller/controllable runtime, all in one process** (no gRPC, no ClickHouse, no network,
-no GUI). Its results match Zipline's. `RESTORE_PROGRESS.md` at the repository root has the
+controller/controllable runtime, all in one process** (no gRPC, no database server, no
+network). Its results match Zipline's. `RESTORE_PROGRESS.md` at the repository root has the
 evidence, the decisions and the full change list.
+
+The components the owner declared superseded (2026-11-15 to 2026-11-20) were removed
+afterwards on branch `cleanup-superseded`: the desktop backtesting window and its launch
+command, the market-data ingestion package and the database-backed bar storage it wrote
+to, with their dependencies. `CLEANUP_PROGRESS.md` lists every removed file and the items
+left for the owner to decide.
 
 ## What runs
 
@@ -40,7 +46,8 @@ Notable pins: `empyrical==0.5.2` (the stored `alpha` uses its linear annualisati
 changing a `.pyx`: `python setup.py build_ext --inplace`.
 
 No configuration file is needed. `~/.pluto_config.toml` (or the file named by
-`PLUTO_CONFIG`) is read if present; only the ClickHouse/Alpaca/Polygon code uses it.
+`PLUTO_CONFIG`) is read if present; only the live data source (Alpaca, Polygon) and the
+gRPC controllable server use it.
 
 ## Tests
 
@@ -57,7 +64,7 @@ $ENV/bin/python -m pytest -p no:cacheprovider \
 |---|---|
 | `tests/test_pluto_examples.py` | each example through Pluto, compared with the stored Zipline results (rtol 0.001, atol 0.02) |
 | `tests/test_pluto_zipline_oracle.py` | each example through the fork's plain Zipline (`zipline.examples.run_example`) and through Pluto in the same process; all common columns, incl. positions, orders, transactions |
-| `tests/test_pluto_isolation.py` | the examples run with `gui`, `styx` and PyQt6 blocked |
+| `tests/test_pluto_isolation.py` | the examples run in a child interpreter in which the third-party packages that only removed code needed are blocked (in case an older environment still has them) |
 | `tests/test_pluto_assets.py` | the asset finder |
 
 Known differences, not reconciled: Pluto stamps `period_open` with the session label,
@@ -69,10 +76,10 @@ break on the fork's changes); it is out of scope.
 
 ## Out of scope (not repaired, still in the tree)
 
-- `gui/` (PyQt6 window; `python __main__.py backtester` still fails to import it),
-- `styx/` (data ingestion meant to become a ClickHouse data source; to be superseded),
 - the gRPC services (`pluto/control/controllable/server.py`, `pluto/interface/`, `dev/cli.py`),
-- live and paper trading, the ClickHouse data layer (`pluto/data/equity_pricing/`, ClickHouse
-  bundle and readers), the old controller modes (`pluto/control/modes/`).
+- live and paper trading, the old controller modes (`pluto/control/modes/`),
+- the launcher support that only the removed window used (`pluto/control/script_handler.py`,
+  `pluto/control/setup/`, `python __main__.py add-manager`) and `dev/backtester.py`.
 
-`python __main__.py install-examples` works without the GUI (it is imported lazily).
+`python __main__.py install-examples` copies the examples into the strategy store under
+`~/.pluto` and ingests the test bundle.
