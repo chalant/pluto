@@ -3,7 +3,6 @@
 # source: protos/broker.proto
 """Generated protocol buffer code."""
 from google.protobuf import descriptor as _descriptor
-from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import message as _message
 from google.protobuf import reflection as _reflection
 from google.protobuf import symbol_database as _symbol_database
@@ -20,19 +19,472 @@ from protos import finance_pb2 as protos_dot_finance__pb2
 from protos import data_pb2 as protos_dot_data__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13protos/broker.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x11protos/data.proto\"K\n\tWatchList\x12&\n\x02ts\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06\x61ssets\x18\x02 \x03(\x0b\x32\x06.Asset\"(\n\nAssetPrice\x12\x0b\n\x03sid\x18\x01 \x01(\r\x12\r\n\x05price\x18\x02 \x01(\x02\"\xc1\x01\n\x0b\x42rokerState\x12,\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x16.TransactionCommission\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bnot_running\x18\x04 \x01(\r\x12%\n\x10last_sale_prices\x18\x05 \x03(\x0b\x32\x0b.AssetPrice\"N\n\x15TransactionCommission\x12!\n\x0btransaction\x18\x01 \x01(\x0b\x32\x0c.Transaction\x12\x12\n\ncommission\x18\x02 \x01(\x02\"\x99\x01\n\nOrderBatch\x12&\n\x02ts\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x02 \x03(\x0b\x32\x06.Order\x12\r\n\x05\x65nded\x18\x03 \x01(\x08\x12\x1d\n\tportfolio\x18\x04 \x01(\x0b\x32\n.Portfolio\x12\x1d\n\tpositions\x18\x05 \x01(\x0b\x32\n.Positions\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t2\x98\x02\n\x06\x42roker\x12/\n\x0bPlaceOrders\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12\x39\n\x07Stopped\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x39\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x16.google.protobuf.Empty\x12\x30\n\x0cSetWatchList\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor.FileDescriptor(
+  name='protos/broker.proto',
+  package='',
+  syntax='proto3',
+  serialized_options=None,
+  create_key=_descriptor._internal_create_key,
+  serialized_pb=b'\n\x13protos/broker.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15protos/protocol.proto\x1a\x13protos/assets.proto\x1a\x14protos/finance.proto\x1a\x11protos/data.proto\"K\n\tWatchList\x12&\n\x02ts\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06\x61ssets\x18\x02 \x03(\x0b\x32\x06.Asset\"(\n\nAssetPrice\x12\x0b\n\x03sid\x18\x01 \x01(\r\x12\r\n\x05price\x18\x02 \x01(\x01\"\xc1\x01\n\x0b\x42rokerState\x12,\n\x0ctransactions\x18\x01 \x03(\x0b\x32\x16.TransactionCommission\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12-\n\ttimestamp\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x13\n\x0bnot_running\x18\x04 \x01(\r\x12%\n\x10last_sale_prices\x18\x05 \x03(\x0b\x32\x0b.AssetPrice\"N\n\x15TransactionCommission\x12!\n\x0btransaction\x18\x01 \x01(\x0b\x32\x0c.Transaction\x12\x12\n\ncommission\x18\x02 \x01(\x01\"\x99\x01\n\nOrderBatch\x12&\n\x02ts\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x02 \x03(\x0b\x32\x06.Order\x12\r\n\x05\x65nded\x18\x03 \x01(\x08\x12\x1d\n\tportfolio\x18\x04 \x01(\x0b\x32\n.Portfolio\x12\x1d\n\tpositions\x18\x05 \x01(\x0b\x32\n.Positions\"H\n\nCommission\x12\x15\n\x05\x61sset\x18\x01 \x01(\x0b\x32\x06.Asset\x12\x15\n\x05order\x18\x02 \x01(\x0b\x32\x06.Order\x12\x0c\n\x04\x63ost\x18\x03 \x01(\x02\"!\n\x0eWarningMessage\x12\x0f\n\x07message\x18\x01 \x01(\t\"\xc1\x01\n\x0bOrderParams\x12\r\n\x05style\x18\x01 \x01(\t\x12\x15\n\x05\x61sset\x18\x02 \x01(\x0b\x32\x06.Asset\x12\x0e\n\x06\x61mount\x18\x03 \x01(\x02\x12\x13\n\x0blimit_price\x18\x04 \x01(\x02\x12\x12\n\nstop_price\x18\x05 \x01(\x02\x12\x13\n\x0blimit_order\x18\x06 \x01(\x02\x12\x10\n\x08\x65xchange\x18\x07 \x01(\x02\x12,\n\x08order_dt\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"!\n\rCancelRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t2\x98\x02\n\x06\x42roker\x12/\n\x0bPlaceOrders\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x12\x39\n\x07Stopped\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12\x35\n\x0b\x43\x61ncelOrder\x12\x0e.CancelRequest\x1a\x16.google.protobuf.Empty\x12\x39\n\x17\x43\x61ncelAllOrdersForAsset\x12\x06.Asset\x1a\x16.google.protobuf.Empty\x12\x30\n\x0cSetWatchList\x12\x06.Chunk\x1a\x16.google.protobuf.Empty(\x01\x62\x06proto3'
+  ,
+  dependencies=[google_dot_protobuf_dot_empty__pb2.DESCRIPTOR,google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,protos_dot_protocol__pb2.DESCRIPTOR,protos_dot_assets__pb2.DESCRIPTOR,protos_dot_finance__pb2.DESCRIPTOR,protos_dot_data__pb2.DESCRIPTOR,])
 
 
 
-_WATCHLIST = DESCRIPTOR.message_types_by_name['WatchList']
-_ASSETPRICE = DESCRIPTOR.message_types_by_name['AssetPrice']
-_BROKERSTATE = DESCRIPTOR.message_types_by_name['BrokerState']
-_TRANSACTIONCOMMISSION = DESCRIPTOR.message_types_by_name['TransactionCommission']
-_ORDERBATCH = DESCRIPTOR.message_types_by_name['OrderBatch']
-_COMMISSION = DESCRIPTOR.message_types_by_name['Commission']
-_WARNINGMESSAGE = DESCRIPTOR.message_types_by_name['WarningMessage']
-_ORDERPARAMS = DESCRIPTOR.message_types_by_name['OrderParams']
-_CANCELREQUEST = DESCRIPTOR.message_types_by_name['CancelRequest']
+
+_WATCHLIST = _descriptor.Descriptor(
+  name='WatchList',
+  full_name='WatchList',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='ts', full_name='WatchList.ts', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='assets', full_name='WatchList.assets', index=1,
+      number=2, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=170,
+  serialized_end=245,
+)
+
+
+_ASSETPRICE = _descriptor.Descriptor(
+  name='AssetPrice',
+  full_name='AssetPrice',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='sid', full_name='AssetPrice.sid', index=0,
+      number=1, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='price', full_name='AssetPrice.price', index=1,
+      number=2, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=247,
+  serialized_end=287,
+)
+
+
+_BROKERSTATE = _descriptor.Descriptor(
+  name='BrokerState',
+  full_name='BrokerState',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='transactions', full_name='BrokerState.transactions', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='account', full_name='BrokerState.account', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='timestamp', full_name='BrokerState.timestamp', index=2,
+      number=3, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='not_running', full_name='BrokerState.not_running', index=3,
+      number=4, type=13, cpp_type=3, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='last_sale_prices', full_name='BrokerState.last_sale_prices', index=4,
+      number=5, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=290,
+  serialized_end=483,
+)
+
+
+_TRANSACTIONCOMMISSION = _descriptor.Descriptor(
+  name='TransactionCommission',
+  full_name='TransactionCommission',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='transaction', full_name='TransactionCommission.transaction', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='commission', full_name='TransactionCommission.commission', index=1,
+      number=2, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=485,
+  serialized_end=563,
+)
+
+
+_ORDERBATCH = _descriptor.Descriptor(
+  name='OrderBatch',
+  full_name='OrderBatch',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='ts', full_name='OrderBatch.ts', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='orders', full_name='OrderBatch.orders', index=1,
+      number=2, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='ended', full_name='OrderBatch.ended', index=2,
+      number=3, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='portfolio', full_name='OrderBatch.portfolio', index=3,
+      number=4, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='positions', full_name='OrderBatch.positions', index=4,
+      number=5, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=566,
+  serialized_end=719,
+)
+
+
+_COMMISSION = _descriptor.Descriptor(
+  name='Commission',
+  full_name='Commission',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='asset', full_name='Commission.asset', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='order', full_name='Commission.order', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='cost', full_name='Commission.cost', index=2,
+      number=3, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=721,
+  serialized_end=793,
+)
+
+
+_WARNINGMESSAGE = _descriptor.Descriptor(
+  name='WarningMessage',
+  full_name='WarningMessage',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='message', full_name='WarningMessage.message', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=795,
+  serialized_end=828,
+)
+
+
+_ORDERPARAMS = _descriptor.Descriptor(
+  name='OrderParams',
+  full_name='OrderParams',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='style', full_name='OrderParams.style', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='asset', full_name='OrderParams.asset', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='amount', full_name='OrderParams.amount', index=2,
+      number=3, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='limit_price', full_name='OrderParams.limit_price', index=3,
+      number=4, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='stop_price', full_name='OrderParams.stop_price', index=4,
+      number=5, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='limit_order', full_name='OrderParams.limit_order', index=5,
+      number=6, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='exchange', full_name='OrderParams.exchange', index=6,
+      number=7, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=float(0),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='order_dt', full_name='OrderParams.order_dt', index=7,
+      number=8, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=831,
+  serialized_end=1024,
+)
+
+
+_CANCELREQUEST = _descriptor.Descriptor(
+  name='CancelRequest',
+  full_name='CancelRequest',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='order_id', full_name='CancelRequest.order_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=1026,
+  serialized_end=1059,
+)
+
+_WATCHLIST.fields_by_name['ts'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_WATCHLIST.fields_by_name['assets'].message_type = protos_dot_assets__pb2._ASSET
+_BROKERSTATE.fields_by_name['transactions'].message_type = _TRANSACTIONCOMMISSION
+_BROKERSTATE.fields_by_name['account'].message_type = protos_dot_protocol__pb2._ACCOUNT
+_BROKERSTATE.fields_by_name['timestamp'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_BROKERSTATE.fields_by_name['last_sale_prices'].message_type = _ASSETPRICE
+_TRANSACTIONCOMMISSION.fields_by_name['transaction'].message_type = protos_dot_finance__pb2._TRANSACTION
+_ORDERBATCH.fields_by_name['ts'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_ORDERBATCH.fields_by_name['orders'].message_type = protos_dot_protocol__pb2._ORDER
+_ORDERBATCH.fields_by_name['portfolio'].message_type = protos_dot_protocol__pb2._PORTFOLIO
+_ORDERBATCH.fields_by_name['positions'].message_type = protos_dot_protocol__pb2._POSITIONS
+_COMMISSION.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
+_COMMISSION.fields_by_name['order'].message_type = protos_dot_protocol__pb2._ORDER
+_ORDERPARAMS.fields_by_name['asset'].message_type = protos_dot_assets__pb2._ASSET
+_ORDERPARAMS.fields_by_name['order_dt'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+DESCRIPTOR.message_types_by_name['WatchList'] = _WATCHLIST
+DESCRIPTOR.message_types_by_name['AssetPrice'] = _ASSETPRICE
+DESCRIPTOR.message_types_by_name['BrokerState'] = _BROKERSTATE
+DESCRIPTOR.message_types_by_name['TransactionCommission'] = _TRANSACTIONCOMMISSION
+DESCRIPTOR.message_types_by_name['OrderBatch'] = _ORDERBATCH
+DESCRIPTOR.message_types_by_name['Commission'] = _COMMISSION
+DESCRIPTOR.message_types_by_name['WarningMessage'] = _WARNINGMESSAGE
+DESCRIPTOR.message_types_by_name['OrderParams'] = _ORDERPARAMS
+DESCRIPTOR.message_types_by_name['CancelRequest'] = _CANCELREQUEST
+_sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
 WatchList = _reflection.GeneratedProtocolMessageType('WatchList', (_message.Message,), {
   'DESCRIPTOR' : _WATCHLIST,
   '__module__' : 'protos.broker_pb2'
@@ -96,28 +548,71 @@ CancelRequest = _reflection.GeneratedProtocolMessageType('CancelRequest', (_mess
   })
 _sym_db.RegisterMessage(CancelRequest)
 
-_BROKER = DESCRIPTOR.services_by_name['Broker']
-if _descriptor._USE_C_DESCRIPTORS == False:
 
-  DESCRIPTOR._options = None
-  _WATCHLIST._serialized_start=170
-  _WATCHLIST._serialized_end=245
-  _ASSETPRICE._serialized_start=247
-  _ASSETPRICE._serialized_end=287
-  _BROKERSTATE._serialized_start=290
-  _BROKERSTATE._serialized_end=483
-  _TRANSACTIONCOMMISSION._serialized_start=485
-  _TRANSACTIONCOMMISSION._serialized_end=563
-  _ORDERBATCH._serialized_start=566
-  _ORDERBATCH._serialized_end=719
-  _COMMISSION._serialized_start=721
-  _COMMISSION._serialized_end=793
-  _WARNINGMESSAGE._serialized_start=795
-  _WARNINGMESSAGE._serialized_end=828
-  _ORDERPARAMS._serialized_start=831
-  _ORDERPARAMS._serialized_end=1024
-  _CANCELREQUEST._serialized_start=1026
-  _CANCELREQUEST._serialized_end=1059
-  _BROKER._serialized_start=1062
-  _BROKER._serialized_end=1342
+
+_BROKER = _descriptor.ServiceDescriptor(
+  name='Broker',
+  full_name='Broker',
+  file=DESCRIPTOR,
+  index=0,
+  serialized_options=None,
+  create_key=_descriptor._internal_create_key,
+  serialized_start=1062,
+  serialized_end=1342,
+  methods=[
+  _descriptor.MethodDescriptor(
+    name='PlaceOrders',
+    full_name='Broker.PlaceOrders',
+    index=0,
+    containing_service=None,
+    input_type=protos_dot_data__pb2._CHUNK,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Stopped',
+    full_name='Broker.Stopped',
+    index=1,
+    containing_service=None,
+    input_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='CancelOrder',
+    full_name='Broker.CancelOrder',
+    index=2,
+    containing_service=None,
+    input_type=_CANCELREQUEST,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='CancelAllOrdersForAsset',
+    full_name='Broker.CancelAllOrdersForAsset',
+    index=3,
+    containing_service=None,
+    input_type=protos_dot_assets__pb2._ASSET,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='SetWatchList',
+    full_name='Broker.SetWatchList',
+    index=4,
+    containing_service=None,
+    input_type=protos_dot_data__pb2._CHUNK,
+    output_type=google_dot_protobuf_dot_empty__pb2._EMPTY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+])
+_sym_db.RegisterServiceDescriptor(_BROKER)
+
+DESCRIPTOR.services_by_name['Broker'] = _BROKER
+
 # @@protoc_insertion_point(module_scope)
