@@ -86,7 +86,11 @@ class Controller(object):
 
 				# transactions, closed_orders = strategy_manager.get_transactions(calendar_name)
 
-				# update states
+				# update states: all the transactions first, then all the
+				# commissions, in this order (as zipline's AlgorithmSimulator
+				# every_bar); interleaving them changes the floating-point
+				# summation of the cash.
+				commissions = []
 				for transaction in transactions:
 					order = transaction['order']
 
@@ -95,19 +99,22 @@ class Controller(object):
 						transaction['transaction'])
 
 					if transaction['commission'] > 0:
-						strategy_manager.process_commission(
-							calendar_name,
-							{
-								'asset': order.asset,
-								'order': order.to_dict(),
-								'cost': transaction['commission']
-							})
+						commissions.append({
+							'asset': order.asset,
+							'order': order.to_dict(),
+							'cost': transaction['commission']
+						})
 
 					broker_states[order.session_id].transactions.append(
 						broker_pb2.TransactionCommission(
 							transaction=conversions.to_proto_transaction(transaction['transaction'].to_dict()),
 							commission=transaction['commission']
 						))
+
+				for commission in commissions:
+					strategy_manager.process_commission(
+						calendar_name,
+						commission)
 
 				blotter.prune_orders(closed_orders)
 				# note: here we force synchronization of sale prices
