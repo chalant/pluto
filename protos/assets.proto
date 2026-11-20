@@ -17,8 +17,8 @@ message Asset {
     string exchange_full = 10;
     string country_code = 11;
 
-    float tick_size = 12;
-    float multiplier = 13;
+    double tick_size = 12;
+    double multiplier = 13;
 
     string root_symbol = 14;
 

@@ -7,14 +7,103 @@ import empyrical as ep
 
 from dev import strategy_store
 
-from pluto import examples
-
 from pluto.control.loop import simulation_loop
 from pluto.control.processes import processes
 from pluto.control.controller import controller
 from pluto.control.controller import behavior as bv
 
 from pluto.finance import metrics as mtr
+
+# Relative tolerance per example for the comparison with the stored expected
+# results (tests/resources/example_data.tar.gz); atol is 0 and every other
+# example is compared exactly. Pluto equals the fork's Zipline bit for bit on
+# all five examples (tests/test_pluto_zipline_oracle.py). For
+# momentum_pipeline both differ from the stored results by floating-point
+# summation noise, measured 2026-11-20 (ALIGN_PROGRESS.md): largest relative
+# difference 1.06e-12 (alpha), 6.4e-13 (pnl), largest absolute 1.3e-10
+# (ending_cash, portfolio_value ~1e5).
+STORED_RTOL = {'momentum_pipeline': 2e-12}
+
+# columns holding lists of dicts, compared after _normalize
+LIST_COLUMNS = ('positions', 'orders', 'transactions')
+
+# identifiers: random uuids (id, order_id) and the strategy session id that
+# Pluto appends to its orders ('' for zipline's own TradingAlgorithm)
+_ID_FIELDS = {'id', 'order_id', 'session_id'}
+
+
+def _sid(value):
+    return int(getattr(value, 'sid', value))
+
+
+def _normalize(items):
+    """List of order/transaction/position dicts -> sorted list of plain dicts
+    (assets as sids, identifiers dropped)."""
+    out = []
+    for item in items:
+        d = {}
+        for k, v in item.items():
+            if k in _ID_FIELDS:
+                continue
+            d[k] = _sid(v) if k in ('sid', 'asset') else v
+        out.append(d)
+    return sorted(out, key=lambda d: (d.get('sid', d.get('asset')),
+                                      str(d.get('dt')),
+                                      float(d.get('amount') or 0)))
+
+
+def _values_equal(desired, actual, rtol=0.0, atol=0.0):
+    if isinstance(desired, (float, np.floating)) or isinstance(actual, (float, np.floating)):
+        if desired is None or actual is None:
+            return desired is None and actual is None
+        return bool(np.isclose(float(actual), float(desired), rtol=rtol, atol=atol, equal_nan=True))
+    return desired == actual
+
+
+def _lists_equal(desired, actual, rtol=0.0, atol=0.0):
+    desired, actual = _normalize(desired), _normalize(actual)
+    if len(desired) != len(actual):
+        return False
+    for a, b in zip(desired, actual):
+        if set(a) != set(b):
+            return False
+        if not all(_values_equal(a[k], b[k], rtol, atol) for k in a):
+            return False
+    return True
+
+
+def compare_column(col, desired, actual, rtol=0.0, atol=0.0):
+    """Compares one column of two daily result frames (pandas.Series of the
+    same length). Returns None if they agree, else an error message.
+
+    Numbers: numpy.testing.assert_allclose(nan_to_num(desired), actual, rtol,
+    atol); rtol=atol=0 is exact equality. NaN in desired counts as 0 (Pluto's
+    trackers report 0 where zipline reports NaN, e.g. the first day's
+    volatility). LIST_COLUMNS: element by element after _normalize, same keys,
+    numeric fields with rtol/atol. Anything else (timestamps, labels,
+    booleans): exact equality.
+    """
+    if col in LIST_COLUMNS:
+        bad = [i for i, (a, b) in enumerate(zip(desired, actual))
+               if not _lists_equal(a, b, rtol, atol)]
+        if bad:
+            return '{}: {} rows differ, first row {}: desired={} actual={}'.format(
+                col, len(bad), bad[0], _normalize(desired.iloc[bad[0]]), _normalize(actual.iloc[bad[0]]))
+        return None
+    try:
+        des = desired.values.astype(float)
+        act = actual.values.astype(float)
+    except (TypeError, ValueError):
+        bad = [i for i, (a, b) in enumerate(zip(desired, actual)) if not a == b]
+        if bad:
+            return '{}: {} rows differ, first row {}: desired={!r} actual={!r}'.format(
+                col, len(bad), bad[0], desired.iloc[bad[0]], actual.iloc[bad[0]])
+        return None
+    try:
+        testing.assert_allclose(np.nan_to_num(des), act, rtol=rtol, atol=atol, equal_nan=False)
+    except AssertionError as e:
+        return '{}: {}'.format(col, str(e).strip().splitlines()[:6])
+    return None
 
 
 class TestMetricsTracker(object):
@@ -24,13 +113,16 @@ class TestMetricsTracker(object):
             benchmark_source,
             trading_sessions,
             expected_df,
-            capital_base):
+            capital_base,
+            trading_calendar):
 
         self._name = name
         self._benchmark_source = benchmark_source
         self._trading_sessions = trading_sessions
+        self._trading_calendar = trading_calendar
 
-        self._expected_df = expected_df[examples._cols_to_check]
+        # None: nothing stored to compare with (scenario runs)
+        self._expected_df = expected_df
 
         self._errors = 0
         self._tests = 0
@@ -73,7 +165,11 @@ class TestMetricsTracker(object):
         return value
 
     def start_of_session(self, ts, calendar_name, ledger):
-        self._first_open_session = ts
+        # the daily packet's period_open: the session's execution open, as
+        # zipline's MetricsTracker.handle_market_open
+        calendar = self._trading_calendar
+        self._first_open_session = calendar.execution_time_from_open(
+            calendar.session_open(ts))
 
         if not self._initialized:
             for metric in self._metrics:
@@ -173,52 +269,44 @@ class TestMetricsTracker(object):
         return pd.DataFrame(daily_perfs, index=daily_dts)
 
     def validate(self):
+        """Compares every column that the stored expected results and this run
+        both have (compare_column, rtol from STORED_RTOL, atol 0). The stored
+        transactions carry 'commission': None (Transaction.to_dict of the
+        zipline version that wrote the files; the fork's Transaction has no
+        commission attribute): that key is dropped before comparing."""
         expected_perf = self._expected_df
+        if expected_perf is None:
+            return
 
-        daily_stats = self.frame()[examples._cols_to_check]
+        daily_stats = self.frame()
+        rtol = STORED_RTOL.get(self._name, 0.0)
 
-        errors = 0
-        tests = 0
-        idx = 0
+        if 'transactions' in expected_perf:
+            # element by element: numpy would turn equal-length lists into a 2-d array
+            transactions = np.empty(len(expected_perf), dtype=object)
+            for i, txns in enumerate(expected_perf['transactions']):
+                transactions[i] = [
+                    {k: v for k, v in t.items() if not (k == 'commission' and v is None)}
+                    for t in txns]
+            expected_perf = expected_perf.copy()
+            expected_perf['transactions'] = transactions
 
-        # for i, j in zip(expected_perf['capital_used'], daily_stats['capital_used']):
-        #     if abs(round(i, 2) - round(j, 2)) > 0:
-        #         print(idx, i, j, len(self._benchmark_returns), daily_dts[idx], daily_stats['capital_used'][idx - 1],
-        #               expected_perf['capital_used'][idx + 1], expected_perf['capital_used'][idx - 1])
-        #
-        #     idx += 1
+        common = sorted(set(expected_perf.columns) & set(daily_stats.columns))
+        errors = []
+        if len(expected_perf) != len(daily_stats):
+            errors.append('row count stored {} vs pluto {}'.format(len(expected_perf), len(daily_stats)))
+        else:
+            for col in common:
+                error = compare_column(col, expected_perf[col], daily_stats[col], rtol=rtol)
+                if error:
+                    errors.append(error)
 
-        for l, r in zip(expected_perf.items(), daily_stats.items()):
-            tests += 1
-
-            des = l[1]
-            act = r[1]
-
-            try:
-                testing.assert_allclose(
-                    np.nan_to_num(des.values),
-                    act.values,
-                    rtol=0.001,
-                    atol=0.02,
-                    equal_nan=False)
-
-            except AssertionError as e:
-                errors += 1
-
-                print('Name: {}\nError: {}'.format(l[0], e))
-
-            except TypeError:
-                # try:
-                #     pd.testing.assert_series_equal(act, des, check_less_precise=3)
-                # except AssertionError as e:
-                #     logging.warning('\nName: {}\nError: {}'.format(l[0], e))
-                pass
-
-        if errors > 0:
-            raise AssertionError('{} failed {} out of {}'.format(
+        if errors:
+            raise AssertionError('{} failed {} out of {} columns:\n{}'.format(
                 self._name,
-                errors,
-                tests))
+                len(errors),
+                len(common),
+                '\n'.join(errors)))
 
 
 class StrategyTester(object):
@@ -235,14 +323,16 @@ class StrategyTester(object):
             trading_sessions,
             market,
             controller_behavior: bv.AbstractControllerBehavior,
-            capital_base):
+            capital_base,
+            trading_calendar):
 
         tracker = TestMetricsTracker(
             self._name,
             benchmark_source,
             trading_sessions,
             expected_perf,
-            capital_base)
+            capital_base,
+            trading_calendar)
 
         for _ in loop.start(controller.Controller(
                 self._process_manager,
