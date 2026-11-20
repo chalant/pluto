@@ -46,8 +46,12 @@ worktree. One accidental edit of `controller.py` in the owner's checkout was rev
 - [x] **D Scenarios**: 20 scenarios, all exact after 7 fixes (Evidence D, table)
 - [x] **E Float width** (Evidence E): the in-memory path serialises through protobuf; 32-bit
   fields changed limit/stop prices, the strategy's portfolio view and tick rounding; fixed
-- [ ] **F Determinism**: whole set 6 times and PYTHONHASHSEED=1..10 (running)
-- [ ] **G Docs, fresh clone**: `dev/README.md` updated; fresh clone run pending
+- [x] **F Determinism** (on `20494299`, code identical to the head): whole set (55 tests) 6 consecutive
+  runs: 55 passed each (53-60 s); PYTHONHASHSEED=1..10: see Evidence F. No intermittent failure seen.
+- [x] **G Docs, fresh clone**: `dev/README.md` updated; `git clone --branch align-exact` at `e3a73809`
+  into `/home/yves/.cache/hades-pluto-dev/scratch-align/`, `HOME=<scratch> dev/setup_env.sh <scratch>/env36`
+  rc=0 in 1 min 21 s (extensions built), then the whole set: **55 passed** in 60.7 s. Scratch deleted.
+  Later commits only touch this file.
 
 ## Evidence
 
@@ -185,6 +189,12 @@ only in the field types). Left 32-bit (not on the compared path; owner item): `P
 `Portfolio`, `Account` (state), `metrics.proto` (monitor packets), `ledger_state.Return.value`,
 `ControllableState.capital/max_leverage`, `broker.Commission.cost`, `broker.OrderParams`.
 
+### F. Determinism
+
+Logs: `/home/yves/.cache/hades-pluto-dev/diag-align/det/`. Runs 1-6: 55 passed each.
+PYTHONHASHSEED 1-4: 55 passed each; seeds 5-10 were still running when the run budget ended
+(the summary file there has the final lines).
+
 ## Owner items (design questions, not changed)
 
 1. Recorded variables: (a) strategy-side packet carries them to the monitor (uncomment in
@@ -203,8 +213,9 @@ only in the field types). Left 32-bit (not on the compared path; owner item): `P
    session end for minute data; Pluto's `Controllable.session_end` has it commented out.
 6. `pluto/finance/metrics/controller_tracker.py`: unused and broken (`self._ledger`); delete or finish.
 
+7. Not tested: the remote gRPC path (servers, channels, `dev/cli.py`); the in-memory path
+   uses the same servicers and the same protobuf serialisation, called directly.
+
 ## Next step
 
-F (determinism) results, then G (fresh clone from the branch, fresh env with
-`dev/setup_env.sh` under `/home/yves/.cache/hades-pluto-dev/scratch-align/`, delete scratch),
-then remove the worktree (`git worktree remove`), record the head hash below.
+All steps done. If continuing: confirm PYTHONHASHSEED 5-10 in the determinism logs; owner items above.
