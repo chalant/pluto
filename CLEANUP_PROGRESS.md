@@ -46,7 +46,8 @@ also a submodule or a module-level name of `m`; star imports accepted), and writ
 - [x] remove GUI (commit "cleanup: remove the GUI"): 35 passed (39.03 s); `import pluto` ok; `install-examples` rc=0
   (strategies, launchers, `assets-7.sqlite` created in a temp HOME, deleted); `__main__.py --help`: add-manager,
   add-strategy, install-examples
-- [ ] remove `styx` (commit), same checks
+- [x] remove `styx` (commit "cleanup: remove styx"): 18 files; no requirement, config, script or test existed
+  only for it (inventory). 35 passed (39.37 s); `import pluto` ok; `install-examples` rc=0
 - [ ] remove ClickHouse data layer (commit), same checks; prove the tests pass without `clickhouse-driver` installed
 - [ ] mentions, docs, requirements, isolation test (commit), same checks
 - [ ] import scan after: unresolved ⊆ baseline
@@ -214,5 +215,6 @@ zipline/test_algorithms.py zipline.api:sid
 
 ## Next step
 
-Remove the GUI: `git rm -r gui ui_main_window.py ui_plotting_control.py`, delete the `backtester`
-command and its `sys`/`logbook` imports from `__main__.py`, then run the checks in "How to run" and commit.
+Remove the ClickHouse data layer (files and edits in the inventory), uninstall nothing from env36 (prove
+the no-package case with a child interpreter that blocks the import, and in the fresh environment), run
+`bash /home/yves/.cache/hades-pluto-dev/cleanup/check.sh` (the three checks of "How to run"), commit.
