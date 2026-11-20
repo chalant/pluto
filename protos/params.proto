@@ -3,7 +3,7 @@ syntax = "proto3";
 import "google/protobuf/timestamp.proto";
 
 message RunParams {
-    float capital_base = 1;
+    double capital_base = 1;
     google.protobuf.Timestamp start_session = 2;
     google.protobuf.Timestamp end_session = 3;
     bool live = 4; // indicates the trade behavior...

@@ -8,24 +8,24 @@ import "protos/protocol.proto";
 message CumulativeMetrics {
     google.protobuf.Timestamp period_open = 1;
     google.protobuf.Timestamp period_close = 2;
-    float returns = 3;
-    float pnl = 4;
-    float capital_used = 5; //capital_used
-    float starting_exposure = 6;
-    float ending_exposure = 7;
-    float starting_value = 8;
-    float ending_value = 9;
-    float starting_cash = 10;
-    float ending_cash = 11;
-    float portfolio_value = 20;
+    double returns = 3;
+    double pnl = 4;
+    double capital_used = 5; //capital_used
+    double starting_exposure = 6;
+    double ending_exposure = 7;
+    double starting_value = 8;
+    double ending_value = 9;
+    double starting_cash = 10;
+    double ending_cash = 11;
+    double portfolio_value = 20;
     int64 longs_count = 12;
     int64 shorts_count = 13;
-    float long_value = 14;
-    float short_value = 15;
-    float long_exposure = 16;
-    float short_exposure = 17;
-    float gross_leverage = 18;
-    float net_leverage = 19;
+    double long_value = 14;
+    double short_value = 15;
+    double long_exposure = 16;
+    double short_exposure = 17;
+    double gross_leverage = 18;
+    double net_leverage = 19;
 }
 
 message PeriodMetrics {
@@ -34,28 +34,28 @@ message PeriodMetrics {
     repeated Position positions = 3;
     google.protobuf.Timestamp period_open = 4;
     google.protobuf.Timestamp period_close = 5;
-    float capital_used = 6;
-    float starting_exposure = 7;
-    float ending_exposure = 8;
-    float starting_value = 9;
-    float starting_cash = 10;
-    float returns = 11;
-    float pnl = 12;
+    double capital_used = 6;
+    double starting_exposure = 7;
+    double ending_exposure = 8;
+    double starting_value = 9;
+    double starting_cash = 10;
+    double returns = 11;
+    double pnl = 12;
 }
 
 message CumulativeRiskMetrics {
-    float algo_volatility = 1;
-//    float benchmark_period_return = 2;
-//    float benchmark_volatility = 3;
-    float algorithm_period_return = 2;
-//    float alpha = 5;
-//    float beta = 6;
-//    float sharpe = 7;
-//    float sortino = 8;
-//    float max_drawdown = 9;
-    float max_leverage = 3;
+    double algo_volatility = 1;
+//    double benchmark_period_return = 2;
+//    double benchmark_volatility = 3;
+    double algorithm_period_return = 2;
+//    double alpha = 5;
+//    double beta = 6;
+//    double sharpe = 7;
+//    double sortino = 8;
+//    double max_drawdown = 9;
+    double max_leverage = 3;
     int32 trading_days = 4;
     string period_label = 5;
-    float excess_return = 6;
-    float treasury_period_return = 7;
+    double excess_return = 6;
+    double treasury_period_return = 7;
 }

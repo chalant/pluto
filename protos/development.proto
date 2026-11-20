@@ -49,8 +49,8 @@ message StrategyRequest {
 message SetupRequest {
     //setup parameters of the strategy
     string strategy_id = 1;
-    float capital = 2;
-    float max_leverage = 3;
+    double capital = 2;
+    double max_leverage = 3;
     string universe = 4;
     int32 look_back = 5;
     string data_frequency = 7;

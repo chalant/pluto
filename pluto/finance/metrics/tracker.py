@@ -1,5 +1,3 @@
-import pandas as pd
-
 from pluto.finance import metrics as mtr
 from pluto.coms.utils import conversions
 from pluto.finance import returns
@@ -106,11 +104,10 @@ class MetricsTracker(object):
         tr_state = trs.TrackerState()
         tr_state.ParseFromString(state)
 
-        self._first_open_session = pd.Timestamp(
-            conversions.to_datetime(tr_state.first_open_session),
-            tz='UTC')
+        self._first_open_session = conversions.to_datetime(
+            tr_state.first_open_session)
 
-        self._last_checkpoint = ledger_.restore_state(tr_state.account_state)
+        self._last_checkpoint = ledger_.restore_state(tr_state.ledger_state)
 
     def handle_minute_close(self, dt, data_portal):
         """

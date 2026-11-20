@@ -8,6 +8,12 @@ from pluto.coms.utils import conversions as cv
 
 from protos import ledger_state_pb2 as acc
 
+# format of the saved state (ledger_state.proto LedgerState.version):
+# 1: 64-bit (double) values and positions. State without a version was
+# written by the modules with 32-bit fields: its values would parse as
+# unknown fields (silently 0), so it is refused.
+STATE_VERSION = 1
+
 
 class Ledger(object):
     def __init__(self, start_date, portfolio, account, position_tracker):
@@ -491,17 +497,23 @@ class Ledger(object):
         return self._processed_transactions.get(dt, [])
 
     def get_state(self, dt):
+        # the properties bring the portfolio and the account up to date
+        portfolio = self.portfolio
+        account = self.account
         state = acc.LedgerState(
+            version=STATE_VERSION,
             session_count=self._session_count,
-            portfolio=cv.to_proto_portfolio(self._immutable_portfolio),
-            account=cv.to_proto_account(self._immutable_account),
+            portfolio=cv.to_proto_portfolio(portfolio),
+            account=cv.to_proto_account(account),
             last_checkpoint=cv.to_proto_timestamp(dt),
             orders=[cv.to_proto_order(order.to_dict())
                     for order in self._orders_by_id.values()],
             first_session=cv.to_proto_timestamp(self._start_dt.to_pydatetime()),
-            daily_returns=[
-                acc.Return(timestamp=cv.to_proto_timestamp(ts), value=val)
-                for ts, val in zip(self._sessions, self.daily_returns_array)
+            positions=[
+                cv.to_proto_position(
+                    dict(position.to_dict(),
+                         last_sale_date=position.last_sale_date))
+                for position in self._position_tracker.positions.values()
             ])
         self._last_checkpoint = dt
         return state.SerializeToString()
@@ -511,13 +523,40 @@ class Ledger(object):
 
         l = acc.LedgerState()
         l.ParseFromString(state)
-        self._portfolio = cv.to_zp_portfolio(l.portfolio)
-        self._account = cv.to_zp_account(l.account)
+        if l.version != STATE_VERSION:
+            raise ValueError(
+                'cannot restore the ledger state: format version {}, expected'
+                ' {}. State saved before the protobuf fields were widened to'
+                ' 64 bits (no version) cannot be read: its 32-bit values would'
+                ' be lost.'.format(l.version, STATE_VERSION))
+
+        position_tracker = self._position_tracker
+        for position in l.positions:
+            position_tracker.update_position(
+                cv.to_zp_asset(position.asset),
+                amount=position.amount,
+                last_sale_price=position.last_sale_price,
+                last_sale_date=(cv.to_datetime(position.last_sale_date)
+                                if position.HasField('last_sale_date')
+                                else None),
+                cost_basis=position.cost_basis)
+
+        self._immutable_portfolio = cv.to_zp_portfolio(l.portfolio)
+        self._portfolio = protocol.MutableView(self._immutable_portfolio)
+        self._portfolio.positions = position_tracker.get_positions()
+
+        self._immutable_account = cv.to_zp_account(l.account)
+        self._account = protocol.MutableView(self._immutable_account)
+        # the ledger keeps leverage == gross_leverage (see account)
+        self._account.gross_leverage = self._account.leverage
+
+        # the saved portfolio and account were up to date (get_state)
+        self._dirty_portfolio_ = False
+        self._dirty_account = False
+
         self._session_count = l.session_count
         for order in [cv.to_zp_order(order) for order in l.orders]:
             self.process_order(order)
-        dra = self.daily_returns_array
-        for ret in l.daily_returns:
-            dra.append(ret.value)
-        self._start_dt = l.first_session
-        self._last_checkpoint = l.last_checkpoint
+        self._start_dt = cv.to_datetime(l.first_session)
+        self._last_checkpoint = cv.to_datetime(l.last_checkpoint)
+        return self._last_checkpoint
