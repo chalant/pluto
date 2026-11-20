@@ -3,15 +3,11 @@ import contextlib2 as ctx
 from os import path, environ
 import tarfile
 import tempfile
-import logging
 from concurrent import futures
 
 from nose_parameterized import parameterized
 
 import pandas as pd
-
-from numpy import testing
-import numpy as np
 
 from trading_calendars import calendar_utils
 
@@ -77,8 +73,10 @@ def _build_data_frame(mon, process_id):
     return daily_stats
 
 
-def _run(dir_, example_name, expected_perf, environ_):
-    args, path_ = examples.EXAMPLE_MODULES[example_name]
+def _run(dir_, example_name, expected_perf, environ_, modules=examples.EXAMPLE_MODULES):
+    """modules: name -> (_test_args(), path of the strategy file); the
+    examples by default, tests/pluto_scenarios for the scenario tests."""
+    args, path_ = modules[example_name]
 
     # setup strategy...
 
@@ -235,7 +233,8 @@ def _run(dir_, example_name, expected_perf, environ_):
         sessions,
         market,
         controller_behavior,
-        stp.capital)
+        stp.capital,
+        calendar)
 
     # capital = 1e7
 
@@ -260,6 +259,8 @@ def _run(dir_, example_name, expected_perf, environ_):
 
 def _compare_df(desired, actual):
     """
+    Exact comparison, column by column (test_utils.compare_column, rtol=0,
+    atol=0, non-numeric columns included).
 
     Parameters
     ----------
@@ -271,32 +272,12 @@ def _compare_df(desired, actual):
 
     """
 
-    errors = 0
-    tests = 0
+    errors = [e for e in (test_utils.compare_column(col, desired[col], actual[col])
+                          for col in desired.columns) if e]
 
-    for l, r in zip(desired.iteritems(), actual.iteritems()):
-        tests += 1
-        act = r[1]
-        des = l[1]
-
-        try:
-            testing.assert_allclose(
-                np.nan_to_num(des.values),
-                act.values,
-                rtol=0.1,
-                atol=0.2,
-                equal_nan=False)
-        except AssertionError as e:
-            errors += 1
-            print('Name: {}\nError: {}'.format(l[0], e))
-        except TypeError:
-            try:
-                pd.testing.assert_series_equal(des, act, check_less_precise=3)
-            except AssertionError as e:
-                logging.warning('\nName: {}\nError: {}'.format(l[0], e))
-
-    if errors > 0:
-        raise AssertionError('failed {} out of {}'.format(errors, tests))
+    if errors:
+        raise AssertionError('failed {} out of {}:\n{}'.format(
+            len(errors), len(desired.columns), '\n'.join(errors)))
 
 
 class PlutoExamplesTests(unittest.TestCase):

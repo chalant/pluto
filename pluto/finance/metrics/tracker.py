@@ -191,12 +191,12 @@ class MetricsTracker(object):
         if not self._first_open_session:
             self._first_open_session = session_label
 
-        self._market_open = session_label
-
-        # self._market_open, self._market_close = self._execution_open_and_close(
-        #     trading_calendar,
-        #     session_label,
-        # )
+        # the daily packet's period_open: the session's execution open, as
+        # zipline's MetricsTracker.handle_market_open
+        self._market_open, self._market_close = self._execution_open_and_close(
+            data_portal.trading_calendar,
+            session_label,
+        )
 
         for metric in self._metrics:
             metric.start_of_session(
