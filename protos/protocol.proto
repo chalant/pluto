@@ -38,44 +38,44 @@ message Order {
 
 message Position {
     Asset asset = 1;
-    int64 amount = 2;
-    float cost_basis = 3;
-    float last_sale_price = 4;
+    double amount = 2;
+    double cost_basis = 3;
+    double last_sale_price = 4;
     google.protobuf.Timestamp last_sale_date = 5;
 }
 
 message Account {
     //todo: add fields for commodities...
-    float settled_cash = 1;
-    float accrued_interest = 2;
-    float buying_power = 3;
-    float equity_with_loan = 4;
-    float total_positions_value = 5;
-    float total_positions_exposure = 6;
-    float regt_equity = 7;
-    float regt_margin = 8;
-    float initial_margin_requirement = 9;
-    float maintenance_margin_requirement = 10;
-    float available_funds = 11;
-    float excess_liquidity = 12;
-    float cushion = 13;
-    float day_trades_remaining = 14;
-    float leverage = 15;
-    float net_leverage = 16;
-    float net_liquidation = 17;
-    float sma = 18;
+    double settled_cash = 1;
+    double accrued_interest = 2;
+    double buying_power = 3;
+    double equity_with_loan = 4;
+    double total_positions_value = 5;
+    double total_positions_exposure = 6;
+    double regt_equity = 7;
+    double regt_margin = 8;
+    double initial_margin_requirement = 9;
+    double maintenance_margin_requirement = 10;
+    double available_funds = 11;
+    double excess_liquidity = 12;
+    double cushion = 13;
+    double day_trades_remaining = 14;
+    double leverage = 15;
+    double net_leverage = 16;
+    double net_liquidation = 17;
+    double sma = 18;
 }
 
 message Portfolio {
-    float cash_flow = 1;
-    float starting_cash = 2;
-    float portfolio_value = 3;
-    float pnl = 4;
-    float returns = 5;
-    float cash = 6;
+    double cash_flow = 1;
+    double starting_cash = 2;
+    double portfolio_value = 3;
+    double pnl = 4;
+    double returns = 5;
+    double cash = 6;
     google.protobuf.Timestamp start_date = 7;
-    float positions_value = 8;
-    float positions_exposure = 9;
+    double positions_value = 8;
+    double positions_exposure = 9;
 }
 
 message Positions {
