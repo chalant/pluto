@@ -43,7 +43,9 @@ also a submodule or a module-level name of `m`; star imports accepted), and writ
 - [x] worktree + branch `cleanup-superseded` at `b2a8dfdf`; extensions built (rc=0, 18 `.so`)
 - [x] baseline: 35 tests on `b2a8dfdf` in the worktree: **35 passed** in 39.45 s
 - [x] inventory (below) and baseline import scan: 64 unresolved pairs (listed below)
-- [ ] remove GUI (commit), 35 tests + `import pluto` + `install-examples`
+- [x] remove GUI (commit "cleanup: remove the GUI"): 35 passed (39.03 s); `import pluto` ok; `install-examples` rc=0
+  (strategies, launchers, `assets-7.sqlite` created in a temp HOME, deleted); `__main__.py --help`: add-manager,
+  add-strategy, install-examples
 - [ ] remove `styx` (commit), same checks
 - [ ] remove ClickHouse data layer (commit), same checks; prove the tests pass without `clickhouse-driver` installed
 - [ ] mentions, docs, requirements, isolation test (commit), same checks

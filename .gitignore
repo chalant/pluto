@@ -79,5 +79,4 @@ TAGS
 
 *.dSYM/
 
-gui/node_modules/
 venv/
