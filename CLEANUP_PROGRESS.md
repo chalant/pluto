@@ -48,7 +48,15 @@ also a submodule or a module-level name of `m`; star imports accepted), and writ
   add-strategy, install-examples
 - [x] remove `styx` (commit "cleanup: remove styx"): 18 files; no requirement, config, script or test existed
   only for it (inventory). 35 passed (39.37 s); `import pluto` ok; `install-examples` rc=0
-- [ ] remove ClickHouse data layer (commit), same checks; prove the tests pass without `clickhouse-driver` installed
+- [x] remove ClickHouse data layer (commit "cleanup: remove the ClickHouse data layer"): `pluto/data/equity_pricing/`,
+  `pluto/data/utils.py`, `pluto/data/{pluto,vendors}_db_schema.py`, `compound_calendar.py`, the ClickHouse test;
+  `ClickHouseTestBundle` and its imports (incl. the module-level `clickhouse_driver`) out of `pluto/data/bundles/test.py`;
+  `assets.py` unused client import, unused lifetimes query, comments; `clickhouse-driver` out of `dev/setup_env.sh`.
+  Stale `pluto/data/equity_pricing/__pycache__` deleted (an untracked dir would import as a namespace package).
+  35 passed (34.17 s); `import pluto` ok; `install-examples` rc=0. Without the package: 35 passed (37.12 s) with a
+  `sitecustomize.py` (`cleanup/noch/`, on `PYTHONPATH`) that makes `clickhouse_driver`, `PyQt6`, `PySide6` raise
+  ImportError; importing `pluto.data.bundles.test`, `zipline.data.bundles.core`, `pluto.assets.assets`,
+  `pluto.data.universes.core` under it loads none of them (`loaded: []`). Real absence: fresh environment (below).
 - [ ] mentions, docs, requirements, isolation test (commit), same checks
 - [ ] import scan after: unresolved ⊆ baseline
 - [ ] fresh environment from `dev/setup_env.sh` under `/home/yves/.cache/hades-pluto-dev/scratch-cleanup/`: 35 tests, `pip list` without PyQt6/PySide6/clickhouse-driver; scratch deleted
@@ -215,6 +223,6 @@ zipline/test_algorithms.py zipline.api:sid
 
 ## Next step
 
-Remove the ClickHouse data layer (files and edits in the inventory), uninstall nothing from env36 (prove
-the no-package case with a child interpreter that blocks the import, and in the fresh environment), run
-`bash /home/yves/.cache/hades-pluto-dev/cleanup/check.sh` (the three checks of "How to run"), commit.
+Mentions step: `tests/test_pluto_isolation.py` (block the third-party packages only, see Decisions),
+`dev/README.md` (removed vs remaining), then `check.sh`, commit; then the import scan after, the fresh
+environment, the final grep.

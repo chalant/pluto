@@ -160,10 +160,6 @@ class TestUniverse(AbstractUniverse):
         self._calendar = None
         self._cache = calendar_cache
 
-        # self._bundle = bundle = test.ClickHouseTestBundle(
-        #     root_dir,
-        #     data_cache)
-
         self._bundle = bundle = test.TestBundleLoader(root_dir)
 
         self._bundle_data = bundle.load()
