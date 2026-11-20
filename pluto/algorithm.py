@@ -10,6 +10,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from trading_calendars import get_calendar
 
 import pluto.control.controllable.controllable
 
@@ -29,7 +30,8 @@ from zipline.errors import (
     CannotOrderDelistedAsset,
     DuplicatePipelineName,
     AttachPipelineAfterInitialize,
-    OrderInBeforeTradingStart
+    OrderInBeforeTradingStart,
+    ScheduleFunctionInvalidCalendar
 )
 
 from zipline.pipeline import Pipeline
@@ -260,8 +262,24 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
                      # If we are in daily mode the time_rule is ignored.
                      events.time_rules.every_minute())
 
+        # as zipline's TradingAlgorithm.schedule_function: the date rule is
+        # evaluated on the requested calendar's sessions
+        if calendar is None:
+            cal = self._trading_calendar
+        elif calendar is events.calendars.US_EQUITIES:
+            cal = get_calendar('XNYS')
+        elif calendar is events.calendars.US_FUTURES:
+            cal = get_calendar('us_futures')
+        else:
+            raise ScheduleFunctionInvalidCalendar(
+                given_calendar=calendar,
+                allowed_calendars=(
+                    '[calendars.US_EQUITIES, calendars.US_FUTURES]'
+                ),
+            )
+
         self.add_event(
-            events.make_eventrule(date_rule, time_rule, self._trading_calendar, half_days),
+            events.make_eventrule(date_rule, time_rule, cal, half_days),
             func)
 
     def get_history_window(self, bar_count, frequency, assets, field, ffill):
