@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): api_method registers the method on pluto.api and zipline.api.
 #
 # Copyright 2014 Quantopian, Inc.
 #
@@ -14,6 +15,7 @@
 # limitations under the License.
 
 import zipline.api
+from pluto import api as pluto_api
 from zipline.utils.compat import wraps
 from zipline.utils.algo_instance import get_algo_instance, set_algo_instance
 
@@ -43,7 +45,7 @@ class ZiplineAPI:
 
 def api_method(f):
     # Decorator that adds the decorated class method as a callable
-    # function (wrapped) to zipline.api
+    # function (wrapped) to pluto.api
     @wraps(f)
     def wrapped(*args, **kwargs):
         # Get the instance and call the method
@@ -54,9 +56,11 @@ def api_method(f):
             )
         return getattr(algo_instance, f.__name__)(*args, **kwargs)
 
-    # Add functor to zipline.api
-    setattr(zipline.api, f.__name__, wrapped)
-    zipline.api.__all__.append(f.__name__)
+    # Add functor to pluto.api, and to zipline.api so that zipline's own
+    # run path (zipline/examples, run_algorithm) keeps working
+    for module in (pluto_api, zipline.api):
+        setattr(module, f.__name__, wrapped)
+        module.__all__.append(f.__name__)
     f.is_api_method = True
     return f
 

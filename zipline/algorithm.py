@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): the engine gets the algorithm itself; before_trading_start takes the algo.
 #
 # Copyright 2015 Quantopian, Inc.
 #
@@ -410,7 +411,8 @@ class TradingAlgorithm:
         if get_loader is not None:
             self.engine = SimplePipelineEngine(
                 get_loader,
-                self.asset_finder,
+                # the engine reads `.asset_finder` from this object
+                self,
                 self.default_pipeline_domain(self.trading_calendar),
             )
         else:
@@ -423,7 +425,7 @@ class TradingAlgorithm:
         with ZiplineAPI(self):
             self._initialize(self, *args, **kwargs)
 
-    def before_trading_start(self, data):
+    def before_trading_start(self, algo, data):
         self.compute_eager_pipelines()
 
         if self._before_trading_start is None:
@@ -436,7 +438,7 @@ class TradingAlgorithm:
             if self.data_frequency == "minute"
             else ExitStack()
         ):
-            self._before_trading_start(self, data)
+            self._before_trading_start(algo, data)
 
         self._in_before_trading_start = False
 

@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): before_trading_start is called with the algo.
 #
 # Copyright 2015 Quantopian, Inc.
 #
@@ -240,7 +241,7 @@ class AlgorithmSimulator:
                 elif action == BEFORE_TRADING_START_BAR:
                     self.simulation_dt = dt
                     algo.on_dt_changed(dt)
-                    algo.before_trading_start(self.current_data)
+                    algo.before_trading_start(algo, self.current_data)
                 elif action == MINUTE_END:
                     minute_msg = self._get_minute_message(
                         dt,
