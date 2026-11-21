@@ -155,9 +155,12 @@ applied. `pluto/_protocol.pyx` (not in `setup.py`, no importer, does not compile
 
 ## EXACT NEXT STEPS
 
-1. Parity hardening (ns units): `pluto/assets/assets.py` (`asi8`), `sim_engine.pyx` (`_as_nanos` done), `benchmark_source.py`; check empty
-   `pd.Series()` dtypes and `pct_change` on the executed path (`git grep`).
-2. Deletions (PM23 + `minute_event_gen.py` + `pluto/finance/position.py`), `git grep` first.
+1. DONE parity hardening: `assets.py` (`as_unit('ns').asi8`), `sim_engine.pyx` (`_as_nanos`), `benchmark_source.py` (`as_unit('ns').asi8`,
+   `pd.Series(dtype='float64')`), `controllable.py` (`pd.Series(dtype='float64')`), `data/benchmark.py` (`astype('datetime64[ns]')`,
+   `pct_change(fill_method=None)`); `git grep` shows no other `asi8`/`pd.Series()`/`pct_change` on the executed path.
+   Dead and left (owner item): `pluto/coms/client/ledger.py` (`Series.append`, `pd.Series()`; no importer), `pluto/data/io/*`.
+2. DONE deletions (git grep: no importer, `imptest.py` 285 ok 0 bad): `pluto/data/download/` (all), `pluto/setup/{schema,account_setup,account}.py`,
+   `dev/setup_store.py`, `pluto/control/{bundle,domain}.py`, `pluto/control/clock/minute_event_gen.py`, `pluto/finance/position.py`.
 3. `dev/setup_env.sh` + `dev/README.md` + `etc/requirements-py313.txt` (= `$P/pins-initial.txt`).
 4. C6 fresh clone + env; C7 three runs of all pluto tests; C1b rerun; remove the worktree only when everything is committed.
 
