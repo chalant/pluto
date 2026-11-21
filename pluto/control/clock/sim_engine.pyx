@@ -30,6 +30,12 @@ from protos.clock_pb2 import (
 cdef np.int64_t _nanos_in_minute = 60000000000
 NANOS_IN_MINUTE = _nanos_in_minute
 
+def _as_nanos(dates):
+    # nanoseconds since the epoch, whatever the unit of the index is (pandas 2+
+    # keeps the unit it was built with; the arithmetic below is in nanoseconds)
+    return pd.DatetimeIndex(dates).as_unit('ns').values.astype(np.int64)
+
+
 cdef class MinuteSimulationClock:
     cdef bool minute_emission
     cdef np.int64_t[:] market_opens_nanos, market_closes_nanos, bts_nanos, \
@@ -45,11 +51,11 @@ cdef class MinuteSimulationClock:
                  minute_emission=False):
         self.minute_emission = minute_emission
 
-        self.market_opens_nanos = market_opens.values.astype(np.int64)
-        self.market_closes_nanos = market_closes.values.astype(np.int64)
-        self.sessions_nanos = sessions.values.astype(np.int64)
-        self.bts_nanos = before_trading_start_minutes.values.astype(np.int64)
-        self.trade_end_nanos = trade_end_minutes.values.astype(np.int64)
+        self.market_opens_nanos = _as_nanos(market_opens)
+        self.market_closes_nanos = _as_nanos(market_closes)
+        self.sessions_nanos = _as_nanos(sessions)
+        self.bts_nanos = _as_nanos(before_trading_start_minutes)
+        self.trade_end_nanos = _as_nanos(trade_end_minutes)
 
         self.minutes_by_session = self.calc_minutes_by_session()
 
@@ -69,7 +75,7 @@ cdef class MinuteSimulationClock:
                 _nanos_in_minute
             )
             minutes_by_session[session_nano] = pd.to_datetime(
-                minutes_nanos, utc=True, box=True
+                minutes_nanos, utc=True
             )
         return minutes_by_session
 

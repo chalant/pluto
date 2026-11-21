@@ -144,7 +144,7 @@ class Controllable(ABC):
         # self._benchmark_source = None
         self._last_session_close = None
 
-        self._sessions = pd.Series()
+        self._sessions = pd.Series(dtype='float64')
         self._sessions_array = deque()
 
         self._name = None

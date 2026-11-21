@@ -10,7 +10,7 @@ import pandas as pd
 from zipline.assets import assets
 
 from zipline.data.bundles import core
-from zipline.data.minute_bars import BcolzMinuteBarReader
+from zipline.data.bcolz_minute_bars import BcolzMinuteBarReader
 from zipline.data.adjustments import SQLiteAdjustmentReader
 
 from zipline.data.bcolz_daily_bars import BcolzDailyBarReader
@@ -36,7 +36,7 @@ class TestBundle(AbstractBundleIngester):
 
     def _ingest(self, root_dir, *args, **kwargs):
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
-            tar.extractall(root_dir.path)
+            tar.extractall(root_dir.path, filter='data')
 
     def __enter__(self):
         return self
@@ -61,7 +61,7 @@ class TestBundleLoader(AbstractBundleLoader):
 
     def _load(self):
         name = 'test'
-        timestamp = pd.Timestamp.utcnow()
+        timestamp = pd.Timestamp.now(tz='UTC')
         environ = self._environ
 
         timestr = core.most_recent_data(name, timestamp, environ=environ)

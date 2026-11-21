@@ -12,26 +12,31 @@ from exchange_calendars import calendar_utils as _ec_utils
 
 _cache = {}
 
+# Pluto's own exchange aliases (for example the test bundle's 'YAHOO'), looked up
+# before exchange_calendars' aliases. They are not registered in
+# exchange_calendars' global dispatcher, where zipline's examples register a
+# 'YAHOO' calendar instance of their own.
+_aliases = {}
+
 
 def resolve_alias(name):
-    """Resolve a calendar alias (for example 'NYSE') to its canonical name."""
+    """Resolve an alias (for example 'NYSE' or 'YAHOO') to a canonical calendar name."""
+    seen = set()
+    while name in _aliases:
+        if name in seen:
+            raise ValueError("Cyclic calendar alias: {!r}".format(name))
+        seen.add(name)
+        name = _aliases[name]
     return _ec_utils.global_calendar_dispatcher.resolve_alias(name)
 
 
-def exchange_aliases():
-    """Map of every registered alias to the canonical calendar name."""
-    return _ec_utils.global_calendar_dispatcher.aliases_to_names()
-
-
-def register_alias(alias, name, force=False):
-    """Register ``alias`` for the calendar ``name`` (for example 'YAHOO')."""
-    _ec_utils.global_calendar_dispatcher.register_calendar_alias(
-        alias, name, force=force
-    )
+def register_alias(alias, name):
+    """Register ``alias`` for the calendar ``name``, replacing an earlier one."""
+    _aliases[alias] = name
 
 
 def deregister_alias(alias):
-    _ec_utils.global_calendar_dispatcher.deregister_calendar(alias)
+    _aliases.pop(alias, None)
 
 
 def to_session_label(dt):

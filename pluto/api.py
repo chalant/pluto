@@ -16,6 +16,11 @@
 # Note that part of the API is implemented in TradingAlgorithm as
 # methods (e.g. order). These are added to this namespace via the
 # decorator ``api_method`` inside of algorithm.py.
+# zipline's eager package init imports zipline.algorithm, whose api_method
+# registers the methods on this module and appends to __all__: it has to exist
+# before the first zipline import, also when this module is imported first.
+__all__ = []
+
 from zipline.finance.asset_restrictions import (
     Restriction,
     StaticRestrictions,
@@ -39,7 +44,7 @@ from zipline.utils.events import (
     time_rules
 )
 
-__all__ = [
+__all__ += [
     'EODCancel',
     'FixedSlippage',
     'FixedBasisPointsSlippage',

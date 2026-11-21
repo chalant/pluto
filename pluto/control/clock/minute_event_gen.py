@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 
 import pluto.control.clock.sim_engine as sim
 
-from trading_calendars.utils.pandas_utils import days_at_time
+from zipline.utils.calendar_utils import days_at_time
 import pandas as pd
 
 

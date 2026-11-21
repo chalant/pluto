@@ -1,5 +1,6 @@
 from itertools import chain, repeat
-from collections import Iterable, namedtuple
+from collections import namedtuple
+from collections.abc import Iterable
 
 from six import (
     string_types
@@ -10,7 +11,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from trading_calendars import get_calendar
+from zipline.utils.calendar_utils import get_calendar
 
 import pluto.control.controllable.controllable
 

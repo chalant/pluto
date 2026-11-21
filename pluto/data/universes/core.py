@@ -1,8 +1,6 @@
 import abc
 
 
-from trading_calendars import calendar_utils
-
 from zipline.data import bundles
 
 from zipline.pipeline.loaders import USEquityPricingLoader
@@ -167,7 +165,7 @@ class TestUniverse(AbstractUniverse):
         self._equity_daily_bar_reader = self._bundle_data.equity_daily_bar_reader
         self._environ = environ if environ else bundle._environ
 
-        calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
+        cu.register_alias('YAHOO', 'XNYS')
 
     @property
     def environ(self):
