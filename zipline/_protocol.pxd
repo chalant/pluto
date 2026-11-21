@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): InnerPosition.amount is float64 (fractional positions).
 cimport numpy as np
 import numpy; numpy.import_array()
 from zipline.assets._assets cimport Asset
@@ -11,7 +12,7 @@ cdef class InnerPosition:
     :class:`zipline.protocol.Position` at the same time without a cycle.
     """
     cdef readonly Asset asset
-    cdef public np.int64_t amount
+    cdef public np.float64_t amount
     cdef public np.float64_t cost_basis
     cdef public np.float64_t last_sale_price
     cdef public object last_sale_date
