@@ -106,6 +106,30 @@ def compare_column(col, desired, actual, rtol=0.0, atol=0.0):
     return None
 
 
+def stored_with_utc_timestamps(frame):
+    """A copy of a stored expected frame (pickled with pandas 0.22) in which the
+    Timestamps inside the positions, orders and transactions dicts are UTC.
+
+    Under pandas 2 the 0.22 pickles of a time-zone aware Timestamp load as a
+    naive Timestamp with the same UTC wall time; the Timestamps of the frame's
+    own columns and index keep their zone.
+    """
+    def fix(value):
+        if isinstance(value, pd.Timestamp) and value.tzinfo is None:
+            return value.tz_localize('UTC')
+        return value
+
+    frame = frame.copy()
+    for col in LIST_COLUMNS:
+        if col in frame:
+            # element by element: numpy would turn equal-length lists into a 2-d array
+            fixed = np.empty(len(frame), dtype=object)
+            for i, items in enumerate(frame[col]):
+                fixed[i] = [{k: fix(v) for k, v in item.items()} for item in items]
+            frame[col] = fixed
+    return frame
+
+
 class TestMetricsTracker(object):
     def __init__(
             self,
@@ -168,8 +192,8 @@ class TestMetricsTracker(object):
         # the daily packet's period_open: the session's execution open, as
         # zipline's MetricsTracker.handle_market_open
         calendar = self._trading_calendar
-        self._first_open_session = calendar.execution_time_from_open(
-            calendar.session_open(ts))
+        self._first_open_session = calendar.session_first_minute(
+            ts.tz_localize(None) if ts.tzinfo is not None else ts)
 
         if not self._initialized:
             for metric in self._metrics:
@@ -271,9 +295,7 @@ class TestMetricsTracker(object):
     def validate(self):
         """Compares every column that the stored expected results and this run
         both have (compare_column, rtol from STORED_RTOL, atol 0). The stored
-        transactions carry 'commission': None (Transaction.to_dict of the
-        zipline version that wrote the files; the fork's Transaction has no
-        commission attribute): that key is dropped before comparing."""
+        frames are read with stored_with_utc_timestamps."""
         expected_perf = self._expected_df
         if expected_perf is None:
             return
@@ -281,15 +303,7 @@ class TestMetricsTracker(object):
         daily_stats = self.frame()
         rtol = STORED_RTOL.get(self._name, 0.0)
 
-        if 'transactions' in expected_perf:
-            # element by element: numpy would turn equal-length lists into a 2-d array
-            transactions = np.empty(len(expected_perf), dtype=object)
-            for i, txns in enumerate(expected_perf['transactions']):
-                transactions[i] = [
-                    {k: v for k, v in t.items() if not (k == 'commission' and v is None)}
-                    for t in txns]
-            expected_perf = expected_perf.copy()
-            expected_perf['transactions'] = transactions
+        expected_perf = stored_with_utc_timestamps(expected_perf)
 
         common = sorted(set(expected_perf.columns) & set(daily_stats.columns))
         errors = []

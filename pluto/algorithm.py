@@ -140,6 +140,12 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
     def set_trading_calendar(self, calendar):
         self._trading_calendar = calendar
 
+    @property
+    def trading_calendar(self):
+        # zipline-reloaded's TradingAlgorithm methods (_can_order_asset, ...)
+        # read self.trading_calendar
+        return self._controllable.trading_calendar
+
     def initialize(self, *args, **kwargs):
         self._initialize(self, *args, **kwargs)
 
@@ -556,7 +562,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         return value / (last_price * value_multiplier)
 
     def run_pipeline(self, pipeline, start_session, chunksize):
-        sessions = self._controllable.trading_calendar.all_sessions
+        sessions = self._controllable.trading_calendar.sessions
 
         # Load data starting from the previous trading day...
         start_date_loc = sessions.get_loc(start_session)
@@ -622,7 +628,7 @@ class LiveTradingAlgorithm(TradingAlgorithm):
         --------
         PipelineEngine.run_pipeline
         """
-        sessions = self._controllable.trading_calendar.all_sessions
+        sessions = self._controllable.trading_calendar.sessions
 
         # Load data until the day before end session...
         start_loc = sessions.get_loc(end_session) - chunksize

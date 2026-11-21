@@ -246,9 +246,16 @@ class MetricsTracker(object):
 
     @staticmethod
     def _execution_open_and_close(calendar, session):
-        open_, close = calendar.open_and_close_for_session(session)
-        execution_open = calendar.execution_time_from_open(open_)
-        execution_close = calendar.execution_time_from_close(close)
+        # mirrors zipline-reloaded 2642caa7 (exchange-calendars 4.x): sessions
+        # are time-zone naive, the execution open is the session's first minute
+        if session.tzinfo is not None:
+            session = session.tz_localize(None)
+
+        open_ = calendar.session_first_minute(session)
+        close = calendar.session_close(session)
+
+        execution_open = open_
+        execution_close = close
 
         return execution_open, execution_close
 

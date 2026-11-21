@@ -1,15 +1,13 @@
 import unittest
-import contextlib2 as ctx
+import contextlib as ctx
 from os import path, environ
 import tarfile
 import tempfile
 from concurrent import futures
 
-from nose_parameterized import parameterized
+from parameterized import parameterized
 
 import pandas as pd
-
-from trading_calendars import calendar_utils
 
 from directory import utils as tdr
 
@@ -44,6 +42,12 @@ from pluto.trading_calendars import calendar_utils as cu
 from pluto.setup import run_setup
 from pluto.setup import directory_setup as dsp
 from pluto.setup import engine_setup
+
+# the stored expected results of the pandas 0.22 era (PM19), compared at the
+# tolerances of pluto.test_utils.test_utils (STORED_RTOL), and the set generated
+# on this stack by zipline's own run path, stored under the pandas version in use
+STORED_PANDAS_VERSION = '0-22-0'
+NEW_PANDAS_VERSION = pd.__version__.replace('.', '-')
 
 
 def _build_data_frame(mon, process_id):
@@ -180,7 +184,7 @@ def _run(dir_, example_name, expected_perf, environ_, modules=examples.EXAMPLE_M
         equity_daily_reader=uni.equity_daily_bar_reader,
         adjustment_reader=uni.adjustment_reader,
         last_available_session=last_session,
-        last_available_minute=calendar.minutes_for_session(last_session)[-1]
+        last_available_minute=calendar.session_last_minute(last_session)
     )
 
     market.add_bar_data(dp, restrictions)
@@ -218,11 +222,11 @@ def _run(dir_, example_name, expected_perf, environ_, modules=examples.EXAMPLE_M
         example_name,
         manager)
 
-    sessions = calendar.all_sessions
+    sessions = calendar.sessions
 
     benchmark_source = source.SimulationBenchmarkSource(
         calendar,
-        calendar.all_sessions,
+        calendar.sessions,
         uni.benchmark,
         150)
 
@@ -305,27 +309,26 @@ class PlutoExamplesTests(unittest.TestCase):
         cls._zpl_tempdir = dir_ = stack.enter_context(core.tmp_dir())
 
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
-            tar.extractall(dir_.path)
+            tar.extractall(dir_.path, filter='data')
 
         # environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
 
         cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
 
+        # the stored results written with pandas 0.22 (PM19: the lookup key is
+        # pinned, it no longer follows the pandas version in use)
         cls._expected_perf = cache.dataframe_cache(
-            dir_.getpath(
-                'example_data/expected_perf/%s' %
-                pd.__version__.replace('.', '-'),
-            ),
+            dir_.getpath('example_data/expected_perf/%s' % STORED_PANDAS_VERSION),
             serialization='pickle',
         )
 
         cls._framework_url = '[::]:50051'
 
-        calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
+        cu.register_alias('YAHOO', 'XNYS')
 
     @classmethod
     def tearDownClass(cls) -> None:
-        calendar_utils._default_calendar_aliases.pop('YAHOO')
+        cu.deregister_alias('YAHOO')
         cls._exit_stack.close()
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))

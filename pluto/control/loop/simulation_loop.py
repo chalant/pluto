@@ -52,7 +52,7 @@ class SimulationLoop(object):
 
         for ts, global_event in get_generator(
                 calendar,
-                calendar.all_sessions,
+                calendar.sessions,
                 frequency=self._frequency):
             signals = []
 

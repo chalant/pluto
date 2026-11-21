@@ -413,7 +413,8 @@ class Controllable(ABC):
 
         # todo: this could be loaded from files and account parameters (capital etc.)
         self._params = params = trading.SimulationParameters(
-            start_dt,
+            # sessions are time-zone naive (exchange_calendars)
+            start_dt.tz_localize(None) if start_dt.tzinfo is not None else start_dt,
             end_dt,
             calendar,
             run_setup.capital,
@@ -442,12 +443,12 @@ class Controllable(ABC):
             trading_calendar=calendar,
             first_trading_day=max(
                 bundle.first_trading_day,
-                calendar.all_sessions[0]),
+                calendar.sessions[0]),
             equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader,
             last_available_session=last_session,
-            last_available_minute=calendar.minutes_for_session(last_session)[-1])
+            last_available_minute=calendar.session_last_minute(last_session))
 
         # self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
         #     calendar,
@@ -1049,6 +1050,9 @@ class Controllable(ABC):
 
         def past_auto_close_date(asset):
             acd = asset.auto_close_date
+            if acd is not None:
+                # mirrors zipline-reloaded 2642caa7: asset dates are naive
+                acd = acd.tz_localize(dt.tzinfo)
             return acd is not None and acd <= dt
 
         # Remove positions in any sids that have reached their auto_close date.

@@ -144,7 +144,7 @@ class Clock(object):
 
         # self._start_dt = cal.first_session
 
-        self._generator = gen = iter(get_generator(cal, cal.all_sessions))
+        self._generator = gen = iter(get_generator(cal, cal.sessions))
 
         self._nxt_dt, self._nxt_evt = next(gen)
 
@@ -156,4 +156,4 @@ class Clock(object):
 
         self._end_dt = end_dt
 
-        # self._generator = iter(get_generator(cal, cal.all_sessions))
+        # self._generator = iter(get_generator(cal, cal.sessions))

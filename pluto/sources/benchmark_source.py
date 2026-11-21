@@ -234,13 +234,10 @@ class BenchmarkSource(abc.ABC):
 
     @classmethod
     def downsample_minute_return_series(cls, trading_calendar, minutely_returns):
-        sessions = trading_calendar.minute_index_to_session_labels(
+        sessions = trading_calendar.minutes_to_sessions(
             minutely_returns.index,
         )
-        closes = trading_calendar.session_closes_in_range(
-            sessions[0],
-            sessions[-1],
-        )
+        closes = trading_calendar.closes.loc[sessions[0]:sessions[-1]]
         daily_returns = minutely_returns[closes]
         daily_returns.index = closes.index
         return daily_returns.iloc[1:]

@@ -68,7 +68,10 @@ class ZiplineBenchmark(object):
             header=0 if has_header else None,
             names=None if has_header else ['date', 'return'],
             index_col='date',
-            parse_dates=['date'])
+            parse_dates=['date'],
+            # exact decimal to double conversion, as the stored results (pandas
+            # 0.22) and independent of the pandas default parser
+            float_precision='round_trip')
         returns = df['return'].sort_index()
         if returns.index.tz is None:
             returns.index = returns.index.tz_localize('UTC')

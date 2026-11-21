@@ -14,7 +14,7 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from trading_calendars import get_calendar
+from zipline.utils.calendar_utils import get_calendar
 
 from zipline import protocol
 from zipline.assets import Equity, ExchangeInfo
@@ -95,7 +95,7 @@ class StateRoundTripTest(unittest.TestCase):
         self.data_portal = DataPortal(
             asset_finder=None,
             trading_calendar=calendar,
-            first_trading_day=START)
+            first_trading_day=START.tz_localize(None))
 
     def _trade(self, metrics_tracker):
         metrics_tracker.handle_market_open(SESSION, self.data_portal)

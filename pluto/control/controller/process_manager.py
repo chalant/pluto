@@ -402,6 +402,9 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         def past_auto_close_date(asset):
             acd = asset.auto_close_date
+            if acd is not None:
+                # mirrors zipline-reloaded 2642caa7: asset dates are naive
+                acd = acd.tz_localize(dt.tzinfo)
             return acd is not None and acd <= dt
 
         blotter = self._blotters[calendar_name]
