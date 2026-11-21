@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): load() builds Pluto's AssetFinder; most_recent_data is exposed at module level.
 from collections import namedtuple
 import errno
 import os
@@ -10,13 +11,15 @@ import pandas as pd
 from zipline.utils.calendar_utils import get_calendar
 from toolz import curry, complement, take
 
+from pluto.assets import assets as pluto_assets
+
 from ..adjustments import SQLiteAdjustmentReader, SQLiteAdjustmentWriter
 from ..bcolz_daily_bars import BcolzDailyBarReader, BcolzDailyBarWriter
 from ..bcolz_minute_bars import (
     BcolzMinuteBarReader,
     BcolzMinuteBarWriter,
 )
-from zipline.assets import AssetDBWriter, AssetFinder, ASSET_DB_VERSION
+from zipline.assets import AssetDBWriter, ASSET_DB_VERSION
 from zipline.assets.asset_db_migrations import downgrade
 from zipline.utils.cache import (
     dataframe_cache,
@@ -174,7 +177,7 @@ class BundleData(_BundleData):
 
 BundleCore = namedtuple(
     "BundleCore",
-    "bundles register unregister ingest load clean",
+    "bundles register unregister ingest load clean most_recent_data",
 )
 
 
@@ -558,7 +561,7 @@ def _make_bundle_core():
             timestamp = pd.Timestamp.utcnow()
         timestr = most_recent_data(name, timestamp, environ=environ)
         return BundleData(
-            asset_finder=AssetFinder(
+            asset_finder=pluto_assets.AssetFinder(
                 asset_db_path(name, timestr, environ=environ),
             ),
             equity_minute_bar_reader=BcolzMinuteBarReader(
@@ -654,7 +657,17 @@ def _make_bundle_core():
 
         return cleaned
 
-    return BundleCore(bundles, register, unregister, ingest, load, clean)
+    return BundleCore(
+        bundles, register, unregister, ingest, load, clean, most_recent_data
+    )
 
 
-bundles, register, unregister, ingest, load, clean = _make_bundle_core()
+(
+    bundles,
+    register,
+    unregister,
+    ingest,
+    load,
+    clean,
+    most_recent_data,
+) = _make_bundle_core()
