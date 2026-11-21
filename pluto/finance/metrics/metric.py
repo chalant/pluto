@@ -237,10 +237,11 @@ class Transactions(Metric):
 
 class Positions(Metric):
     def end_of_bar(self, **kwargs):
-        kwargs['packet']['minute_perf']['positions'] = kwargs['ledger'].positions(kwargs['dt'])
+        # mirrors zipline-reloaded e45d9569: ledger.positions is a property
+        kwargs['packet']['minute_perf']['positions'] = kwargs['ledger'].positions
 
     def end_of_session(self, **kwargs):
-        kwargs['packet']['daily_perf']['positions'] = kwargs['ledger'].positions()
+        kwargs['packet']['daily_perf']['positions'] = kwargs['ledger'].positions
 
 
 class ReturnsStatistic(Metric):
@@ -289,7 +290,8 @@ class AlphaBeta(Metric):
             ledger_returns,
             benchmark_returns)
 
-        if np.isnan(alpha):
+        # mirrors zipline-reloaded cd05eee3: None for inf alpha, not just for nan
+        if not np.isfinite(alpha):
             alpha = None
         if np.isnan(beta):
             beta = None

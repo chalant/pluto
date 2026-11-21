@@ -8,6 +8,7 @@ import pandas as pd
 import logbook
 
 from zipline.finance import trading
+from zipline.gens.sim_engine import SESSION_END
 from zipline.finance.order import ORDER_STATUS
 
 from zipline.data import data_portal as dp
@@ -792,8 +793,15 @@ class Controllable(ABC):
 
         # fixme: validate account controls controller side.
 
-        # todo execute cancellation policy on trade end events not session end
-        # blotter.execute_cancel_policy(sim_engine.SESSION_END)
+        # mirrors zipline-reloaded 698b7dbb (ENH: enabled EODCancel for daily
+        # frequency): at the end of a daily session the oldest of the open
+        # orders of an asset that has several is cancelled; the cancellation is
+        # relayed (to the controller) with the orders of the next bar.
+        # todo: the cancel policy of minute runs (blotter.execute_cancel_policy)
+        #  needs the controller to cancel its copies of the orders: it is not
+        #  executed (it never was on this path).
+        if self._data_frequency == 'daily':
+            blotter.execute_daily_cancel_policy(SESSION_END)
         algo.validate_account_controls()
         return self._get_daily_message(
             dt,

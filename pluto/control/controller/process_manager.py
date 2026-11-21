@@ -293,8 +293,13 @@ class StrategyManager(brk_rpc.BrokerServicer):
                 # as zipline's blotter.cancel; an order placed and cancelled
                 # in the same bar is only recorded.
                 if order.id in blotter.orders:
+                    # the time of the cancellation is the one the strategy's
+                    # blotter stamped (the cancel policy runs at the end of the
+                    # session, the order is relayed with the next bar)
+                    cancelled_at = order.dt
                     blotter.cancel(order.id, relay_status=False)
                     order = blotter.orders[order.id]
+                    order.dt = cancelled_at
                 else:
                     blotter.orders[order.id] = order
                 ledgers[calendar_name].process_order(order)

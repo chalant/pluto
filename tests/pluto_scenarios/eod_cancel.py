@@ -1,7 +1,9 @@
-"""EODCancel cancel policy (set_cancel_policy) in a daily run: zipline's
-AlgorithmSimulator executes the cancel policy only for minute data, so the
-unfilled limit orders stay open and the partially filled market orders (small
-volume limit) keep filling on the next bars; Pluto must do the same."""
+"""EODCancel cancel policy (set_cancel_policy) in a daily run: zipline-reloaded
+(698b7dbb, "enabled EODCancel for daily frequency") executes the daily cancel
+policy at the end of each session: of the open orders of an asset that has more
+than one, the oldest is canceled (the unfilled limit order of the first bar when
+the second one is placed); the partially filled market orders (small volume
+limit) keep filling on the next bars. Pluto must do the same."""
 from zipline.finance import slippage
 
 from pluto.api import *

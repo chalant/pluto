@@ -310,7 +310,9 @@ class Ledger(object):
         """
         leftover_cash = self._position_tracker.handle_splits(splits)
 
-        if leftover_cash > 0:
+        if leftover_cash:
+            # mirrors zipline-reloaded 62cb4a13: either sign, a short pays cash
+            # to settle its fraction
             self._cash_flow(leftover_cash)
 
     def process_order(self, order):
