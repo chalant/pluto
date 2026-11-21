@@ -61,8 +61,11 @@ class Transaction:
 
 
 def create_transaction(order, dt, price, amount):
-    # Pluto: no integer conversion and no minimum magnitude, so that
-    # fractional amounts are traded.
+    # Pluto: no minimum magnitude, and a fractional amount is kept (it is
+    # traded as is); a whole amount stays an int, as in zipline.
+    if int(amount) == amount:
+        amount = int(amount)
+
     transaction = Transaction(
         asset=order.asset, amount=amount, dt=dt, price=price, order_id=order.id
     )
