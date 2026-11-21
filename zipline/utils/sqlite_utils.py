@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): connections can be used from another thread.
 # Copyright 2016 Quantopian, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +38,7 @@ def verify_sqlite_path_exists(path):
 def check_and_create_connection(path, require_exists):
     if require_exists:
         verify_sqlite_path_exists(path)
-    return sqlite3.connect(path)
+    return sqlite3.connect(path, check_same_thread=False)
 
 
 def check_and_create_engine(path, require_exists):
