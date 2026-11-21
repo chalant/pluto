@@ -60,7 +60,8 @@ $PY $P/import_scan.py $WT $P/scan_<step>.json
 - [x] `dev/README.md`: history paragraph, "Strategy scripts (interim convention)" with the redesign note, the
   proto compile note, the out-of-scope list and `install-examples` text. `dev/setup_env.sh` names none of the
   removed code (read; unchanged)
-- [ ] fresh clone + `dev/setup_env.sh` proof; final grep; worktree removed
+- [x] fresh clone + `dev/setup_env.sh` proof (61 passed), final grep (Evidence); worktree removed after the
+  last commit
 
 ## Inventory (at `b890bb28`)
 
@@ -208,10 +209,42 @@ Identical to the `cleanup-superseded` after-scan listed in `CLEANUP_PROGRESS.md`
 
 ## Evidence
 
-(filled in per step)
+Per-step results are in the checklist. Scan outputs and the check script are kept in `$P`
+(`scan_{before,a,b,c,d,fresh}.json`, `check.sh`, `protoc_{before,after,env36}/`).
+
+### Diff `master..7a18c544` (without this file)
+
+| Commit | Files | + / − |
+|---|---:|---|
+| `df72bb98` strategy store (store 102, `strategies.py` 248, `schema.py` 52, `sessions.py` 50, `templates.py` 55, `pluto_setup.py` 42, `directory/loader.py` 105, `pluto/control/setup/` 101, `dev/backtester.py` 163; `strategies/setup.py` −50, `__main__.py` −47, helper +18) | 15 | +28 / −1030 |
+| `a36bbe15` launcher leftovers (`script_handler.py` 46, `example_setup.py` 24, `launchers` line) | 3 | +0 / −72 |
+| `b8719450` dead off-path modules (`modes/` 842, `loop.py` 438, `graph.py` 546, `domain_filter.py` 225, `download/resources/` 173, `morningstar.py` 86, `writer.py` 76, `loader_factory.py` 59, `filters/universes.py` 58, `simulation_broker.py` 57, `local_process.py` 57, `alpaca.py` 47, `data/schema.py` 44, `benchmark_metrics.py` 31, `pod_process.py` 18, empty test 0) | 29 | +0 / −2764 |
+| `2b24213b` proto sources | 3 | +3 / −3 |
+| `7a18c544` `dev/README.md` | 1 | +29 / −5 |
+| total | 50 | +60 / −3874 |
+
+### Fresh clone
+
+`git clone --branch py313-cleanup` (`7a18c544`) into `$P/scratch/pluto`,
+`HOME=$P/scratch/home dev/setup_env.sh $P/scratch/env36`: rc=0 in 73 s, 18 extensions
+(`_int64window` 977,400 bytes). `check.sh` there: **61 passed** in 56.17 s; `import pluto` ok;
+`install-examples` rc=0, rerun rc=0; `--help` lists `install-examples` only; scan 55 pairs, new = [];
+0 parse errors; clone `git status` clean. Scratch (1.4 GB) deleted.
+
+### Final grep (at `7a18c544`)
+
+`git grep -E` over the removed module paths and dotted names (`strategy_store`, `pluto_setup`,
+`pluto.strategies.{strategies,schema,sessions,templates}`, `directory.loader`, `control.setup`,
+`script_handler`, `example_setup`, `backtester.py`, `domain_filter`, `filters.universes`, `local_process`,
+`pod_process`, `universes.alpaca`, `simulation_broker`, `benchmark_metrics`, `utils.graph`, `morningstar`,
+`download.resources`, `loader_factory`, `universes.writer`, `pluto.data.schema`,
+`test_pluto_minute_bars`, `control.modes`, `loop.loop`, `add-manager`, `add-strategy`, `metadata.sqlite`,
+`launchers`), excluding `zipline/`, `.vscode/tags` and the `*PROGRESS.md` files: only `dev/README.md`
+(the removal notes, lines 20, 54-56), `Testing.ipynb` (stored traceback, see above) and
+`pluto/control/bundle.py` (`_create_data_loader_factory`, an unrelated method name). No import of a
+removed module (an import of one would resolve to nothing and appear as a new unresolved pair; new = []).
 
 ## Next step
 
-Step (d): `protos/interface.proto:5` → `import "protos/data.proto";`; `protos/hub.proto`: drop the duplicate
-`import "protos/controller.proto";` (line 8), add `import "protos/params.proto";`; `protos/login.proto:5`: add
-`;`. Compile every file alone and all together with `$P/venv313`; `check.sh WT PY d`; commit.
+None: all steps done; the worktree is removed after this commit and the branch head is the commit that
+last changed this file. Open items: "Left for the owner or the next step" above.
