@@ -39,7 +39,12 @@ $PY $P/import_scan.py $WT $P/scan_<step>.json
   `cleanup-superseded` after-scan; 1 parse error (`domain_filter.py:109`)
 - [x] proto baseline (grpcio-tools 1.85.3): 24 of 27 compile; `hub.proto`, `interface.proto`, `login.proto` fail
 - [x] inventory (below), committed before any deletion
-- [ ] (a) strategy-store database layer and `TestClient` helper
+- [x] (a) strategy-store database layer and `TestClient` helper (plus `pluto/control/setup/`, `dev/backtester.py`,
+  see the note under (a)): **61 passed** (56.87 s); `import pluto` ok; `install-examples` rc=0, rerun rc=0,
+  `~/.pluto` has `data/test`, `launchers`, `setup`, `strategies/{5 examples}.py`, `strategies/{states,performance}`
+  (no `metadata.sqlite`, no `templates/`); `--help` lists only `install-examples`; scan 64 pairs, new = [],
+  gone = []. Helper check: the 5 copies are byte-identical to the sources (`filecmp`), registered in the
+  `Directory`, and a second copy raises `FileExistsError`
 - [ ] (b) launcher and script-handler leftovers
 - [ ] (c) off-path dead modules
 - [ ] (d) proto source fixes
@@ -74,6 +79,11 @@ The helper is replaced (no database), so they leave the closure.
 | `__main__.py` `add-strategy` | 26 | no | — | delete (needs the store and the templates) |
 | `__main__.py` `add-manager` | 15 | no | — | delete (needs `pluto_setup`; its `launchers/<name>.py` was consumed only by the removed GUI `backtester`) |
 | `__main__.py` `install-examples` | — | no | — | keep: `directory_setup.create_directory(~/.pluto)`, copy each example to `strategies/<name>.py` (skip existing), ingest the test bundle |
+
+Moved into (a) during the step (they import the deleted modules; leaving them for (b)/(c) made the
+scan grow by 3 pairs between commits): `pluto/control/setup/` (listed under (b); its `StrategyStore`
+reads `strategies/metadata.sqlite` through `strategies.get_strategy`) and `dev/backtester.py` (listed
+under (c); imports `pluto.strategies.{strategies,schema}`).
 
 Interim convention (documented in `dev/README.md`): a run's script is the file
 `<root>/strategies/<strategy_id>.py`, read by `ControllableService.Initialize`
@@ -153,4 +163,5 @@ Identical to the `cleanup-superseded` after-scan listed in `CLEANUP_PROGRESS.md`
 
 ## Next step
 
-Commit this inventory, then step (a).
+Step (b): delete `pluto/control/script_handler.py`, `pluto/control/example_setup.py` and the `launchers`
+directory line of `pluto/setup/directory_setup.py`; run `check.sh WT PY b` (scratch dir); commit.
