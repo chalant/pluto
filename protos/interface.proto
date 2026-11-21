@@ -2,7 +2,7 @@ syntax = "proto3";
 
 import "google/protobuf/empty.proto";
 
-import "data.proto";
+import "protos/data.proto";
 
 service Gateway {
     rpc Login (LoginRequest) returns (LoginResponse);
