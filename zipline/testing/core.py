@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): zipline_reloaded_git_root for the flat layout.
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 import gzip
@@ -1271,8 +1272,9 @@ def read_compressed(path):
         return f.read()
 
 
+# Modified by Pluto: the package is at the repository root (no src/ layout).
 zipline_reloaded_git_root = abspath(
-    join(realpath(dirname(__file__)), "..", "..", ".."),
+    join(realpath(dirname(__file__)), "..", ".."),
 )
 
 
