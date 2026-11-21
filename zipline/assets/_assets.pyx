@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): adds FractionalEquity.
 # cython: embedsignature=True
 #
 # Copyright 2015 Quantopian, Inc.
@@ -268,6 +269,11 @@ cdef class Equity(Asset):
     Asset subclass representing partial ownership of a company, trust, or
     partnership.
     """
+    pass
+
+
+cdef class FractionalEquity(Equity):
+    """Equity that can be traded in fractions (Pluto)."""
     pass
 
 @cython.embedsignature(False)
