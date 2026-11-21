@@ -5,7 +5,7 @@ import "protos/data.proto";
 import "protos/controller.proto";
 import "protos/data_bundle.proto";
 import "protos/exchange.proto";
-import "protos/controller.proto";
+import "protos/params.proto";
 
 service Hub {
     rpc UploadGraph (stream Chunk) returns (google.protobuf.Empty);
