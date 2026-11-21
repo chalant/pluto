@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): readers are compared by calendar name (one calendar instance per run).
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -47,11 +48,11 @@ class AssetDispatchBarReader(ABC):
         self._last_available_dt = last_available_dt
 
         for t, r in self._readers.items():
-            assert trading_calendar == r.trading_calendar, (
+            assert trading_calendar.name == r.trading_calendar.name, (
                 "All readers must share target trading_calendar. "
                 "Reader={0} for type={1} uses calendar={2} which does not "
                 "match the desired shared calendar={3} ".format(
-                    r, t, r.trading_calendar, trading_calendar
+                    r, t, r.trading_calendar.name, trading_calendar.name
                 )
             )
 
