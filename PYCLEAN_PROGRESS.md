@@ -45,7 +45,9 @@ $PY $P/import_scan.py $WT $P/scan_<step>.json
   (no `metadata.sqlite`, no `templates/`); `--help` lists only `install-examples`; scan 64 pairs, new = [],
   gone = []. Helper check: the 5 copies are byte-identical to the sources (`filecmp`), registered in the
   `Directory`, and a second copy raises `FileExistsError`
-- [ ] (b) launcher and script-handler leftovers
+- [x] (b) launcher leftovers (`script_handler.py`, `example_setup.py`, `launchers` directory): **61 passed**
+  (55.85 s); `import pluto` ok; `install-examples` rc=0 and rerun rc=0 (no `launchers/` any more); scan 64,
+  new = [], gone = []
 - [ ] (c) off-path dead modules
 - [ ] (d) proto source fixes
 - [ ] `dev/README.md`
@@ -163,5 +165,5 @@ Identical to the `cleanup-superseded` after-scan listed in `CLEANUP_PROGRESS.md`
 
 ## Next step
 
-Step (b): delete `pluto/control/script_handler.py`, `pluto/control/example_setup.py` and the `launchers`
-directory line of `pluto/setup/directory_setup.py`; run `check.sh WT PY b` (scratch dir); commit.
+Step (c): delete the off-path modules of the (c) table (not `pluto/coms/client/ledger.py`, not the notebook,
+not `pluto/interface/*`); remove leftover `__pycache__`-only directories; `check.sh WT PY c`; commit.
