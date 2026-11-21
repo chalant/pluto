@@ -49,6 +49,44 @@ from pluto.setup import engine_setup
 STORED_PANDAS_VERSION = '0-22-0'
 NEW_PANDAS_VERSION = pd.__version__.replace('.', '-')
 
+# Columns in which Pluto differs from the stored 0.22 results on this stack, at
+# the existing tolerances (STORED_RTOL, exact otherwise). Measured with
+# pandas 2.3.3, numpy 2.5.4, empyrical-reloaded (Python 3.13 port):
+# example -> column -> (rows that differ, rows, largest absolute difference,
+# largest relative difference). Pluto equals the vendored zipline on all of them
+# (tests/test_pluto_zipline_oracle.py), so they are differences of the stack, not of
+# Pluto: ``alpha`` is computed by empyrical-reloaded 0.7.3 as
+# (1 + mean(alpha series)) ** annualization - 1, where the empyrical of the 0.22
+# era multiplied the mean by the annualization factor (PM3);
+# ``benchmark_volatility`` and ``beta`` differ by about one unit in the last place in
+# some rows (cause not analysed further: numpy/pandas rounding is the likely one). These comparisons are marked
+# unittest.expectedFailure; every other column is compared at the existing tolerance.
+STORED_EXPECTED_DIFFERENCES = {
+    'buy_and_hold': {
+        'alpha': (1258, 1259, 3.51572e-05, 4.17854e-03),
+        'benchmark_volatility': (669, 1259, 1.11022e-16, 3.90999e-16),
+        'beta': (527, 1259, 1.30104e-18, 7.10548e-16),
+    },
+    'buyapple': {
+        'alpha': (210, 211, 2.79377e-04, 1.18417e-02),
+        'benchmark_volatility': (17, 211, 2.77556e-17, 2.21463e-16),
+        'beta': (106, 211, 2.08167e-17, 2.44270e-15),
+    },
+    'dual_ema_talib': {
+        'alpha': (210, 211, 5.62621e-06, 1.67483e-03),
+        'benchmark_volatility': (17, 211, 2.77556e-17, 2.21463e-16),
+        'beta': (118, 211, 1.73472e-18, 8.77257e-16),
+    },
+    'dual_moving_average': {
+        'alpha': (202, 502, 2.25119e-07, 3.34869e-04),
+        'benchmark_volatility': (87, 502, 2.77556e-17, 3.09713e-16),
+        'beta': (89, 502, 5.42101e-19, 1.55319e-15),
+    },
+    'momentum_pipeline': {
+        'alpha': (38, 39, 1.35744, 0.602379),
+    },
+}
+
 
 def _build_data_frame(mon, process_id):
     daily_perfs = []
@@ -77,7 +115,7 @@ def _build_data_frame(mon, process_id):
     return daily_stats
 
 
-def _run(dir_, example_name, expected_perf, environ_, modules=examples.EXAMPLE_MODULES):
+def _run(dir_, example_name, environ_, modules=examples.EXAMPLE_MODULES):
     """modules: name -> (_test_args(), path of the strategy file); the
     examples by default, tests/pluto_scenarios for the scenario tests."""
     args, path_ = modules[example_name]
@@ -232,7 +270,6 @@ def _run(dir_, example_name, expected_perf, environ_, modules=examples.EXAMPLE_M
 
     return tester.run(
         loop,
-        expected_perf,
         benchmark_source,
         sessions,
         market,
@@ -316,11 +353,17 @@ class PlutoExamplesTests(unittest.TestCase):
         cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
 
         # the stored results written with pandas 0.22 (PM19: the lookup key is
-        # pinned, it no longer follows the pandas version in use)
+        # pinned, it no longer follows the pandas version in use), and the ones
+        # generated on this stack
         cls._expected_perf = cache.dataframe_cache(
             dir_.getpath('example_data/expected_perf/%s' % STORED_PANDAS_VERSION),
             serialization='pickle',
         )
+        cls._new_expected_perf = cache.dataframe_cache(
+            dir_.getpath('example_data/expected_perf/%s' % NEW_PANDAS_VERSION),
+            serialization='pickle',
+        )
+        cls._frames = {}
 
         cls._framework_url = '[::]:50051'
 
@@ -331,21 +374,59 @@ class PlutoExamplesTests(unittest.TestCase):
         cu.deregister_alias('YAHOO')
         cls._exit_stack.close()
 
+    def _pluto_frame(self, example_name):
+        """The daily result frame of Pluto's run of an example (run once per
+        class: the run is deterministic)."""
+        frames = type(self)._frames
+        if example_name not in frames:
+            frames[example_name] = _run(
+                self._pluto_tempdir, example_name, self._environ).frame()
+        return frames[example_name]
+
+    def check_new_expected(self, example_name):
+        """Pluto against the results generated on this stack by zipline's own
+        run path (tests/resources/add_expected_perf.py): exact on every column
+        both have; the columns that only zipline has are its recorded variables."""
+        desired = self._new_expected_perf[example_name]
+        actual = self._pluto_frame(example_name)
+
+        self.assertTrue((desired.index == actual.index).all())
+        errors = test_utils.frame_errors(desired, actual)
+        self.assertEqual(errors, [])
+        self.assertEqual(set(actual.columns) - set(desired.columns), set())
+
+    def check_stored(self, example_name, columns):
+        """Pluto against the results stored with pandas 0.22 (PM19), at
+        the tolerance of STORED_RTOL (0 unless listed), on ``columns``."""
+        desired = test_utils.stored_with_utc_timestamps(self._expected_perf[example_name])
+        actual = self._pluto_frame(example_name)
+
+        if columns is None:
+            columns = sorted(
+                (set(desired.columns) & set(actual.columns))
+                - set(STORED_EXPECTED_DIFFERENCES.get(example_name, {})))
+
+        errors = test_utils.frame_errors(
+            desired, actual, rtol=test_utils.STORED_RTOL.get(example_name, 0.0), columns=columns)
+        self.assertEqual(errors, [])
+
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
-        # monitor for performance callbacks...
+        self.check_new_expected(example_name)
 
-        # process, uni = _create_process(
-        #     _STP,
-        #     example_name,
-        #     in_memory.InMemoryControllableStub(dir_, 'backtesting'))
+    @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
+    def test_stored_results(self, example_name):
+        """Every column of the 0.22 results that is not in
+        STORED_EXPECTED_DIFFERENCES."""
+        self.check_stored(example_name, None)
 
-        # print("Example ", example_name)
-
-        _run(self._pluto_tempdir,
-             example_name,
-             self._expected_perf[example_name],
-             self._environ)
+    @parameterized.expand(sorted(STORED_EXPECTED_DIFFERENCES))
+    @unittest.expectedFailure
+    def test_stored_results_expected_differences(self, example_name):
+        """The columns of STORED_EXPECTED_DIFFERENCES against the 0.22 results,
+        at the existing tolerance. Expected to fail; an unexpected success fails
+        the run."""
+        self.check_stored(example_name, sorted(STORED_EXPECTED_DIFFERENCES[example_name]))
 
     # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     # def test_live_simulation(self, example_name):

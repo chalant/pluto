@@ -1,4 +1,4 @@
-# Modified by Pluto (Apache-2.0 section 4(b)): readers are compared by calendar name (one calendar instance per run).
+# Modified by Pluto (Apache-2.0 section 4(b)): readers are compared by calendar name (one calendar instance per run); sessions are clipped to the calendar of the run.
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -143,6 +143,10 @@ class AssetDispatchSessionBarReader(AssetDispatchBarReader):
 
     @lazyval
     def sessions(self):
-        return self.trading_calendar.sessions_in_range(
-            self.first_trading_day, self.last_available_dt
+        # Pluto: the calendar of a run is bounded to the run (exchange_calendars
+        # raises outside its range), the readers' data may reach beyond it
+        calendar = self.trading_calendar
+        return calendar.sessions_in_range(
+            max(self.first_trading_day, calendar.first_session),
+            min(self.last_available_dt, calendar.last_session),
         )

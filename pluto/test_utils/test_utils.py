@@ -136,7 +136,6 @@ class TestMetricsTracker(object):
             name,
             benchmark_source,
             trading_sessions,
-            expected_df,
             capital_base,
             trading_calendar):
 
@@ -144,9 +143,6 @@ class TestMetricsTracker(object):
         self._benchmark_source = benchmark_source
         self._trading_sessions = trading_sessions
         self._trading_calendar = trading_calendar
-
-        # None: nothing stored to compare with (scenario runs)
-        self._expected_df = expected_df
 
         self._errors = 0
         self._tests = 0
@@ -292,35 +288,19 @@ class TestMetricsTracker(object):
 
         return pd.DataFrame(daily_perfs, index=daily_dts)
 
-    def validate(self):
-        """Compares every column that the stored expected results and this run
-        both have (compare_column, rtol from STORED_RTOL, atol 0). The stored
-        frames are read with stored_with_utc_timestamps."""
-        expected_perf = self._expected_df
-        if expected_perf is None:
-            return
 
-        daily_stats = self.frame()
-        rtol = STORED_RTOL.get(self._name, 0.0)
+def frame_errors(desired, actual, rtol=0.0, atol=0.0, columns=None):
+    """Errors of the comparison of two daily result frames, column by column
+    (compare_column; every column both have, or ``columns``), plus a row count
+    error: an empty list if they agree."""
+    if len(desired) != len(actual):
+        return ['row count desired {} vs actual {}'.format(len(desired), len(actual))]
 
-        expected_perf = stored_with_utc_timestamps(expected_perf)
+    if columns is None:
+        columns = sorted(set(desired.columns) & set(actual.columns))
 
-        common = sorted(set(expected_perf.columns) & set(daily_stats.columns))
-        errors = []
-        if len(expected_perf) != len(daily_stats):
-            errors.append('row count stored {} vs pluto {}'.format(len(expected_perf), len(daily_stats)))
-        else:
-            for col in common:
-                error = compare_column(col, expected_perf[col], daily_stats[col], rtol=rtol)
-                if error:
-                    errors.append(error)
-
-        if errors:
-            raise AssertionError('{} failed {} out of {} columns:\n{}'.format(
-                self._name,
-                len(errors),
-                len(common),
-                '\n'.join(errors)))
+    return [e for e in (compare_column(col, desired[col], actual[col], rtol, atol)
+                        for col in columns) if e]
 
 
 class StrategyTester(object):
@@ -332,7 +312,6 @@ class StrategyTester(object):
 
     def run(self,
             loop: simulation_loop.SimulationLoop,
-            expected_perf,
             benchmark_source,
             trading_sessions,
             market,
@@ -344,7 +323,6 @@ class StrategyTester(object):
             self._name,
             benchmark_source,
             trading_sessions,
-            expected_perf,
             capital_base,
             trading_calendar)
 
@@ -354,9 +332,6 @@ class StrategyTester(object):
                 tracker,
                 controller_behavior)):
             pass
-
-        # validate results
-        tracker.validate()
 
         return tracker
 

@@ -59,7 +59,7 @@ class ZiplineBenchmark(object):
                 return path
         return os.path.join(os.path.dirname(zipline.__file__), 'resources', 'market_data', name)
 
-    def _read(self):
+    def read(self):
         path = self._path()
         with open(path) as f:
             has_header = f.readline().lower().startswith('date')
@@ -78,7 +78,7 @@ class ZiplineBenchmark(object):
         return returns
 
     def get_history_window(self, start_dt, end_dt, frequency, ffill=True):
-        br = self._read()
+        br = self.read()
         start_dt, end_dt = (pd.Timestamp(dt) for dt in (start_dt, end_dt))
         if start_dt.tz is None:
             start_dt = start_dt.tz_localize('UTC')

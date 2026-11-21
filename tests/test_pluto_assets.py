@@ -28,11 +28,10 @@ from unittest import TestCase
 import uuid
 import warnings
 
-from nose_parameterized import parameterized
+from parameterized import parameterized
 import numpy as np
 from numpy import full, int32, int64
 import pandas as pd
-from six import viewkeys
 import sqlalchemy as sa
 
 from zipline.assets import (
@@ -49,7 +48,6 @@ from zipline.assets.synthetic import (
     make_rotating_equity_info,
     make_simple_equity_info,
 )
-from six import itervalues, integer_types
 from toolz import valmap, concat
 
 from zipline.assets.asset_writer import (
@@ -85,7 +83,7 @@ from zipline.testing import (
     tmp_assets_db,
     tmp_asset_finder,
 )
-from zipline.testing.predicates import assert_equal, assert_not_equal
+from zipline.testing.predicates import assert_equal
 from zipline.testing.fixtures import (
     WithAssetFinder,
     ZiplineTestCase,
@@ -93,16 +91,212 @@ from zipline.testing.fixtures import (
     WithTmpDir,
     WithInstanceTmpDir,
 )
-from zipline.utils.range import range
-
-# helper used by test_lookup_generic, left behind when this file was copied
-# from tests/test_assets.py
-from tests.test_assets import build_lookup_generic_cases
-
 
 Case = namedtuple('Case', 'finder inputs as_of country_code expected')
 
 minute = pd.Timedelta(minutes=1)
+
+
+def build_lookup_generic_cases():
+    """
+    Generate test cases for the type of asset finder specific by
+    asset_finder_type for test_lookup_generic.
+    """
+    unique_start = pd.Timestamp('2013-01-01')
+    unique_end = pd.Timestamp('2014-01-01')
+
+    dupe_old_start = pd.Timestamp('2013-01-01')
+    dupe_old_end = pd.Timestamp('2013-01-02')
+    dupe_new_start = pd.Timestamp('2013-01-03')
+    dupe_new_end = pd.Timestamp('2013-01-03')
+
+    equities = pd.DataFrame.from_records(
+        [
+            # These symbols are duplicated within the US, but have different
+            # lifetimes.
+            {
+                'sid': 0,
+                'symbol': 'duplicated_in_us',
+                'start_date': dupe_old_start.value,
+                'end_date': dupe_old_end.value,
+                'exchange': 'US_EXCHANGE',
+            },
+            {
+                'sid': 1,
+                'symbol': 'duplicated_in_us',
+                'start_date': dupe_new_start.value,
+                'end_date': dupe_new_end.value,
+                'exchange': 'US_EXCHANGE',
+            },
+            # This asset is unique.
+            {
+                'sid': 2,
+                'symbol': 'unique',
+                'start_date': unique_start.value,
+                'end_date': unique_end.value,
+                'exchange': 'US_EXCHANGE',
+            },
+            # These assets appear with the same ticker at the same time in
+            # different countries.
+            {
+                'sid': 3,
+                'symbol': 'duplicated_globally',
+                'start_date': unique_start.value,
+                'end_date': unique_start.value,
+                'exchange': 'US_EXCHANGE',
+            },
+            {
+                'sid': 4,
+                'symbol': 'duplicated_globally',
+                'start_date': unique_start.value,
+                'end_date': unique_start.value,
+                'exchange': 'CA_EXCHANGE',
+            },
+        ],
+        index='sid'
+    )
+
+    fof14_sid = 10000
+
+    futures = pd.DataFrame.from_records(
+        [
+            {
+                'sid': fof14_sid,
+                'symbol': 'FOF14',
+                'root_symbol': 'FO',
+                'start_date': unique_start.value,
+                'end_date': unique_end.value,
+                'auto_close_date': unique_end.value,
+                'exchange': 'US_FUT',
+            },
+        ],
+        index='sid'
+    )
+
+    root_symbols = pd.DataFrame({
+        'root_symbol': ['FO'],
+        'root_symbol_id': [1],
+        'exchange': ['US_FUT'],
+    })
+
+    exchanges = pd.DataFrame.from_records([
+        {'exchange': 'US_EXCHANGE', 'country_code': 'US'},
+        {'exchange': 'CA_EXCHANGE', 'country_code': 'CA'},
+        {'exchange': 'US_FUT', 'country_code': 'US'},
+    ])
+
+    temp_db = tmp_assets_db(
+        equities=equities,
+        futures=futures,
+        root_symbols=root_symbols,
+        exchanges=exchanges,
+    )
+
+    with temp_db as assets_db:
+        finder = AssetFinder(assets_db)
+
+        case = partial(Case, finder)
+
+        equities = finder.retrieve_all(range(5))
+        dupe_old, dupe_new, unique, dupe_us, dupe_ca = equities
+
+        fof14 = finder.retrieve_asset(fof14_sid)
+        cf = finder.create_continuous_future(
+            root_symbol=fof14.root_symbol,
+            offset=0,
+            roll_style='volume',
+            adjustment=None,
+        )
+
+        all_assets = list(equities) + [fof14, cf]
+
+        for asset in list(equities) + [fof14, cf]:
+            # Looking up an asset object directly should yield itself.
+            yield case(asset, None, None, asset)
+            # Looking up an asset by sid should yield the asset.
+            yield case(asset.sid, None, None, asset)
+
+        # Duplicated US equity symbol with resolution date.
+        for country in ('US', None):
+            # On or before dupe_new_start, we should get dupe_old.
+            yield case('DUPLICATED_IN_US', dupe_old_start, country, dupe_old)
+            yield case(
+                'DUPLICATED_IN_US', dupe_new_start - minute, country, dupe_old,
+            )
+            # After that, we should get dupe_new.
+            yield case('DUPLICATED_IN_US', dupe_new_start, country, dupe_new)
+            yield case(
+                'DUPLICATED_IN_US', dupe_new_start + minute, country, dupe_new,
+            )
+
+        # Unique symbol, disambiguated by country, with or without resolution
+        # date.
+        for asset, country in ((dupe_us, 'US'),
+                               (dupe_ca, 'CA')):
+            yield case('DUPLICATED_GLOBALLY', unique_start, country, asset)
+            yield case('DUPLICATED_GLOBALLY', None, country, asset)
+
+        # Future symbols should be unique, but including as_of date
+        # make sure that code path is exercised.
+        yield case('FOF14', None, None, fof14)
+        yield case('FOF14', unique_start, None, fof14)
+
+        ##
+        # Iterables
+        # Iterables of Asset objects.
+        yield case(all_assets, None, None, all_assets)
+        yield case(iter(all_assets), None, None, all_assets)
+
+        # Iterables of ints
+        yield case((0, 1), None, None, equities[:2])
+        yield case(iter((0, 1)), None, None, equities[:2])
+
+        # Iterables of symbols.
+        yield case(
+            inputs=('DUPLICATED_IN_US', 'UNIQUE', 'DUPLICATED_GLOBALLY'),
+            as_of=dupe_old_start,
+            country_code='US',
+            expected=[dupe_old, unique, dupe_us],
+        )
+        yield case(
+            inputs=['DUPLICATED_GLOBALLY'],
+            as_of=dupe_new_start,
+            country_code='CA',
+            expected=[dupe_ca],
+        )
+
+        # Mixed types
+        yield case(
+            inputs=(
+                'DUPLICATED_IN_US',     # dupe_old b/c of as_of
+                dupe_new,               # dupe_new
+                2,                      # unique
+                'UNIQUE',               # unique
+                'DUPLICATED_GLOBALLY',  # dupe_us b/c of country_code
+                dupe_ca,                # dupe_ca
+            ),
+            as_of=dupe_old_start,
+            country_code='US',
+            expected=[dupe_old, dupe_new, unique, unique, dupe_us, dupe_ca],
+        )
+
+        # Futures and Equities
+        yield case(['FOF14', 0], None, None, [fof14, equities[0]])
+        yield case(
+            inputs=['FOF14', 'DUPLICATED_IN_US', 'DUPLICATED_GLOBALLY'],
+            as_of=dupe_new_start,
+            country_code='US',
+            expected=[fof14, dupe_new, dupe_us],
+        )
+
+        # ContinuousFuture and Equity
+        yield case([cf, 0], None, None, [cf, equities[0]])
+        yield case(
+            [cf, 'DUPLICATED_IN_US', 'DUPLICATED_GLOBALLY'],
+            as_of=dupe_new_start,
+            country_code='US',
+            expected=[cf, dupe_new, dupe_us],
+        )
 
 
 class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
@@ -121,7 +315,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
     def test_blocked_lookup_symbol_query(self):
         # we will try to query for more variables than sqlite supports
         # to make sure we are properly chunking on the client side
-        as_of = pd.Timestamp('2013-01-01', tz='UTC')
+        as_of = pd.Timestamp('2013-01-01')
         # we need more sids than we can query from sqlite
         nsids = SQLITE_MAX_VARIABLE_NUMBER + 10
         sids = range(nsids)
@@ -139,10 +333,10 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         )
         self.write_assets(equities=frame)
         assets = self.asset_finder.retrieve_equities(sids)
-        assert_equal(viewkeys(assets), set(sids))
+        assert_equal(assets.keys(), set(sids))
 
     def test_lookup_symbol_delimited(self):
-        as_of = pd.Timestamp('2013-01-01', tz='UTC')
+        as_of = pd.Timestamp('2013-01-01')
         frame = pd.DataFrame.from_records(
             [
                 {
@@ -187,7 +381,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         ])
         self.write_assets(equities=metadata)
         finder = self.asset_finder
-        dt = pd.Timestamp('2013-01-01', tz='UTC')
+        dt = pd.Timestamp('2013-01-01')
 
         # Try combos of looking up PRTYHRD with and without a time or fuzzy
         # Both non-fuzzys get no result
@@ -218,7 +412,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         self.assertEqual(2, finder.lookup_symbol('BRK_A', dt, fuzzy=True))
 
     def test_lookup_symbol_change_ticker(self):
-        T = partial(pd.Timestamp, tz='utc')
+        T = partial(pd.Timestamp)
         metadata = pd.DataFrame.from_records(
             [
                 # sid 0
@@ -271,7 +465,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         with self.assertRaises(SymbolNotFound):
             finder.lookup_symbol('C', T('2013-12-31'))
 
-        for asof in pd.date_range('2014-01-01', '2014-01-05', tz='utc'):
+        for asof in pd.date_range('2014-01-01', '2014-01-05'):
             # from 01 through 05 sid 0 held 'A'
             A_result = finder.lookup_symbol('A', asof)
             assert_equal(
@@ -305,7 +499,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
             finder.retrieve_asset(1),
         )
 
-        for asof in pd.date_range('2014-01-06', '2014-01-11', tz='utc'):
+        for asof in pd.date_range('2014-01-06', '2014-01-11'):
             # from 06 through 10 sid 0 held 'B'
             # we test through the 11th because sid 1 is the last to hold 'B'
             # so it should ffill
@@ -335,7 +529,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         # Incrementing by two so that start and end dates for each
         # generated Asset don't overlap (each Asset's end_date is the
         # day after its start date.)
-        dates = pd.date_range('2013-01-01', freq='2D', periods=5, tz='UTC')
+        dates = pd.date_range('2013-01-01', freq='2D', periods=5)
         df = pd.DataFrame.from_records(
             [
                 {
@@ -440,7 +634,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         a single returned asset.
         """
 
-        date = pd.Timestamp('2013-01-01', tz='UTC')
+        date = pd.Timestamp('2013-01-01')
 
         df = pd.DataFrame.from_records(
             [
@@ -472,7 +666,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         they should be able to correctly get 2.
         """
 
-        date = pd.Timestamp('2013-01-01', tz='UTC')
+        date = pd.Timestamp('2013-01-01')
 
         df = pd.DataFrame.from_records(
             [
@@ -480,7 +674,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                     'sid': 1,
                     'symbol': 'FOOB',
                     'start_date': date.value,
-                    'end_date': date.max.value,
+                    'end_date': date.max.asm8.view("i8"),
                     'exchange': 'NYSE',
                 },
                 {
@@ -494,7 +688,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                     'sid': 2,
                     'symbol': 'FOO_B',
                     'start_date': (date + timedelta(days=61)).value,
-                    'end_date': date.max.value,
+                    'end_date': date.max.asm8.view("i8"),
                     'exchange': 'NYSE',
                 },
 
@@ -518,15 +712,15 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                 {
                     'sid': 0,
                     'symbol': 'real',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
                 {
                     'sid': 1,
                     'symbol': 'also_real',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
                 # Sid whose end date is before our query date.  We should
@@ -534,8 +728,8 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                 {
                     'sid': 2,
                     'symbol': 'real_but_old',
-                    'start_date': pd.Timestamp('2002-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2003-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2002-1-1'),
+                    'end_date': pd.Timestamp('2003-1-1'),
                     'exchange': 'TEST',
                 },
                 # Sid whose start_date is **after** our query date.  We should
@@ -543,8 +737,8 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                 {
                     'sid': 3,
                     'symbol': 'real_but_in_the_future',
-                    'start_date': pd.Timestamp('2014-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2020-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2014-1-1'),
+                    'end_date': pd.Timestamp('2020-1-1'),
                     'exchange': 'THE FUTURE',
                 },
             ]
@@ -553,7 +747,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         finder = self.asset_finder
         results, missing = finder.lookup_generic(
             ['REAL', 1, 'FAKE', 'REAL_BUT_OLD', 'REAL_BUT_IN_THE_FUTURE'],
-            pd.Timestamp('2013-02-01', tz='UTC'),
+            pd.Timestamp('2013-02-01'),
             country_code=None,
         )
 
@@ -575,15 +769,15 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                 {
                     'sid': 0,
                     'symbol': 'real',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'US_EXCHANGE',
                 },
                 {
                     'sid': 1,
                     'symbol': 'real',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'CA_EXCHANGE',
                 },
             ]
@@ -600,7 +794,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         with self.assertRaises(SameSymbolUsedAcrossCountries):
             self.asset_finder.lookup_generic(
                 'real',
-                as_of_date=pd.Timestamp('2014-1-1', tz='UTC'),
+                as_of_date=pd.Timestamp('2014-1-1'),
                 country_code=None,
             )
 
@@ -613,7 +807,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
 
         matches, missing = self.asset_finder.lookup_generic(
             'real',
-            as_of_date=pd.Timestamp('2014-1-1', tz='UTC'),
+            as_of_date=pd.Timestamp('2014-1-1'),
             country_code='US',
         )
         self.assertEqual([matches], [self.asset_finder.retrieve_asset(0)])
@@ -621,36 +815,16 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
 
         matches, missing = self.asset_finder.lookup_generic(
             'real',
-            as_of_date=pd.Timestamp('2014-1-1', tz='UTC'),
+            as_of_date=pd.Timestamp('2014-1-1'),
             country_code='CA',
         )
         self.assertEqual([matches], [self.asset_finder.retrieve_asset(1)])
         self.assertEqual(missing, [])
 
-    def test_security_dates_warning(self):
-
-        # Build an asset with an end_date
-        eq_end = pd.Timestamp('2012-01-01', tz='UTC')
-        equity_asset = Equity(1, symbol="TESTEQ", end_date=eq_end,
-                              exchange_info=ExchangeInfo("TEST", "TEST", "??"))
-
-        # Catch all warnings
-        with warnings.catch_warnings(record=True) as w:
-            # Cause all warnings to always be triggered
-            warnings.simplefilter("always")
-            equity_asset.security_start_date
-            equity_asset.security_end_date
-            equity_asset.security_name
-            # Verify the warning
-            self.assertEqual(3, len(w))
-            for warning in w:
-                self.assertTrue(issubclass(warning.category,
-                                           DeprecationWarning))
-
     def test_compute_lifetimes(self):
         assets_per_exchange = 4
         trading_day = self.trading_calendar.day
-        first_start = pd.Timestamp('2015-04-01', tz='UTC')
+        first_start = pd.Timestamp('2015-04-01')
 
         equities = pd.concat(
             [
@@ -727,10 +901,10 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                             expected_no_start_raw[i, j] = True
 
             for country_codes in powerset(exchanges.country_code.unique()):
-                expected_sids = pd.Int64Index(sorted(concat(
+                expected_sids = pd.Index(sorted(concat(
                     sids_by_country[country_code]
                     for country_code in country_codes
-                )))
+                )), dtype='int64')
                 permuted_sids = [
                     sid for sid in sorted(expected_sids, key=permute_sid)
                 ]
@@ -741,7 +915,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                         tile_count,
                     ),
                     index=dates,
-                    columns=pd.Int64Index(permuted_sids),
+                    columns=pd.Index(permuted_sids, dtype="int64"),
                 )
                 result = finder.lifetimes(
                     dates,
@@ -758,7 +932,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                         tile_count,
                     ),
                     index=dates,
-                    columns=pd.Int64Index(permuted_sids),
+                    columns=pd.Index(permuted_sids, dtype="int64"),
                 )
                 result = finder.lifetimes(
                     dates,
@@ -784,22 +958,22 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                 {
                     'sid': 0,
                     'symbol': 'A',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
                 {
                     'sid': 1,
                     'symbol': 'B',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
                 {
                     'sid': 2,
                     'symbol': 'C',
-                    'start_date': pd.Timestamp('2013-7-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-7-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
             ]
@@ -811,29 +985,29 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                     'sid': 0,
                     'field': 'ALT_ID',
                     'value': '100000000',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2013-6-28', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2013-6-28'),
                 },
                 {
                     'sid': 1,
                     'field': 'ALT_ID',
                     'value': '100000001',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                 },
                 {
                     'sid': 0,
                     'field': 'ALT_ID',
                     'value': '100000002',
-                    'start_date': pd.Timestamp('2013-7-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-7-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                 },
                 {
                     'sid': 2,
                     'field': 'ALT_ID',
                     'value': '100000000',
-                    'start_date': pd.Timestamp('2013-7-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-7-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                 },
             ]
         )
@@ -846,7 +1020,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         af = self.asset_finder
 
         # Before sid 0 has changed ALT_ID.
-        dt = pd.Timestamp('2013-6-28', tz='UTC')
+        dt = pd.Timestamp('2013-6-28')
 
         asset_0 = af.lookup_by_supplementary_field('ALT_ID', '100000000', dt)
         self.assertEqual(asset_0.sid, 0)
@@ -855,7 +1029,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         self.assertEqual(asset_1.sid, 1)
 
         # We don't know about this ALT_ID yet.
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
             ValueNotFoundForField,
             "Value '{}' was not found for field '{}'.".format(
                 '100000002',
@@ -865,7 +1039,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
             af.lookup_by_supplementary_field('ALT_ID', '100000002', dt)
 
         # After all assets have ended.
-        dt = pd.Timestamp('2014-01-02', tz='UTC')
+        dt = pd.Timestamp('2014-01-02')
 
         asset_2 = af.lookup_by_supplementary_field('ALT_ID', '100000000', dt)
         self.assertEqual(asset_2.sid, 2)
@@ -882,7 +1056,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
             "Multiple occurrences of the value '{}' found for field '{}'."
         ).format('100000000', 'ALT_ID')
 
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
             MultipleValuesFoundForField,
             expected_in_repr,
         ):
@@ -894,22 +1068,22 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                 {
                     'sid': 0,
                     'symbol': 'A',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
                 {
                     'sid': 1,
                     'symbol': 'B',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
                 {
                     'sid': 2,
                     'symbol': 'C',
-                    'start_date': pd.Timestamp('2013-7-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-7-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                     'exchange': 'TEST',
                 },
             ]
@@ -921,29 +1095,29 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
                     'sid': 0,
                     'field': 'ALT_ID',
                     'value': '100000000',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2013-6-28', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2013-6-28'),
                 },
                 {
                     'sid': 1,
                     'field': 'ALT_ID',
                     'value': '100000001',
-                    'start_date': pd.Timestamp('2013-1-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-1-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                 },
                 {
                     'sid': 0,
                     'field': 'ALT_ID',
                     'value': '100000002',
-                    'start_date': pd.Timestamp('2013-7-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-7-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                 },
                 {
                     'sid': 2,
                     'field': 'ALT_ID',
                     'value': '100000000',
-                    'start_date': pd.Timestamp('2013-7-1', tz='UTC'),
-                    'end_date': pd.Timestamp('2014-1-1', tz='UTC'),
+                    'start_date': pd.Timestamp('2013-7-1'),
+                    'end_date': pd.Timestamp('2014-1-1'),
                 },
             ]
         )
@@ -955,7 +1129,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
         finder = self.asset_finder
 
         # Before sid 0 has changed ALT_ID and sid 2 has started.
-        dt = pd.Timestamp('2013-6-28', tz='UTC')
+        dt = pd.Timestamp('2013-6-28')
 
         for sid, expected in [(0, '100000000'), (1, '100000001')]:
             self.assertEqual(
@@ -965,14 +1139,14 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
 
         # Since sid 2 has not yet started, we don't know about its
         # ALT_ID.
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
             NoValueForSid,
             "No '{}' value found for sid '{}'.".format('ALT_ID', 2),
         ):
             finder.get_supplementary_field(2, 'ALT_ID', dt),
 
         # After all assets have ended.
-        dt = pd.Timestamp('2014-01-02', tz='UTC')
+        dt = pd.Timestamp('2014-01-02')
 
         for sid, expected in [
             (0, '100000002'), (1, '100000001'), (2, '100000000'),
@@ -983,7 +1157,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
             )
 
         # Sid 0 has historically held two values for ALT_ID by this dt.
-        with self.assertRaisesRegexp(
+        with self.assertRaisesRegex(
             MultipleValuesFoundForSid,
             "Multiple '{}' values found for sid '{}'.".format('ALT_ID', 0),
         ):
@@ -1061,7 +1235,7 @@ class AssetFinderTestCase(WithTradingCalendars, ZiplineTestCase):
             )
             self.assertEqual(
                 {type_},
-                {type(asset) for asset in itervalues(results)},
+                {type(asset) for asset in results.values()},
             )
             with self.assertRaises(failure_type):
                 lookup(fail_sids)

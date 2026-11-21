@@ -10,24 +10,23 @@ period_open/period_close/period_label, positions, orders and transactions
 with the same keys). Columns produced by only one side are listed and checked
 against the known set below.
 """
+import contextlib as ctx
 import tarfile
 import tempfile
 import unittest
+from importlib import import_module
 
-import contextlib2 as ctx
-import pandas as pd
-from nose_parameterized import parameterized
-from trading_calendars import calendar_utils
+from parameterized import parameterized
 
 from directory import utils as tdr
 
 from zipline import examples as zipline_examples
 from zipline.testing import test_resource_path, core
-from zipline.utils import cache
-from zipline.utils.paths import update_modified_time
 
 from pluto import examples as pluto_examples
+from pluto.data import benchmark as bm
 from pluto.data.bundles import test as tb
+from pluto.trading_calendars import calendar_utils as cu
 from pluto.setup import directory_setup as dsp
 from pluto.test_utils import test_utils
 
@@ -49,6 +48,25 @@ ZIPLINE_ONLY = {
     'dual_moving_average': {'AAPL', 'short_mavg', 'long_mavg'},
     'momentum_pipeline': {'universe_size'},
 }
+
+
+def zipline_example_modules():
+    """zipline's example modules by name. load_example_modules() leaves
+    dual_ema_talib out under numpy 2; it imports where TA-Lib does (it does in
+    the environment of this port), so it is added here."""
+    modules = dict(zipline_examples.load_example_modules())
+    if 'dual_ema_talib' not in modules:
+        modules['dual_ema_talib'] = import_module('zipline.examples.dual_ema_talib')
+    return modules
+
+
+def benchmark_returns(environ):
+    """The benchmark returns Pluto reads (``ZiplineBenchmark``), in the form
+    zipline's run_algorithm takes them (time-zone naive index): both sides then
+    work on the very same numbers (the checked-in file of zipline and the one in
+    the example data tarball differ in the last digit)."""
+    returns = bm.ZiplineBenchmark(environ=environ).read()
+    return returns.tz_localize(None)
 
 
 def compare_frames(zipline_perf, pluto_perf, rtol=RTOL, atol=ATOL):
@@ -87,20 +105,11 @@ class ZiplinePlutoFixture(unittest.TestCase):
 
         cls._zpl_tempdir = dir_ = stack.enter_context(core.tmp_dir())
         with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
-            tar.extractall(dir_.path)
-
-        # as zipline's tests/test_examples.py: the market data files must look
-        # fresh, otherwise zipline's loader tries to download them.
-        for name in ('SPY_benchmark.csv', 'treasury_curves.csv'):
-            update_modified_time(dir_.getpath('example_data/root/data/' + name))
+            tar.extractall(dir_.path, filter='data')
 
         cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}
-        cls._expected_perf = cache.dataframe_cache(
-            dir_.getpath('example_data/expected_perf/%s' % pd.__version__.replace('.', '-')),
-            serialization='pickle')
-
-        calendar_utils._default_calendar_aliases['YAHOO'] = 'XNYS'
-        stack.callback(calendar_utils._default_calendar_aliases.pop, 'YAHOO')
+        cu.register_alias('YAHOO', 'XNYS')
+        stack.callback(cu.deregister_alias, 'YAHOO')
 
     @classmethod
     def tearDownClass(cls):
@@ -110,12 +119,15 @@ class ZiplinePlutoFixture(unittest.TestCase):
 class PlutoZiplineOracleTests(ZiplinePlutoFixture):
     @parameterized.expand(sorted(pluto_examples.EXAMPLE_MODULES))
     def test_zipline_and_pluto_agree(self, example_name):
-        zipline_perf = zipline_examples.run_example(example_name, environ=self._environ)
+        zipline_perf = zipline_examples.run_example(
+            zipline_example_modules(),
+            example_name,
+            environ=self._environ,
+            benchmark_returns=benchmark_returns(self._environ))
 
         tracker = _run(
             self._pluto_tempdir,
             example_name,
-            self._expected_perf[example_name],
             self._environ)
         pluto_perf = tracker.frame()
 
