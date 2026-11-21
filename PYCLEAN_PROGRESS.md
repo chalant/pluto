@@ -48,7 +48,12 @@ $PY $P/import_scan.py $WT $P/scan_<step>.json
 - [x] (b) launcher leftovers (`script_handler.py`, `example_setup.py`, `launchers` directory): **61 passed**
   (55.85 s); `import pluto` ok; `install-examples` rc=0 and rerun rc=0 (no `launchers/` any more); scan 64,
   new = [], gone = []
-- [ ] (c) off-path dead modules
+- [x] (c) off-path dead modules (29 files, −2,764 lines): **61 passed** (56.94 s); `import pluto` ok;
+  `install-examples` rc=0, rerun rc=0; scan **55 pairs**, new = [], gone = 9 (the 7 `pluto/control/modes/*`
+  pairs, `alpaca.py` → `pluto.data.bundles:pluto`, `writer.py` → `pluto.universes:schema`); **0 parse errors**
+  (the `domain_filter.py` SyntaxError is gone). Directories left with only `__pycache__`
+  (`pluto/control/modes`, `pluto/pipeline/filters`, `pluto/data/download/resources`) removed from the
+  worktree (untracked; such a directory would import as a namespace package)
 - [ ] (d) proto source fixes
 - [ ] `dev/README.md`
 - [ ] fresh clone + `dev/setup_env.sh` proof; final grep; worktree removed
@@ -165,5 +170,6 @@ Identical to the `cleanup-superseded` after-scan listed in `CLEANUP_PROGRESS.md`
 
 ## Next step
 
-Step (c): delete the off-path modules of the (c) table (not `pluto/coms/client/ledger.py`, not the notebook,
-not `pluto/interface/*`); remove leftover `__pycache__`-only directories; `check.sh WT PY c`; commit.
+Step (d): `protos/interface.proto:5` → `import "protos/data.proto";`; `protos/hub.proto`: drop the duplicate
+`import "protos/controller.proto";` (line 8), add `import "protos/params.proto";`; `protos/login.proto:5`: add
+`;`. Compile every file alone and all together with `$P/venv313`; `check.sh WT PY d`; commit.
