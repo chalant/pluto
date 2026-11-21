@@ -5,7 +5,7 @@ import numpy as np
 
 import empyrical as ep
 
-from dev import strategy_store
+from pluto.setup import directory_setup
 
 from pluto.control.loop import simulation_loop
 from pluto.control.processes import processes
@@ -359,11 +359,11 @@ class TestClient(object):
 
         self._controllable = controllable
 
-        self._store = strategy_store.StrategyStore(directory)
         self._directory = directory
 
     def add_strategy(self, stp, name, source_path):
-        self._store.add_strategy(name, source_path)
+        # the controllable reads the script from <root>/strategies/<name>.py
+        directory_setup.add_strategy_script(self._directory, name, source_path)
 
         pi = processes.ProcessInitializer(self._controllable)
         init_response = pi.initialize(stp, name)

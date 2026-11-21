@@ -1,6 +1,8 @@
-import toml
+import shutil
 
-from sqlalchemy import create_engine
+from os import path
+
+import toml
 
 from directory import directory as dr
 
@@ -23,16 +25,29 @@ def create_directory(root_path):
     strategies_dir = root_dir.add_directory('strategies')
     strategy_states_dir = strategies_dir.add_directory('states')
     strategy_performance_dir = strategies_dir.add_directory('performance')
-    strategy_metadata = strategies_dir.add_file('metadata', 'sqlite')
 
     launchers_dir = root_dir.add_directory('launchers')
 
     root_dir.add_file('metadata', 'sqlite')
 
-    strategies_db_engine = create_engine(
-        'sqlite://' + strategy_metadata.path)
-
     return root_dir
+
+
+def add_strategy_script(root_dir, name, source_path):
+    """Copy the strategy script at source_path to <root>/strategies/<name>.py.
+
+    ControllableService.Initialize reads the script of strategy <name> from
+    that file (interim convention: no strategy database; the strategy store
+    will be redesigned). Raises FileExistsError if the file exists.
+    """
+    strategies_dir = root_dir.get_directory('strategies')
+
+    if path.exists(path.join(strategies_dir.path, name + '.py')):
+        raise FileExistsError('Strategy of name {} already exists'.format(name))
+
+    fl = strategies_dir.add_file(name, 'py')
+    shutil.copyfile(source_path, fl.path)
+    return fl
 
 
 
