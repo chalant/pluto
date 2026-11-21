@@ -161,7 +161,7 @@ applied. `pluto/_protocol.pyx` (not in `setup.py`, no importer, does not compile
    Dead and left (owner item): `pluto/coms/client/ledger.py` (`Series.append`, `pd.Series()`; no importer), `pluto/data/io/*`.
 2. DONE deletions (git grep: no importer, `imptest.py` 285 ok 0 bad): `pluto/data/download/` (all), `pluto/setup/{schema,account_setup,account}.py`,
    `dev/setup_store.py`, `pluto/control/{bundle,domain}.py`, `pluto/control/clock/minute_event_gen.py`, `pluto/finance/position.py`.
-3. `dev/setup_env.sh` + `dev/README.md` + `etc/requirements-py313.txt` (= `$P/pins-initial.txt`).
+3. DONE `dev/setup_env.sh` (uv, default ENV `~/.cache/pluto-dev/env313`), `dev/README.md` (rewritten for 3.13), `etc/requirements-py313.txt` (= `$P/pins-initial.txt` + header). Stale legacy CI files (`.travis.yml`, `.appveyor.yml`, `Dockerfile-dev`, `vagrant_init.sh`, `etc/dev-install`, `ci/`) still name the removed `etc/requirements_{blaze,talib}.txt`: not touched (owner item).
 4. C6 fresh clone + env; C7 three runs of all pluto tests; C1b rerun; remove the worktree only when everything is committed.
 
 ## Decisions taken (for the owner)
