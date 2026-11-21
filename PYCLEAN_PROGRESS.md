@@ -54,7 +54,9 @@ $PY $P/import_scan.py $WT $P/scan_<step>.json
   (the `domain_filter.py` SyntaxError is gone). Directories left with only `__pycache__`
   (`pluto/control/modes`, `pluto/pipeline/filters`, `pluto/data/download/resources`) removed from the
   worktree (untracked; such a directory would import as a namespace package)
-- [ ] (d) proto source fixes
+- [x] (d) proto sources (`interface.proto`, `hub.proto`, `login.proto`; one line each): 27 of 27 compile one by
+  one (grpcio-tools 1.85.3 and 1.33.2); the one-call compile fails on name clashes (see (d)); **61 passed**
+  (55.80 s); `import pluto` ok; `install-examples` rc=0, rerun rc=0; scan 55, new = []
 - [ ] `dev/README.md`
 - [ ] fresh clone + `dev/setup_env.sh` proof; final grep; worktree removed
 
@@ -158,11 +160,49 @@ have. Decision: delete `mode.py` with `modes/` (item c), no adaptation needed.
 |---|---|---|
 | `protos/interface.proto:5` | `Import "data.proto" was not found` (then `"Chunk" is not defined`) | `import "protos/data.proto";` |
 | `protos/hub.proto:8,17,18` | `Import "protos/controller.proto" was listed twice`; `"RunParams" is not defined` | drop the duplicate import; import `protos/params.proto` (defines `RunParams`) |
-| `protos/login.proto:5` | `Expected ";"` | `;` after the `rpc` declaration |
+| `protos/login.proto:5:1` | `Expected ";"` | `;` after the `rpc` declaration on line 4 |
+
+Result after the fixes (grpcio-tools 1.85.3, protobuf 7.36.2, Python 3.13, output in
+`$P/protoc_after/`, nothing written into the repository):
+
+- **each file alone: 27 of 27 compile** (`hub.proto` warns `Import protos/controller.proto is unused`; the
+  committed `hub_pb2.py` imports `controller_pb2`, so the import stays). Also 27 of 27 with env36's
+  grpcio-tools 1.33.2 (output in `$P/protoc_env36/`).
+- **all files in one invocation (`protos/*.proto`): fails**, not fixable with a trivial edit. The files have
+  no `package`, so these top-level names clash: `admin.proto`/`login.proto`/`interface.proto`
+  (`LoginRequest`; `LoginReply` admin/login), `hub.proto`/`interface.proto` (service `Hub`,
+  `DeploymentResponse`), `interface.proto`/`monitor.proto` (service `Monitor`, `Packet`, `WatchRequest`,
+  `WatchResponse`, `StopWatchingRequest`, `StopWatchingResponse`). protoc lists the first ones it meets
+  (`interface.proto: DeploymentResponse, Hub` from hub.proto, `LoginRequest` from admin.proto); the full
+  list comes from compiling subsets. Jointly compilable: the 23 files without `admin`, `hub`, `login`,
+  `monitor` (rc=0), or the 25 without `interface`, `login` (rc=0). A fix needs a decision (PM20 asks
+  about `monitor.proto` against `interface.proto`; adding `package`s changes message full names and the
+  gRPC method paths). Under upb the generated modules of a clashing pair cannot be imported in one
+  process either (PyScan F4).
 
 ### Baseline unresolved first-party imports (64 pairs)
 
 Identical to the `cleanup-superseded` after-scan listed in `CLEANUP_PROGRESS.md` (compared as JSON).
+
+## Left for the owner or the next step
+
+- **`.proto` name clashes** (above): `admin`/`login`/`interface`, `hub`/`interface`, `interface`/`monitor`
+  (PM20: remove `monitor.proto` in favour of `interface.proto`?). Needed before a one-call regeneration.
+- **F821 sites kept**: `pluto/coms/client/ledger.py:472` (`broker`; `pluto/coms` protected; the module also
+  fails on import: `account_state.proto` misses its imports), `docs/notebooks/tutorial.ipynb` ×2
+  (`figsize`, Zipline docs notebook).
+- **`declarative_base` importers kept**: `pluto/interface/directory.py:9`, `pluto/interface/credentials.py:1`
+  (`pluto/interface/` protected).
+- **Dead but not named in the brief, kept**: the rest of `pluto/data/download/` (K36; no importer outside
+  the package; `downloader.py:40,43` reads `clock_evt.exchange`), `pluto/setup/schema.py` (no importer),
+  `pluto/setup/account_setup.py`, the 0-byte `pluto/setup/account.py`, the empty
+  `pluto/pipeline/loaders/__init__.py` (its only module was deleted).
+- `pluto/setup/directory_setup.py` still registers (does not create) `setup/metadata.sqlite`,
+  `data/metadata.sqlite`, root `metadata.sqlite` and `setup.yaml`, and imports `toml` unused: not part of the
+  strategy store, left as they are.
+- `Testing.ipynb` (root dump, K57) has a stored traceback that names `pluto/control/modes/mode.py`.
+- `.vscode/tags` is a stale ctags file of an older `contrib/` tree (names deleted modules).
+- Duplicate `window_specialization('int64')` in `setup.py` (K83, parallel-build race): not touched here.
 
 ## Evidence
 
