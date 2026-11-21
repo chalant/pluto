@@ -1,0 +1,9 @@
+This package is a copy of zipline-reloaded 3.2.1 (tag 3.2.1, commit 057ccd60),
+https://github.com/stefan-jansen/zipline-reloaded, Apache License 2.0 (see the
+LICENSE file at the root of this repository), derived from Quantopian's zipline
+(Copyright Quantopian, Inc., Apache License 2.0). Every Quantopian copyright and
+licence header is kept.
+
+Pluto changes are applied on top of it. A file that Pluto modifies carries a
+"Modified by Pluto" line in its header (Apache License 2.0, section 4(b)); the git
+history records every change with its origin. There is no upstream tracking.

@@ -31,8 +31,7 @@ from numpy cimport (
     uint32_t,
     uint8_t,
 )
-from numpy.math cimport NAN
-
+from libc.math cimport NAN
 ctypedef object carray_t
 ctypedef object ctable_t
 ctypedef object Timestamp_t
@@ -151,8 +150,7 @@ cpdef _read_bcolz_data(ctable_t table,
                        intp_t[:] last_rows,
                        intp_t[:] offsets,
                        bool read_all):
-    """
-    Load raw bcolz data for the given columns and indices.
+    """Load raw bcolz data for the given columns and indices.
 
     Parameters
     ----------

@@ -2,16 +2,14 @@ from collections import namedtuple
 
 from .iface import PipelineHooks, PIPELINE_HOOKS_CONTEXT_MANAGERS
 
-from interface import implements
 
 from zipline.utils.compat import contextmanager, wraps
 
 
-Call = namedtuple('Call', 'method_name args kwargs')
+Call = namedtuple("Call", "method_name args kwargs")
 
 
-class ContextCall(namedtuple('ContextCall', 'state call')):
-
+class ContextCall(namedtuple("ContextCall", "state call")):
     @property
     def method_name(self):
         return self.call.method_name
@@ -26,17 +24,17 @@ class ContextCall(namedtuple('ContextCall', 'state call')):
 
 
 def testing_hooks_method(method_name):
-    """Factory function for making testing methods.
-    """
+    """Factory function for making testing methods."""
     if method_name in PIPELINE_HOOKS_CONTEXT_MANAGERS:
         # Generate a method that enters the context of all sub-hooks.
         @wraps(getattr(PipelineHooks, method_name))
         @contextmanager
         def ctx(self, *args, **kwargs):
             call = Call(method_name, args, kwargs)
-            self.trace.append(ContextCall('enter', call))
+            self.trace.append(ContextCall("enter", call))
             yield
-            self.trace.append(ContextCall('exit', call))
+            self.trace.append(ContextCall("exit", call))
+
         return ctx
 
     else:
@@ -44,22 +42,43 @@ def testing_hooks_method(method_name):
         @wraps(getattr(PipelineHooks, method_name))
         def method(self, *args, **kwargs):
             self.trace.append(Call(method_name, args, kwargs))
+
         return method
 
 
-class TestingHooks(implements(PipelineHooks)):
-    """A hooks implementation that keeps a trace of hook method calls.
-    """
+class TestingHooks(PipelineHooks):
+    """A hooks implementation that keeps a trace of hook method calls."""
+
     def __init__(self):
         self.trace = []
 
     def clear(self):
         self.trace = []
 
-    # Implement all interface methods by delegating to corresponding methods on
-    # input hooks.
-    locals().update({
-        name: testing_hooks_method(name)
-        # TODO: Expose this publicly on interface.
-        for name in PipelineHooks._signatures
-    })
+    @contextmanager
+    def running_pipeline(self, *args, **kwargs):
+        call = Call("running_pipeline", args, kwargs)
+        self.trace.append(ContextCall("enter", call))
+        yield
+        self.trace.append(ContextCall("exit", call))
+
+    @contextmanager
+    def computing_chunk(self, *args, **kwargs):
+        call = Call("computing_chunk", args, kwargs)
+        self.trace.append(ContextCall("enter", call))
+        yield
+        self.trace.append(ContextCall("exit", call))
+
+    @contextmanager
+    def loading_terms(self, *args, **kwargs):
+        call = Call("loading_terms", args, kwargs)
+        self.trace.append(ContextCall("enter", call))
+        yield
+        self.trace.append(ContextCall("exit", call))
+
+    @contextmanager
+    def computing_term(self, *args, **kwargs):
+        call = Call("computing_term", args, kwargs)
+        self.trace.append(ContextCall("enter", call))
+        yield
+        self.trace.append(ContextCall("exit", call))

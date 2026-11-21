@@ -44,12 +44,14 @@ def tolerant_equals(a, b, atol=10e-7, rtol=10e-7, equal_nan=False):
     """
     if equal_nan and isnan(a) and isnan(b):
         return True
-    return math.fabs(a - b) <= (atol + rtol * math.fabs(b))
+    return math.isclose(a, b, rel_tol=rtol, abs_tol=atol)
+    # return math.fabs(a - b) <= (atol + rtol * math.fabs(b))
 
 
 try:
     # fast versions
     import bottleneck as bn
+
     nanmean = bn.nanmean
     nanstd = bn.nanstd
     nansum = bn.nansum
@@ -57,9 +59,11 @@ try:
     nanmin = bn.nanmin
     nanargmax = bn.nanargmax
     nanargmin = bn.nanargmin
+    nanmedian = bn.nanmedian
 except ImportError:
     # slower numpy
     import numpy as np
+
     nanmean = np.nanmean
     nanstd = np.nanstd
     nansum = np.nansum
@@ -67,6 +71,7 @@ except ImportError:
     nanmin = np.nanmin
     nanargmax = np.nanargmax
     nanargmin = np.nanargmin
+    nanmedian = np.nanmedian
 
 
 def round_if_near_integer(a, epsilon=1e-4):

@@ -1,6 +1,7 @@
 """
 Utilities for working with pandas objects.
 """
+
 from contextlib import contextmanager
 from copy import deepcopy
 from itertools import product
@@ -9,27 +10,19 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from distutils.version import StrictVersion
-from trading_calendars.utils.pandas_utils import days_at_time  # noqa: reexport
+from packaging.version import Version
+from zipline.utils.calendar_utils import days_at_time
+from pandas.errors import PerformanceWarning
 
-pandas_version = StrictVersion(pd.__version__)
-new_pandas = pandas_version >= StrictVersion('0.19')
-skip_pipeline_new_pandas = \
-    'Pipeline categoricals are not yet compatible with pandas >=0.19'
+pandas_version = Version(pd.__version__)
+new_pandas = pandas_version >= Version("0.19")
+skip_pipeline_new_pandas = (
+    "Pipeline categoricals are not yet compatible with pandas >=0.19"
+)
+# skip_pipeline_blaze = "Blaze doesn't play nicely with Pandas >=1.0"
 
-if pandas_version >= StrictVersion('0.20'):
-    def normalize_date(dt):
-        """
-        Normalize datetime.datetime value to midnight. Returns datetime.date as
-        a datetime.datetime at midnight
-
-        Returns
-        -------
-        normalized : datetime.datetime or Timestamp
-        """
-        return dt.normalize()
-else:
-    from pandas.tseries.tools import normalize_date  # noqa
+# future_stack parameter was added in pandas 2.1.0
+PANDAS_210_OR_LATER = pandas_version >= Version("2.1.0")
 
 
 def july_5th_holiday_observance(datetime_index):
@@ -37,8 +30,7 @@ def july_5th_holiday_observance(datetime_index):
 
 
 def explode(df):
-    """
-    Take a DataFrame and return a triple of
+    """Take a DataFrame and return a triple of
 
     (df.index, df.columns, df.values)
     """
@@ -63,10 +55,12 @@ def _time_to_micros(time):
     return 1000000 * seconds + time.microsecond
 
 
-_opmap = dict(zip(
-    product((True, False), repeat=3),
-    product((op.le, op.lt), (op.le, op.lt), (op.and_, op.or_)),
-))
+_opmap = dict(
+    zip(
+        product((True, False), repeat=3),
+        product((op.le, op.lt), (op.le, op.lt), (op.and_, op.or_)),
+    )
+)
 
 
 def mask_between_time(dts, start, end, include_start=True, include_end=True):
@@ -112,8 +106,7 @@ def mask_between_time(dts, start, end, include_start=True, include_end=True):
 
 
 def find_in_sorted_index(dts, dt):
-    """
-    Find the index of ``dt`` in ``dts``.
+    """Find the index of ``dt`` in ``dts``.
 
     This function should be used instead of `dts.get_loc(dt)` if the index is
     large enough that we don't want to initialize a hash table in ``dts``. In
@@ -143,8 +136,7 @@ def find_in_sorted_index(dts, dt):
 
 
 def nearest_unequal_elements(dts, dt):
-    """
-    Find values in ``dts`` closest but not equal to ``dt``.
+    """Find values in ``dts`` closest but not equal to ``dt``.
 
     Returns a pair of (last_before, first_after).
 
@@ -169,7 +161,7 @@ def nearest_unequal_elements(dts, dt):
     if not len(dts):
         return None, None
 
-    sortpos = dts.searchsorted(dt, side='left')
+    sortpos = dts.searchsorted(dt, side="left")
     try:
         sortval = dts[sortpos]
     except IndexError:
@@ -193,16 +185,12 @@ def nearest_unequal_elements(dts, dt):
 
 
 def timedelta_to_integral_seconds(delta):
-    """
-    Convert a pd.Timedelta to a number of seconds as an int.
-    """
+    """Convert a pd.Timedelta to a number of seconds as an int."""
     return int(delta.total_seconds())
 
 
 def timedelta_to_integral_minutes(delta):
-    """
-    Convert a pd.Timedelta to a number of minutes as an int.
-    """
+    """Convert a pd.Timedelta to a number of minutes as an int."""
     return timedelta_to_integral_seconds(delta) // 60
 
 
@@ -213,40 +201,14 @@ def ignore_pandas_nan_categorical_warning():
         # avoiding that requires a broader change to how missing values are
         # handled in pipeline, so for now just silence the warning.
         warnings.filterwarnings(
-            'ignore',
+            "ignore",
             category=FutureWarning,
         )
         yield
 
 
-_INDEXER_NAMES = [
-    '_' + name for (name, _) in pd.core.indexing.get_indexers_list()
-]
-
-
-def clear_dataframe_indexer_caches(df):
-    """
-    Clear cached attributes from a pandas DataFrame.
-
-    By default pandas memoizes indexers (`iloc`, `loc`, `ix`, etc.) objects on
-    DataFrames, resulting in refcycles that can lead to unexpectedly long-lived
-    DataFrames. This function attempts to clear those cycles by deleting the
-    cached indexers from the frame.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-    """
-    for attr in _INDEXER_NAMES:
-        try:
-            delattr(df, attr)
-        except AttributeError:
-            pass
-
-
 def categorical_df_concat(df_list, inplace=False):
-    """
-    Prepare list of pandas DataFrames to be used as input to pd.concat.
+    """Prepare list of pandas DataFrames to be used as input to pd.concat.
     Ensure any columns of type 'category' have the same categories across each
     dataframe.
 
@@ -268,10 +230,10 @@ def categorical_df_concat(df_list, inplace=False):
 
     # Assert each dataframe has the same columns/dtypes
     df = df_list[0]
-    if not all([(df.dtypes.equals(df_i.dtypes)) for df_i in df_list[1:]]):
-        raise ValueError("Input DataFrames must have the same columns/dtypes.")
+    if not all([set(df.columns) == set(df_i.columns) for df_i in df_list[1:]]):
+        raise ValueError("Input DataFrames must have the same columns.")
 
-    categorical_columns = df.columns[df.dtypes == 'category']
+    categorical_columns = df.columns[df.dtypes == "category"]
 
     for col in categorical_columns:
         new_categories = _sort_set_none_first(
@@ -280,20 +242,18 @@ def categorical_df_concat(df_list, inplace=False):
 
         with ignore_pandas_nan_categorical_warning():
             for df in df_list:
-                df[col].cat.set_categories(new_categories, inplace=True)
+                df[col] = df[col].cat.set_categories(new_categories)
 
     return pd.concat(df_list)
 
 
 def _union_all(iterables):
-    """Union entries in ``iterables`` into a set.
-    """
+    """Union entries in ``iterables`` into a set."""
     return set().union(*iterables)
 
 
 def _sort_set_none_first(set_):
-    """Sort a set, sorting ``None`` before other elements, if present.
-    """
+    """Sort a set, sorting ``None`` before other elements, if present."""
     if None in set_:
         set_.remove(None)
         out = [None]
@@ -339,6 +299,54 @@ def empty_dataframe(*columns):
     return pd.DataFrame(np.array([], dtype=list(columns)))
 
 
+def stack_future_compatible(df, level=-1, dropna=None, sort=None, future_stack=None):
+    """
+    Compatibility wrapper for DataFrame.stack() method.
+
+    The `future_stack` parameter was added in pandas 2.1.0 to prepare for
+    future behavior changes. This wrapper ensures compatibility across
+    different pandas versions.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The DataFrame to stack.
+    level : int, str, list, default -1
+        Level(s) to stack from the column axis onto the index axis.
+    dropna : bool, default None
+        Whether to drop rows in the resulting Frame/Series with missing values.
+    sort : bool, default None
+        Whether to sort the levels of the resulting MultiIndex.
+    future_stack : bool, optional
+        Parameter added in pandas 2.1.0. If True, the behavior will be
+        consistent with future pandas versions.
+
+    Returns
+    -------
+    pd.DataFrame or pd.Series
+        Stacked dataframe or series.
+    """
+    if PANDAS_210_OR_LATER and future_stack is not None:
+        # Pass future_stack parameter if pandas version supports it
+        kwargs = {"level": level}
+        if dropna is not None:
+            kwargs["dropna"] = dropna
+        if sort is not None:
+            kwargs["sort"] = sort
+        kwargs["future_stack"] = future_stack
+        return df.stack(**kwargs)
+    else:
+        # Preserve missing values requested by future_stack on older pandas.
+        kwargs = {"level": level}
+        if dropna is not None:
+            kwargs["dropna"] = dropna
+        elif future_stack:
+            kwargs["dropna"] = False
+        if sort is not None:
+            kwargs["sort"] = sort
+        return df.stack(**kwargs)
+
+
 def check_indexes_all_same(indexes, message="Indexes are not equal."):
     """Check that a list of Index objects are all equal.
 
@@ -352,15 +360,14 @@ def check_indexes_all_same(indexes, message="Indexes are not equal."):
     ValueError
         If the indexes are not all the same.
     """
+
     iterator = iter(indexes)
     first = next(iterator)
     for other in iterator:
-        same = (first == other)
+        same = first == other
         if not same.all():
             bad_loc = np.flatnonzero(~same)[0]
             raise ValueError(
                 "{}\nFirst difference is at index {}: "
-                "{} != {}".format(
-                    message, bad_loc, first[bad_loc], other[bad_loc]
-                ),
+                "{} != {}".format(message, bad_loc, first[bad_loc], other[bad_loc]),
             )

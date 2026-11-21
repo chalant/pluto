@@ -1,9 +1,6 @@
 from functools import reduce
 from operator import itemgetter
 from pprint import pformat
-
-from six import viewkeys, iteritems
-from six.moves import map, zip
 from toolz import curry, flip
 
 from .sentinel import sentinel
@@ -135,10 +132,8 @@ def dzip_exact(*dicts):
     >>> result == {'a': (1, 3), 'b': (2, 4)}
     True
     """
-    if not same(*map(viewkeys, dicts)):
-        raise ValueError(
-            "dict keys not all equal:\n\n%s" % _format_unequal_keys(dicts)
-        )
+    if not same(*map(dict.keys, dicts)):
+        raise ValueError("dict keys not all equal:\n\n%s" % _format_unequal_keys(dicts))
     return {k: tuple(d[k] for d in dicts) for k in dicts[0]}
 
 
@@ -161,12 +156,17 @@ def _gen_unzip(it, elem_len):
     ValueError
         Raised when the lengths do not match the ``elem_len``.
     """
-    elem = next(it)
+    try:
+        elem = next(it)
+    except StopIteration:
+        return (), ()
+
     first_elem_len = len(elem)
 
     if elem_len is not None and elem_len != first_elem_len:
         raise ValueError(
-            'element at index 0 was length %d, expected %d' % (
+            "element at index 0 was length %d, expected %d"
+            % (
                 first_elem_len,
                 elem_len,
             )
@@ -178,7 +178,8 @@ def _gen_unzip(it, elem_len):
     for n, elem in enumerate(it, 1):
         if len(elem) != elem_len:
             raise ValueError(
-                'element at index %d was length %d, expected %d' % (
+                "element at index %d was length %d, expected %d"
+                % (
                     n,
                     len(elem),
                     elem_len,
@@ -250,7 +251,7 @@ def unzip(seq, elem_len=None):
     return ((),) * elem_len
 
 
-_no_default = sentinel('_no_default')
+_no_default = sentinel("_no_default")
 
 
 def getattrs(value, attrs, default=_no_default):
@@ -276,7 +277,7 @@ def getattrs(value, attrs, default=_no_default):
 
     Examples
     --------
-    >>> class EmptyObject(object):
+    >>> class EmptyObject:
     ...     pass
     ...
     >>> obj = EmptyObject()
@@ -321,17 +322,19 @@ def set_attribute(name, value):
     >>> bar.__name__
     'foo'
     """
+
     def decorator(f):
         setattr(f, name, value)
         return f
+
     return decorator
 
 
 # Decorators for setting the __name__ and __doc__ properties of a decorated
 # function.
 # Example:
-with_name = set_attribute('__name__')
-with_doc = set_attribute('__doc__')
+with_name = set_attribute("__name__")
+with_doc = set_attribute("__doc__")
 
 
 def foldr(f, seq, default=_no_default):
@@ -387,9 +390,7 @@ def foldr(f, seq, default=_no_default):
     :func:`sum`
     """
     return reduce(
-        flip(f),
-        reversed(seq),
-        *(default,) if default is not _no_default else ()
+        flip(f), reversed(seq), *(default,) if default is not _no_default else ()
     )
 
 
@@ -401,7 +402,7 @@ def invert(d):
     {1: {'a', 'c'}, 2: {'b'}}
     """
     out = {}
-    for k, v in iteritems(d):
+    for k, v in d.items():
         try:
             out[v].add(k)
         except KeyError:
@@ -417,4 +418,4 @@ def keysorted(d):
     >>> keysorted({'c': 1, 'b': 2, 'a': 3})
     [('a', 3), ('b', 2), ('c', 1)]
     """
-    return sorted(iteritems(d), key=itemgetter(0))
+    return sorted(d.items(), key=itemgetter(0))

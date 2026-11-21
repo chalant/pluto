@@ -1,6 +1,8 @@
 """
 factor.py
 """
+
+import numpy as np
 from operator import attrgetter
 from numbers import Number
 from math import ceil
@@ -40,13 +42,9 @@ from zipline.pipeline.filters import (
     NumExprFilter,
     PercentileFilter,
     MaximumFilter,
-    NotNullFilter,
-    NullFilter,
 )
 from zipline.pipeline.mixins import (
-    AliasedMixin,
     CustomTermMixin,
-    DownsampledMixin,
     LatestMixin,
     PositiveWindowLengthMixin,
     RestrictedDTypeMixin,
@@ -56,17 +54,25 @@ from zipline.pipeline.sentinels import NotSpecified, NotSpecifiedType
 from zipline.pipeline.term import AssetExists, ComputableTerm, Term
 from zipline.utils.functional import with_doc, with_name
 from zipline.utils.input_validation import expect_types
-from zipline.utils.math_utils import nanmean, nanstd
-from zipline.utils.memoize import classlazyval
+from zipline.utils.math_utils import (
+    nanmax,
+    nanmean,
+    nanmedian,
+    nanmin,
+    nanstd,
+    nansum,
+)
 from zipline.utils.numpy_utils import (
+    as_column,
     bool_dtype,
     coerce_to_dtype,
     float64_dtype,
+    is_missing,
 )
 from zipline.utils.sharedoc import templated_docstring
 
 
-_RANK_METHODS = frozenset(['average', 'min', 'max', 'dense', 'ordinal'])
+_RANK_METHODS = frozenset(["average", "min", "max", "dense", "ordinal"])
 
 
 def coerce_numbers_to_my_dtype(f):
@@ -85,11 +91,13 @@ def coerce_numbers_to_my_dtype(f):
     my_factor probably has dtype float64, but 3 is an int, so we want to coerce
     to float64 before doing the comparison.
     """
+
     @wraps(f)
     def method(self, other):
         if isinstance(other, Number):
             other = coerce_to_dtype(self.dtype, other)
         return f(self, other)
+
     return method
 
 
@@ -175,10 +183,10 @@ def binary_operator(op):
 
     if is_compare:
         ret_doc = BINOP_RETURN_FILTER.format(op=op)
-        rtype = 'Filter'
+        rtype = "Filter"
     else:
         ret_doc = BINOP_RETURN_FACTOR.format(op=op)
-        rtype = 'Factor'
+        rtype = "Factor"
 
     docstring = BINOP_DOCSTRING_TEMPLATE.format(
         op=op,
@@ -197,7 +205,8 @@ def binary_operator(op):
 
         if isinstance(self, NumExprFactor):
             self_expr, other_expr, new_inputs = self.build_binary_op(
-                op, other,
+                op,
+                other,
             )
             return return_type(
                 "({left}) {op} ({right})".format(
@@ -231,7 +240,7 @@ def binary_operator(op):
                 binds=(self,),
                 # .dtype access is safe here because coerce_numbers_to_my_dtype
                 # will convert any input numbers to numpy equivalents.
-                dtype=binop_return_dtype(op, self.dtype, other.dtype)
+                dtype=binop_return_dtype(op, self.dtype, other.dtype),
             )
         raise BadBinaryOperator(op, self, other)
 
@@ -252,9 +261,7 @@ def reflected_binary_operator(op):
     def reflected_binary_operator(self, other):
 
         if isinstance(self, NumericalExpression):
-            self_expr, other_expr, new_inputs = self.build_binary_op(
-                op, other
-            )
+            self_expr, other_expr, new_inputs = self.build_binary_op(op, other)
             return NumExprFactor(
                 "({left}) {op} ({right})".format(
                     left=other_expr,
@@ -262,7 +269,7 @@ def reflected_binary_operator(op):
                     op=op,
                 ),
                 new_inputs,
-                dtype=binop_return_dtype(op, other.dtype, self.dtype)
+                dtype=binop_return_dtype(op, other.dtype, self.dtype),
             )
 
         # Only have to handle the numeric case because in all other valid cases
@@ -274,6 +281,7 @@ def reflected_binary_operator(op):
                 dtype=binop_return_dtype(op, other.dtype, self.dtype),
             )
         raise BadBinaryOperator(op, other, self)
+
     return reflected_binary_operator
 
 
@@ -282,7 +290,7 @@ def unary_operator(op):
     Factory function for making unary operator methods for Factors.
     """
     # Only negate is currently supported.
-    valid_ops = {'-'}
+    valid_ops = {"-"}
     if op not in valid_ops:
         raise ValueError("Invalid unary operator %s." % op)
 
@@ -316,6 +324,7 @@ def unary_operator(op):
                 (self,),
                 dtype=float64_dtype,
             )
+
     return unary_operator
 
 
@@ -334,7 +343,9 @@ def function_application(func):
         Returns
         -------
         factor : zipline.pipeline.Factor
-        """.format(func)
+        """.format(
+            func
+        )
     )
 
     @with_doc(docstring)
@@ -352,6 +363,7 @@ def function_application(func):
                 (self,),
                 dtype=float64_dtype,
             )
+
     return mathfunc
 
 
@@ -362,7 +374,7 @@ if_not_float64_tell_caller_to_use_isnull = restrict_to_dtype(
         "{method_name}() was called on a factor of dtype {received_dtype}.\n"
         "{method_name}() is only defined for dtype {expected_dtype}."
         "To filter missing data, use isnull() or notnull()."
-    )
+    ),
 )
 
 float64_only = restrict_to_dtype(
@@ -370,7 +382,7 @@ float64_only = restrict_to_dtype(
     message_template=(
         "{method_name}() is only defined on Factors of dtype {expected_dtype},"
         " but it was called on a Factor of dtype {received_dtype}."
-    )
+    ),
 )
 
 
@@ -385,6 +397,72 @@ CORRELATION_METHOD_NOTE = dedent(
     :meth:`~zipline.pipeline.Factor.zscore`.
     """
 )
+
+
+class summary_funcs:
+    """Namespace of functions meant to be used with DailySummary."""
+
+    @staticmethod
+    def mean(a, missing_value):
+        return nanmean(a, axis=1)
+
+    @staticmethod
+    def stddev(a, missing_value):
+        return nanstd(a, axis=1)
+
+    @staticmethod
+    def max(a, missing_value):
+        return nanmax(a, axis=1)
+
+    @staticmethod
+    def min(a, missing_value):
+        return nanmin(a, axis=1)
+
+    @staticmethod
+    def median(a, missing_value):
+        return nanmedian(a, axis=1)
+
+    @staticmethod
+    def sum(a, missing_value):
+        return nansum(a, axis=1)
+
+    @staticmethod
+    def notnull_count(a, missing_value):
+        return (~is_missing(a, missing_value)).sum(axis=1)
+
+    names = {k for k in locals() if not k.startswith("_")}
+
+
+def summary_method(name):
+    func = getattr(summary_funcs, name)
+
+    @expect_types(mask=(Filter, NotSpecifiedType))
+    @float64_only
+    def f(self, mask=NotSpecified):
+        """Create a 1-dimensional factor computing the {} of self, each day.
+
+        Parameters
+        ----------
+        mask : zipline.pipeline.Filter, optional
+           A Filter representing assets to consider when computing results.
+           If supplied, we ignore asset/date pairs where ``mask`` produces
+           ``False``.
+
+        Returns
+        -------
+        result : zipline.pipeline.Factor
+        """
+        return DailySummary(
+            func,
+            self,
+            mask=mask,
+            dtype=self.dtype,
+        )
+
+    f.__name__ = func.__name__
+    f.__doc__ = f.__doc__.format(f.__name__)
+
+    return f
 
 
 class Factor(RestrictedDTypeMixin, ComputableTerm):
@@ -416,6 +494,7 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
     on rank-order properties of results (:meth:`top`, :meth:`bottom`,
     :meth:`percentile_between`).
     """
+
     ALLOWED_DTYPES = FACTOR_DTYPES  # Used by RestrictedDTypeMixin
 
     # Dynamically add functions for creating NumExprFactor/NumExprFilter
@@ -426,7 +505,7 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
             method_name_for_op(op): binary_operator(op)
             # Don't override __eq__ because it breaks comparisons on tuples of
             # Factors.
-            for op in MATH_BINOPS.union(COMPARISONS - {'=='})
+            for op in MATH_BINOPS.union(COMPARISONS - {"=="})
         }
     )
     clsdict.update(
@@ -435,26 +514,23 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
             for op in MATH_BINOPS
         }
     )
-    clsdict.update(
-        {
-            unary_op_name(op): unary_operator(op)
-            for op in UNARY_OPS
-        }
-    )
+    clsdict.update({unary_op_name(op): unary_operator(op) for op in UNARY_OPS})
 
     clsdict.update(
-        {
-            funcname: function_application(funcname)
-            for funcname in NUMEXPR_MATH_FUNCS
-        }
+        {funcname: function_application(funcname) for funcname in NUMEXPR_MATH_FUNCS}
     )
 
-    __truediv__ = clsdict['__div__']
-    __rtruediv__ = clsdict['__rdiv__']
+    __truediv__ = clsdict["__div__"]
+    __rtruediv__ = clsdict["__rdiv__"]
+
+    # Add summary functions.
+    clsdict.update(
+        {name: summary_method(name) for name in summary_funcs.names},
+    )
 
     del clsdict  # don't pollute the class namespace with this.
 
-    eq = binary_operator('==')
+    eq = binary_operator("==")
 
     @expect_types(
         mask=(Filter, NotSpecifiedType),
@@ -652,11 +728,9 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
             window_safe=True,
         )
 
-    def rank(self,
-             method='ordinal',
-             ascending=True,
-             mask=NotSpecified,
-             groupby=NotSpecified):
+    def rank(
+        self, method="ordinal", ascending=True, mask=NotSpecified, groupby=NotSpecified
+    ):
         """
         Construct a new Factor representing the sorted rank of each column
         within each row.
@@ -712,7 +786,9 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         )
 
     @expect_types(
-        target=Term, correlation_length=int, mask=(Filter, NotSpecifiedType),
+        target=Term,
+        correlation_length=int,
+        mask=(Filter, NotSpecifiedType),
     )
     @templated_docstring(CORRELATION_METHOD_NOTE=CORRELATION_METHOD_NOTE)
     def pearsonr(self, target, correlation_length, mask=NotSpecified):
@@ -770,6 +846,7 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         :meth:`Factor.spearmanr`
         """
         from .statistical import RollingPearson
+
         return RollingPearson(
             base_factor=self,
             target=target,
@@ -778,7 +855,9 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         )
 
     @expect_types(
-        target=Term, correlation_length=int, mask=(Filter, NotSpecifiedType),
+        target=Term,
+        correlation_length=int,
+        mask=(Filter, NotSpecifiedType),
     )
     @templated_docstring(CORRELATION_METHOD_NOTE=CORRELATION_METHOD_NOTE)
     def spearmanr(self, target, correlation_length, mask=NotSpecified):
@@ -835,6 +914,7 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         :meth:`Factor.pearsonr`
         """
         from .statistical import RollingSpearman
+
         return RollingSpearman(
             base_factor=self,
             target=target,
@@ -843,7 +923,9 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         )
 
     @expect_types(
-        target=Term, regression_length=int, mask=(Filter, NotSpecifiedType),
+        target=Term,
+        regression_length=int,
+        mask=(Filter, NotSpecifiedType),
     )
     @templated_docstring(CORRELATION_METHOD_NOTE=CORRELATION_METHOD_NOTE)
     def linear_regression(self, target, regression_length, mask=NotSpecified):
@@ -897,6 +979,7 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         :func:`scipy.stats.linregress`
         """
         from .statistical import RollingLinearRegression
+
         return RollingLinearRegression(
             dependent=self,
             independent=target,
@@ -911,11 +994,9 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         groupby=(Classifier, NotSpecifiedType),
     )
     @float64_only
-    def winsorize(self,
-                  min_percentile,
-                  max_percentile,
-                  mask=NotSpecified,
-                  groupby=NotSpecified):
+    def winsorize(
+        self, min_percentile, max_percentile, mask=NotSpecified, groupby=NotSpecified
+    ):
         """
         Construct a new factor that winsorizes the result of this factor.
 
@@ -1162,10 +1243,7 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
     def _maximum(self, mask=NotSpecified, groupby=NotSpecified):
         return MaximumFilter(self, groupby=groupby, mask=mask)
 
-    def percentile_between(self,
-                           min_percentile,
-                           max_percentile,
-                           mask=NotSpecified):
+    def percentile_between(self, min_percentile, max_percentile, mask=NotSpecified):
         """
         Construct a Filter matching values of self that fall within the range
         defined by ``min_percentile`` and ``max_percentile``.
@@ -1194,33 +1272,6 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
             max_percentile=max_percentile,
             mask=mask,
         )
-
-    def isnull(self):
-        """
-        A Filter producing True for values where this Factor has missing data.
-
-        Equivalent to self.isnan() when ``self.dtype`` is float64.
-        Otherwise equivalent to ``self.eq(self.missing_value)``.
-
-        Returns
-        -------
-        filter : zipline.pipeline.Filter
-        """
-        if self.dtype == float64_dtype:
-            # Using isnan is more efficient when possible because we can fold
-            # the isnan computation with other NumExpr expressions.
-            return self.isnan()
-        else:
-            return NullFilter(self)
-
-    def notnull(self):
-        """
-        A Filter producing True for values where this Factor has complete data.
-
-        Equivalent to ``~self.isnan()` when ``self.dtype`` is float64.
-        Otherwise equivalent to ``(self != self.missing_value)``.
-        """
-        return NotNullFilter(self)
 
     @if_not_float64_tell_caller_to_use_isnull
     def isnan(self):
@@ -1252,13 +1303,48 @@ class Factor(RestrictedDTypeMixin, ComputableTerm):
         """
         return (-inf < self) & (self < inf)
 
-    @classlazyval
-    def _downsampled_type(self):
-        return DownsampledMixin.make_downsampled_type(Factor)
+    def clip(self, min_bound, max_bound, mask=NotSpecified):
+        """
+        Clip (limit) the values in a factor.
 
-    @classlazyval
-    def _aliased_type(self):
-        return AliasedMixin.make_aliased_type(Factor)
+        Given an interval, values outside the interval are clipped to the
+        interval edges. For example, if an interval of ``[0, 1]`` is specified,
+        values smaller than 0 become 0, and values larger than 1 become 1.
+
+        Parameters
+        ----------
+        min_bound : float
+            The minimum value to use.
+        max_bound : float
+            The maximum value to use.
+        mask : zipline.pipeline.Filter, optional
+            A Filter representing assets to consider when clipping.
+
+        Notes
+        -----
+        To only clip values on one side, ``-np.inf` and ``np.inf`` may be
+        passed.  For example, to only clip the maximum value but not clip a
+        minimum value:
+
+        .. code-block:: python
+
+           factor.clip(min_bound=-np.inf, max_bound=user_provided_max)
+
+        See Also
+        --------
+        numpy.clip
+        """
+        from .basic import Clip
+
+        return Clip(
+            inputs=[self],
+            min_bound=min_bound,
+            max_bound=max_bound,
+        )
+
+    @classmethod
+    def _principal_computable_term_type(cls):
+        return Factor
 
 
 class NumExprFactor(NumericalExpression, Factor):
@@ -1279,6 +1365,7 @@ class NumExprFactor(NumericalExpression, Factor):
     NumExprFactors are constructed by numerical operators like `+` and `-`.
     Users should rarely need to construct a NumExprFactor directly.
     """
+
     pass
 
 
@@ -1317,17 +1404,20 @@ class GroupedRowTransform(Factor):
     zipline.pipeline.Factor.demean
     zipline.pipeline.Factor.rank
     """
+
     window_length = 0
 
-    def __new__(cls,
-                transform,
-                transform_args,
-                factor,
-                groupby,
-                dtype,
-                missing_value,
-                mask,
-                **kwargs):
+    def __new__(
+        cls,
+        transform,
+        transform_args,
+        factor,
+        groupby,
+        dtype,
+        missing_value,
+        mask,
+        **kwargs,
+    ):
 
         if mask is NotSpecified:
             mask = factor.mask
@@ -1345,7 +1435,7 @@ class GroupedRowTransform(Factor):
             missing_value=missing_value,
             mask=mask,
             dtype=dtype,
-            **kwargs
+            **kwargs,
         )
 
     def _init(self, transform, transform_args, *args, **kwargs):
@@ -1384,7 +1474,7 @@ class GroupedRowTransform(Factor):
 
     def graph_repr(self):
         """Short repr to use when rendering Pipeline graphs."""
-        return type(self).__name__ + '(%r)' % self.transform_name
+        return type(self).__name__ + "(%r)" % self.transform_name
 
 
 class Rank(SingleInputMixin, Factor):
@@ -1410,6 +1500,7 @@ class Rank(SingleInputMixin, Factor):
     Most users should call Factor.rank rather than directly construct an
     instance of this class.
     """
+
     window_length = 0
     dtype = float64_dtype
     window_safe = True
@@ -1625,28 +1716,29 @@ class CustomFactor(PositiveWindowLengthMixin, CustomTermMixin, Factor):
     same dtype. For instance, in the example above, if alpha is a float then
     beta must also be a float.
     '''
+
     dtype = float64_dtype
 
     def _validate(self):
         try:
             super(CustomFactor, self)._validate()
-        except UnsupportedDataType:
+        except UnsupportedDataType as exc:
             if self.dtype in CLASSIFIER_DTYPES:
                 raise UnsupportedDataType(
                     typename=type(self).__name__,
                     dtype=self.dtype,
-                    hint='Did you mean to create a CustomClassifier?',
-                )
+                    hint="Did you mean to create a CustomClassifier?",
+                ) from exc
             elif self.dtype in FILTER_DTYPES:
                 raise UnsupportedDataType(
                     typename=type(self).__name__,
                     dtype=self.dtype,
-                    hint='Did you mean to create a CustomFilter?',
-                )
+                    hint="Did you mean to create a CustomFilter?",
+                ) from exc
             raise
 
     def __getattribute__(self, name):
-        outputs = object.__getattribute__(self, 'outputs')
+        outputs = object.__getattribute__(self, "outputs")
         if outputs is NotSpecified:
             return super(CustomFactor, self).__getattribute__(name)
         elif name in outputs:
@@ -1654,20 +1746,20 @@ class CustomFactor(PositiveWindowLengthMixin, CustomTermMixin, Factor):
         else:
             try:
                 return super(CustomFactor, self).__getattribute__(name)
-            except AttributeError:
+            except AttributeError as exc:
                 raise AttributeError(
-                    'Instance of {factor} has no output named {attr!r}. '
-                    'Possible choices are: {choices}.'.format(
+                    "Instance of {factor} has no output named {attr!r}. "
+                    "Possible choices are: {choices}.".format(
                         factor=type(self).__name__,
                         attr=name,
                         choices=self.outputs,
                     )
-                )
+                ) from exc
 
     def __iter__(self):
         if self.outputs is NotSpecified:
             raise ValueError(
-                '{factor} does not have multiple outputs.'.format(
+                "{factor} does not have multiple outputs.".format(
                     factor=type(self).__name__,
                 )
             )
@@ -1678,6 +1770,7 @@ class RecarrayField(SingleInputMixin, Factor):
     """
     A single field from a multi-output factor.
     """
+
     def __new__(cls, factor, attribute):
         return super(RecarrayField, cls).__new__(
             cls,
@@ -1687,7 +1780,7 @@ class RecarrayField(SingleInputMixin, Factor):
             mask=factor.mask,
             dtype=factor.dtype,
             missing_value=factor.missing_value,
-            window_safe=factor.window_safe
+            window_safe=factor.window_safe,
         )
 
     def _init(self, attribute, *args, **kwargs):
@@ -1715,10 +1808,55 @@ class Latest(LatestMixin, CustomFactor):
     The `.latest` attribute of DataSet columns returns an instance of this
     Factor.
     """
+
     window_length = 1
 
     def compute(self, today, assets, out, data):
         out[:] = data[-1]
+
+
+class DailySummary(SingleInputMixin, Factor):
+    """1D Factor that computes a summary statistic across all assets."""
+
+    ndim = 1
+    window_length = 0
+    params = ("func",)
+
+    def __new__(cls, func, input_, mask, dtype):
+        # TODO: We should be able to support datetime64 as well, but that
+        # requires extra care for handling NaT.
+        if dtype != float64_dtype:
+            raise AssertionError(
+                "DailySummary only supports float64 dtype, got {}".format(dtype),
+            )
+
+        return super(DailySummary, cls).__new__(
+            cls,
+            inputs=[input_],
+            dtype=dtype,
+            missing_value=nan,
+            window_safe=input_.window_safe,
+            func=func,
+            mask=mask,
+        )
+
+    def _compute(self, arrays, dates, assets, mask):
+        func = self.params["func"]
+
+        data = arrays[0]
+        data[~mask] = nan
+        if not isnan(self.inputs[0].missing_value):
+            data[data == self.inputs[0].missing_value] = nan
+
+        return as_column(func(data, self.inputs[0].missing_value))
+
+    def __repr__(self):
+        return "{}.{}()".format(
+            self.inputs[0].recursive_repr(),
+            self.params["func"].__name__,
+        )
+
+    graph_repr = recursive_repr = __repr__
 
 
 # Functions to be passed to GroupedRowTransform.  These aren't defined inline
@@ -1728,7 +1866,8 @@ def demean(row):
 
 
 def zscore(row):
-    return (row - nanmean(row)) / nanstd(row)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return (row - nanmean(row)) / nanstd(row)
 
 
 def winsorize(row, min_percentile, max_percentile):

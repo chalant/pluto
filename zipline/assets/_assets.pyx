@@ -34,12 +34,13 @@ from numpy cimport int64_t
 import warnings
 cimport numpy as np
 
-from trading_calendars import get_calendar
+
+from zipline.utils.calendar_utils import get_calendar
 
 
 # Users don't construct instances of this object, and embedding the signature
 # in the docstring seems to confuse Sphinx, so disable it for now.
-@cython.embedsignature(True)
+@cython.embedsignature(False)
 cdef class Asset:
     """
     Base class for entities that can be owned by a trading algorithm.
@@ -60,6 +61,8 @@ cdef class Asset:
     exchange_full : str
         Full name of the exchange on which the asset trades (e.g., 'NEW YORK
         STOCK EXCHANGE').
+    exchange_info : zipline.assets.ExchangeInfo
+        Information about the exchange this asset is listed on.
     country_code : str
         Two character code indicating the country in which the asset trades.
     start_date : pd.Timestamp
@@ -259,50 +262,15 @@ cdef class Asset:
         return calendar.is_open_on_minute(dt_minute)
 
 
-@cython.embedsignature(True)
+@cython.embedsignature(False)
 cdef class Equity(Asset):
     """
     Asset subclass representing partial ownership of a company, trust, or
     partnership.
     """
-
-    property security_start_date:
-        """
-        DEPRECATION: This property should be deprecated and is only present for
-        backwards compatibility
-        """
-        def __get__(self):
-            warnings.warn("The security_start_date property will soon be "
-            "retired. Please use the start_date property instead.",
-            DeprecationWarning)
-            return self.start_date
-
-    property security_end_date:
-        """
-        DEPRECATION: This property should be deprecated and is only present for
-        backwards compatibility
-        """
-        def __get__(self):
-            warnings.warn("The security_end_date property will soon be "
-            "retired. Please use the end_date property instead.",
-            DeprecationWarning)
-            return self.end_date
-
-    property security_name:
-        """
-        DEPRECATION: This property should be deprecated and is only present for
-        backwards compatibility
-        """
-        def __get__(self):
-            warnings.warn("The security_name property will soon be "
-            "retired. Please use the asset_name property instead.",
-            DeprecationWarning)
-            return self.asset_name
-
-cdef class FractionalEquity(Equity):
     pass
 
-@cython.embedsignature(True)
+@cython.embedsignature(False)
 cdef class Future(Asset):
     """Asset subclass representing ownership of a futures contract.
     """
@@ -360,17 +328,6 @@ cdef class Future(Asset):
                 self.auto_close_date = notice_date
             else:
                 self.auto_close_date = min(notice_date, expiration_date)
-
-    property multiplier:
-        """
-        DEPRECATION: This property should be deprecated and is only present for
-        backwards compatibility
-        """
-        def __get__(self):
-            warnings.warn("The multiplier property will soon be "
-            "retired. Please use the price_multiplier property instead.",
-            DeprecationWarning)
-            return self.price_multiplier
 
     cpdef __reduce__(self):
         """

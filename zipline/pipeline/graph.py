@@ -1,14 +1,15 @@
 """
 Dependency-Graph representation of Pipeline API terms.
 """
+
 import uuid
 
 import networkx as nx
-from six import iteritems, itervalues
 from zipline.utils.memoize import lazyval
 from zipline.pipeline.visualize import display_graph
 
 from .term import LoadableTerm
+from pprint import pprint
 
 
 class CyclicDependency(Exception):
@@ -20,10 +21,10 @@ class CyclicDependency(Exception):
 #
 # (Yes, technically, a user can import this file and pass this as the name of a
 # column. If you do that you deserve whatever bizarre failure you cause.)
-SCREEN_NAME = 'screen_' + uuid.uuid4().hex
+SCREEN_NAME = "screen_" + uuid.uuid4().hex
 
 
-class TermGraph(object):
+class TermGraph:
     """
     An abstract representation of Pipeline Term dependencies.
 
@@ -53,12 +54,13 @@ class TermGraph(object):
     --------
     ExecutionPlan
     """
+
     def __init__(self, terms):
         self.graph = nx.DiGraph()
 
         self._frozen = False
         parents = set()
-        for term in itervalues(terms):
+        for term in terms.values():
             self._add_to_graph(term, parents)
             # No parents should be left between top-level terms.
             assert not parents
@@ -89,6 +91,9 @@ class TermGraph(object):
         if term in parents:
             raise CyclicDependency(term)
 
+        if term in self.graph:
+            return
+
         parents.add(term)
 
         self.graph.add_node(term)
@@ -108,8 +113,7 @@ class TermGraph(object):
 
     @property
     def screen_name(self):
-        """Name of the specially-designated ``screen`` term for the pipeline.
-        """
+        """Name of the specially-designated ``screen`` term for the pipeline."""
         return SCREEN_NAME
 
     def execution_order(self, workspace, refcounts):
@@ -129,14 +133,17 @@ class TermGraph(object):
             Reference counts for terms to be computed. Terms with reference
             counts of 0 do not need to be computed.
         """
-        return list(nx.topological_sort(
-            self.graph.subgraph(
-                {
-                    term for term, refcount in refcounts.items()
-                    if refcount > 0 and term not in workspace
-                },
-            ),
-        ))
+        return list(
+            nx.topological_sort(
+                self.graph.subgraph(
+                    {
+                        term
+                        for term, refcount in refcounts.items()
+                        if refcount > 0 and term not in workspace
+                    },
+                ),
+            )
+        )
 
     def ordered(self):
         return iter(nx.topological_sort(self.graph))
@@ -147,15 +154,15 @@ class TermGraph(object):
 
     @lazyval
     def jpeg(self):
-        return display_graph(self, 'jpeg')
+        return display_graph(self, "jpeg")
 
     @lazyval
     def png(self):
-        return display_graph(self, 'png')
+        return display_graph(self, "png")
 
     @lazyval
     def svg(self):
-        return display_graph(self, 'svg')
+        return display_graph(self, "svg")
 
     def _repr_png_(self):
         return self.png.data
@@ -173,7 +180,7 @@ class TermGraph(object):
         nodes get one extra reference to ensure that they're still in the graph
         at the end of execution.
         """
-        refcounts = self.graph.out_degree()
+        refcounts = dict(self.graph.out_degree())
         for t in self.outputs.values():
             refcounts[t] += 1
 
@@ -233,12 +240,12 @@ class TermGraph(object):
 
 class ExecutionPlan(TermGraph):
     """
-    Graph represention of Pipeline Term dependencies that includes metadata
+    Graph representation of Pipeline Term dependencies that includes metadata
     about extra rows required to perform computations.
 
     Each node in the graph has an `extra_rows` attribute, indicating how many,
-    if any, extra rows we should compute for the node.  Extra rows are most
-    often needed when a term is an input to a rolling window computation.  For
+    if any, extra rows we should compute for the node. Extra rows are most
+    often needed when a term is an input to a rolling window computation. For
     example, if we compute a 30 day moving average of price from day X to day
     Y, we need to load price data for the range from day (X - 29) to day Y.
 
@@ -260,12 +267,8 @@ class ExecutionPlan(TermGraph):
     outputs
     offset
     """
-    def __init__(self,
-                 domain,
-                 terms,
-                 start_date,
-                 end_date,
-                 min_extra_rows=0):
+
+    def __init__(self, domain, terms, start_date, end_date, min_extra_rows=0):
         super(ExecutionPlan, self).__init__(terms)
 
         # Specialize all the LoadableTerms in the graph to our domain, so that
@@ -280,14 +283,13 @@ class ExecutionPlan(TermGraph):
         # lazyval, and we don't want its result to be cached until after we've
         # specialized.
         specializations = {
-            t: t.specialize(domain)
-            for t in self.graph if isinstance(t, LoadableTerm)
+            t: t.specialize(domain) for t in self.graph if isinstance(t, LoadableTerm)
         }
-        self.graph = nx.relabel_nodes(self.graph, specializations)
+        self.graph = nx.relabel.relabel_nodes(self.graph, specializations)
 
         self.domain = domain
 
-        sessions = domain.all_sessions()
+        sessions = domain.sessions()
         for term in terms.values():
             self.set_extra_rows(
                 term,
@@ -299,14 +301,13 @@ class ExecutionPlan(TermGraph):
 
         self._assert_all_loadable_terms_specialized_to(domain)
 
-    def set_extra_rows(self,
-                       term,
-                       all_dates,
-                       start_date,
-                       end_date,
-                       min_extra_rows):
+    def set_extra_rows(self, term, all_dates, start_date, end_date, min_extra_rows):
         # Specialize any loadable terms before adding extra rows.
         term = maybe_specialize(term, self.domain)
+
+        attrs = self.graph.nodes[term]
+        if attrs.get("min_extra_rows", -1) >= min_extra_rows:
+            return
 
         # A term can require that additional extra rows beyond the minimum be
         # computed.  This is most often used with downsampled terms, which need
@@ -319,12 +320,15 @@ class ExecutionPlan(TermGraph):
         )
         if extra_rows_for_term < min_extra_rows:
             raise ValueError(
-                "term %s requested fewer rows than the minimum of %d" % (
-                    term, min_extra_rows,
+                "term %s requested fewer rows than the minimum of %d"
+                % (
+                    term,
+                    min_extra_rows,
                 )
             )
 
         self._ensure_extra_rows(term, extra_rows_for_term)
+        attrs["min_extra_rows"] = min_extra_rows
 
         for dependency, additional_extra_rows in term.dependencies.items():
             self.set_extra_rows(
@@ -451,23 +455,17 @@ class ExecutionPlan(TermGraph):
         :meth:`zipline.pipeline.graph.ExecutionPlan.offset`
         :meth:`zipline.pipeline.Term.dependencies`
         """
-        return {
-            term: attrs['extra_rows']
-            for term, attrs in iteritems(self.graph.node)
-        }
+
+        return {term: self.graph.nodes[term]["extra_rows"] for term in self.graph.nodes}
 
     def _ensure_extra_rows(self, term, N):
         """
         Ensure that we're going to compute at least N extra rows of `term`.
         """
-        attrs = self.graph.node[term]
-        attrs['extra_rows'] = max(N, attrs.get('extra_rows', 0))
+        attrs = self.graph.nodes[term]
+        attrs["extra_rows"] = max(N, attrs.get("extra_rows", 0))
 
-    def mask_and_dates_for_term(self,
-                                term,
-                                root_mask_term,
-                                workspace,
-                                all_dates):
+    def mask_and_dates_for_term(self, term, root_mask_term, workspace, all_dates):
         """
         Load mask and mask row labels for term.
 
@@ -494,16 +492,13 @@ class ExecutionPlan(TermGraph):
 
         # This offset is computed against root_mask_term because that is what
         # determines the shape of the top-level dates array.
-        dates_offset = (
-            self.extra_rows[root_mask_term] - self.extra_rows[term]
-        )
+        dates_offset = self.extra_rows[root_mask_term] - self.extra_rows[term]
 
         return workspace[mask][mask_offset:], all_dates[dates_offset:]
 
     def _assert_all_loadable_terms_specialized_to(self, domain):
-        """Make sure that we've specialized all loadable terms in the graph.
-        """
-        for term in self.graph.node:
+        """Make sure that we've specialized all loadable terms in the graph."""
+        for term in self.graph.nodes():
             if isinstance(term, LoadableTerm):
                 assert term.domain is domain
 
@@ -511,8 +506,7 @@ class ExecutionPlan(TermGraph):
 # XXX: This function exists because we currently only specialize LoadableTerms
 #      when running a Pipeline on a given domain.
 def maybe_specialize(term, domain):
-    """Specialize a term if it's loadable.
-    """
+    """Specialize a term if it's loadable."""
     if isinstance(term, LoadableTerm):
         return term.specialize(domain)
     return term

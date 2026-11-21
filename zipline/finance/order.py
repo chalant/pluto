@@ -14,20 +14,23 @@
 # limitations under the License.
 import math
 import uuid
-
-from six import text_type
+from enum import IntEnum
 
 import zipline.protocol as zp
 from zipline.assets import Asset
-from zipline.utils.enum import enum
+
 from zipline.utils.input_validation import expect_types
 
-ORDER_STATUS = enum(
-    'OPEN',
-    'FILLED',
-    'CANCELLED',
-    'REJECTED',
-    'HELD',
+ORDER_STATUS = IntEnum(
+    "ORDER_STATUS",
+    [
+        "OPEN",
+        "FILLED",
+        "CANCELLED",
+        "REJECTED",
+        "HELD",
+    ],
+    start=0,
 )
 
 SELL = 1 << 0
@@ -35,20 +38,44 @@ BUY = 1 << 1
 STOP = 1 << 2
 LIMIT = 1 << 3
 
-ORDER_FIELDS_TO_IGNORE = {'type', 'direction', '_status', 'asset'}
+ORDER_FIELDS_TO_IGNORE = {"type", "direction", "_status", "asset"}
 
 
-class Order(object):
+class Order:
     # using __slots__ to save on memory usage.  Simulations can create many
     # Order objects and we keep them all in memory, so it's worthwhile trying
     # to cut down on the memory footprint of this object.
-    __slots__ = ["session_id", "id", "dt", "reason", "created", "asset", "amount", "filled",
-                 "commission", "_status", "stop", "limit", "stop_reached",
-                 "limit_reached", "direction", "type", "broker_order_id"]
+    __slots__ = [
+        "id",
+        "dt",
+        "reason",
+        "created",
+        "asset",
+        "amount",
+        "filled",
+        "commission",
+        "_status",
+        "stop",
+        "limit",
+        "stop_reached",
+        "limit_reached",
+        "direction",
+        "type",
+        "broker_order_id",
+    ]
 
     @expect_types(asset=Asset)
-    def __init__(self, session_id, dt, asset, amount, stop=None, limit=None, filled=0,
-                 commission=0, id_=None):
+    def __init__(
+        self,
+        dt,
+        asset,
+        amount,
+        stop=None,
+        limit=None,
+        filled=0,
+        commission=0,
+        id=None,
+    ):
         """
         @dt - datetime.datetime that the order was placed
         @asset - asset for the order.
@@ -59,9 +86,8 @@ class Order(object):
         """
 
         # get a string representation of the uuid.
-        self.id = self.make_id() + session_id if id_ is None else id_
+        self.id = self.make_id() if id is None else id
         self.dt = dt
-        self.session_id = session_id
         self.reason = None
         self.created = dt
         self.asset = asset
@@ -82,16 +108,18 @@ class Order(object):
         return uuid.uuid4().hex
 
     def to_dict(self):
-        dct = {name: getattr(self, name)
-               for name in self.__slots__
-               if name not in ORDER_FIELDS_TO_IGNORE}
+        dct = {
+            name: getattr(self, name)
+            for name in self.__slots__
+            if name not in ORDER_FIELDS_TO_IGNORE
+        }
 
         if self.broker_order_id is None:
-            del dct['broker_order_id']
+            del dct["broker_order_id"]
 
         # Adding 'sid' for backwards compatibility with downstream consumers.
-        dct['sid'] = self.asset
-        dct['status'] = self.status
+        dct["sid"] = self.asset
+        dct["status"] = self.status
 
         return dct
 
@@ -111,10 +139,15 @@ class Order(object):
         Update internal state based on price triggers and the
         trade event's price.
         """
-        stop_reached, limit_reached, sl_stop_reached = \
-            self.check_order_triggers(price)
-        if (stop_reached, limit_reached) \
-                != (self.stop_reached, self.limit_reached):
+        (
+            stop_reached,
+            limit_reached,
+            sl_stop_reached,
+        ) = self.check_order_triggers(price)
+        if (stop_reached, limit_reached) != (
+            self.stop_reached,
+            self.limit_reached,
+        ):
             self.dt = dt
         self.stop_reached = stop_reached
         self.limit_reached = limit_reached
@@ -122,6 +155,8 @@ class Order(object):
             # Change the STOP LIMIT order into a LIMIT order
             self.stop = None
 
+    # TODO: simplify
+    # flake8: noqa: C901
     def check_order_triggers(self, current_price):
         """
         Given an order and a trade event, return a tuple of
@@ -190,7 +225,12 @@ class Order(object):
 
         # new_share_amount = old_share_amount / ratio
         # new_price = old_price * ratio
-        self.amount = int(self.amount / ratio)
+
+        # Truncate outstanding shares separately so a reverse split cannot
+        # create an extra share to trade from a fractional prior fill.
+        remaining = int(self.open_amount / ratio)
+        self.filled = int(self.filled / ratio)
+        self.amount = self.filled + remaining
 
         if self.limit is not None:
             self.limit = round(self.limit * ratio, 2)
@@ -214,11 +254,11 @@ class Order(object):
     def cancel(self):
         self.status = ORDER_STATUS.CANCELLED
 
-    def reject(self, reason=''):
+    def reject(self, reason=""):
         self.status = ORDER_STATUS.REJECTED
         self.reason = reason
 
-    def hold(self, reason=''):
+    def hold(self, reason=""):
         self.status = ORDER_STATUS.HELD
         self.reason = reason
 
@@ -250,15 +290,3 @@ class Order(object):
         String representation for this object.
         """
         return "Order(%s)" % self.to_dict().__repr__()
-
-    def __unicode__(self):
-        """
-        Unicode representation for this object.
-        """
-        return text_type(repr(self))
-
-    def __hash__(self):
-        return int(self.id, 16)
-
-    def __eq__(self, other):
-        return other.id == self.id

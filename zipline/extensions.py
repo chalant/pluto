@@ -1,5 +1,4 @@
 import re
-import six
 from toolz import curry
 
 
@@ -24,7 +23,7 @@ def create_args(args, root):
         parse_extension_arg(arg, extension_args)
 
     for name in sorted(extension_args, key=len):
-        path = name.split('.')
+        path = name.split(".")
         update_namespace(root, path, extension_args[name])
 
 
@@ -42,7 +41,7 @@ def parse_extension_arg(arg, arg_dict):
         The dictionary into which the key/value pair will be added
     """
 
-    match = re.match(r'^(([^\d\W]\w*)(\.[^\d\W]\w*)*)=(.*)$', arg)
+    match = re.match(r"^(([^\d\W]\w*)(\.[^\d\W]\w*)*)=(.*)$", arg)
     if match is None:
         raise ValueError(
             "invalid extension argument '%s', must be in key=value form" % arg
@@ -73,9 +72,10 @@ def update_namespace(namespace, path, name):
         setattr(namespace, path[0], name)
     else:
         if hasattr(namespace, path[0]):
-            if isinstance(getattr(namespace, path[0]), six.string_types):
-                raise ValueError("Conflicting assignments at namespace"
-                                 " level '%s'" % path[0])
+            if isinstance(getattr(namespace, path[0]), str):
+                raise ValueError(
+                    "Conflicting assignments at namespace" " level '%s'" % path[0]
+                )
         else:
             a = Namespace()
             setattr(namespace, path[0], a)
@@ -83,13 +83,13 @@ def update_namespace(namespace, path, name):
         update_namespace(getattr(namespace, path[0]), path[1:], name)
 
 
-class Namespace(object):
+class Namespace:
     """
     A placeholder object representing a namespace level
     """
 
 
-class Registry(object):
+class Registry:
     """
     Responsible for managing all instances of custom subclasses of a
     given abstract base class - only one instance needs to be created
@@ -103,6 +103,7 @@ class Registry(object):
     interface : type
         The abstract base class to manage.
     """
+
     def __init__(self, interface):
         self.interface = interface
         self._factories = {}
@@ -117,23 +118,22 @@ class Registry(object):
         """
         try:
             return self._factories[name]()
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
-                "no %s factory registered under name %r, options are: %r" %
-                (self.interface.__name__, name, sorted(self._factories)),
-            )
+                "no %s factory registered under name %r, options are: %r"
+                % (self.interface.__name__, name, sorted(self._factories)),
+            ) from exc
 
     def is_registered(self, name):
-        """Check whether we have a factory registered under ``name``.
-        """
+        """Check whether we have a factory registered under ``name``."""
         return name in self._factories
 
     @curry
     def register(self, name, factory):
         if self.is_registered(name):
             raise ValueError(
-                "%s factory with name %r is already registered" %
-                (self.interface.__name__, name)
+                "%s factory with name %r is already registered"
+                % (self.interface.__name__, name)
             )
 
         self._factories[name] = factory
@@ -143,17 +143,18 @@ class Registry(object):
     def unregister(self, name):
         try:
             del self._factories[name]
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
-                "%s factory %r was not already registered" %
-                (self.interface.__name__, name)
-            )
+                "%s factory %r was not already registered"
+                % (self.interface.__name__, name)
+            ) from exc
 
     def clear(self):
         self._factories.clear()
 
 
 # Public wrapper methods for Registry:
+
 
 def get_registry(interface):
     """
@@ -172,8 +173,8 @@ def get_registry(interface):
     """
     try:
         return custom_types[interface]
-    except KeyError:
-        raise ValueError("class specified is not an extendable type")
+    except KeyError as exc:
+        raise ValueError("class specified is not an extendable type") from exc
 
 
 def load(interface, name):
@@ -257,14 +258,14 @@ def create_registry(interface):
         The data type specified/decorated, unaltered.
     """
     if interface in custom_types:
-        raise ValueError('there is already a Registry instance '
-                         'for the specified type')
+        raise ValueError(
+            "there is already a Registry instance " "for the specified type"
+        )
     custom_types[interface] = Registry(interface)
     return interface
 
 
 extensible = create_registry
-
 
 # A global dictionary for storing instances of Registry:
 custom_types = {}

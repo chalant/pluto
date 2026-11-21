@@ -12,15 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABCMeta, abstractmethod
-from six import with_metaclass
+from abc import ABC, abstractmethod
 from zipline.extensions import extensible
 from zipline.finance.cancel_policy import NeverCancel
 
 
 @extensible
-class Blotter(with_metaclass(ABCMeta)):
-
+class Blotter(ABC):
     def __init__(self, cancel_policy=None):
         self.cancel_policy = cancel_policy if cancel_policy else NeverCancel()
         self.current_dt = None
@@ -29,7 +27,7 @@ class Blotter(with_metaclass(ABCMeta)):
         self.current_dt = dt
 
     @abstractmethod
-    def order(self, asset, amount, style, session_id, order_id=None):
+    def order(self, asset, amount, style, order_id=None):
         """Place an order.
 
         Parameters
@@ -53,16 +51,16 @@ class Blotter(with_metaclass(ABCMeta)):
 
         Notes
         -----
-        amount > 0 :: Buy/Cover
-        amount < 0 :: Sell/Short
-        Market order:    order(asset, amount)
-        Limit order:     order(asset, amount, style=LimitOrder(limit_price))
-        Stop order:      order(asset, amount, style=StopOrder(stop_price))
-        StopLimit order: order(asset, amount, style=StopLimitOrder(limit_price,
-                               stop_price))
+        amount > 0 : Buy/Cover
+        amount < 0 : Sell/Short
+        Market order : order(asset, amount)
+        Limit order : order(asset, amount, style=LimitOrder(limit_price))
+        Stop order : order(asset, amount, style=StopOrder(stop_price))
+        StopLimit order : order(asset, amount,
+        style=StopLimitOrder(limit_price, stop_price))
         """
 
-        raise NotImplementedError('order')
+        raise NotImplementedError("order")
 
     def batch_order(self, order_arg_lists):
         """Place a batch of orders.
@@ -98,23 +96,22 @@ class Blotter(with_metaclass(ABCMeta)):
         relay_status : bool
             Whether or not to record the status of the order
         """
-        raise NotImplementedError('cancel')
+        raise NotImplementedError("cancel")
 
     @abstractmethod
-    def cancel_all_orders_for_asset(self, asset, warn=False,
-                                    relay_status=True):
+    def cancel_all_orders_for_asset(self, asset, warn=False, relay_status=True):
         """
         Cancel all open orders for a given asset.
         """
 
-        raise NotImplementedError('cancel_all_orders_for_asset')
+        raise NotImplementedError("cancel_all_orders_for_asset")
 
     @abstractmethod
     def execute_cancel_policy(self, event):
-        raise NotImplementedError('execute_cancel_policy')
+        raise NotImplementedError("execute_cancel_policy")
 
     @abstractmethod
-    def reject(self, order_id, reason=''):
+    def reject(self, order_id, reason=""):
         """
         Mark the given order as 'rejected', which is functionally similar to
         cancelled. The distinction is that rejections are involuntary (and
@@ -122,17 +119,17 @@ class Blotter(with_metaclass(ABCMeta)):
         rejected) while cancels are typically user-driven.
         """
 
-        raise NotImplementedError('reject')
+        raise NotImplementedError("reject")
 
     @abstractmethod
-    def hold(self, order_id, reason=''):
+    def hold(self, order_id, reason=""):
         """
         Mark the order with order_id as 'held'. Held is functionally similar
         to 'open'. When a fill (full or partial) arrives, the status
         will automatically change back to open/filled as necessary.
         """
 
-        raise NotImplementedError('hold')
+        raise NotImplementedError("hold")
 
     @abstractmethod
     def process_splits(self, splits):
@@ -149,7 +146,7 @@ class Blotter(with_metaclass(ABCMeta)):
         None
         """
 
-        raise NotImplementedError('process_splits')
+        raise NotImplementedError("process_splits")
 
     @abstractmethod
     def get_transactions(self, bar_data):
@@ -182,7 +179,7 @@ class Blotter(with_metaclass(ABCMeta)):
             closed_orders: list of all the orders that have filled.
         """
 
-        raise NotImplementedError('get_transactions')
+        raise NotImplementedError("get_transactions")
 
     @abstractmethod
     def prune_orders(self, closed_orders):
@@ -198,4 +195,4 @@ class Blotter(with_metaclass(ABCMeta)):
         None
         """
 
-        raise NotImplementedError('prune_orders')
+        raise NotImplementedError("prune_orders")

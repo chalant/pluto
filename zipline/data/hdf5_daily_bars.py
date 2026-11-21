@@ -97,15 +97,13 @@ Sample layout of the full file with multiple countries.
          |- /code
 """
 
-
 from functools import partial
 
 import h5py
-import logbook
+import logging
 import numpy as np
 import pandas as pd
-from six import iteritems, raise_from, viewkeys
-from six.moves import reduce
+from functools import reduce
 
 from zipline.data.bar_reader import (
     NoDataAfterDate,
@@ -115,40 +113,37 @@ from zipline.data.bar_reader import (
 )
 from zipline.data.session_bars import CurrencyAwareSessionBarReader
 from zipline.utils.memoize import lazyval
+from zipline.utils.numpy_utils import bytes_array_to_native_str_object_array
 from zipline.utils.pandas_utils import check_indexes_all_same
 
-
-log = logbook.Logger('HDF5DailyBars')
+log = logging.getLogger("HDF5DailyBars")
 
 VERSION = 0
 
+DATA = "data"
+INDEX = "index"
+LIFETIMES = "lifetimes"
+CURRENCY = "currency"
+CODE = "code"
 
-DATA = 'data'
-INDEX = 'index'
-LIFETIMES = 'lifetimes'
-CURRENCY = 'currency'
-CODE = 'code'
+SCALING_FACTOR = "scaling_factor"
 
-SCALING_FACTOR = 'scaling_factor'
-
-OPEN = 'open'
-HIGH = 'high'
-LOW = 'low'
-CLOSE = 'close'
-VOLUME = 'volume'
+OPEN = "open"
+HIGH = "high"
+LOW = "low"
+CLOSE = "close"
+VOLUME = "volume"
 
 FIELDS = (OPEN, HIGH, LOW, CLOSE, VOLUME)
 
-DAY = 'day'
-SID = 'sid'
+DAY = "day"
+SID = "sid"
 
-START_DATE = 'start_date'
-END_DATE = 'end_date'
-
+START_DATE = "start_date"
+END_DATE = "end_date"
 
 # XXX is reserved for "transactions involving no currency".
-MISSING_CURRENCY = 'XXX'
-
+MISSING_CURRENCY = "XXX"
 
 DEFAULT_SCALING_FACTORS = {
     # Retain 3 decimal places for prices.
@@ -166,7 +161,7 @@ def coerce_to_uint32(a, scaling_factor):
     Returns a copy of the array as uint32, applying a scaling factor to
     maintain precision if supplied.
     """
-    return (a * scaling_factor).round().astype('uint32')
+    return (a * scaling_factor).round().astype("uint32")
 
 
 def days_and_sids_for_frames(frames):
@@ -193,24 +188,24 @@ def days_and_sids_for_frames(frames):
         and sids.
     """
     if not frames:
-        days = np.array([], dtype='datetime64[ns]')
-        sids = np.array([], dtype='int64')
+        days = np.array([], dtype="datetime64[ns]")
+        sids = np.array([], dtype="int64")
         return days, sids
 
     # Ensure the indices and columns all match.
     check_indexes_all_same(
         [frame.index for frame in frames],
-        message='Frames have mismatched days.',
+        message="Frames have mismatched days.",
     )
     check_indexes_all_same(
         [frame.columns for frame in frames],
-        message='Frames have mismatched sids.',
+        message="Frames have mismatched sids.",
     )
 
     return frames[0].index.values, frames[0].columns.values
 
 
-class HDF5DailyBarWriter(object):
+class HDF5DailyBarWriter:
     """
     Class capable of writing daily OHLCV data to disk in a format that
     can be read efficiently by HDF5DailyBarReader.
@@ -228,6 +223,7 @@ class HDF5DailyBarWriter(object):
     --------
     zipline.data.hdf5_daily_bars.HDF5DailyBarReader
     """
+
     def __init__(self, filename, date_chunk_size):
         self._filename = filename
         self._date_chunk_size = date_chunk_size
@@ -235,11 +231,7 @@ class HDF5DailyBarWriter(object):
     def h5_file(self, mode):
         return h5py.File(self._filename, mode)
 
-    def write(self,
-              country_code,
-              frames,
-              currency_codes=None,
-              scaling_factors=None):
+    def write(self, country_code, frames, currency_codes=None, scaling_factors=None):
         """
         Write the OHLCV data for one country to the HDF5 file.
 
@@ -291,9 +283,9 @@ class HDF5DailyBarWriter(object):
             # h5py crashes if we provide chunks for empty data.
             chunks = None
 
-        with self.h5_file(mode='a') as h5_file:
+        with self.h5_file(mode="a") as h5_file:
             # ensure that the file version has been written
-            h5_file.attrs['version'] = VERSION
+            h5_file.attrs["version"] = VERSION
 
             country_group = h5_file.create_group(country_code)
 
@@ -311,11 +303,9 @@ class HDF5DailyBarWriter(object):
                 chunks,
             )
 
-    def write_from_sid_df_pairs(self,
-                                country_code,
-                                data,
-                                currency_codes=None,
-                                scaling_factors=None):
+    def write_from_sid_df_pairs(
+        self, country_code, data, currency_codes=None, scaling_factors=None
+    ):
         """
         Parameters
         ----------
@@ -341,8 +331,8 @@ class HDF5DailyBarWriter(object):
         if not data:
             empty_frame = pd.DataFrame(
                 data=None,
-                index=np.array([], dtype='datetime64[ns]'),
-                columns=np.array([], dtype='int64'),
+                index=np.array([], dtype="datetime64[ns]"),
+                columns=np.array([], dtype="int64"),
             )
             return self.write(
                 country_code,
@@ -359,21 +349,17 @@ class HDF5DailyBarWriter(object):
         # Add id to the index, so the frame is indexed by (date, id).
         ohlcv_frame.set_index(sid_ix, append=True, inplace=True)
 
-        frames = {
-            field: ohlcv_frame[field].unstack()
-            for field in FIELDS
-        }
+        frames = {field: ohlcv_frame[field].unstack() for field in FIELDS}
 
         return self.write(
             country_code=country_code,
             frames=frames,
             scaling_factors=scaling_factors,
-            currency_codes=currency_codes
+            currency_codes=currency_codes,
         )
 
     def _write_index_group(self, country_group, days, sids):
-        """Write /country/index.
-        """
+        """Write /country/index."""
         index_group = country_group.create_group(INDEX)
         self._log_writing_dataset(index_group)
 
@@ -383,12 +369,8 @@ class HDF5DailyBarWriter(object):
         # as integers.
         index_group.create_dataset(DAY, data=days.astype(np.int64))
 
-    def _write_lifetimes_group(self,
-                               country_group,
-                               start_date_ixs,
-                               end_date_ixs):
-        """Write /country/lifetimes
-        """
+    def _write_lifetimes_group(self, country_group, start_date_ixs, end_date_ixs):
+        """Write /country/lifetimes"""
         lifetimes_group = country_group.create_group(LIFETIMES)
         self._log_writing_dataset(lifetimes_group)
 
@@ -396,23 +378,17 @@ class HDF5DailyBarWriter(object):
         lifetimes_group.create_dataset(END_DATE, data=end_date_ixs)
 
     def _write_currency_group(self, country_group, currencies):
-        """Write /country/currency
-        """
+        """Write /country/currency"""
         currency_group = country_group.create_group(CURRENCY)
         self._log_writing_dataset(currency_group)
 
         currency_group.create_dataset(
             CODE,
-            data=currencies.values.astype(dtype='S3'),
+            data=currencies.values.astype(dtype="S3"),
         )
 
-    def _write_data_group(self,
-                          country_group,
-                          frames,
-                          scaling_factors,
-                          chunks):
-        """Write /country/data
-        """
+    def _write_data_group(self, country_group, frames, scaling_factors, chunks):
+        """Write /country/data"""
         data_group = country_group.create_group(DATA)
         self._log_writing_dataset(data_group)
 
@@ -421,7 +397,7 @@ class HDF5DailyBarWriter(object):
 
             # Sort rows by increasing sid, and columns by increasing date.
             frame.sort_index(inplace=True)
-            frame.sort_index(axis='columns', inplace=True)
+            frame.sort_index(axis="columns", inplace=True)
 
             data = coerce_to_uint32(
                 frame.T.fillna(0).values,
@@ -430,7 +406,7 @@ class HDF5DailyBarWriter(object):
 
             dataset = data_group.create_dataset(
                 field,
-                compression='lzf',
+                compression="lzf",
                 shuffle=True,
                 data=data,
                 chunks=chunks,
@@ -439,10 +415,7 @@ class HDF5DailyBarWriter(object):
 
             dataset.attrs[SCALING_FACTOR] = scaling_factors[field]
 
-            log.debug(
-                'Writing dataset {} to file {}',
-                dataset.name, self._filename
-            )
+            log.debug("Writing dataset {} to file {}", dataset.name, self._filename)
 
     def _log_writing_dataset(self, dataset):
         log.debug("Writing {} to file {}", dataset.name, self._filename)
@@ -469,7 +442,7 @@ def compute_asset_lifetimes(frames):
         [frames[field].isnull().values for field in FIELDS],
     )
     if not is_null_matrix.size:
-        empty = np.array([], dtype='int64')
+        empty = np.array([], dtype="int64")
         return empty, empty.copy()
 
     # Offset of the first null from the start of the input.
@@ -483,10 +456,10 @@ def compute_asset_lifetimes(frames):
 
 
 def convert_price_with_scaling_factor(a, scaling_factor):
-    conversion_factor = (1.0 / scaling_factor)
+    conversion_factor = 1.0 / scaling_factor
 
-    zeroes = (a == 0)
-    return np.where(zeroes, np.nan, a.astype('float64')) * conversion_factor
+    zeroes = a == 0
+    return np.where(zeroes, np.nan, a.astype("float64")) * conversion_factor
 
 
 class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
@@ -496,18 +469,27 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
     country_group : h5py.Group
         The group for a single country in an HDF5 daily pricing file.
     """
+
     def __init__(self, country_group):
         self._country_group = country_group
 
         self._postprocessors = {
-            OPEN: partial(convert_price_with_scaling_factor,
-                          scaling_factor=self._read_scaling_factor(OPEN)),
-            HIGH: partial(convert_price_with_scaling_factor,
-                          scaling_factor=self._read_scaling_factor(HIGH)),
-            LOW: partial(convert_price_with_scaling_factor,
-                         scaling_factor=self._read_scaling_factor(LOW)),
-            CLOSE: partial(convert_price_with_scaling_factor,
-                           scaling_factor=self._read_scaling_factor(CLOSE)),
+            OPEN: partial(
+                convert_price_with_scaling_factor,
+                scaling_factor=self._read_scaling_factor(OPEN),
+            ),
+            HIGH: partial(
+                convert_price_with_scaling_factor,
+                scaling_factor=self._read_scaling_factor(HIGH),
+            ),
+            LOW: partial(
+                convert_price_with_scaling_factor,
+                scaling_factor=self._read_scaling_factor(LOW),
+            ),
+            CLOSE: partial(
+                convert_price_with_scaling_factor,
+                scaling_factor=self._read_scaling_factor(CLOSE),
+            ),
             VOLUME: lambda a: a,
         }
 
@@ -523,10 +505,11 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         country_code : str
             The ISO 3166 alpha-2 country code for the country to read.
         """
-        if h5_file.attrs['version'] != VERSION:
+        if h5_file.attrs["version"] != VERSION:
             raise ValueError(
-                'mismatched version: file is of version %s, expected %s' % (
-                    h5_file.attrs['version'],
+                "mismatched version: file is of version %s, expected %s"
+                % (
+                    h5_file.attrs["version"],
                     VERSION,
                 ),
             )
@@ -550,11 +533,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
     def _read_scaling_factor(self, field):
         return self._country_group[DATA][field].attrs[SCALING_FACTOR]
 
-    def load_raw_arrays(self,
-                        columns,
-                        start_date,
-                        end_date,
-                        assets):
+    def load_raw_arrays(self, columns, start_date, end_date, assets):
         """
         Parameters
         ----------
@@ -637,7 +616,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         """
         assets = np.array(assets)
         sid_selector = self.sids.searchsorted(assets)
-        unknown = np.in1d(assets, self.sids, invert=True)
+        unknown = np.isin(assets, self.sids, invert=True)
         sid_selector[unknown] = -1
         return sid_selector
 
@@ -646,7 +625,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         start_ix = self.dates.searchsorted(start_date)
 
         # Get the index of the start of the first date **after** end_date.
-        end_ix = self.dates.searchsorted(end_date, side='right')
+        end_ix = self.dates.searchsorted(end_date, side="right")
 
         return slice(start_ix, end_ix)
 
@@ -668,9 +647,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
 
         if len(missing_sids):
             raise NoDataForSid(
-                'Assets not contained in daily pricing file: {}'.format(
-                    missing_sids
-                )
+                "Assets not contained in daily pricing file: {}".format(missing_sids)
             )
 
     def _validate_timestamp(self, ts):
@@ -679,11 +656,11 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
 
     @lazyval
     def dates(self):
-        return self._country_group[INDEX][DAY][:].astype('datetime64[ns]')
+        return self._country_group[INDEX][DAY][:].astype("datetime64[ns]")
 
     @lazyval
     def sids(self):
-        return self._country_group[INDEX][SID][:].astype('int64', copy=False)
+        return self._country_group[INDEX][SID][:].astype("int64", copy=False)
 
     @lazyval
     def asset_start_dates(self):
@@ -695,7 +672,8 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
 
     @lazyval
     def _currency_codes(self):
-        return self._country_group[CURRENCY][CODE][:]
+        bytes_array = self._country_group[CURRENCY][CODE][:]
+        return bytes_array_to_native_str_object_array(bytes_array)
 
     def currency_codes(self, sids):
         """Get currencies in which prices are quoted for the requested sids.
@@ -707,25 +685,21 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
 
         Returns
         -------
-        currency_codes : np.array[S3]
+        currency_codes : np.array[object]
             Array of currency codes for listing currencies of ``sids``.
         """
-        all_sids = sids
+        # Find the index of requested sids in our stored sids.
+        ixs = self.sids.searchsorted(sids, side="left")
 
-        # For each sid in ``sids``, find its index in ``all_sids``.
-        ixs = all_sids.searchsorted(sids, side='left')
+        result = self._currency_codes[ixs]
 
-        # searchsorted will return the index of the next lowest sid if the
-        # lookup fails. Check for this case and raise an error.
-        not_found = (all_sids[ixs] != sids)
-        if not_found.any():
-            # TODO: Should we return an unknown sentinel here?
-            missing = sids[not_found]
-            raise ValueError(
-                "Unable to find currency codes for sids:\n{}".format(missing)
-            )
+        # searchsorted returns the index of the next lowest sid if the lookup
+        # fails. Fill these sids with the special "missing" sentinel.
+        not_found = self.sids[ixs] != sids
 
-        return self._currency_codes[ixs]
+        result[not_found] = None
+
+        return result
 
     @property
     def last_available_dt(self):
@@ -735,7 +709,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         dt : pd.Timestamp
             The last session for which the reader can provide data.
         """
-        return pd.Timestamp(self.dates[-1], tz='UTC')
+        return pd.Timestamp(self.dates[-1])
 
     @property
     def trading_calendar(self):
@@ -744,7 +718,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         the data.  Can be None (if the writer didn't specify it).
         """
         raise NotImplementedError(
-            'HDF5 pricing does not yet support trading calendars.'
+            "HDF5 pricing does not yet support trading calendars."
         )
 
     @property
@@ -756,7 +730,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
             The first trading day (session) for which the reader can provide
             data.
         """
-        return pd.Timestamp(self.dates[0], tz='UTC')
+        return pd.Timestamp(self.dates[0])
 
     @lazyval
     def sessions(self):
@@ -767,7 +741,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
            All session labels (unioning the range for all assets) which the
            reader can provide.
         """
-        return pd.to_datetime(self.dates, utc=True)
+        return pd.to_datetime(self.dates)
 
     def get_value(self, sid, dt, field):
         """
@@ -818,8 +792,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         return value
 
     def get_last_traded_dt(self, asset, dt):
-        """
-        Get the latest day on or before ``dt`` in which ``asset`` traded.
+        """Get the latest day on or before ``dt`` in which ``asset`` traded.
 
         If there are no trades on or before ``dt``, returns ``pd.NaT``.
 
@@ -838,7 +811,7 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         """
         sid_ix = self.sids.searchsorted(asset.sid)
         # Used to get a slice of all dates up to and including ``dt``.
-        dt_limit_ix = self.dates.searchsorted(dt.asm8, side='right')
+        dt_limit_ix = self.dates.searchsorted(dt.asm8, side="right")
 
         # Get the indices of all dates with nonzero volume.
         nonzero_volume_ixs = np.ravel(
@@ -848,38 +821,43 @@ class HDF5DailyBarReader(CurrencyAwareSessionBarReader):
         if len(nonzero_volume_ixs) == 0:
             return pd.NaT
 
-        return pd.Timestamp(self.dates[nonzero_volume_ixs][-1], tz='UTC')
+        return pd.Timestamp(self.dates[nonzero_volume_ixs][-1])
 
 
 class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
     """
+
     Parameters
     ---------
     readers : dict[str -> SessionBarReader]
         A dict mapping country codes to SessionBarReader instances to
         service each country.
     """
+
     def __init__(self, readers):
         self._readers = readers
-        self._country_map = pd.concat([
-            pd.Series(index=reader.sids, data=country_code)
-            for country_code, reader in iteritems(readers)
-        ])
+        self._country_map = pd.concat(
+            [
+                pd.Series(index=reader.sids, data=country_code)
+                for country_code, reader in readers.items()
+            ]
+        )
 
     @classmethod
     def from_file(cls, h5_file):
-        """
-        Construct from an h5py.File.
+        """Construct from an h5py.File.
 
         Parameters
         ----------
         h5_file : h5py.File
             An HDF5 daily pricing file.
         """
-        return cls({
-            country: HDF5DailyBarReader.from_file(h5_file, country)
-            for country in h5_file.keys()
-        })
+        return cls(
+            {
+                country: HDF5DailyBarReader.from_file(h5_file, country)
+                for country in h5_file.keys()
+            }
+        )
 
     @classmethod
     def from_path(cls, path):
@@ -895,15 +873,13 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
 
     @property
     def countries(self):
-        """A set-like object of the country codes supplied by this reader.
-        """
-        return viewkeys(self._readers)
+        """A set-like object of the country codes supplied by this reader."""
+        return self._readers.keys()
 
     def _country_code_for_assets(self, assets):
-        country_codes = self._country_map.get(assets)
+        country_codes = self._country_map.reindex(assets)
 
-        # In some versions of pandas (observed in 0.22), Series.get()
-        # returns None if none of the labels are in the index.
+        # Series.get() returns None if none of the labels are in the index.
         if country_codes is not None:
             unique_country_codes = country_codes.dropna().unique()
             num_countries = len(unique_country_codes)
@@ -911,23 +887,20 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
             num_countries = 0
 
         if num_countries == 0:
-            raise ValueError('At least one valid asset id is required.')
+            raise ValueError("At least one valid asset id is required.")
         elif num_countries > 1:
             raise NotImplementedError(
                 (
-                    'Assets were requested from multiple countries ({}),'
-                    ' but multi-country reads are not yet supported.'
+                    "Assets were requested from multiple countries ({}),"
+                    " but multi-country reads are not yet supported."
                 ).format(list(unique_country_codes))
             )
 
-        return np.asscalar(unique_country_codes)
+        return unique_country_codes.item()
 
-    def load_raw_arrays(self,
-                        columns,
-                        start_date,
-                        end_date,
-                        assets):
+    def load_raw_arrays(self, columns, start_date, end_date, assets):
         """
+
         Parameters
         ----------
         columns : list of str
@@ -958,14 +931,13 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
     @property
     def last_available_dt(self):
         """
+
         Returns
         -------
         dt : pd.Timestamp
             The last session for which the reader can provide data.
         """
-        return max(
-            reader.last_available_dt for reader in self._readers.values()
-        )
+        return max(reader.last_available_dt for reader in self._readers.values())
 
     @property
     def trading_calendar(self):
@@ -974,25 +946,25 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
         the data.  Can be None (if the writer didn't specify it).
         """
         raise NotImplementedError(
-            'HDF5 pricing does not yet support trading calendars.'
+            "HDF5 pricing does not yet support trading calendars."
         )
 
     @property
     def first_trading_day(self):
         """
+
         Returns
         -------
         dt : pd.Timestamp
             The first trading day (session) for which the reader can provide
             data.
         """
-        return min(
-            reader.first_trading_day for reader in self._readers.values()
-        )
+        return min(reader.first_trading_day for reader in self._readers.values())
 
     @property
     def sessions(self):
         """
+
         Returns
         -------
         sessions : DatetimeIndex
@@ -1004,12 +976,10 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
                 np.union1d,
                 (reader.dates for reader in self._readers.values()),
             ),
-            utc=True,
         )
 
     def get_value(self, sid, dt, field):
-        """
-        Retrieve the value at the given coordinates.
+        """Retrieve the value at the given coordinates.
 
         Parameters
         ----------
@@ -1037,17 +1007,13 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
         try:
             country_code = self._country_code_for_assets([sid])
         except ValueError as exc:
-            raise_from(
-                NoDataForSid(
-                    'Asset not contained in daily pricing file: {}'.format(sid)
-                ),
-                exc
-            )
+            raise NoDataForSid(
+                "Asset not contained in daily pricing file: {}".format(sid)
+            ) from exc
         return self._readers[country_code].get_value(sid, dt, field)
 
     def get_last_traded_dt(self, asset, dt):
-        """
-        Get the latest day on or before ``dt`` in which ``asset`` traded.
+        """Get the latest day on or before ``dt`` in which ``asset`` traded.
 
         If there are no trades on or before ``dt``, returns ``pd.NaT``.
 
@@ -1087,8 +1053,7 @@ class MultiCountryDailyBarReader(CurrencyAwareSessionBarReader):
 
 
 def check_sids_arrays_match(left, right, message):
-    """Check that two 1d arrays of sids are equal
-    """
+    """Check that two 1d arrays of sids are equal"""
     if len(left) != len(right):
         raise ValueError(
             "{}:\nlen(left) ({}) != len(right) ({})".format(
@@ -1096,9 +1061,7 @@ def check_sids_arrays_match(left, right, message):
             )
         )
 
-    diff = (left != right)
+    diff = left != right
     if diff.any():
         (bad_locs,) = np.where(diff)
-        raise ValueError(
-            "{}:\n Indices with differences: {}".format(message, bad_locs)
-        )
+        raise ValueError("{}:\n Indices with differences: {}".format(message, bad_locs))

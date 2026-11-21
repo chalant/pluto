@@ -1,8 +1,8 @@
+from numexpr import evaluate
 import numpy as np
 from numpy import broadcast_arrays
 from scipy.stats import (
     linregress,
-    pearsonr,
     spearmanr,
 )
 
@@ -32,14 +32,9 @@ ALLOWED_DTYPES = (float64_dtype, int64_dtype)
 
 
 class _RollingCorrelation(CustomFactor):
-
     @expect_dtypes(base_factor=ALLOWED_DTYPES, target=ALLOWED_DTYPES)
     @expect_bounded(correlation_length=(2, None))
-    def __new__(cls,
-                base_factor,
-                target,
-                correlation_length,
-                mask=NotSpecified):
+    def __new__(cls, base_factor, target, correlation_length, mask=NotSpecified):
         if target.ndim == 2 and base_factor.mask is not target.mask:
             raise IncompatibleTerms(term_1=base_factor, term_2=target)
 
@@ -85,16 +80,16 @@ class RollingPearson(_RollingCorrelation):
     Most users should call Factor.pearsonr rather than directly construct an
     instance of this class.
     """
+
     window_safe = True
 
     def compute(self, today, assets, out, base_data, target_data):
-        # If `target_data` is a Slice or single column of data, broadcast it
-        # out to the same shape as `base_data`, then compute column-wise. This
-        # is efficient because each column of the broadcasted array only refers
-        # to a single memory location.
-        target_data = broadcast_arrays(target_data, base_data)[0]
-        for i in range(len(out)):
-            out[i] = pearsonr(base_data[:, i], target_data[:, i])[0]
+        vectorized_pearson_r(
+            base_data,
+            target_data,
+            allowed_missing=0,
+            out=out,
+        )
 
 
 class RollingSpearman(_RollingCorrelation):
@@ -131,6 +126,7 @@ class RollingSpearman(_RollingCorrelation):
     Most users should call Factor.spearmanr rather than directly construct an
     instance of this class.
     """
+
     window_safe = True
 
     def compute(self, today, assets, out, base_data, target_data):
@@ -175,15 +171,12 @@ class RollingLinearRegression(CustomFactor):
     Most users should call Factor.linear_regression rather than directly
     construct an instance of this class.
     """
-    outputs = ['alpha', 'beta', 'r_value', 'p_value', 'stderr']
+
+    outputs = ["alpha", "beta", "r_value", "p_value", "stderr"]
 
     @expect_dtypes(dependent=ALLOWED_DTYPES, independent=ALLOWED_DTYPES)
     @expect_bounded(regression_length=(2, None))
-    def __new__(cls,
-                dependent,
-                independent,
-                regression_length,
-                mask=NotSpecified):
+    def __new__(cls, dependent, independent, regression_length, mask=NotSpecified):
         if independent.ndim == 2 and dependent.mask is not independent.mask:
             raise IncompatibleTerms(term_1=dependent, term_2=independent)
 
@@ -202,7 +195,7 @@ class RollingLinearRegression(CustomFactor):
         stderr = out.stderr
 
         def regress(y, x):
-            regr_results = linregress(y=y, x=x)
+            regr_results = linregress(x, y)
             # `linregress` returns its results in the following order:
             # slope, intercept, r-value, p-value, stderr
             alpha[i] = regr_results[1]
@@ -293,11 +286,8 @@ class RollingPearsonOfReturns(RollingPearson):
     :class:`zipline.pipeline.factors.RollingSpearmanOfReturns`
     :class:`zipline.pipeline.factors.RollingLinearRegressionOfReturns`
     """
-    def __new__(cls,
-                target,
-                returns_length,
-                correlation_length,
-                mask=NotSpecified):
+
+    def __new__(cls, target, returns_length, correlation_length, mask=NotSpecified):
         # Use the `SingleAsset` filter here because it protects against
         # inputting a non-existent target asset.
         returns = Returns(
@@ -343,11 +333,8 @@ class RollingSpearmanOfReturns(RollingSpearman):
     :class:`zipline.pipeline.factors.RollingPearsonOfReturns`
     :class:`zipline.pipeline.factors.RollingLinearRegressionOfReturns`
     """
-    def __new__(cls,
-                target,
-                returns_length,
-                correlation_length,
-                mask=NotSpecified):
+
+    def __new__(cls, target, returns_length, correlation_length, mask=NotSpecified):
         # Use the `SingleAsset` filter here because it protects against
         # inputting a non-existent target asset.
         returns = Returns(
@@ -364,8 +351,7 @@ class RollingSpearmanOfReturns(RollingSpearman):
 
 
 class RollingLinearRegressionOfReturns(RollingLinearRegression):
-    """
-    Perform an ordinary least-squares regression predicting the returns of all
+    """Perform an ordinary least-squares regression predicting the returns of all
     other assets on the given asset.
 
     Parameters
@@ -460,13 +446,10 @@ class RollingLinearRegressionOfReturns(RollingLinearRegression):
     :class:`zipline.pipeline.factors.RollingPearsonOfReturns`
     :class:`zipline.pipeline.factors.RollingSpearmanOfReturns`
     """
+
     window_safe = True
 
-    def __new__(cls,
-                target,
-                returns_length,
-                regression_length,
-                mask=NotSpecified):
+    def __new__(cls, target, returns_length, regression_length, mask=NotSpecified):
         # Use the `SingleAsset` filter here because it protects against
         # inputting a non-existent target asset.
         returns = Returns(
@@ -483,8 +466,7 @@ class RollingLinearRegressionOfReturns(RollingLinearRegression):
 
 
 class SimpleBeta(CustomFactor, StandardOutputs):
-    """
-    Factor producing the slope of a regression line between each asset's daily
+    """Factor producing the slope of a regression line between each asset's daily
     returns to the daily returns of a single "target" asset.
 
     Parameters
@@ -499,32 +481,28 @@ class SimpleBeta(CustomFactor, StandardOutputs):
         percentage of returns observations missing will produce values of
         NaN. Default behavior is that 25% of inputs can be missing.
     """
+
     window_safe = True
     dtype = float64_dtype
-    params = ('allowed_missing_count',)
+    params = ("allowed_missing_count",)
 
     @expect_types(
         target=Asset,
         regression_length=int,
         allowed_missing_percentage=(int, float),
-        __funcname='SimpleBeta',
+        __funcname="SimpleBeta",
     )
     @expect_bounded(
         regression_length=(3, None),
         allowed_missing_percentage=(0.0, 1.0),
-        __funcname='SimpleBeta',
+        __funcname="SimpleBeta",
     )
-    def __new__(cls,
-                target,
-                regression_length,
-                allowed_missing_percentage=0.25):
+    def __new__(cls, target, regression_length, allowed_missing_percentage=0.25):
         daily_returns = Returns(
             window_length=2,
             mask=(AssetExists() | SingleAsset(asset=target)),
         )
-        allowed_missing_count = int(
-            allowed_missing_percentage * regression_length
-        )
+        allowed_missing_count = int(allowed_missing_percentage * regression_length)
         return super(SimpleBeta, cls).__new__(
             cls,
             inputs=[daily_returns, daily_returns[target]],
@@ -532,13 +510,9 @@ class SimpleBeta(CustomFactor, StandardOutputs):
             allowed_missing_count=allowed_missing_count,
         )
 
-    def compute(self,
-                today,
-                assets,
-                out,
-                all_returns,
-                target_returns,
-                allowed_missing_count):
+    def compute(
+        self, today, assets, out, all_returns, target_returns, allowed_missing_count
+    ):
         vectorized_beta(
             dependents=all_returns,
             independent=target_returns,
@@ -551,13 +525,12 @@ class SimpleBeta(CustomFactor, StandardOutputs):
             type(self).__name__,
             str(self.target.symbol),  # coerce from unicode to str in py2.
             self.window_length,
-            self.params['allowed_missing_count'],
+            self.params["allowed_missing_count"],
         )
 
     @property
     def target(self):
-        """Get the target of the beta calculation.
-        """
+        """Get the target of the beta calculation."""
         return self.inputs[1].asset
 
     def __repr__(self):
@@ -565,13 +538,12 @@ class SimpleBeta(CustomFactor, StandardOutputs):
             type(self).__name__,
             self.target,
             self.window_length,
-            self.params['allowed_missing_count'],
+            self.params["allowed_missing_count"],
         )
 
 
 def vectorized_beta(dependents, independent, allowed_missing, out=None):
-    """
-    Compute slopes of linear regressions between columns of ``dependents`` and
+    """Compute slopes of linear regressions between columns of ``dependents`` and
     ``independent``.
 
     Parameters
@@ -582,8 +554,11 @@ def vectorized_beta(dependents, independent, allowed_missing, out=None):
         Independent variable of the regression
     allowed_missing : int
         Number of allowed missing (NaN) observations per column. Columns with
-        more than this many non-nan observations in both ``dependents`` and
+        more than this many non-nan observations in either ``dependents`` or
         ``independents`` will output NaN as the regression coefficient.
+    out : np.array[M] or None, optional
+        Output array into which to write results.  If None, a new array is
+        created and returned.
 
     Returns
     -------
@@ -652,7 +627,7 @@ def vectorized_beta(dependents, independent, allowed_missing, out=None):
     # column may have a different subset of the data dropped due to missing
     # data in the corresponding dependent column.
     # shape: (M,)
-    independent_variances = nanmean(ind_residual ** 2, axis=0)
+    independent_variances = nanmean(ind_residual**2, axis=0)
 
     # shape: (M,)
     np.divide(covariances, independent_variances, out=out)
@@ -662,4 +637,76 @@ def vectorized_beta(dependents, independent, allowed_missing, out=None):
     nanlocs = isnan(independent).sum(axis=0) > allowed_missing
     out[nanlocs] = nan
 
+    return out
+
+
+def vectorized_pearson_r(dependents, independents, allowed_missing, out=None):
+    """Compute Pearson's r between columns of ``dependents`` and ``independents``.
+
+    Parameters
+    ----------
+    dependents : np.array[N, M]
+        Array with columns of data to be regressed against ``independent``.
+    independents : np.array[N, M] or np.array[N, 1]
+        Independent variable(s) of the regression. If a single column is
+        passed, it is broadcast to the shape of ``dependents``.
+    allowed_missing : int
+        Number of allowed missing (NaN) observations per column. Columns with
+        more than this many non-nan observations in either ``dependents`` or
+        ``independents`` will output NaN as the correlation coefficient.
+    out : np.array[M] or None, optional
+        Output array into which to write results.  If None, a new array is
+        created and returned.
+
+    Returns
+    -------
+    correlations : np.array[M]
+        Pearson correlation coefficients for each column of ``dependents``.
+
+    See Also
+    --------
+    :class:`zipline.pipeline.factors.RollingPearson`
+    :class:`zipline.pipeline.factors.RollingPearsonOfReturns`
+    """
+    nan = np.nan
+    isnan = np.isnan
+    N, M = dependents.shape
+
+    if out is None:
+        out = np.full(M, nan)
+
+    if allowed_missing > 0:
+        # If we're handling nans robustly, we need to mask both arrays to
+        # locations where either was nan.
+        either_nan = isnan(dependents) | isnan(independents)
+        independents = np.where(either_nan, nan, independents)
+        dependents = np.where(either_nan, nan, dependents)
+        mean = nanmean
+    else:
+        # Otherwise, we can just use mean, which will give us a nan for any
+        # column where there's ever a nan.
+        mean = np.mean
+
+    # Pearson R is Cov(X, Y) / StdDev(X) * StdDev(Y)
+    # c.f. https://en.wikipedia.org/wiki/Pearson_correlation_coefficient
+    ind_residual = independents - mean(independents, axis=0)
+    dep_residual = dependents - mean(dependents, axis=0)
+
+    ind_variance = mean(ind_residual**2, axis=0)
+    dep_variance = mean(dep_residual**2, axis=0)
+
+    covariances = mean(ind_residual * dep_residual, axis=0)
+
+    evaluate(
+        "where(mask, nan, cov / sqrt(ind_variance * dep_variance))",
+        local_dict={
+            "cov": covariances,
+            "mask": isnan(independents).sum(axis=0) > allowed_missing,
+            "nan": np.nan,
+            "ind_variance": ind_variance,
+            "dep_variance": dep_variance,
+        },
+        global_dict={},
+        out=out,
+    )
     return out

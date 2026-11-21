@@ -11,22 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import abstractproperty, abstractmethod
+from abc import abstractmethod
 
 from zipline.data.bar_reader import BarReader
 
 
 class SessionBarReader(BarReader):
-    """
-    Reader for OHCLV pricing data at a session frequency.
-    """
+    """Reader for OHCLV pricing data at a session frequency."""
+
     @property
     def data_frequency(self):
-        return 'session'
+        return "session"
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def sessions(self):
         """
+
         Returns
         -------
         sessions : DatetimeIndex
@@ -36,7 +37,6 @@ class SessionBarReader(BarReader):
 
 
 class CurrencyAwareSessionBarReader(SessionBarReader):
-
     @abstractmethod
     def currency_codes(self, sids):
         """Get currencies in which prices are quoted for the requested sids.
@@ -50,6 +50,8 @@ class CurrencyAwareSessionBarReader(SessionBarReader):
 
         Returns
         -------
-        currency_codes : np.array[S3]
-            Array of currency codes for listing currencies of ``sids``.
+        currency_codes : np.array[object]
+            Array of currency codes for listing currencies of
+            ``sids``. Implementations should return None for sids whose
+            currency is unknown.
         """

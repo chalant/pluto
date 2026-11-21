@@ -1,7 +1,7 @@
-from zipline.utils.calendars import get_calendar
+from zipline.utils.calendar_utils import get_calendar
 
 
-class ExchangeInfo(object):
+class ExchangeInfo:
     """An exchange where assets are traded.
 
     Parameters
@@ -13,8 +13,22 @@ class ExchangeInfo(object):
         The canonical name of the exchange, for example 'NYSE' or 'NASDAQ'. If
         None this will be the same as the name.
     country_code : str
-        The ISO 3166 alpha-2 country code where the exchange is located.
+        The country code where the exchange is located.
+
+    Attributes
+    ----------
+    name : str or None
+        The full name of the exchange, for example 'NEW YORK STOCK EXCHANGE' or
+        'NASDAQ GLOBAL MARKET'.
+    canonical_name : str
+        The canonical name of the exchange, for example 'NYSE' or 'NASDAQ'. If
+        None this will be the same as the name.
+    country_code : str
+        The country code where the exchange is located.
+    calendar : TradingCalendar
+        The trading calendar the exchange uses.
     """
+
     def __init__(self, name, canonical_name, country_code):
         self.name = name
 
@@ -25,7 +39,7 @@ class ExchangeInfo(object):
         self.country_code = country_code.upper()
 
     def __repr__(self):
-        return '%s(%r, %r, %r)' % (
+        return "%s(%r, %r, %r)" % (
             type(self).__name__,
             self.name,
             self.canonical_name,
@@ -34,6 +48,7 @@ class ExchangeInfo(object):
 
     @property
     def calendar(self):
+        """The trading calendar that this exchange uses."""
         return get_calendar(self.canonical_name)
 
     def __eq__(self, other):
@@ -42,7 +57,7 @@ class ExchangeInfo(object):
 
         return all(
             getattr(self, attr) == getattr(other, attr)
-            for attr in ('name', 'canonical_name', 'country_code')
+            for attr in ("name", "canonical_name", "country_code")
         )
 
     def __ne__(self, other):

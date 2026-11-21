@@ -1,8 +1,6 @@
 import numpy as np
 import pandas as pd
 
-from interface import implements
-from six import viewvalues
 from toolz import groupby, merge
 
 from .base import PipelineLoader
@@ -31,8 +29,8 @@ def required_event_fields(next_value_columns, previous_value_columns):
     }.union(
         # We also expect any of the field names that our loadable columns
         # are mapped to.
-        viewvalues(next_value_columns),
-        viewvalues(previous_value_columns),
+        next_value_columns.values(),
+        previous_value_columns.values(),
     )
 
 
@@ -42,8 +40,7 @@ def validate_column_specs(events, next_value_columns, previous_value_columns):
     serve the BoundColumns described by ``next_value_columns`` and
     ``previous_value_columns``.
     """
-    required = required_event_fields(next_value_columns,
-                                     previous_value_columns)
+    required = required_event_fields(next_value_columns, previous_value_columns)
     received = set(events.columns)
     missing = required - received
     if missing:
@@ -58,7 +55,7 @@ def validate_column_specs(events, next_value_columns, previous_value_columns):
         )
 
 
-class EventsLoader(implements(PipelineLoader)):
+class EventsLoader(PipelineLoader):
     """
     Base class for PipelineLoaders that supports loading the next and previous
     value of an event field.
@@ -89,10 +86,8 @@ class EventsLoader(implements(PipelineLoader)):
         Map from dataset columns to raw field names that should be used when
         searching for a previous event value.
     """
-    def __init__(self,
-                 events,
-                 next_value_columns,
-                 previous_value_columns):
+
+    def __init__(self, events, next_value_columns, previous_value_columns):
         validate_column_specs(
             events,
             next_value_columns,
@@ -105,9 +100,7 @@ class EventsLoader(implements(PipelineLoader)):
         # so we coerce from a frame to a dict of arrays here.
         self.events = {
             name: np.asarray(series)
-            for name, series in (
-                events.sort_values(EVENT_DATE_FIELD_NAME).iteritems()
-            )
+            for name, series in (events.sort_values(EVENT_DATE_FIELD_NAME).items())
         }
 
         # Columns to load with self.load_next_events.
@@ -132,18 +125,21 @@ class EventsLoader(implements(PipelineLoader)):
             whether the column should produce values from the next event or the
             previous event
         """
+
         def next_or_previous(c):
             if c in self.next_value_columns:
-                return 'next'
+                return "next"
             elif c in self.previous_value_columns:
-                return 'previous'
+                return "previous"
 
             raise ValueError(
-                "{c} not found in next_value_columns "
-                "or previous_value_columns".format(c=c)
+                "{c} not found in next_value_columns or previous_value_columns".format(
+                    c=c
+                )
             )
+
         groups = groupby(next_or_previous, requested_columns)
-        return groups.get('next', ()), groups.get('previous', ())
+        return groups.get("next", ()), groups.get("previous", ())
 
     def next_event_indexer(self, dates, data_query_cutoff, sids):
         return next_event_indexer(
@@ -164,13 +160,7 @@ class EventsLoader(implements(PipelineLoader)):
             self.events[SID_FIELD_NAME],
         )
 
-    def load_next_events(self,
-                         domain,
-                         columns,
-                         dates,
-                         data_query_time,
-                         sids,
-                         mask):
+    def load_next_events(self, domain, columns, dates, data_query_time, sids, mask):
         if not columns:
             return {}
 
@@ -184,13 +174,7 @@ class EventsLoader(implements(PipelineLoader)):
             mask=mask,
         )
 
-    def load_previous_events(self,
-                             domain,
-                             columns,
-                             dates,
-                             data_query_time,
-                             sids,
-                             mask):
+    def load_previous_events(self, domain, columns, dates, data_query_time, sids, mask):
         if not columns:
             return {}
 
@@ -204,14 +188,7 @@ class EventsLoader(implements(PipelineLoader)):
             mask=mask,
         )
 
-    def _load_events(self,
-                     name_map,
-                     indexer,
-                     domain,
-                     columns,
-                     dates,
-                     sids,
-                     mask):
+    def _load_events(self, name_map, indexer, domain, columns, dates, sids, mask):
         def to_frame(array):
             return pd.DataFrame(array, index=dates, columns=sids)
 
@@ -246,7 +223,11 @@ class EventsLoader(implements(PipelineLoader)):
             # Delegate the actual array formatting logic to a DataFrameLoader.
             loader = DataFrameLoader(c, to_frame(raw), adjustments=None)
             out[c] = loader.load_adjusted_array(
-                domain, [c], dates, sids, mask,
+                domain,
+                [c],
+                dates,
+                sids,
+                mask,
             )[c]
         return out
 
@@ -255,5 +236,5 @@ class EventsLoader(implements(PipelineLoader)):
         n, p = self.split_next_and_previous_event_columns(columns)
         return merge(
             self.load_next_events(domain, n, dates, data_query, sids, mask),
-            self.load_previous_events(domain, p, dates, data_query, sids, mask)
+            self.load_previous_events(domain, p, dates, data_query, sids, mask),
         )

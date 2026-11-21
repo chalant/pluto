@@ -1,6 +1,7 @@
 """
 filter.py
 """
+
 from itertools import chain
 from operator import attrgetter
 
@@ -31,9 +32,8 @@ from zipline.pipeline.expression import (
     NumericalExpression,
 )
 from zipline.pipeline.mixins import (
-    AliasedMixin,
     CustomTermMixin,
-    DownsampledMixin,
+    IfElseMixin,
     LatestMixin,
     PositiveWindowLengthMixin,
     RestrictedDTypeMixin,
@@ -42,8 +42,8 @@ from zipline.pipeline.mixins import (
 )
 from zipline.pipeline.term import ComputableTerm, Term
 from zipline.utils.input_validation import expect_types
-from zipline.utils.memoize import classlazyval
 from zipline.utils.numpy_utils import (
+    same,
     bool_dtype,
     int64_dtype,
     repeat_first_axis,
@@ -74,7 +74,8 @@ def binary_operator(op):
     def binary_operator(self, other):
         if isinstance(self, NumericalExpression):
             self_expr, other_expr, new_inputs = self.build_binary_op(
-                op, other,
+                op,
+                other,
             )
             return NumExprFilter.create(
                 "({left}) {op} ({right})".format(
@@ -116,7 +117,7 @@ def unary_operator(op):
     """
     Factory function for making unary operator methods for Filters.
     """
-    valid_ops = {'~'}
+    valid_ops = {"~"}
     if op not in valid_ops:
         raise ValueError("Invalid unary operator %s." % op)
 
@@ -184,6 +185,7 @@ class Filter(RestrictedDTypeMixin, ComputableTerm):
     output of a Pipeline and for reducing memory consumption of Pipeline
     results.
     """
+
     # Filters are window-safe by default, since a yes/no decision means the
     # same thing from all temporal perspectives.
     window_safe = True
@@ -194,10 +196,7 @@ class Filter(RestrictedDTypeMixin, ComputableTerm):
 
     clsdict = locals()
     clsdict.update(
-        {
-            method_name_for_op(op): binary_operator(op)
-            for op in FILTER_BINOPS
-        }
+        {method_name_for_op(op): binary_operator(op) for op in FILTER_BINOPS}
     )
     clsdict.update(
         {
@@ -206,26 +205,119 @@ class Filter(RestrictedDTypeMixin, ComputableTerm):
         }
     )
 
-    __invert__ = unary_operator('~')
+    __invert__ = unary_operator("~")
 
     def _validate(self):
         # Run superclass validation first so that we handle `dtype not passed`
         # before this.
         retval = super(Filter, self)._validate()
         if self.dtype != bool_dtype:
-            raise UnsupportedDataType(
-                typename=type(self).__name__,
-                dtype=self.dtype
-            )
+            raise UnsupportedDataType(typename=type(self).__name__, dtype=self.dtype)
         return retval
 
-    @classlazyval
-    def _downsampled_type(self):
-        return DownsampledMixin.make_downsampled_type(Filter)
+    @classmethod
+    def _principal_computable_term_type(cls):
+        return Filter
 
-    @classlazyval
-    def _aliased_type(self):
-        return AliasedMixin.make_aliased_type(Filter)
+    @expect_types(if_true=ComputableTerm, if_false=ComputableTerm)
+    def if_else(self, if_true, if_false):
+        """
+        Create a term that selects values from one of two choices.
+
+        Parameters
+        ----------
+        if_true : zipline.pipeline.term.ComputableTerm
+            Expression whose values should be used at locations where this
+            filter outputs True.
+        if_false : zipline.pipeline.term.ComputableTerm
+            Expression whose values should be used at locations where this
+            filter outputs False.
+
+        Returns
+        -------
+        merged : zipline.pipeline.term.ComputableTerm
+           A term that computes by taking values from either ``if_true`` or
+           ``if_false``, depending on the values produced by ``self``.
+
+           The returned term draws from``if_true`` at locations where ``self``
+           produces True, and it draws from ``if_false`` at locations where
+           ``self`` produces False.
+
+        Example
+        -------
+
+        Let ``f`` be a Factor that produces the following output::
+
+                         AAPL   MSFT    MCD     BK
+            2017-03-13    1.0    2.0    3.0    4.0
+            2017-03-14    5.0    6.0    7.0    8.0
+
+        Let ``g`` be another Factor that produces the following output::
+
+                         AAPL   MSFT    MCD     BK
+            2017-03-13   10.0   20.0   30.0   40.0
+            2017-03-14   50.0   60.0   70.0   80.0
+
+        Finally, let ``condition`` be a Filter that produces the following
+        output::
+
+                         AAPL   MSFT    MCD     BK
+            2017-03-13   True  False   True  False
+            2017-03-14   True   True  False  False
+
+        Then, the expression ``condition.if_else(f, g)`` produces the following
+        output::
+
+                         AAPL   MSFT    MCD     BK
+            2017-03-13    1.0   20.0    3.0   40.0
+            2017-03-14    5.0    6.0   70.0   80.0
+
+        See Also
+        --------
+        numpy.where
+        Factor.fillna
+        """
+        true_type = if_true._principal_computable_term_type()
+        false_type = if_false._principal_computable_term_type()
+
+        if true_type is not false_type:
+            raise TypeError(
+                "Mismatched types in if_else(): if_true={}, but if_false={}".format(
+                    true_type.__name__, false_type.__name__
+                )
+            )
+
+        if if_true.dtype != if_false.dtype:
+            raise TypeError(
+                "Mismatched dtypes in if_else(): "
+                "if_true.dtype = {}, if_false.dtype = {}".format(
+                    if_true.dtype, if_false.dtype
+                )
+            )
+
+        if if_true.outputs != if_false.outputs:
+            raise ValueError(
+                "Mismatched outputs in if_else(): "
+                "if_true.outputs = {}, if_false.outputs = {}".format(
+                    if_true.outputs, if_false.outputs
+                ),
+            )
+
+        if not same(if_true.missing_value, if_false.missing_value):
+            raise ValueError(
+                "Mismatched missing values in if_else(): "
+                "if_true.missing_value = {!r}, if_false.missing_value = {!r}".format(
+                    if_true.missing_value, if_false.missing_value
+                )
+            )
+
+        return_type = type(if_true)._with_mixin(IfElseMixin)
+
+        return return_type(
+            condition=self,
+            if_true=if_true,
+            if_false=if_false,
+        )
 
 
 class NumExprFilter(NumericalExpression, Filter):
@@ -248,12 +340,15 @@ class NumExprFilter(NumericalExpression, Filter):
         """
         Compute our result with numexpr, then re-apply `mask`.
         """
-        return super(NumExprFilter, self)._compute(
-            arrays,
-            dates,
-            assets,
-            mask,
-        ) & mask
+        return (
+            super(NumExprFilter, self)._compute(
+                arrays,
+                dates,
+                assets,
+                mask,
+            )
+            & mask
+        )
 
 
 class NullFilter(SingleInputMixin, Filter):
@@ -265,6 +360,7 @@ class NullFilter(SingleInputMixin, Filter):
     factor : zipline.pipeline.Term
         The factor to compare against its missing_value.
     """
+
     window_length = 0
 
     def __new__(cls, term):
@@ -289,6 +385,7 @@ class NotNullFilter(SingleInputMixin, Filter):
     factor : zipline.pipeline.Term
         The factor to compare against its missing_value.
     """
+
     window_length = 0
 
     def __new__(cls, term):
@@ -317,6 +414,7 @@ class PercentileFilter(SingleInputMixin, Filter):
     max_percentile : float [0.0, 1.0]
         The maxiumum percentile rank of an asset that will pass the filter.
     """
+
     window_length = 0
 
     def __new__(cls, factor, min_percentile, max_percentile, mask):
@@ -349,7 +447,7 @@ class PercentileFilter(SingleInputMixin, Filter):
             raise BadPercentileBounds(
                 min_percentile=self._min_percentile,
                 max_percentile=self._max_percentile,
-                upper_bound=100.0
+                upper_bound=100.0,
             )
         return super(PercentileFilter, self)._validate()
 
@@ -440,22 +538,23 @@ class CustomFilter(PositiveWindowLengthMixin, CustomTermMixin, Filter):
     --------
     zipline.pipeline.CustomFactor
     """
+
     def _validate(self):
         try:
             super(CustomFilter, self)._validate()
-        except UnsupportedDataType:
+        except UnsupportedDataType as exc:
             if self.dtype in CLASSIFIER_DTYPES:
                 raise UnsupportedDataType(
                     typename=type(self).__name__,
                     dtype=self.dtype,
-                    hint='Did you mean to create a CustomClassifier?',
-                )
+                    hint="Did you mean to create a CustomClassifier?",
+                ) from exc
             elif self.dtype in FACTOR_DTYPES:
                 raise UnsupportedDataType(
                     typename=type(self).__name__,
                     dtype=self.dtype,
-                    hint='Did you mean to create a CustomFactor?',
-                )
+                    hint="Did you mean to create a CustomFactor?",
+                ) from exc
             raise
 
 
@@ -472,7 +571,8 @@ class ArrayPredicate(SingleInputMixin, Filter):
     opargs : tuple[hashable]
         Additional argument to apply to ``op``.
     """
-    params = ('op', 'opargs')
+
+    params = ("op", "opargs")
     window_length = 0
 
     @expect_types(term=Term, opargs=tuple)
@@ -489,14 +589,14 @@ class ArrayPredicate(SingleInputMixin, Filter):
     def _compute(self, arrays, dates, assets, mask):
         params = self.params
         data = arrays[0]
-        return params['op'](data, *params['opargs']) & mask
+        return params["op"](data, *params["opargs"]) & mask
 
     def graph_repr(self):
         # Graphviz interprets `\l` as "divide label into lines, left-justified"
         return "{}:\\l  op: {}.{}()".format(
             type(self).__name__,
-            self.params['op'].__module__,
-            self.params['op'].__name__,
+            self.params["op"].__module__,
+            self.params["op"].__name__,
         )
 
 
@@ -504,6 +604,7 @@ class Latest(LatestMixin, CustomFilter):
     """
     Filter producing the most recently-known value of `inputs[0]` on each day.
     """
+
     pass
 
 
@@ -511,6 +612,7 @@ class SingleAsset(Filter):
     """
     A Filter that computes to True only for the given asset.
     """
+
     inputs = []
     window_length = 1
 
@@ -524,17 +626,20 @@ class SingleAsset(Filter):
     @classmethod
     def _static_identity(cls, asset, *args, **kwargs):
         return (
-            super(SingleAsset, cls)._static_identity(*args, **kwargs), asset,
+            super(SingleAsset, cls)._static_identity(*args, **kwargs),
+            asset,
         )
 
     def _compute(self, arrays, dates, assets, mask):
-        is_my_asset = (assets == self._asset.sid)
+        is_my_asset = assets == self._asset.sid
         out = repeat_first_axis(is_my_asset, len(mask))
         # Raise an exception if `self._asset` does not exist for the entirety
         # of the timeframe over which we are computing.
         if (is_my_asset.sum() != 1) or ((out & mask).sum() != len(mask)):
             raise NonExistentAssetInTimeFrame(
-                asset=self._asset, start_date=dates[0], end_date=dates[-1],
+                asset=self._asset,
+                start_date=dates[0],
+                end_date=dates[-1],
             )
         return out
 
@@ -556,16 +661,17 @@ class StaticSids(Filter):
     sids : iterable[int]
         An iterable of sids for which to filter.
     """
+
     inputs = ()
     window_length = 0
-    params = ('sids',)
+    params = ("sids",)
 
     def __new__(cls, sids):
         sids = frozenset(sids)
         return super(StaticSids, cls).__new__(cls, sids=sids)
 
     def _compute(self, arrays, dates, sids, mask):
-        my_columns = sids.isin(self.params['sids'])
+        my_columns = sids.isin(self.params["sids"])
         return repeat_first_axis(my_columns, len(mask)) & mask
 
 
@@ -582,20 +688,19 @@ class StaticAssets(StaticSids):
     assets : iterable[Asset]
         An iterable of assets for which to filter.
     """
+
     def __new__(cls, assets):
         sids = frozenset(asset.sid for asset in assets)
         return super(StaticAssets, cls).__new__(cls, sids)
 
 
 class AllPresent(CustomFilter, SingleInputMixin, StandardOutputs):
-    """Pipeline filter indicating input term has data for a given window.
-    """
+    """Pipeline filter indicating input term has data for a given window."""
+
     def _validate(self):
 
         if isinstance(self.inputs[0], Filter):
-            raise TypeError(
-                "Input to filter `AllPresent` cannot be a Filter."
-            )
+            raise TypeError("Input to filter `AllPresent` cannot be a Filter.")
 
         return super(AllPresent, self)._validate()
 
@@ -610,13 +715,14 @@ class AllPresent(CustomFilter, SingleInputMixin, StandardOutputs):
 
 
 class MaximumFilter(Filter, StandardOutputs):
-    """Pipeline filter that selects the top asset, possibly grouped and masked.
-    """
+    """Pipeline filter that selects the top asset, possibly grouped and masked."""
+
     window_length = 0
 
     def __new__(cls, factor, groupby, mask):
         if groupby is NotSpecified:
             from zipline.pipeline.classifiers import Everything
+
             groupby = Everything()
 
         return super(MaximumFilter, cls).__new__(
