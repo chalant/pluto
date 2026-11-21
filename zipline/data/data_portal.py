@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): get_history_window forward-fills price only when ffill is set.
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -912,7 +913,7 @@ class DataPortal:
             raise ValueError(f"Invalid frequency: {frequency}")
 
         # forward-fill price
-        if field == "price":
+        if ffill and field == "price":
             if frequency == "1m":
                 ffill_data_frequency = "minute"
             elif frequency == "1d":
