@@ -14,6 +14,12 @@ command, the market-data ingestion package and the database-backed bar storage i
 to, with their dependencies. `CLEANUP_PROGRESS.md` lists every removed file and the items
 left for the owner to decide.
 
+Branch `py313-cleanup` (the first stage of the Python 3.13 port) then removed what will not
+be ported: the SQLite strategy store, the launcher leftovers, and off-path modules that
+could not be imported or used undefined names (among them the old controller modes,
+`pluto/control/modes/`). `PYCLEAN_PROGRESS.md` lists every removed file, the evidence and
+the items left for the owner.
+
 ## What runs
 
 ```
@@ -32,6 +38,22 @@ SimulationLoop (24/7 clock)                   pluto/control/loop/simulation_loop
 `tests/test_pluto_examples.py` (helpers in `pluto/test_utils/test_utils.py`) wires it up for
 the five strategies in `pluto/examples/` on the `test` bundle (`pluto/data/bundles/test.py`,
 bcolz data from `tests/resources/example_data.tar.gz`).
+
+## Strategy scripts (interim convention)
+
+There is no strategy database. A run's strategy script is the file
+`<root>/strategies/<strategy_id>.py`: `ControllableService.Initialize`
+(`pluto/control/controllable/server.py`) reads it, and the run's settings live in a
+`StrategySetup` object (`pluto/strategies/setup.py`: `look_back`, `cancel_policy`,
+`shorting`, `asset_classes`, `data_frequency`, `fractional`). `<root>/strategies/states` and
+`<root>/strategies/performance` hold the saved state and the performance packets.
+`pluto.setup.directory_setup.create_directory(root)` creates the layout, and
+`directory_setup.add_strategy_script(root_dir, name, source_path)` copies a script into place
+(`FileExistsError` if the file exists); `TestClient.add_strategy` and `install-examples` use
+it. The strategy store concept (names, metadata, sessions, status, templates) will be
+redesigned; the SQLite store that stood for it (`dev/strategy_store.py`,
+`pluto/strategies/{strategies,schema,sessions,templates}.py`, `strategies/metadata.sqlite`)
+and the `add-strategy` and `add-manager` commands were removed.
 
 ## Environment
 
@@ -55,6 +77,10 @@ The `protos/*_pb2.py` modules are generated. After changing a `.proto`, regenera
 module with the environment's `grpcio-tools` (1.33.2), from the repository root:
 `$ENV/bin/python -m grpc_tools.protoc -I. --python_out=. protos/<name>.proto`
 (imports in the `.proto` files are relative to the root: `import "protos/<name>.proto"`).
+Each of the 27 `.proto` files compiles on its own; they cannot all be compiled in one
+`protoc` call, because files without a `package` define the same names (`admin`, `login`,
+`interface`: `LoginRequest`; `hub`, `interface`: `Hub`; `interface`, `monitor`: `Monitor`,
+`Packet`, ...), see `PYCLEAN_PROGRESS.md`.
 Every non-integer numeric field is `double`, and amounts (`Position.amount`) too: a 32-bit
 `float` changed limit and stop prices, the strategy's view of its portfolio and the tick
 rounding, and an integer amount cannot hold a fractional position. Integer fields are only
@@ -124,9 +150,7 @@ break on the fork's changes); it is out of scope.
 ## Out of scope (not repaired, still in the tree)
 
 - the gRPC services (`pluto/control/controllable/server.py`, `pluto/interface/`, `dev/cli.py`),
-- live and paper trading, the old controller modes (`pluto/control/modes/`),
-- the launcher support that only the removed window used (`pluto/control/script_handler.py`,
-  `pluto/control/setup/`, `python __main__.py add-manager`) and `dev/backtester.py`.
+- live and paper trading.
 
-`python __main__.py install-examples` copies the examples into the strategy store under
-`~/.pluto` and ingests the test bundle.
+`python __main__.py install-examples` (from the repository root) copies the examples to
+`~/.pluto/strategies/<name>.py` (existing files are kept) and ingests the test bundle.

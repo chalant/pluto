@@ -57,7 +57,9 @@ $PY $P/import_scan.py $WT $P/scan_<step>.json
 - [x] (d) proto sources (`interface.proto`, `hub.proto`, `login.proto`; one line each): 27 of 27 compile one by
   one (grpcio-tools 1.85.3 and 1.33.2); the one-call compile fails on name clashes (see (d)); **61 passed**
   (55.80 s); `import pluto` ok; `install-examples` rc=0, rerun rc=0; scan 55, new = []
-- [ ] `dev/README.md`
+- [x] `dev/README.md`: history paragraph, "Strategy scripts (interim convention)" with the redesign note, the
+  proto compile note, the out-of-scope list and `install-examples` text. `dev/setup_env.sh` names none of the
+  removed code (read; unchanged)
 - [ ] fresh clone + `dev/setup_env.sh` proof; final grep; worktree removed
 
 ## Inventory (at `b890bb28`)
