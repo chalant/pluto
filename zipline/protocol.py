@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): Positions is an OrderedDict.
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -12,6 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections import OrderedDict
+
 import pandas as pd
 
 from .assets import Asset
@@ -264,7 +267,7 @@ class Position:
         }
 
 
-class Positions(dict):
+class Positions(OrderedDict):
     """A dict-like object containing the algorithm's current positions."""
 
     def __missing__(self, key):
