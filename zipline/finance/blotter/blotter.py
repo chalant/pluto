@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): order() takes a session_id.
 #
 # Copyright 2018 Quantopian, Inc.
 #
@@ -27,7 +28,7 @@ class Blotter(ABC):
         self.current_dt = dt
 
     @abstractmethod
-    def order(self, asset, amount, style, order_id=None):
+    def order(self, asset, amount, style, session_id, order_id=None):
         """Place an order.
 
         Parameters

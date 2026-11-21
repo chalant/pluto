@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): order() takes a session_id; Order is built with session_id and id_.
 #
 # Copyright 2015 Quantopian, Inc.
 #
@@ -96,7 +97,7 @@ class SimulationBlotter(Blotter):
         )
 
     @expect_types(asset=Asset)
-    def order(self, asset, amount, style, order_id=None):
+    def order(self, asset, amount, style, session_id="", order_id=None):
         """Place an order.
 
         Parameters
@@ -109,6 +110,9 @@ class SimulationBlotter(Blotter):
             this is the number of shares to sell or short.
         style : zipline.finance.execution.ExecutionStyle
             The execution style for the order.
+        session_id : str, optional
+            Suffix of the order id (Pluto strategy session). Empty when
+            zipline's own TradingAlgorithm places the order.
         order_id : str, optional
             The unique identifier for this order.
 
@@ -142,12 +146,13 @@ class SimulationBlotter(Blotter):
 
         is_buy = amount > 0
         order = Order(
+            session_id=session_id,
             dt=self.current_dt,
             asset=asset,
             amount=amount,
             stop=style.get_stop_price(is_buy),
             limit=style.get_limit_price(is_buy),
-            id=order_id,
+            id_=order_id,
         )
 
         self.open_orders[order.asset].append(order)

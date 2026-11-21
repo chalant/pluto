@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): orders carry a session_id; id_ replaces id; hash and equality by id.
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -46,6 +47,7 @@ class Order:
     # Order objects and we keep them all in memory, so it's worthwhile trying
     # to cut down on the memory footprint of this object.
     __slots__ = [
+        "session_id",
         "id",
         "dt",
         "reason",
@@ -67,6 +69,7 @@ class Order:
     @expect_types(asset=Asset)
     def __init__(
         self,
+        session_id,
         dt,
         asset,
         amount,
@@ -74,7 +77,7 @@ class Order:
         limit=None,
         filled=0,
         commission=0,
-        id=None,
+        id_=None,
     ):
         """
         @dt - datetime.datetime that the order was placed
@@ -86,8 +89,9 @@ class Order:
         """
 
         # get a string representation of the uuid.
-        self.id = self.make_id() if id is None else id
+        self.id = self.make_id() + session_id if id_ is None else id_
         self.dt = dt
+        self.session_id = session_id
         self.reason = None
         self.created = dt
         self.asset = asset
@@ -290,3 +294,9 @@ class Order:
         String representation for this object.
         """
         return "Order(%s)" % self.to_dict().__repr__()
+
+    def __hash__(self):
+        return int(self.id, 16)
+
+    def __eq__(self, other):
+        return other.id == self.id
