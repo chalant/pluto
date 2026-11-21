@@ -100,6 +100,11 @@ def to_proto_asset(zp_asset):
     return pr_asset.Asset(**kwargs)
 
 
+def _to_asset_date(proto_ts):
+    # zipline-reloaded keeps the dates of assets time-zone naive
+    return to_datetime(proto_ts).tz_localize(None)
+
+
 def to_zp_asset(pr_asset):
     kwargs = {
         'sid': pr_asset.sid,
@@ -110,10 +115,10 @@ def to_zp_asset(pr_asset):
         ),
         'symbol': pr_asset.symbol,
         'asset_name': pr_asset.asset_name,
-        'start_date': to_datetime(pr_asset.start_date),
-        'end_date': to_datetime(pr_asset.end_date),
-        'first_traded': to_datetime(pr_asset.first_traded),
-        'auto_close_date': to_datetime(pr_asset.auto_close_date),
+        'start_date': _to_asset_date(pr_asset.start_date),
+        'end_date': _to_asset_date(pr_asset.end_date),
+        'first_traded': _to_asset_date(pr_asset.first_traded),
+        'auto_close_date': _to_asset_date(pr_asset.auto_close_date),
         'tick_size': pr_asset.tick_size,
         'multiplier': pr_asset.multiplier
     }

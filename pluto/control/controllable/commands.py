@@ -76,6 +76,7 @@ class ClockUpdate(Command):
         '_controllable',
         '_frequency_filter',
         '_state_store',
+        '_flag',
         '_broker']
 
     def __init__(self,

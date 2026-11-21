@@ -11,13 +11,13 @@ stay visible and counted (an unexpected success fails the run).
 """
 import unittest
 
-from trading_calendars import register_calendar, get_calendar
+from zipline.utils.calendar_utils import register_calendar, get_calendar
 
 from zipline.utils.run_algo import run_algorithm
 
 from tests.pluto_scenarios import MODULES, SCENARIO_MODULES
 from tests.test_pluto_examples import _run
-from tests.test_pluto_zipline_oracle import ZiplinePlutoFixture, compare_frames
+from tests.test_pluto_zipline_oracle import ZiplinePlutoFixture, compare_frames, benchmark_returns
 
 # name -> measured difference and cause (ALIGN_PROGRESS.md, step D)
 EXPECTED_FAILURES = {}
@@ -35,8 +35,10 @@ def run_zipline(name, environ):
         before_trading_start=getattr(mod, 'before_trading_start', None),
         bundle='test',
         environ=environ,
-        start=args['start'],
-        end=args['end'],
+        benchmark_returns=benchmark_returns(environ),
+        # sessions are time-zone naive (exchange_calendars)
+        start=args['start'].tz_localize(None),
+        end=args['end'].tz_localize(None),
         capital_base=args['capital_base'],
         data_frequency=args['data_frequency'])
 
@@ -47,7 +49,6 @@ class PlutoScenarioTests(ZiplinePlutoFixture):
         pluto_perf = _run(
             self._pluto_tempdir,
             name,
-            None,
             self._environ,
             modules=SCENARIO_MODULES).frame()
 

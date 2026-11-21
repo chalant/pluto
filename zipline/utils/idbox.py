@@ -1,4 +1,4 @@
-class IDBox(object):
+class IDBox:
     """A wrapper that hashs to the id of the underlying object and compares
     equality on the id of the underlying.
 
@@ -16,6 +16,7 @@ class IDBox(object):
     -----
     This is useful for storing non-hashable values in a set or dict.
     """
+
     def __init__(self, ob):
         self.ob = ob
 

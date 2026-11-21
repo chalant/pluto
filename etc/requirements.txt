@@ -1,80 +1,49 @@
+# Runtime requirements (loose). The exact versions the tests are run with are in
+# etc/requirements-py313.txt, which dev/setup_env.sh installs.
 
-# Incompatible with earlier PIP versions
-pip>=7.1.0
-# bcolz fails to install if this is not in the build_requires.
-setuptools>18.0
+# Scientific libraries
+numpy>=2.5.4
+pandas>=2.3.3,<3.0
+scipy
+patsy
+statsmodels
+bottleneck
+numexpr
+empyrical-reloaded
 
-Logbook>=0.12.5
+# Calendars, countries, currencies
+exchange-calendars>=4.2.4
+pytz
+python-dateutil
+iso3166>=2.1.1
+iso4217
 
-# Command line interface helper
-click>=4.0.0
+# Storage
+bcolz-zipline>=1.2.6
+h5py
+tables
+sqlalchemy>=2
+alembic
 
-# Language utilities
-six>=1.10.0
-contextlib2>=0.4.0
-python-interface>=1.5.3
-multipledispatch>=0.6.0
-# FUNctional programming utilities
-toolz>=0.8.2
+# Language and general utilities
+click
+six
+toolz
+multipledispatch
+networkx>=2.0
+lru-dict
+intervaltree
+requests
+Logbook
+toml
+pyyaml
+tqdm
+ntplib
 
-# Scientific Libraries
-numpy>=1.11.3
-pandas>=0.18.1 ,<=0.22
-# pandas-datareader>=0.2.1,<0.9.0
-# scipy>=0.17.1
+# gRPC and protocol buffers (regenerate the protos/*_pb2.py with the matching grpcio-tools)
+grpcio
+grpcio-tools
+protobuf>=7.35.1,<8
 
-# Needed for parts of pandas.stats
-patsy>=0.4.0
-statsmodels>=0.6.1
-
-# For financial risk calculations
-empyrical>=0.5.0
-
-# Dates/times/calendars
-pytz>=2018.5
-# Country Codes
-iso3166>=0.9
-trading-calendars>=1.6.1
-python-dateutil>=2.4.2
-
-# For fetching remote data
-requests>=2.9.1
-
-# Asset writer and finder
-sqlalchemy>=1.0.8
-
-# For asset db management
-alembic>=0.7.7
-
-# On disk storage format for pipeline data.
-bcolz>=1.0.0
-
-# On disk storage format for pricing data.
-h5py>=2.7.1
-tables>=3.4.3
-
-# Performance
-lru-dict>=1.1.4
-intervaltree>=2.1.0
-
-# faster array ops.
-bottleneck>=1.0.0
-
-# Graph algorithms used by zipline.pipeline
-networkx>=1.9.1, <2.0
-
-# NumericalExpression pipeline terms.
-numexpr>=2.6.1
-
-# Currency Codes
-iso4217>=1.6.20180829
-
-#For remote procedure calls
-grpcio>=1.18.0
-grpcio-tools>=1.18.0
-
-# kubernetes==8.0.1
-
-# cryptography==2.5
-
-ntplib>=0.3.4
+# Technical indicators (optional pipeline terms)
+TA-Lib

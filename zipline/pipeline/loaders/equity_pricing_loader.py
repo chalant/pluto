@@ -13,19 +13,20 @@
 # limitations under the License.
 from collections import defaultdict
 
-from interface import implements
 from numpy import iinfo, uint32, multiply
 
 from zipline.data.fx import ExplodingFXRateReader
 from zipline.lib.adjusted_array import AdjustedArray
+from zipline.utils.numpy_utils import repeat_first_axis
 
 from .base import PipelineLoader
 from .utils import shift_dates
+from ..data.equity_pricing import EquityPricing
 
 UINT32_MAX = iinfo(uint32).max
 
 
-class EquityPricingLoader(implements(PipelineLoader)):
+class EquityPricingLoader(PipelineLoader):
     """A PipelineLoader for loading daily OHLCV data.
 
     Parameters
@@ -38,10 +39,7 @@ class EquityPricingLoader(implements(PipelineLoader)):
        Reader providing currency conversions.
     """
 
-    def __init__(self,
-                 raw_price_reader,
-                 adjustments_reader,
-                 fx_reader):
+    def __init__(self, raw_price_reader, adjustments_reader, fx_reader):
         self.raw_price_reader = raw_price_reader
         self.adjustments_reader = adjustments_reader
         self.fx_reader = fx_reader
@@ -78,48 +76,60 @@ class EquityPricingLoader(implements(PipelineLoader)):
         # be known at the **start** of each date. We assume that the latest
         # data known on day N is the data from day (N - 1), so we shift all
         # query dates back by a trading session.
-        sessions = domain.all_sessions()
+        sessions = domain.sessions()
         shifted_dates = shift_dates(sessions, dates[0], dates[-1], shift=1)
 
-        colnames = [c.name for c in columns]
-        raw_arrays = self.raw_price_reader.load_raw_arrays(
-            colnames,
+        ohlcv_cols, currency_cols = self._split_column_types(columns)
+        del columns  # From here on we should use ohlcv_cols or currency_cols.
+        ohlcv_colnames = [c.name for c in ohlcv_cols]
+
+        raw_ohlcv_arrays = self.raw_price_reader.load_raw_arrays(
+            ohlcv_colnames,
             shifted_dates[0],
             shifted_dates[-1],
             sids,
         )
 
-        # print(raw_arrays)
         # Currency convert raw_arrays in place if necessary. We use shifted
         # dates to load currency conversion rates to make them line up with
         # dates used to fetch prices.
         self._inplace_currency_convert(
-            columns,
-            raw_arrays,
+            ohlcv_cols,
+            raw_ohlcv_arrays,
             shifted_dates,
             sids,
         )
 
         adjustments = self.adjustments_reader.load_pricing_adjustments(
-            colnames,
+            ohlcv_colnames,
             dates,
             sids,
         )
 
         out = {}
-        for c, c_raw, c_adjs in zip(columns, raw_arrays, adjustments):
+        for c, c_raw, c_adjs in zip(ohlcv_cols, raw_ohlcv_arrays, adjustments):
             out[c] = AdjustedArray(
                 c_raw.astype(c.dtype),
                 c_adjs,
                 c.missing_value,
             )
+
+        for c in currency_cols:
+            codes_1d = self.raw_price_reader.currency_codes(sids)
+            codes = repeat_first_axis(codes_1d, len(dates))
+            out[c] = AdjustedArray(
+                codes,
+                adjustments={},
+                missing_value=None,
+            )
+
         return out
 
     @property
     def currency_aware(self):
         # Tell the pipeline engine that this loader supports currency
-        # conversion.
-        return True
+        # conversion if we have a non-dummy fx rates reader.
+        return not isinstance(self.fx_reader, ExplodingFXRateReader)
 
     def _inplace_currency_convert(self, columns, arrays, dates, sids):
         """
@@ -152,7 +162,7 @@ class EquityPricingLoader(implements(PipelineLoader)):
             by_spec[column.currency_conversion].append(array)
 
         # Nothing to do for terms with no currency conversion.
-        by_spec.pop(None)
+        by_spec.pop(None, None)
         if not by_spec:
             return
 
@@ -162,13 +172,40 @@ class EquityPricingLoader(implements(PipelineLoader)):
         # Columns with the same conversion spec will use the same multipliers.
         for spec, arrays in by_spec.items():
             rates = fx_reader.get_rates(
-                field=spec.field,
+                rate=spec.field,
                 quote=spec.currency.code,
                 bases=base_currencies,
-                dates=dates,
+                dts=dates,
             )
             for arr in arrays:
                 multiply(arr, rates, out=arr)
+
+    def _split_column_types(self, columns):
+        """Split out currency columns from OHLCV columns.
+
+        Parameters
+        ----------
+        columns : list[zipline.pipeline.data.BoundColumn]
+            Columns to be loaded by ``load_adjusted_array``.
+
+        Returns
+        -------
+        ohlcv_columns : list[zipline.pipeline.data.BoundColumn]
+            Price and volume columns from ``columns``.
+        currency_columns : list[zipline.pipeline.data.BoundColumn]
+            Currency code column from ``columns``, if present.
+        """
+        currency_name = EquityPricing.currency.name
+
+        ohlcv = []
+        currency = []
+        for c in columns:
+            if c.name == currency_name:
+                currency.append(c)
+            else:
+                ohlcv.append(c)
+
+        return ohlcv, currency
 
 
 # Backwards compat alias.

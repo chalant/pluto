@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import division
-
 from collections import namedtuple, OrderedDict
 from functools import partial
 from math import isnan
 
-import logbook
+import logging
 import numpy as np
 import pandas as pd
-from six import iteritems, itervalues, PY2
 
 from zipline.assets import Future
 from zipline.finance.transaction import Transaction
@@ -35,10 +31,10 @@ from ._finance_ext import (
     update_position_last_sale_prices,
 )
 
-log = logbook.Logger(__name__)
+log = logging.getLogger("Performance")
 
 
-class PositionTracker(object):
+class PositionTracker:
     """The current state of the positions held.
 
     Parameters
@@ -46,6 +42,7 @@ class PositionTracker(object):
     data_frequency : {'daily', 'minute'}
         The data frequency of the simulation.
     """
+
     def __init__(self, data_frequency):
         self.positions = OrderedDict()
 
@@ -59,12 +56,14 @@ class PositionTracker(object):
         self._dirty_stats = True
         self._stats = PositionStats.new()
 
-    def update_position(self,
-                        asset,
-                        amount=None,
-                        last_sale_price=None,
-                        last_sale_date=None,
-                        cost_basis=None):
+    def update_position(
+        self,
+        asset,
+        amount=None,
+        last_sale_price=None,
+        last_sale_date=None,
+        cost_basis=None,
+    ):
         self._dirty_stats = True
 
         if asset not in self.positions:
@@ -136,6 +135,16 @@ class PositionTracker(object):
                 leftover_cash = position.handle_split(asset, ratio)
                 total_leftover_cash += leftover_cash
 
+                if position.amount == 0:
+                    # The split left no whole shares; the position is closed,
+                    # as it would be by a fill down to zero.
+                    del self.positions[asset]
+
+                    try:
+                        del self._positions_store[asset]
+                    except KeyError:
+                        pass
+
         return total_leftover_cash
 
     def earn_dividends(self, cash_dividends, stock_dividends):
@@ -166,9 +175,12 @@ class PositionTracker(object):
         for stock_dividend in stock_dividends:
             self._dirty_stats = True  # only mark dirty if we pay a dividend
 
-            div_owed = self.positions[
-                stock_dividend.asset
-            ].earn_stock_dividend(stock_dividend)
+            div_owed = self.positions[stock_dividend.asset].earn_stock_dividend(
+                stock_dividend
+            )
+            if not div_owed["share_count"]:
+                # Less than one share (also -0.0 for a small short).
+                continue
             try:
                 self._unpaid_stock_dividends[stock_dividend.pay_date].append(
                     div_owed,
@@ -196,18 +208,24 @@ class PositionTracker(object):
         # representing the fact that we're required to reimburse the owner of
         # the stock for any dividends paid while borrowing.
         for payment in payments:
-            net_cash_payment += payment['amount']
+            net_cash_payment += payment["amount"]
 
         # Add stock for any stock dividends paid.  Again, the values here may
         # be negative in the case of short positions.
         try:
             stock_payments = self._unpaid_stock_dividends[next_trading_day]
+            # Same as cash dividends: a pay date is settled once.
+            del self._unpaid_stock_dividends[next_trading_day]
         except KeyError:
             stock_payments = []
 
+        if stock_payments:
+            # Share count changed, so cached position stats are stale.
+            self._dirty_stats = True
+
         for stock_payment in stock_payments:
-            payment_asset = stock_payment['payment_asset']
-            share_count = stock_payment['share_count']
+            payment_asset = stock_payment["payment_asset"]
+            share_count = stock_payment["share_count"]
             # note we create a Position for stock dividend if we don't
             # already own the asset
             if payment_asset in self.positions:
@@ -226,8 +244,7 @@ class PositionTracker(object):
             return None
 
         amount = self.positions.get(asset).amount
-        price = data_portal.get_spot_value(
-            asset, 'price', dt, self.data_frequency)
+        price = data_portal.get_spot_value(asset, "price", dt, self.data_frequency)
 
         # Get the last traded price if price is no longer available
         if isnan(price):
@@ -244,7 +261,7 @@ class PositionTracker(object):
     def get_positions(self):
         positions = self._positions_store
 
-        for asset, pos in iteritems(self.positions):
+        for asset, pos in self.positions.items():
             # Adds the new position if we didn't have one before, or overwrite
             # one we have currently
             positions[asset] = pos.protocol_position
@@ -253,22 +270,17 @@ class PositionTracker(object):
 
     def get_position_list(self):
         return [
-            pos.to_dict()
-            for asset, pos in iteritems(self.positions)
-            if pos.amount != 0
+            pos.to_dict() for asset, pos in self.positions.items() if pos.amount != 0
         ]
 
-    def sync_last_sale_prices(self,
-                              dt,
-                              data_portal,
-                              handle_non_market_minutes=False):
+    def sync_last_sale_prices(self, dt, data_portal, handle_non_market_minutes=False):
         self._dirty_stats = True
 
         if handle_non_market_minutes:
             previous_minute = data_portal.trading_calendar.previous_minute(dt)
             get_price = partial(
                 data_portal.get_adjusted_value,
-                field='price',
+                field="price",
                 dt=previous_minute,
                 perspective_dt=dt,
                 data_frequency=self.data_frequency,
@@ -277,7 +289,7 @@ class PositionTracker(object):
         else:
             get_price = partial(
                 data_portal.get_scalar_asset_spot_value,
-                field='price',
+                field="price",
                 dt=dt,
                 data_frequency=self.data_frequency,
             )
@@ -305,41 +317,20 @@ class PositionTracker(object):
         return self._stats
 
 
-if PY2:
-    def move_to_end(ordered_dict, key, last=False):
-        if last:
-            ordered_dict[key] = ordered_dict.pop(key)
-        else:
-            # please don't do this in python 2 ;_;
-            new_first_element = ordered_dict.pop(key)
-
-            # the items (without the given key) in the order they were inserted
-            items = ordered_dict.items()
-
-            # reset the ordered_dict to re-insert in the new order
-            ordered_dict.clear()
-
-            ordered_dict[key] = new_first_element
-
-            # add the items back in their original order
-            ordered_dict.update(items)
-else:
-    move_to_end = OrderedDict.move_to_end
-
+move_to_end = OrderedDict.move_to_end
 
 PeriodStats = namedtuple(
-    'PeriodStats',
-    'net_liquidation gross_leverage net_leverage',
+    "PeriodStats",
+    "net_liquidation gross_leverage net_leverage",
 )
-
 
 not_overridden = sentinel(
-    'not_overridden',
-    'Mark that an account field has not been overridden',
+    "not_overridden",
+    "Mark that an account field has not been overridden",
 )
 
 
-class Ledger(object):
+class Ledger:
     """The ledger tracks all orders and transactions as well as the current
     state of the portfolio and positions.
 
@@ -362,6 +353,7 @@ class Ledger(object):
         The daily returns as an ndarray. Days that have not yet finished will
         hold a value of ``np.nan``.
     """
+
     def __init__(self, trading_sessions, capital_base, data_frequency):
         if len(trading_sessions):
             start = trading_sessions[0]
@@ -415,11 +407,7 @@ class Ledger(object):
     def todays_returns(self):
         # compute today's returns in returns space instead of portfolio-value
         # space to work even when we have capital changes
-        return (
-            (self.portfolio.returns + 1) /
-            (self._previous_total_returns + 1) -
-            1
-        )
+        return (self.portfolio.returns + 1) / (self._previous_total_returns + 1) - 1
 
     @property
     def _dirty_portfolio(self):
@@ -448,16 +436,18 @@ class Ledger(object):
         # make daily_returns hold the partial returns, this saves many
         # metrics from doing a concat and copying all of the previous
         # returns
-        self.daily_returns_array[session_ix] = self.todays_returns
+        if isinstance(self.daily_returns_array, np.ndarray):
+            self.daily_returns_array[session_ix] = self.todays_returns
+        elif isinstance(self.daily_returns_array, pd.Series):
+            self.daily_returns_array.iloc[session_ix] = self.todays_returns
+        else:
+            raise ValueError("Unknown daily returns array type")
 
     def end_of_session(self, session_ix):
         # save the daily returns time-series
-        self.daily_returns_series[session_ix] = self.todays_returns
+        self.daily_returns_series.iloc[session_ix] = self.todays_returns
 
-    def sync_last_sale_prices(self,
-                              dt,
-                              data_portal,
-                              handle_non_market_minutes=False):
+    def sync_last_sale_prices(self, dt, data_portal, handle_non_market_minutes=False):
         self.position_tracker.sync_last_sale_prices(
             dt,
             data_portal,
@@ -467,7 +457,6 @@ class Ledger(object):
 
     @staticmethod
     def _calculate_payout(multiplier, amount, old_price, price):
-
         return (price - old_price) * multiplier * amount
 
     def _cash_flow(self, amount):
@@ -531,7 +520,8 @@ class Ledger(object):
             A list of splits. Each split is a tuple of (asset, ratio).
         """
         leftover_cash = self.position_tracker.handle_splits(splits)
-        if leftover_cash > 0:
+        if leftover_cash:
+            # Either sign: a short pays cash to settle its fraction.
             self._cash_flow(leftover_cash)
 
     def process_order(self, order):
@@ -545,9 +535,11 @@ class Ledger(object):
         try:
             dt_orders = self._orders_by_modified[order.dt]
         except KeyError:
-            self._orders_by_modified[order.dt] = OrderedDict([
-                (order.id, order),
-            ])
+            self._orders_by_modified[order.dt] = OrderedDict(
+                [
+                    (order.id, order),
+                ]
+            )
             self._orders_by_id[order.id] = order
         else:
             self._orders_by_id[order.id] = dt_orders[order.id] = order
@@ -564,8 +556,8 @@ class Ledger(object):
         commission : zp.Event
             The commission being paid.
         """
-        asset = commission['asset']
-        cost = commission['cost']
+        asset = commission["asset"]
+        cost = commission["cost"]
 
         self.position_tracker.handle_commission(asset, cost)
         self._cash_flow(-cost)
@@ -593,16 +585,10 @@ class Ledger(object):
         held_sids = set(position_tracker.positions)
         if held_sids:
             cash_dividends = adjustment_reader.get_dividends_with_ex_date(
-                held_sids,
-                next_session,
-                asset_finder
+                held_sids, next_session, asset_finder
             )
-            stock_dividends = (
-                adjustment_reader.get_stock_dividends_with_ex_date(
-                    held_sids,
-                    next_session,
-                    asset_finder
-                )
+            stock_dividends = adjustment_reader.get_stock_dividends_with_ex_date(
+                held_sids, next_session, asset_finder
             )
 
             # Earning a dividend just marks that we need to get paid out on
@@ -648,7 +634,7 @@ class Ledger(object):
             # flatten the by-day transactions
             return [
                 txn
-                for by_day in itervalues(self._processed_transactions)
+                for by_day in self._processed_transactions.values()
                 for txn in by_day
             ]
 
@@ -671,12 +657,9 @@ class Ledger(object):
         """
         if dt is None:
             # orders by id is already flattened
-            return [o.to_dict() for o in itervalues(self._orders_by_id)]
+            return [o.to_dict() for o in self._orders_by_id.values()]
 
-        return [
-            o.to_dict()
-            for o in itervalues(self._orders_by_modified.get(dt, {}))
-        ]
+        return [o.to_dict() for o in self._orders_by_modified.get(dt, {}).values()]
 
     @property
     def positions(self):
@@ -687,7 +670,7 @@ class Ledger(object):
         payout_last_sale_prices = self._payout_last_sale_prices
 
         total = 0
-        for asset, old_price in iteritems(payout_last_sale_prices):
+        for asset, old_price in payout_last_sale_prices.items():
             position = positions[asset]
             payout_last_sale_prices[asset] = price = position.last_sale_price
             amount = position.amount
@@ -701,8 +684,7 @@ class Ledger(object):
         return total
 
     def update_portfolio(self):
-        """Force a computation of the current portfolio state.
-        """
+        """Force a computation of the current portfolio state."""
         if not self._dirty_portfolio:
             return
 
@@ -712,9 +694,7 @@ class Ledger(object):
         portfolio.positions = pt.get_positions()
         position_stats = pt.stats
 
-        portfolio.positions_value = position_value = (
-            position_stats.net_value
-        )
+        portfolio.positions_value = position_value = position_stats.net_value
         portfolio.positions_exposure = position_stats.net_exposure
         self._cash_flow(self._get_payout_total(pt.positions))
 
@@ -730,11 +710,7 @@ class Ledger(object):
             returns = 0.0
 
         portfolio.pnl += pnl
-        portfolio.returns = (
-            (1 + portfolio.returns) *
-            (1 + returns) -
-            1
-        )
+        portfolio.returns = (1 + portfolio.returns) * (1 + returns) - 1
 
         # the portfolio has been fully synced
         self._dirty_portfolio = False
@@ -763,32 +739,33 @@ class Ledger(object):
 
         return portfolio_value, gross_leverage, net_leverage
 
-    def override_account_fields(self,
-                                settled_cash=not_overridden,
-                                accrued_interest=not_overridden,
-                                buying_power=not_overridden,
-                                equity_with_loan=not_overridden,
-                                total_positions_value=not_overridden,
-                                total_positions_exposure=not_overridden,
-                                regt_equity=not_overridden,
-                                regt_margin=not_overridden,
-                                initial_margin_requirement=not_overridden,
-                                maintenance_margin_requirement=not_overridden,
-                                available_funds=not_overridden,
-                                excess_liquidity=not_overridden,
-                                cushion=not_overridden,
-                                day_trades_remaining=not_overridden,
-                                leverage=not_overridden,
-                                net_leverage=not_overridden,
-                                net_liquidation=not_overridden):
-        """Override fields on ``self.account``.
-        """
+    def override_account_fields(
+        self,
+        settled_cash=not_overridden,
+        accrued_interest=not_overridden,
+        buying_power=not_overridden,
+        equity_with_loan=not_overridden,
+        total_positions_value=not_overridden,
+        total_positions_exposure=not_overridden,
+        regt_equity=not_overridden,
+        regt_margin=not_overridden,
+        initial_margin_requirement=not_overridden,
+        maintenance_margin_requirement=not_overridden,
+        available_funds=not_overridden,
+        excess_liquidity=not_overridden,
+        cushion=not_overridden,
+        day_trades_remaining=not_overridden,
+        leverage=not_overridden,
+        net_leverage=not_overridden,
+        net_liquidation=not_overridden,
+    ):
+        """Override fields on ``self.account``."""
         # mark that the portfolio is dirty to override the fields again
         self._dirty_account = True
         self._account_overrides = kwargs = {
             k: v for k, v in locals().items() if v is not not_overridden
         }
-        del kwargs['self']
+        del kwargs["self"]
 
     @property
     def account(self):
@@ -806,12 +783,8 @@ class Ledger(object):
             account.accrued_interest = 0.0
             account.buying_power = np.inf
             account.equity_with_loan = portfolio.portfolio_value
-            account.total_positions_value = (
-                portfolio.portfolio_value - portfolio.cash
-            )
-            account.total_positions_exposure = (
-                portfolio.positions_exposure
-            )
+            account.total_positions_value = portfolio.portfolio_value - portfolio.cash
+            account.total_positions_exposure = portfolio.positions_exposure
             account.regt_equity = portfolio.cash
             account.regt_margin = np.inf
             account.initial_margin_requirement = 0.0
@@ -820,18 +793,20 @@ class Ledger(object):
             account.excess_liquidity = portfolio.cash
             account.cushion = (
                 (portfolio.cash / portfolio.portfolio_value)
-                if portfolio.portfolio_value else
-                np.nan
+                if portfolio.portfolio_value
+                else np.nan
             )
             account.day_trades_remaining = np.inf
-            (account.net_liquidation,
-             account.gross_leverage,
-             account.net_leverage) = self.calculate_period_stats()
+            (
+                account.net_liquidation,
+                account.gross_leverage,
+                account.net_leverage,
+            ) = self.calculate_period_stats()
 
             account.leverage = account.gross_leverage
 
             # apply the overrides
-            for k, v in iteritems(self._account_overrides):
+            for k, v in self._account_overrides.items():
                 setattr(account, k, v)
 
             # the account has been fully synced

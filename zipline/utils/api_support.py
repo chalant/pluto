@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): api_method registers the method on pluto.api and zipline.api.
 #
 # Copyright 2014 Quantopian, Inc.
 #
@@ -13,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import zipline.api
+from pluto import api as pluto_api
 from zipline.utils.compat import wraps
 from zipline.utils.algo_instance import get_algo_instance, set_algo_instance
 
-from pluto import api
-import zipline.api as zipline_api
 
-
-class ZiplineAPI(object):
+class ZiplineAPI:
     """
     Context manager for making an algorithm instance available to zipline API
     functions within a scoped block.
@@ -52,13 +52,13 @@ def api_method(f):
         algo_instance = get_algo_instance()
         if algo_instance is None:
             raise RuntimeError(
-                'pluto api method %s must be called during a run.'
-                % f.__name__
+                "zipline api method %s must be called during a simulation." % f.__name__
             )
         return getattr(algo_instance, f.__name__)(*args, **kwargs)
+
     # Add functor to pluto.api, and to zipline.api so that zipline's own
     # run path (zipline/examples, run_algorithm) keeps working
-    for module in (api, zipline_api):
+    for module in (pluto_api, zipline.api):
         setattr(module, f.__name__, wrapped)
         module.__all__.append(f.__name__)
     f.is_api_method = True
@@ -77,13 +77,16 @@ def require_not_initialized(exception):
     def method(self):
         # Do stuff that should only be allowed during initialize.
     """
+
     def decorator(method):
         @wraps(method)
         def wrapped_method(self, *args, **kwargs):
             if self.initialized:
                 raise exception
             return method(self, *args, **kwargs)
+
         return wrapped_method
+
     return decorator
 
 
@@ -99,13 +102,16 @@ def require_initialized(exception):
     def method(self):
         # Do stuff that should only be allowed after initialize.
     """
+
     def decorator(method):
         @wraps(method)
         def wrapped_method(self, *args, **kwargs):
             if not self.initialized:
                 raise exception
             return method(self, *args, **kwargs)
+
         return wrapped_method
+
     return decorator
 
 
@@ -121,33 +127,14 @@ def disallowed_in_before_trading_start(exception):
     def method(self):
         # Do stuff that is not allowed inside before_trading_start.
     """
+
     def decorator(method):
         @wraps(method)
         def wrapped_method(self, *args, **kwargs):
             if self._in_before_trading_start:
                 raise exception
             return method(self, *args, **kwargs)
+
         return wrapped_method
-    return decorator
 
-
-def allowed_only_in_before_trading_start(exception):
-    """
-    Decorator for API methods that can be called only from within
-    TradingAlgorithm.before_trading_start.  `exception` will be raised if the
-    method is called outside `before_trading_start`.
-
-    Usage
-    -----
-    @allowed_only_in_before_trading_start(SomeException("Don't do that!"))
-    def method(self):
-        # Do stuff that is only allowed inside before_trading_start.
-    """
-    def decorator(method):
-        @wraps(method)
-        def wrapped_method(self, *args, **kwargs):
-            if not self._in_before_trading_start:
-                raise exception
-            return method(self, *args, **kwargs)
-        return wrapped_method
     return decorator

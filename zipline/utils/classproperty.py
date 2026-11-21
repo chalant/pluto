@@ -1,6 +1,6 @@
-class classproperty(object):
-    """Class property
-    """
+class classproperty:
+    """Class property"""
+
     def __init__(self, fget):
         self.fget = fget
 

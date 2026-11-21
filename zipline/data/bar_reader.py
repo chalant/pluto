@@ -11,14 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABCMeta, abstractmethod, abstractproperty
-from six import with_metaclass
+from abc import ABC, abstractmethod
 
 
 class NoDataOnDate(Exception):
     """
     Raised when a spot price cannot be found for the sid and date.
     """
+
     pass
 
 
@@ -34,14 +34,16 @@ class NoDataForSid(Exception):
     """
     Raised when the requested sid is missing from the pricing data.
     """
+
     pass
 
 
-OHLCV = ('open', 'high', 'low', 'close', 'volume')
+OHLCV = ("open", "high", "low", "close", "volume")
 
 
-class BarReader(with_metaclass(ABCMeta, object)):
-    @abstractproperty
+class BarReader(ABC):
+    @property
+    @abstractmethod
     def data_frequency(self):
         pass
 
@@ -68,7 +70,8 @@ class BarReader(with_metaclass(ABCMeta, object)):
         """
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def last_available_dt(self):
         """
         Returns
@@ -78,7 +81,8 @@ class BarReader(with_metaclass(ABCMeta, object)):
         """
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def trading_calendar(self):
         """
         Returns the zipline.utils.calendar.trading_calendar used to read
@@ -86,7 +90,8 @@ class BarReader(with_metaclass(ABCMeta, object)):
         """
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def first_trading_day(self):
         """
         Returns

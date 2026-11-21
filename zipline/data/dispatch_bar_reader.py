@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): readers are compared by calendar name (one calendar instance per run); sessions are clipped to the calendar of the run.
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -12,20 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 
-from numpy import (
-    full,
-    nan,
-    int64,
-    zeros
-)
-from six import iteritems, with_metaclass
+from numpy import full, nan, int64, zeros
 
 from zipline.utils.memoize import lazyval
 
 
-class AssetDispatchBarReader(with_metaclass(ABCMeta)):
+class AssetDispatchBarReader(ABC):
     """
 
     Parameters
@@ -39,6 +34,7 @@ class AssetDispatchBarReader(with_metaclass(ABCMeta)):
         If not provided, infers it by using the min of the
         last_available_dt values of the underlying readers.
     """
+
     def __init__(
         self,
         trading_calendar,
@@ -51,12 +47,14 @@ class AssetDispatchBarReader(with_metaclass(ABCMeta)):
         self._readers = readers
         self._last_available_dt = last_available_dt
 
-        for t, r in iteritems(self._readers):
-            assert trading_calendar.name == r.trading_calendar.name, \
-                "All readers must share target trading_calendar. " \
-                "Reader={0} for type={1} uses calendar={2} which does not " \
+        for t, r in self._readers.items():
+            assert trading_calendar.name == r.trading_calendar.name, (
+                "All readers must share target trading_calendar. "
+                "Reader={0} for type={1} uses calendar={2} which does not "
                 "match the desired shared calendar={3} ".format(
-                    r, t, r.trading_calendar.name, trading_calendar.name)
+                    r, t, r.trading_calendar.name, trading_calendar.name
+                )
+            )
 
     @abstractmethod
     def _dt_window_size(self, start_dt, end_dt):
@@ -70,7 +68,7 @@ class AssetDispatchBarReader(with_metaclass(ABCMeta)):
         return self._dt_window_size(start_dt, end_dt), num_sids
 
     def _make_raw_array_out(self, field, shape):
-        if field != 'volume' and field != 'sid':
+        if field != "volume" and field != "sid":
             out = full(shape, nan)
         else:
             out = zeros(shape, dtype=int64)
@@ -109,22 +107,25 @@ class AssetDispatchBarReader(with_metaclass(ABCMeta)):
 
         for i, asset in enumerate(assets):
             t = type(asset)
+            if t not in sid_groups:
+                sid_groups[t] = []
+            if t not in out_pos:
+                out_pos[t] = []
             sid_groups[t].append(asset)
             out_pos[t].append(i)
 
         batched_arrays = {
-            t: self._readers[t].load_raw_arrays(fields,
-                                                start_dt,
-                                                end_dt,
-                                                sid_groups[t])
-            for t in asset_types if sid_groups[t]}
+            t: self._readers[t].load_raw_arrays(fields, start_dt, end_dt, sid_groups[t])
+            for t in asset_types
+            if sid_groups[t]
+        }
 
         results = []
         shape = self._make_raw_array_shape(start_dt, end_dt, len(sids))
 
         for i, field in enumerate(fields):
             out = self._make_raw_array_out(field, shape)
-            for t, arrays in iteritems(batched_arrays):
+            for t, arrays in batched_arrays.items():
                 out[:, out_pos[t]] = arrays[i]
             results.append(out)
 
@@ -132,18 +133,20 @@ class AssetDispatchBarReader(with_metaclass(ABCMeta)):
 
 
 class AssetDispatchMinuteBarReader(AssetDispatchBarReader):
-
     def _dt_window_size(self, start_dt, end_dt):
         return len(self.trading_calendar.minutes_in_range(start_dt, end_dt))
 
 
 class AssetDispatchSessionBarReader(AssetDispatchBarReader):
-
     def _dt_window_size(self, start_dt, end_dt):
         return len(self.trading_calendar.sessions_in_range(start_dt, end_dt))
 
     @lazyval
     def sessions(self):
-        return self.trading_calendar.sessions_in_range(
-            self.first_trading_day,
-            self.last_available_dt)
+        # Pluto: the calendar of a run is bounded to the run (exchange_calendars
+        # raises outside its range), the readers' data may reach beyond it
+        calendar = self.trading_calendar
+        return calendar.sessions_in_range(
+            max(self.first_trading_day, calendar.first_session),
+            min(self.last_available_dt, calendar.last_session),
+        )

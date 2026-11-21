@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): order() takes a session_id; Order is built with session_id and id_.
 #
 # Copyright 2015 Quantopian, Inc.
 #
@@ -12,11 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from logbook import Logger
+import logging
 from collections import defaultdict
 from copy import copy
-
-from six import iteritems
 
 from zipline.assets import Equity, Future, Asset
 from .blotter import Blotter
@@ -35,19 +34,21 @@ from zipline.finance.commission import (
 )
 from zipline.utils.input_validation import expect_types
 
-log = Logger('Blotter')
-warning_logger = Logger('AlgoWarning')
+log = logging.getLogger("Blotter")
+warning_logger = logging.getLogger("AlgoWarning")
 
 
-@register(Blotter, 'default')
+@register(Blotter, "default")
 class SimulationBlotter(Blotter):
-    def __init__(self,
-                 equity_slippage=None,
-                 future_slippage=None,
-                 equity_commission=None,
-                 future_commission=None,
-                 cancel_policy=None):
-        super(SimulationBlotter, self).__init__(cancel_policy=cancel_policy)
+    def __init__(
+        self,
+        equity_slippage=None,
+        future_slippage=None,
+        equity_commission=None,
+        future_commission=None,
+        cancel_policy=None,
+    ):
+        super().__init__(cancel_policy=cancel_policy)
 
         # these orders are aggregated by asset
         self.open_orders = defaultdict(list)
@@ -58,18 +59,19 @@ class SimulationBlotter(Blotter):
         # holding orders that have come in since the last event.
         self.new_orders = []
 
-        self.max_shares = int(1e+11)
+        self.max_shares = int(1e11)
 
         self.slippage_models = {
             Equity: equity_slippage or FixedBasisPointsSlippage(),
-            Future: future_slippage or VolatilityVolumeShare(
+            Future: future_slippage
+            or VolatilityVolumeShare(
                 volume_limit=DEFAULT_FUTURE_VOLUME_SLIPPAGE_BAR_LIMIT,
             ),
         }
-
         self.commission_models = {
             Equity: equity_commission or PerShare(),
-            Future: future_commission or PerContract(
+            Future: future_commission
+            or PerContract(
                 cost=DEFAULT_PER_CONTRACT_COST,
                 exchange_fee=FUTURE_EXCHANGE_FEES_BY_SYMBOL,
             ),
@@ -84,16 +86,18 @@ class SimulationBlotter(Blotter):
     orders={orders},
     new_orders={new_orders},
     current_dt={current_dt})
-""".strip().format(class_name=self.__class__.__name__,
-                   slippage_models=self.slippage_models,
-                   commission_models=self.commission_models,
-                   open_orders=self.open_orders,
-                   orders=self.orders,
-                   new_orders=self.new_orders,
-                   current_dt=self.current_dt)
+""".strip().format(
+            class_name=self.__class__.__name__,
+            slippage_models=self.slippage_models,
+            commission_models=self.commission_models,
+            open_orders=self.open_orders,
+            orders=self.orders,
+            new_orders=self.new_orders,
+            current_dt=self.current_dt,
+        )
 
     @expect_types(asset=Asset)
-    def order(self, asset, amount, style, session_id='', order_id=None):
+    def order(self, asset, amount, style, session_id="", order_id=None):
         """Place an order.
 
         Parameters
@@ -107,7 +111,7 @@ class SimulationBlotter(Blotter):
         style : zipline.finance.execution.ExecutionStyle
             The execution style for the order.
         session_id : str, optional
-            Suffix of the order id (pluto strategy session). Empty when
+            Suffix of the order id (Pluto strategy session). Empty when
             zipline's own TradingAlgorithm places the order.
         order_id : str, optional
             The unique identifier for this order.
@@ -126,7 +130,7 @@ class SimulationBlotter(Blotter):
         Limit order:     order(asset, amount, style=LimitOrder(limit_price))
         Stop order:      order(asset, amount, style=StopOrder(stop_price))
         StopLimit order: order(asset, amount, style=StopLimitOrder(limit_price,
-                               stop_price))
+        stop_price))
         """
         # something could be done with amount to further divide
         # between buy by share count OR buy shares up to a dollar amount
@@ -138,10 +142,9 @@ class SimulationBlotter(Blotter):
         elif amount > self.max_shares:
             # Arbitrary limit of 100 billion (US) shares will never be
             # exceeded except by a buggy algorithm.
-            raise OverflowError("Can't order more than %d shares" %
-                                self.max_shares)
+            raise OverflowError("Can't order more than %d shares" % self.max_shares)
 
-        is_buy = (amount > 0)
+        is_buy = amount > 0
         order = Order(
             session_id=session_id,
             dt=self.current_dt,
@@ -149,7 +152,7 @@ class SimulationBlotter(Blotter):
             amount=amount,
             stop=style.get_stop_price(is_buy),
             limit=style.get_limit_price(is_buy),
-            id_=order_id
+            id_=order_id,
         )
 
         self.open_orders[order.asset].append(order)
@@ -196,13 +199,13 @@ class SimulationBlotter(Blotter):
                 # Message appropriately depending on whether there's
                 # been a partial fill or not.
                 if order.filled > 0:
-                    warning_logger.warn(
-                        'Your order for {order_amt} shares of '
-                        '{order_sym} has been partially filled. '
-                        '{order_filled} shares were successfully '
-                        'purchased. {order_failed} shares were not '
-                        'filled by the end of day and '
-                        'were canceled.'.format(
+                    warning_logger.warning(
+                        "Your order for {order_amt} shares of "
+                        "{order_sym} has been partially filled. "
+                        "{order_filled} shares were successfully "
+                        "purchased. {order_failed} shares were not "
+                        "filled by the end of day and "
+                        "were canceled.".format(
                             order_amt=order.amount,
                             order_sym=order.asset.symbol,
                             order_filled=order.filled,
@@ -210,13 +213,13 @@ class SimulationBlotter(Blotter):
                         )
                     )
                 elif order.filled < 0:
-                    warning_logger.warn(
-                        'Your order for {order_amt} shares of '
-                        '{order_sym} has been partially filled. '
-                        '{order_filled} shares were successfully '
-                        'sold. {order_failed} shares were not '
-                        'filled by the end of day and '
-                        'were canceled.'.format(
+                    warning_logger.warning(
+                        "Your order for {order_amt} shares of "
+                        "{order_sym} has been partially filled. "
+                        "{order_filled} shares were successfully "
+                        "sold. {order_failed} shares were not "
+                        "filled by the end of day and "
+                        "were canceled.".format(
                             order_amt=order.amount,
                             order_sym=order.asset.symbol,
                             order_filled=-1 * order.filled,
@@ -224,10 +227,10 @@ class SimulationBlotter(Blotter):
                         )
                     )
                 else:
-                    warning_logger.warn(
-                        'Your order for {order_amt} shares of '
-                        '{order_sym} failed to fill by the end of day '
-                        'and was canceled.'.format(
+                    warning_logger.warning(
+                        "Your order for {order_amt} shares of "
+                        "{order_sym} failed to fill by the end of day "
+                        "and was canceled.".format(
                             order_amt=order.amount,
                             order_sym=order.asset.symbol,
                         )
@@ -236,16 +239,61 @@ class SimulationBlotter(Blotter):
         assert not orders
         del self.open_orders[asset]
 
+    # End of day cancel for daily frequency
+    def execute_daily_cancel_policy(self, event):
+        if self.cancel_policy.should_cancel(event):
+            warn = self.cancel_policy.warn_on_cancel
+            for asset in copy(self.open_orders):
+                orders = self.open_orders[asset]
+                if len(orders) > 1:
+                    order = orders[0]
+                    self.cancel(order.id, relay_status=True)
+                    if warn:
+                        if order.filled > 0:
+                            warning_logger.warn(
+                                "Your order for {order_amt} shares of "
+                                "{order_sym} has been partially filled. "
+                                "{order_filled} shares were successfully "
+                                "purchased. {order_failed} shares were not "
+                                "filled by the end of day and "
+                                "were canceled.".format(
+                                    order_amt=order.amount,
+                                    order_sym=order.asset.symbol,
+                                    order_filled=order.filled,
+                                    order_failed=order.amount - order.filled,
+                                )
+                            )
+                        elif order.filled < 0:
+                            warning_logger.warn(
+                                "Your order for {order_amt} shares of "
+                                "{order_sym} has been partially filled. "
+                                "{order_filled} shares were successfully "
+                                "sold. {order_failed} shares were not "
+                                "filled by the end of day and "
+                                "were canceled.".format(
+                                    order_amt=order.amount,
+                                    order_sym=order.asset.symbol,
+                                    order_filled=-1 * order.filled,
+                                    order_failed=-1 * (order.amount - order.filled),
+                                )
+                            )
+                        else:
+                            warning_logger.warn(
+                                "Your order for {order_amt} shares of "
+                                "{order_sym} failed to fill by the end of day "
+                                "and was canceled.".format(
+                                    order_amt=order.amount,
+                                    order_sym=order.asset.symbol,
+                                )
+                            )
+
     def execute_cancel_policy(self, event):
         if self.cancel_policy.should_cancel(event):
             warn = self.cancel_policy.warn_on_cancel
             for asset in copy(self.open_orders):
-                self.cancel_all_orders_for_asset(
-                    asset,
-                    warn,
-                    relay_status=False)
+                self.cancel_all_orders_for_asset(asset, warn, relay_status=False)
 
-    def reject(self, order_id, reason=''):
+    def reject(self, order_id, reason=""):
         """
         Mark the given order as 'rejected', which is functionally similar to
         cancelled. The distinction is that rejections are involuntary (and
@@ -269,7 +317,7 @@ class SimulationBlotter(Blotter):
         # along with newly placed orders.
         self.new_orders.append(cur_order)
 
-    def hold(self, order_id, reason=''):
+    def hold(self, order_id, reason=""):
         """
         Mark the order with order_id as 'held'. Held is functionally similar
         to 'open'. When a fill (full or partial) arrives, the status
@@ -309,6 +357,21 @@ class SimulationBlotter(Blotter):
             for order in orders_to_modify:
                 order.handle_split(ratio)
 
+            # A reverse split can leave an order with no whole shares. Such an
+            # order reports FILLED (`open_amount` is zero), so `cancel` skips
+            # it and it would stay in the book forever -- and then trip the
+            # `assert not orders` in `cancel_all_orders_for_asset` when the
+            # asset is auto-closed. A broker cancels an order a split leaves
+            # with nothing to trade, so drop it here.
+            emptied = [order for order in orders_to_modify if order.open_amount == 0]
+            for order in emptied:
+                orders_to_modify.remove(order)
+                if order in self.new_orders:
+                    self.new_orders.remove(order)
+
+            if not orders_to_modify:
+                del self.open_orders[asset]
+
     def get_transactions(self, bar_data):
         """
         Creates a list of transactions based on the current open orders,
@@ -344,20 +407,21 @@ class SimulationBlotter(Blotter):
         commissions = []
 
         if self.open_orders:
-            for asset, asset_orders in iteritems(self.open_orders):
+            for asset, asset_orders in self.open_orders.items():
                 slippage = self.slippage_models[type(asset)]
 
                 for order, txn in slippage.simulate(bar_data, asset, asset_orders):
-
                     commission = self.commission_models[type(asset)]
                     additional_commission = commission.calculate(order, txn)
 
                     if additional_commission > 0:
-                        commissions.append({
-                            "asset": order.asset,
-                            "order": order,
-                            "cost": additional_commission
-                        })
+                        commissions.append(
+                            {
+                                "asset": order.asset,
+                                "order": order,
+                                "cost": additional_commission,
+                            }
+                        )
 
                     order.filled += txn.amount
                     order.commission += additional_commission
@@ -387,7 +451,6 @@ class SimulationBlotter(Blotter):
         for order in closed_orders:
             asset = order.asset
             asset_orders = self.open_orders[asset]
-
             try:
                 asset_orders.remove(order)
             except ValueError:

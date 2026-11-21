@@ -1,6 +1,7 @@
 """
 classifier.py
 """
+
 from functools import partial
 from numbers import Number
 import operator
@@ -22,18 +23,15 @@ from zipline.pipeline.sentinels import NotSpecified
 from zipline.pipeline.term import ComputableTerm
 from zipline.utils.compat import unicode
 from zipline.utils.input_validation import expect_types, expect_dtypes
-from zipline.utils.memoize import classlazyval
 from zipline.utils.numpy_utils import (
     categorical_dtype,
     int64_dtype,
     vectorized_is_element,
 )
 
-from ..filters import ArrayPredicate, NotNullFilter, NullFilter, NumExprFilter
+from ..filters import ArrayPredicate, NumExprFilter
 from ..mixins import (
-    AliasedMixin,
     CustomTermMixin,
-    DownsampledMixin,
     LatestMixin,
     PositiveWindowLengthMixin,
     RestrictedDTypeMixin,
@@ -47,7 +45,7 @@ string_classifiers_only = restrict_to_dtype(
     message_template=(
         "{method_name}() is only defined on Classifiers producing strings"
         " but it was called on a Classifier of dtype {received_dtype}."
-    )
+    ),
 )
 
 
@@ -61,21 +59,10 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
     indicating that means/standard deviations should be computed on assets for
     which the classifier produced the same label.
     """
+
     # Used by RestrictedDTypeMixin
     ALLOWED_DTYPES = CLASSIFIER_DTYPES
     categories = NotSpecified
-
-    def isnull(self):
-        """
-        A Filter producing True for values where this term has missing data.
-        """
-        return NullFilter(self)
-
-    def notnull(self):
-        """
-        A Filter producing True for values where this term has complete data.
-        """
-        return NotNullFilter(self)
 
     # We explicitly don't support classifier to classifier comparisons, since
     # the stored values likely don't mean the same thing. This may be relaxed
@@ -136,12 +123,12 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
             return ArrayPredicate(term=self, op=operator.ne, opargs=(other,))
 
     def bad_compare(opname, other):
-        raise TypeError('cannot compare classifiers with %s' % opname)
+        raise TypeError("cannot compare classifiers with %s" % opname)
 
-    __gt__ = partial(bad_compare, '>')
-    __ge__ = partial(bad_compare, '>=')
-    __le__ = partial(bad_compare, '<=')
-    __lt__ = partial(bad_compare, '<')
+    __gt__ = staticmethod(partial(bad_compare, ">"))
+    __ge__ = staticmethod(partial(bad_compare, ">="))
+    __le__ = staticmethod(partial(bad_compare, "<="))
+    __lt__ = staticmethod(partial(bad_compare, "<"))
 
     del bad_compare
 
@@ -215,7 +202,7 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
         )
 
     @string_classifiers_only
-    @expect_types(pattern=(bytes, unicode, type(re.compile(''))))
+    @expect_types(pattern=(bytes, unicode, type(re.compile(""))))
     def matches(self, pattern):
         """
         Construct a Filter that checks regex matches against ``pattern``.
@@ -278,12 +265,12 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
         """
         try:
             choices = frozenset(choices)
-        except Exception as e:
+        except Exception as exc:
             raise TypeError(
                 "Expected `choices` to be an iterable of hashable values,"
                 " but got {} instead.\n"
-                "This caused the following error: {!r}.".format(choices, e)
-            )
+                "This caused the following error: {!r}.".format(choices, exc)
+            ) from exc
 
         if self.missing_value in choices:
             raise ValueError(
@@ -333,7 +320,7 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
                         choices=choices,
                     )
                 )
-        assert False, "Unknown dtype in Classifier.element_of %s." % self.dtype
+        raise AssertionError(f"Unknown dtype in Classifier.element_of {self.dtype}.")
 
     def postprocess(self, data):
         if self.dtype == int64_dtype:
@@ -352,9 +339,9 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
         if self.dtype == int64_dtype:
             return super(Classifier, self).to_workspace_value(result, assets)
 
-        assert isinstance(result.values, pd.Categorical), (
-            'Expected a Categorical, got %r.' % type(result.values)
-        )
+        assert isinstance(
+            result.values, pd.Categorical
+        ), "Expected a Categorical, got %r." % type(result.values)
         with_missing = pd.Series(
             data=pd.Categorical(
                 result.values,
@@ -370,13 +357,9 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
             self.missing_value,
         )
 
-    @classlazyval
-    def _downsampled_type(self):
-        return DownsampledMixin.make_downsampled_type(Classifier)
-
-    @classlazyval
-    def _aliased_type(self):
-        return AliasedMixin.make_aliased_type(Classifier)
+    @classmethod
+    def _principal_computable_term_type(cls):
+        return Classifier
 
     def _to_integral(self, output_array):
         """
@@ -393,15 +376,19 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
             group_labels = output_array.as_int_array()
             null_label = output_array.missing_value_code
         else:
-            raise AssertionError(
-                "Unexpected Classifier dtype: %s." % self.dtype
-            )
+            raise AssertionError("Unexpected Classifier dtype: %s." % self.dtype)
         return group_labels, null_label
 
-    def peer_count(self):
+    def peer_count(self, mask=NotSpecified):
         """
         Construct a factor that gives the number of occurrences of
         each distinct category in a classifier.
+
+        Parameters
+        ----------
+        mask : zipline.pipeline.Filter, optional
+            If passed, only count assets passing the filter.  Default behavior
+            is to count all assets.
 
         Examples
         --------
@@ -433,13 +420,15 @@ class Classifier(RestrictedDTypeMixin, ComputableTerm):
         """
         # Lazy import due to cyclic dependencies in factor.py, classifier.py
         from ..factors import PeerCount
-        return PeerCount(inputs=[self])
+
+        return PeerCount(inputs=[self], mask=mask)
 
 
 class Everything(Classifier):
     """
     A trivial classifier that classifies everything the same.
     """
+
     dtype = int64_dtype
     window_length = 0
     inputs = ()
@@ -457,14 +446,15 @@ class Quantiles(SingleInputMixin, Classifier):
     """
     A classifier computing quantiles over an input.
     """
-    params = ('bins',)
+
+    params = ("bins",)
     dtype = int64_dtype
     window_length = 0
     missing_value = -1
 
     def _compute(self, arrays, dates, assets, mask):
         data = arrays[0]
-        bins = self.params['bins']
+        bins = self.params["bins"]
         to_bin = where(mask, data, nan)
         result = quantiles(to_bin, bins)
         # Write self.missing_value into nan locations, whether they were
@@ -474,7 +464,7 @@ class Quantiles(SingleInputMixin, Classifier):
 
     def graph_repr(self):
         """Short repr to use when rendering Pipeline graphs."""
-        return type(self).__name__ + '(%d)' % self.params['bins']
+        return type(self).__name__ + "(%d)" % self.params["bins"]
 
 
 class Relabel(SingleInputMixin, Classifier):
@@ -489,8 +479,9 @@ class Relabel(SingleInputMixin, Classifier):
     relabel_func : function(LabelArray) -> LabelArray
         Function to apply to the result of `term`.
     """
+
     window_length = 0
-    params = ('relabeler',)
+    params = ("relabeler",)
 
     # TODO: Support relabeling for integer dtypes.
     @expect_dtypes(term=categorical_dtype)
@@ -505,7 +496,7 @@ class Relabel(SingleInputMixin, Classifier):
         )
 
     def _compute(self, arrays, dates, assets, mask):
-        relabeler = self.params['relabeler']
+        relabeler = self.params["relabeler"]
         data = arrays[0]
 
         if isinstance(data, LabelArray):
@@ -513,16 +504,14 @@ class Relabel(SingleInputMixin, Classifier):
             result[~mask] = data.missing_value
         else:
             raise NotImplementedError(
-                "Relabeling is not currently supported for "
-                "int-dtype classifiers."
+                "Relabeling is not currently supported for " "int-dtype classifiers."
             )
         return result
 
 
-class CustomClassifier(PositiveWindowLengthMixin,
-                       StandardOutputs,
-                       CustomTermMixin,
-                       Classifier):
+class CustomClassifier(
+    PositiveWindowLengthMixin, StandardOutputs, CustomTermMixin, Classifier
+):
     """
     Base class for user-defined Classifiers.
 
@@ -533,22 +522,23 @@ class CustomClassifier(PositiveWindowLengthMixin,
     zipline.pipeline.CustomFactor
     zipline.pipeline.CustomFilter
     """
+
     def _validate(self):
         try:
             super(CustomClassifier, self)._validate()
-        except UnsupportedDataType:
+        except UnsupportedDataType as exc:
             if self.dtype in FACTOR_DTYPES:
                 raise UnsupportedDataType(
                     typename=type(self).__name__,
                     dtype=self.dtype,
-                    hint='Did you mean to create a CustomFactor?',
-                )
+                    hint="Did you mean to create a CustomFactor?",
+                ) from exc
             elif self.dtype in FILTER_DTYPES:
                 raise UnsupportedDataType(
                     typename=type(self).__name__,
                     dtype=self.dtype,
-                    hint='Did you mean to create a CustomFilter?',
-                )
+                    hint="Did you mean to create a CustomFilter?",
+                ) from exc
             raise
 
     def _allocate_output(self, windows, shape):
@@ -576,6 +566,7 @@ class Latest(LatestMixin, CustomClassifier):
     --------
     zipline.pipeline.data.dataset.BoundColumn.latest
     """
+
     pass
 
 

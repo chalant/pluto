@@ -12,20 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABCMeta
-import array
-import binascii
+# import array
+# import binascii
+# import struct
+from abc import ABC
 from collections import deque, namedtuple
 from functools import partial
 from numbers import Integral
-from operator import itemgetter, attrgetter
-import struct
+from operator import attrgetter, itemgetter
 
-from logbook import Logger
+import logging
 import numpy as np
 import pandas as pd
-from pandas import isnull
-from six import with_metaclass, string_types, viewkeys, iteritems
 import sqlalchemy as sa
 from toolz import (
     compose,
@@ -47,13 +45,25 @@ from zipline.errors import (
     MultipleValuesFoundForField,
     MultipleValuesFoundForSid,
     NoValueForSid,
-    ValueNotFoundForField,
     SameSymbolUsedAcrossCountries,
     SidsNotFound,
     SymbolNotFound,
+    ValueNotFoundForField,
 )
-from . import (
-    Asset, Equity, Future,
+from zipline.utils.functional import invert
+from zipline.utils.memoize import lazyval
+from zipline.utils.numpy_utils import as_column
+from zipline.utils.preprocess import preprocess
+from zipline.utils.sqlite_utils import coerce_string_to_eng, group_into_chunks
+
+from . import Asset, Equity, Future
+from .asset_db_schema import ASSET_DB_VERSION
+from .asset_writer import (
+    SQLITE_MAX_VARIABLE_NUMBER,
+    asset_db_table_names,
+    check_version_info,
+    split_delimited_symbol,
+    symbol_columns as SYMBOL_COLUMNS,
 )
 from .continuous_futures import (
     ADJUSTMENT_STYLES,
@@ -61,49 +71,37 @@ from .continuous_futures import (
     ContinuousFuture,
     OrderedContracts,
 )
-from .asset_writer import (
-    check_version_info,
-    split_delimited_symbol,
-    asset_db_table_names,
-    symbol_columns,
-    SQLITE_MAX_VARIABLE_NUMBER,
-)
-from .asset_db_schema import (
-    ASSET_DB_VERSION
-)
 from .exchange_info import ExchangeInfo
-from zipline.utils.functional import invert
-from zipline.utils.memoize import lazyval
-from zipline.utils.numpy_utils import as_column
-from zipline.utils.preprocess import preprocess
-from zipline.utils.sqlite_utils import group_into_chunks, coerce_string_to_eng
 
-log = Logger('assets.py')
+log = logging.getLogger("assets.py")
 
 # A set of fields that need to be converted to strings before building an
 # Asset to avoid unicode fields
-_asset_str_fields = frozenset({
-    'symbol',
-    'asset_name',
-    'exchange',
-})
+# _asset_str_fields = frozenset(
+#     {
+#         "symbol",
+#         "asset_name",
+#         "exchange",
+#     }
+# )
 
 # A set of fields that need to be converted to timestamps in UTC
-_asset_timestamp_fields = frozenset({
-    'start_date',
-    'end_date',
-    'first_traded',
-    'notice_date',
-    'expiration_date',
-    'auto_close_date',
-})
+_asset_timestamp_fields = frozenset(
+    {
+        "start_date",
+        "end_date",
+        "first_traded",
+        "notice_date",
+        "expiration_date",
+        "auto_close_date",
+    }
+)
 
-OwnershipPeriod = namedtuple('OwnershipPeriod', 'start end sid value')
+OwnershipPeriod = namedtuple("OwnershipPeriod", "start end sid value")
 
 
 def merge_ownership_periods(mappings):
-    """
-    Given a dict of mappings where the values are lists of
+    """Given a dict of mappings where the values are lists of
     OwnershipPeriod objects, returns a dict with the same structure with
     new OwnershipPeriod objects adjusted so that the periods have no
     gaps.
@@ -119,18 +117,21 @@ def merge_ownership_periods(mappings):
                 b.start,
                 a.sid,
                 a.value,
-            ) for a, b in sliding_window(
+            )
+            for a, b in sliding_window(
                 2,
                 concatv(
                     sorted(v),
                     # concat with a fake ownership object to make the last
                     # end date be max timestamp
-                    [OwnershipPeriod(
-                        pd.Timestamp.max.tz_localize('utc'),
-                        None,
-                        None,
-                        None,
-                    )],
+                    [
+                        OwnershipPeriod(
+                            pd.Timestamp.max,
+                            None,
+                            None,
+                            None,
+                        )
+                    ],
                 ),
             )
         ),
@@ -146,8 +147,11 @@ def _build_ownership_map_from_rows(rows, key_from_row, value_from_row):
             [],
         ).append(
             OwnershipPeriod(
-                pd.Timestamp(row.start_date, unit='ns', tz='utc'),
-                pd.Timestamp(row.end_date, unit='ns', tz='utc'),
+                # TODO FIX TZ MESS
+                # pd.Timestamp(row.start_date, unit="ns", tz="utc"),
+                # pd.Timestamp(row.end_date, unit="ns", tz="utc"),
+                pd.Timestamp(row.start_date, unit="ns", tz=None),
+                pd.Timestamp(row.end_date, unit="ns", tz=None),
                 row.sid,
                 value_from_row(row),
             ),
@@ -156,28 +160,23 @@ def _build_ownership_map_from_rows(rows, key_from_row, value_from_row):
     return merge_ownership_periods(mappings)
 
 
-def build_ownership_map(table, key_from_row, value_from_row):
-    """
-    Builds a dict mapping to lists of OwnershipPeriods, from a db table.
-    """
+def build_ownership_map(conn, table, key_from_row, value_from_row):
+    """Builds a dict mapping to lists of OwnershipPeriods, from a db table."""
     return _build_ownership_map_from_rows(
-        sa.select(table.c).execute().fetchall(),
+        conn.execute(sa.select(table.c)).fetchall(),
         key_from_row,
         value_from_row,
     )
 
 
-def build_grouped_ownership_map(table,
-                                key_from_row,
-                                value_from_row,
-                                group_key):
-    """
-    Builds a dict mapping group keys to maps of keys to to lists of
+def build_grouped_ownership_map(conn, table, key_from_row, value_from_row, group_key):
+    """Builds a dict mapping group keys to maps of keys to lists of
     OwnershipPeriods, from a db table.
     """
+
     grouped_rows = groupby(
         group_key,
-        sa.select(table.c).execute().fetchall(),
+        conn.execute(sa.select(table.c)).fetchall(),
     )
     return {
         key: _build_ownership_map_from_rows(
@@ -214,12 +213,12 @@ _filter_equity_kwargs = _filter_kwargs(Equity._kwargnames)
 
 
 def _convert_asset_timestamp_fields(dict_):
-    """
-    Takes in a dict of Asset init args and converts dates to pd.Timestamps
-    """
-    for key in _asset_timestamp_fields & viewkeys(dict_):
-        value = pd.Timestamp(dict_[key], tz='UTC')
-        dict_[key] = None if isnull(value) else value
+    """Takes in a dict of Asset init args and converts dates to pd.Timestamps"""
+    for key in _asset_timestamp_fields & dict_.keys():
+        # TODO FIX TZ MESS
+        # value = pd.Timestamp(dict_[key], tz="UTC")
+        value = pd.Timestamp(dict_[key], tz=None)
+        dict_[key] = None if pd.isnull(value) else value
     return dict_
 
 
@@ -229,53 +228,34 @@ SID_TYPE_IDS = {
 }
 
 CONTINUOUS_FUTURE_ROLL_STYLE_IDS = {
-    'calendar': 0,
-    'volume': 1,
+    "calendar": 0,
+    "volume": 1,
 }
 
 CONTINUOUS_FUTURE_ADJUSTMENT_STYLE_IDS = {
     None: 0,
-    'div': 1,
-    'add': 2,
+    "div": 1,
+    "add": 2,
 }
 
 
-def _encode_continuous_future_sid(root_symbol,
-                                  offset,
-                                  roll_style,
-                                  adjustment_style):
-    s = struct.Struct("B 2B B B B 2B")
-    # B - sid type
-    # 2B - root symbol
-    # B - offset (could be packed smaller since offsets of greater than 12 are
-    #             probably unneeded.)
-    # B - roll type
-    # B - adjustment
-    # 2B - empty space left for parameterized roll types
-
-    # The root symbol currently supports 2 characters.  If 3 char root symbols
-    # are needed, the size of the root symbol does not need to change, however
-    # writing the string directly will need to change to a scheme of writing
-    # the A-Z values in 5-bit chunks.
-    a = array.array('B', [0] * s.size)
-    rs = bytearray(root_symbol, 'ascii')
-    values = (SID_TYPE_IDS[ContinuousFuture],
-              rs[0],
-              rs[1],
-              offset,
-              CONTINUOUS_FUTURE_ROLL_STYLE_IDS[roll_style],
-              CONTINUOUS_FUTURE_ADJUSTMENT_STYLE_IDS[adjustment_style],
-              0, 0)
-    s.pack_into(a, 0, *values)
-    return int(binascii.hexlify(a), 16)
+def _encode_continuous_future_sid(root_symbol, offset, roll_style, adjustment_style):
+    # Generate a unique int identifier
+    values = (
+        SID_TYPE_IDS[ContinuousFuture],
+        offset,
+        *[ord(x) for x in root_symbol.upper()],
+        CONTINUOUS_FUTURE_ROLL_STYLE_IDS[roll_style],
+        CONTINUOUS_FUTURE_ADJUSTMENT_STYLE_IDS[adjustment_style],
+    )
+    return int("".join([str(x) for x in values]))
 
 
-Lifetimes = namedtuple('Lifetimes', 'sid start end')
+Lifetimes = namedtuple("Lifetimes", "sid start end")
 
 
-class AssetFinder(object):
-    """
-    An AssetFinder is an interface to a database of Asset metadata written by
+class AssetFinder:
+    """An AssetFinder is an interface to a database of Asset metadata written by
     an ``AssetDBWriter``.
 
     This class provides methods for looking up assets by unique integer id or
@@ -295,16 +275,19 @@ class AssetFinder(object):
     --------
     :class:`zipline.assets.AssetDBWriter`
     """
+
     @preprocess(engine=coerce_string_to_eng(require_exists=True))
     def __init__(self, engine, future_chain_predicates=CHAIN_PREDICATES):
         self.engine = engine
-        metadata = sa.MetaData(bind=engine)
-        metadata.reflect(only=asset_db_table_names)
+        self._should_close_engine = isinstance(engine, str)
+        metadata_obj = sa.MetaData()
+        metadata_obj.reflect(engine, only=asset_db_table_names)
         for table_name in asset_db_table_names:
-            setattr(self, table_name, metadata.tables[table_name])
+            setattr(self, table_name, metadata_obj.tables[table_name])
 
         # Check the version info of the db for compatibility
-        check_version_info(engine, self.version_info, ASSET_DB_VERSION)
+        with engine.connect() as conn:
+            check_version_info(conn, self.version_info, ASSET_DB_VERSION)
 
         # Cache for lookup of assets by sid, the objects in the asset lookup
         # may be shared with the results from equity and future lookup caches.
@@ -318,16 +301,23 @@ class AssetFinder(object):
         self._asset_type_cache = {}
         self._caches = (self._asset_cache, self._asset_type_cache)
 
-        self._future_chain_predicates = future_chain_predicates \
-            if future_chain_predicates is not None else {}
+        self._future_chain_predicates = (
+            future_chain_predicates if future_chain_predicates is not None else {}
+        )
         self._ordered_contracts = {}
 
         # Populated on first call to `lifetimes`.
         self._asset_lifetimes = {}
 
+    def close(self):
+        """Close the underlying SQLAlchemy engine if we created it from a string path."""
+        if hasattr(self, "_should_close_engine") and self._should_close_engine:
+            self.engine.dispose()
+
     @lazyval
     def exchange_info(self):
-        es = sa.select(self.exchanges.c).execute().fetchall()
+        with self.engine.connect() as conn:
+            es = conn.execute(sa.select(self.exchanges.c)).fetchall()
         return {
             name: ExchangeInfo(name, canonical_name, country_code)
             for name, canonical_name, country_code in es
@@ -344,23 +334,20 @@ class AssetFinder(object):
 
     @lazyval
     def symbol_ownership_maps_by_country_code(self):
-        sid_to_country_code = dict(
-            sa.select((
+        with self.engine.connect() as conn:
+            query = sa.select(
                 self.equities.c.sid,
                 self.exchanges.c.country_code,
-            )).where(
-                self.equities.c.exchange == self.exchanges.c.exchange
-            ).execute().fetchall(),
-        )
+            ).where(self.equities.c.exchange == self.exchanges.c.exchange)
+            sid_to_country_code = dict(conn.execute(query).fetchall())
 
-        return build_grouped_ownership_map(
-            table=self.equity_symbol_mappings,
-            key_from_row=(
-                lambda row: (row.company_symbol, row.share_class_symbol)
-            ),
-            value_from_row=lambda row: row.symbol,
-            group_key=lambda row: sid_to_country_code[row.sid],
-        )
+            return build_grouped_ownership_map(
+                conn,
+                table=self.equity_symbol_mappings,
+                key_from_row=(lambda row: (row.company_symbol, row.share_class_symbol)),
+                value_from_row=lambda row: row.symbol,
+                group_key=lambda row: sid_to_country_code[row.sid],
+            )
 
     @lazyval
     def country_codes(self):
@@ -369,7 +356,7 @@ class AssetFinder(object):
     @staticmethod
     def _fuzzify_symbol_ownership_map(ownership_map):
         fuzzy_mappings = {}
-        for (cs, scs), owners in iteritems(ownership_map):
+        for (cs, scs), owners in ownership_map.items():
             fuzzy_owners = fuzzy_mappings.setdefault(
                 cs + scs,
                 [],
@@ -391,23 +378,26 @@ class AssetFinder(object):
 
     @lazyval
     def equity_supplementary_map(self):
-        return build_ownership_map(
-            table=self.equity_supplementary_mappings,
-            key_from_row=lambda row: (row.field, row.value),
-            value_from_row=lambda row: row.value,
-        )
+        with self.engine.connect() as conn:
+            return build_ownership_map(
+                conn,
+                table=self.equity_supplementary_mappings,
+                key_from_row=lambda row: (row.field, row.value),
+                value_from_row=lambda row: row.value,
+            )
 
     @lazyval
     def equity_supplementary_map_by_sid(self):
-        return build_ownership_map(
-            table=self.equity_supplementary_mappings,
-            key_from_row=lambda row: (row.field, row.sid),
-            value_from_row=lambda row: row.value,
-        )
+        with self.engine.connect() as conn:
+            return build_ownership_map(
+                conn,
+                table=self.equity_supplementary_mappings,
+                key_from_row=lambda row: (row.field, row.sid),
+                value_from_row=lambda row: row.value,
+            )
 
     def lookup_asset_types(self, sids):
-        """
-        Retrieve asset types for a list of sids.
+        """Retrieve asset types for a list of sids.
 
         Parameters
         ----------
@@ -432,22 +422,22 @@ class AssetFinder(object):
 
         router_cols = self.asset_router.c
 
-        for assets in group_into_chunks(missing):
-            query = sa.select((router_cols.sid, router_cols.asset_type)).where(
-                self.asset_router.c.sid.in_(map(int, assets))
-            )
-            for sid, type_ in query.execute().fetchall():
-                missing.remove(sid)
-                found[sid] = self._asset_type_cache[sid] = type_
+        with self.engine.connect() as conn:
+            for assets in group_into_chunks(missing):
+                query = sa.select(router_cols.sid, router_cols.asset_type).where(
+                    self.asset_router.c.sid.in_(map(int, assets))
+                )
+                for sid, type_ in conn.execute(query).fetchall():
+                    missing.remove(sid)
+                    found[sid] = self._asset_type_cache[sid] = type_
 
-            for sid in missing:
-                found[sid] = self._asset_type_cache[sid] = None
+                for sid in missing:
+                    found[sid] = self._asset_type_cache[sid] = None
 
         return found
 
     def group_by_type(self, sids):
-        """
-        Group a list of sids by asset type.
+        """Group a list of sids by asset type.
 
         Parameters
         ----------
@@ -474,8 +464,7 @@ class AssetFinder(object):
             return self.retrieve_all((sid,), default_none=default_none)[0]
 
     def retrieve_all(self, sids, default_none=False):
-        """
-        Retrieve all assets in `sids`.
+        """Retrieve all assets in `sids`.
 
         Parameters
         ----------
@@ -528,22 +517,17 @@ class AssetFinder(object):
 
         # We don't update the asset cache here because it should already be
         # updated by `self.retrieve_equities`.
-        update_hits(self.retrieve_equities(type_to_assets.pop('equity', ())))
-        update_hits(
-            self.retrieve_futures_contracts(type_to_assets.pop('future', ()))
-        )
+        update_hits(self.retrieve_equities(type_to_assets.pop("equity", ())))
+        update_hits(self.retrieve_futures_contracts(type_to_assets.pop("future", ())))
 
         # We shouldn't know about any other asset types.
         if type_to_assets:
-            raise AssertionError(
-                "Found asset types: %s" % list(type_to_assets.keys())
-            )
+            raise AssertionError("Found asset types: %s" % list(type_to_assets.keys()))
 
         return [hits[sid] for sid in sids]
 
     def retrieve_equities(self, sids):
-        """
-        Retrieve Equity objects for a list of sids.
+        """Retrieve Equity objects for a list of sids.
 
         Users generally shouldn't need to this method (instead, they should
         prefer the more general/friendly `retrieve_assets`), but it has a
@@ -568,8 +552,7 @@ class AssetFinder(object):
         return self.retrieve_equities((sid,))[sid]
 
     def retrieve_futures_contracts(self, sids):
-        """
-        Retrieve Future objects for an iterable of sids.
+        """Retrieve Future objects for an iterable of sids.
 
         Users generally shouldn't need to this method (instead, they should
         prefer the more general/friendly `retrieve_assets`), but it has a
@@ -592,13 +575,11 @@ class AssetFinder(object):
 
     @staticmethod
     def _select_assets_by_sid(asset_tbl, sids):
-        return sa.select([asset_tbl]).where(
-            asset_tbl.c.sid.in_(map(int, sids))
-        )
+        return sa.select(asset_tbl).where(asset_tbl.c.sid.in_(map(int, sids)))
 
     @staticmethod
     def _select_asset_by_symbol(asset_tbl, symbol):
-        return sa.select([asset_tbl]).where(asset_tbl.c.symbol == symbol)
+        return sa.select(asset_tbl).where(asset_tbl.c.symbol == symbol)
 
     def _select_most_recent_symbols_chunk(self, sid_group):
         """Retrieve the most recent symbol for a set of sids.
@@ -627,71 +608,76 @@ class AssetFinder(object):
         cols = self.equity_symbol_mappings.c
 
         # These are the columns we actually want.
-        data_cols = (cols.sid,) + tuple(cols[name] for name in symbol_columns)
+        data_cols = (cols.sid,) + tuple(cols[name] for name in SYMBOL_COLUMNS)
 
         # Also select the max of end_date so that all non-grouped fields take
-        # on the value associated with the max end_date. The SQLite docs say
-        # this:
-        #
-        # When the min() or max() aggregate functions are used in an aggregate
-        # query, all bare columns in the result set take values from the input
-        # row which also contains the minimum or maximum. Only the built-in
-        # min() and max() functions work this way.
-        #
-        # See https://www.sqlite.org/lang_select.html#resultset, for more info.
-        to_select = data_cols + (sa.func.max(cols.end_date),)
-
-        return sa.select(
-            to_select,
-        ).where(
-            cols.sid.in_(map(int, sid_group))
-        ).group_by(
-            cols.sid,
+        # on the value associated with the max end_date.
+        # to_select = data_cols + (sa.func.max(cols.end_date),)
+        func_rank = (
+            sa.func.rank()
+            .over(order_by=cols.end_date.desc(), partition_by=cols.sid)
+            .label("rnk")
         )
+        to_select = data_cols + (func_rank,)
+
+        subquery = (
+            sa.select(*to_select)
+            .where(cols.sid.in_(map(int, sid_group)))
+            .subquery("sq")
+        )
+        query = (
+            sa.select(subquery.columns)
+            .filter(subquery.c.rnk == 1)
+            .select_from(subquery)
+        )
+        return query
 
     def _lookup_most_recent_symbols(self, sids):
-        return {
-            row.sid: {c: row[c] for c in symbol_columns}
-            for row in concat(
-                self.engine.execute(
-                    self._select_most_recent_symbols_chunk(sid_group),
-                ).fetchall()
-                for sid_group in partition_all(
-                    SQLITE_MAX_VARIABLE_NUMBER,
-                    sids
+        with self.engine.connect() as conn:
+            return {
+                row.sid: {c: row[c] for c in SYMBOL_COLUMNS}
+                for row in concat(
+                    conn.execute(self._select_most_recent_symbols_chunk(sid_group))
+                    .mappings()
+                    .fetchall()
+                    for sid_group in partition_all(SQLITE_MAX_VARIABLE_NUMBER, sids)
                 )
-            )
-        }
+            }
 
     def _retrieve_asset_dicts(self, sids, asset_tbl, querying_equities):
         if not sids:
             return
 
         if querying_equities:
-            def mkdict(row,
-                       exchanges=self.exchange_info,
-                       symbols=self._lookup_most_recent_symbols(sids)):
+
+            def mkdict(
+                row,
+                exchanges=self.exchange_info,
+                symbols=self._lookup_most_recent_symbols(sids),
+            ):
                 d = dict(row)
-                d['exchange_info'] = exchanges[d.pop('exchange')]
+                d["exchange_info"] = exchanges[d.pop("exchange")]
                 # we are not required to have a symbol for every asset, if
                 # we don't have any symbols we will just use the empty string
-                return merge(d, symbols.get(row['sid'], {}))
+                return merge(d, symbols.get(row["sid"], {}))
+
         else:
+
             def mkdict(row, exchanges=self.exchange_info):
                 d = dict(row)
-                d['exchange_info'] = exchanges[d.pop('exchange')]
+                d["exchange_info"] = exchanges[d.pop("exchange")]
                 return d
 
         for assets in group_into_chunks(sids):
             # Load misses from the db.
             query = self._select_assets_by_sid(asset_tbl, assets)
 
-            for row in query.execute().fetchall():
-                yield _convert_asset_timestamp_fields(mkdict(row))
+            with self.engine.connect() as conn:
+                for row in conn.execute(query).mappings().fetchall():
+                    yield _convert_asset_timestamp_fields(mkdict(row))
 
     def _retrieve_assets(self, sids, asset_tbl, asset_type):
-        """
-        Internal function for loading assets from a table.
+        """Internal function for loading assets from a table.
 
         This should be the only method of `AssetFinder` that writes Assets into
         self._asset_cache.
@@ -719,14 +705,12 @@ class AssetFinder(object):
 
         querying_equities = issubclass(asset_type, Equity)
         filter_kwargs = (
-            _filter_equity_kwargs
-            if querying_equities else
-            _filter_future_kwargs
+            _filter_equity_kwargs if querying_equities else _filter_future_kwargs
         )
 
         rows = self._retrieve_asset_dicts(sids, asset_tbl, querying_equities)
         for row in rows:
-            sid = row['sid']
+            sid = row["sid"]
             asset = asset_type(**filter_kwargs(row))
             hits[sid] = cache[sid] = asset
 
@@ -734,7 +718,7 @@ class AssetFinder(object):
         # particular sid was an equity/future and called this function with a
         # concrete type, but we couldn't actually resolve the asset.  This is
         # an error in our code, not a user-input error.
-        misses = tuple(set(sids) - viewkeys(hits))
+        misses = tuple(set(sids) - hits.keys())
         if misses:
             if querying_equities:
                 raise EquitiesNotFound(sids=misses)
@@ -742,13 +726,8 @@ class AssetFinder(object):
                 raise FutureContractsNotFound(sids=misses)
         return hits
 
-    def _lookup_symbol_strict(self,
-                              ownership_map,
-                              multi_country,
-                              symbol,
-                              as_of_date):
-        """
-        Resolve a symbol to an asset object without fuzzy matching.
+    def _lookup_symbol_strict(self, ownership_map, multi_country, symbol, as_of_date):
+        """Resolve a symbol to an asset object without fuzzy matching.
 
         Parameters
         ----------
@@ -811,10 +790,10 @@ class AssetFinder(object):
         company_symbol, share_class_symbol = split_delimited_symbol(symbol)
         try:
             owners = ownership_map[company_symbol, share_class_symbol]
-            assert owners, 'empty owners list for %r' % symbol
-        except KeyError:
+            assert owners, "empty owners list for %r" % symbol
+        except KeyError as exc:
             # no equity has ever held this symbol
-            raise SymbolNotFound(symbol=symbol)
+            raise SymbolNotFound(symbol=symbol) from exc
 
         if not as_of_date:
             # exactly one equity has ever held this symbol, we may resolve
@@ -825,12 +804,11 @@ class AssetFinder(object):
             options = {self.retrieve_asset(owner.sid) for owner in owners}
 
             if multi_country:
-                country_codes = map(attrgetter('country_code'), options)
+                country_codes = [asset.country_code for asset in options]
 
                 if len(set(country_codes)) > 1:
                     raise SameSymbolUsedAcrossCountries(
-                        symbol=symbol,
-                        options=dict(zip(country_codes, options))
+                        symbol=symbol, options=dict(zip(country_codes, options))
                     )
 
             # more than one equity has held this ticker, this
@@ -863,23 +841,18 @@ class AssetFinder(object):
         # if there's more than one option given the asof date, a country code
         # must be passed to resolve the symbol to an asset
         raise SameSymbolUsedAcrossCountries(
-            symbol=symbol,
-            options=dict(zip(country_codes, options))
+            symbol=symbol, options=dict(zip(country_codes, options))
         )
 
-    def _lookup_symbol_fuzzy(self,
-                             ownership_map,
-                             multi_country,
-                             symbol,
-                             as_of_date):
+    def _lookup_symbol_fuzzy(self, ownership_map, multi_country, symbol, as_of_date):
         symbol = symbol.upper()
         company_symbol, share_class_symbol = split_delimited_symbol(symbol)
         try:
             owners = ownership_map[company_symbol + share_class_symbol]
-            assert owners, 'empty owners list for %r' % symbol
-        except KeyError:
+            assert owners, "empty owners list for %r" % symbol
+        except KeyError as exc:
             # no equity has ever held a symbol matching the fuzzy symbol
-            raise SymbolNotFound(symbol=symbol)
+            raise SymbolNotFound(symbol=symbol) from exc
 
         if not as_of_date:
             if len(owners) == 1:
@@ -923,8 +896,7 @@ class AssetFinder(object):
             # Possible to have a scenario where multiple fuzzy matches have the
             # same date. Want to find the one where symbol and share class
             # match.
-            if ((company_symbol, share_class_symbol) ==
-                    split_delimited_symbol(sym)):
+            if (company_symbol, share_class_symbol) == split_delimited_symbol(sym):
                 asset = self.retrieve_asset(sid)
                 if not multi_country:
                     return asset
@@ -955,18 +927,14 @@ class AssetFinder(object):
 
         return self.symbol_ownership_maps_by_country_code.get(country_code)
 
-    def lookup_symbol(self,
-                      symbol,
-                      as_of_date,
-                      fuzzy=False,
-                      country_code=None):
+    def lookup_symbol(self, symbol, as_of_date, fuzzy=False, country_code=None):
         """Lookup an equity by symbol.
 
         Parameters
         ----------
         symbol : str
             The ticker symbol to resolve.
-        as_of_date : datetime or None
+        as_of_date : datetime.datetime or None
             Look up the last owner of this symbol as of this datetime.
             If ``as_of_date`` is None, then this can only resolve the equity
             if exactly one equity has ever owned the ticker.
@@ -999,8 +967,10 @@ class AssetFinder(object):
             the symbol is ambiguous across multiple countries.
         """
         if symbol is None:
-            raise TypeError("Cannot lookup asset for symbol of None for "
-                            "as of date %s." % as_of_date)
+            raise TypeError(
+                "Cannot lookup asset for symbol of None for "
+                "as of date %s." % as_of_date
+            )
 
         if fuzzy:
             f = self._lookup_symbol_fuzzy
@@ -1018,13 +988,8 @@ class AssetFinder(object):
             as_of_date,
         )
 
-    def lookup_symbols(self,
-                       symbols,
-                       as_of_date,
-                       fuzzy=False,
-                       country_code=None):
-        """
-        Lookup a list of equities by symbol.
+    def lookup_symbols(self, symbols, as_of_date, fuzzy=False, country_code=None):
+        """Lookup a list of equities by symbol.
 
         Equivalent to::
 
@@ -1098,14 +1063,19 @@ class AssetFinder(object):
             Raised when no contract named 'symbol' is found.
 
         """
-
-        data = self._select_asset_by_symbol(self.futures_contracts, symbol)\
-                   .execute().fetchone()
+        with self.engine.connect() as conn:
+            data = (
+                conn.execute(
+                    self._select_asset_by_symbol(self.futures_contracts, symbol)
+                )
+                .mappings()
+                .fetchone()
+            )
 
         # If no data found, raise an exception
         if not data:
             raise SymbolNotFound(symbol=symbol)
-        return self.retrieve_asset(data['sid'])
+        return self.retrieve_asset(data["sid"])
 
     def lookup_by_supplementary_field(self, field_name, value, as_of_date):
         try:
@@ -1113,10 +1083,13 @@ class AssetFinder(object):
                 field_name,
                 value,
             ]
-            assert owners, 'empty owners list for %r' % (field_name, value)
-        except KeyError:
+            assert owners, "empty owners list for field %r (sid: %r)" % (
+                field_name,
+                value,
+            )
+        except KeyError as exc:
             # no equity has ever held this value
-            raise ValueNotFoundForField(field=field_name, value=value)
+            raise ValueNotFoundForField(field=field_name, value=value) from exc
 
         if not as_of_date:
             if len(owners) > 1:
@@ -1125,10 +1098,12 @@ class AssetFinder(object):
                 raise MultipleValuesFoundForField(
                     field=field_name,
                     value=value,
-                    options=set(map(
-                        compose(self.retrieve_asset, attrgetter('sid')),
-                        owners,
-                    )),
+                    options=set(
+                        map(
+                            compose(self.retrieve_asset, attrgetter("sid")),
+                            owners,
+                        )
+                    ),
                 )
             # exactly one equity has ever held this value, we may resolve
             # without the date
@@ -1171,9 +1146,12 @@ class AssetFinder(object):
                 field_name,
                 sid,
             ]
-            assert periods, 'empty periods list for %r' % (field_name, sid)
+            assert periods, "empty periods list for field %r and sid %r" % (
+                field_name,
+                sid,
+            )
         except KeyError:
-            raise NoValueForSid(field=field_name, sid=sid)
+            raise NoValueForSid(field=field_name, sid=sid) from KeyError
 
         if not as_of_date:
             if len(periods) > 1:
@@ -1197,20 +1175,30 @@ class AssetFinder(object):
 
     def _get_contract_sids(self, root_symbol):
         fc_cols = self.futures_contracts.c
-
-        return [r.sid for r in
-                list(sa.select((fc_cols.sid,)).where(
-                    (fc_cols.root_symbol == root_symbol) &
-                    (fc_cols.start_date != pd.NaT.value)).order_by(
-                        fc_cols.sid).execute().fetchall())]
+        with self.engine.connect() as conn:
+            return (
+                conn.execute(
+                    sa.select(
+                        fc_cols.sid,
+                    )
+                    .where(
+                        (fc_cols.root_symbol == root_symbol)
+                        & (fc_cols.start_date != pd.NaT.value)
+                    )
+                    .order_by(fc_cols.sid)
+                )
+                .scalars()
+                .fetchall()
+            )
 
     def _get_root_symbol_exchange(self, root_symbol):
         fc_cols = self.futures_root_symbols.c
-
         fields = (fc_cols.exchange,)
 
-        exchange = sa.select(fields).where(
-            fc_cols.root_symbol == root_symbol).execute().scalar()
+        with self.engine.connect() as conn:
+            exchange = conn.execute(
+                sa.select(*fields).where(fc_cols.root_symbol == root_symbol)
+            ).scalar()
 
         if exchange is not None:
             return exchange
@@ -1223,35 +1211,24 @@ class AssetFinder(object):
         except KeyError:
             contract_sids = self._get_contract_sids(root_symbol)
             contracts = deque(self.retrieve_all(contract_sids))
-            chain_predicate = self._future_chain_predicates.get(root_symbol,
-                                                                None)
+            chain_predicate = self._future_chain_predicates.get(root_symbol, None)
             oc = OrderedContracts(root_symbol, contracts, chain_predicate)
             self._ordered_contracts[root_symbol] = oc
             return oc
 
-    def create_continuous_future(self,
-                                 root_symbol,
-                                 offset,
-                                 roll_style,
-                                 adjustment):
+    def create_continuous_future(self, root_symbol, offset, roll_style, adjustment):
         if adjustment not in ADJUSTMENT_STYLES:
             raise ValueError(
-                'Invalid adjustment style {!r}. Allowed adjustment styles are '
-                '{}.'.format(adjustment, list(ADJUSTMENT_STYLES))
+                f"Invalid adjustment style {adjustment!r}. Allowed adjustment styles are "
+                f"{list(ADJUSTMENT_STYLES)}."
             )
 
         oc = self.get_ordered_contracts(root_symbol)
         exchange = self._get_root_symbol_exchange(root_symbol)
 
-        sid = _encode_continuous_future_sid(root_symbol, offset,
-                                            roll_style,
-                                            None)
-        mul_sid = _encode_continuous_future_sid(root_symbol, offset,
-                                                roll_style,
-                                                'div')
-        add_sid = _encode_continuous_future_sid(root_symbol, offset,
-                                                roll_style,
-                                                'add')
+        sid = _encode_continuous_future_sid(root_symbol, offset, roll_style, None)
+        mul_sid = _encode_continuous_future_sid(root_symbol, offset, roll_style, "div")
+        add_sid = _encode_continuous_future_sid(root_symbol, offset, roll_style, "add")
 
         cf_template = partial(
             ContinuousFuture,
@@ -1264,46 +1241,41 @@ class AssetFinder(object):
         )
 
         cf = cf_template(sid=sid)
-        mul_cf = cf_template(sid=mul_sid, adjustment='mul')
-        add_cf = cf_template(sid=add_sid, adjustment='add')
+        mul_cf = cf_template(sid=mul_sid, adjustment="mul")
+        add_cf = cf_template(sid=add_sid, adjustment="add")
 
         self._asset_cache[cf.sid] = cf
         self._asset_cache[mul_cf.sid] = mul_cf
         self._asset_cache[add_cf.sid] = add_cf
 
-        return {None: cf, 'mul': mul_cf, 'add': add_cf}[adjustment]
+        return {None: cf, "mul": mul_cf, "add": add_cf}[adjustment]
 
     def _make_sids(tblattr):
         def _(self):
-            return tuple(map(
-                itemgetter('sid'),
-                sa.select((
-                    getattr(self, tblattr).c.sid,
-                )).execute().fetchall(),
-            ))
+            with self.engine.connect() as conn:
+                return tuple(
+                    conn.execute(sa.select(getattr(self, tblattr).c.sid))
+                    .scalars()
+                    .fetchall()
+                )
 
         return _
 
     sids = property(
-        _make_sids('asset_router'),
-        doc='All the sids in the asset finder.',
+        _make_sids("asset_router"),
+        doc="All the sids in the asset finder.",
     )
     equities_sids = property(
-        _make_sids('equities'),
-        doc='All of the sids for equities in the asset finder.',
+        _make_sids("equities"),
+        doc="All of the sids for equities in the asset finder.",
     )
     futures_sids = property(
-        _make_sids('futures_contracts'),
-        doc='All of the sids for futures consracts in the asset finder.',
+        _make_sids("futures_contracts"),
+        doc="All of the sids for futures consracts in the asset finder.",
     )
     del _make_sids
 
-    def _lookup_generic_scalar(self,
-                               obj,
-                               as_of_date,
-                               country_code,
-                               matches,
-                               missing):
+    def _lookup_generic_scalar(self, obj, as_of_date, country_code, matches, missing):
         """
         Convert asset_convertible to an asset.
 
@@ -1311,7 +1283,9 @@ class AssetFinder(object):
         On failure, append to missing.
         """
         result = self._lookup_generic_scalar_helper(
-            obj, as_of_date, country_code,
+            obj,
+            as_of_date,
+            country_code,
         )
         if result is not None:
             matches.append(result)
@@ -1319,7 +1293,6 @@ class AssetFinder(object):
             missing.append(obj)
 
     def _lookup_generic_scalar_helper(self, obj, as_of_date, country_code):
-
         if isinstance(obj, (Asset, ContinuousFuture)):
             return obj
 
@@ -1329,13 +1302,11 @@ class AssetFinder(object):
             except SidsNotFound:
                 return None
 
-        if isinstance(obj, string_types):
+        if isinstance(obj, str):
             # Try to look up as an equity first.
             try:
                 return self.lookup_symbol(
-                    symbol=obj,
-                    as_of_date=as_of_date,
-                    country_code=country_code
+                    symbol=obj, as_of_date=as_of_date, country_code=country_code
                 )
             except SymbolNotFound:
                 # Fall back to lookup as a Future
@@ -1348,8 +1319,7 @@ class AssetFinder(object):
         raise NotAssetConvertible("Input was %s, not AssetConvertible." % obj)
 
     def lookup_generic(self, obj, as_of_date, country_code):
-        """
-        Convert an object into an Asset or sequence of Assets.
+        """Convert an object into an Asset or sequence of Assets.
 
         This method exists primarily as a convenience for implementing
         user-facing APIs that can handle multiple kinds of input.  It should
@@ -1391,19 +1361,18 @@ class AssetFinder(object):
             try:
                 return matches[0], missing
             except IndexError:
-                if hasattr(obj, '__int__'):
-                    raise SidsNotFound(sids=[obj])
+                if hasattr(obj, "__int__"):
+                    raise SidsNotFound(sids=[obj]) from IndexError
                 else:
-                    raise SymbolNotFound(symbol=obj)
+                    raise SymbolNotFound(symbol=obj) from IndexError
 
         # Interpret input as iterable.
         try:
             iterator = iter(obj)
         except TypeError:
             raise NotAssetConvertible(
-                "Input was not a AssetConvertible "
-                "or iterable of AssetConvertible."
-            )
+                "Input was not a AssetConvertible or iterable of AssetConvertible."
+            ) from TypeError
 
         for obj in iterator:
             self._lookup_generic_scalar(
@@ -1416,34 +1385,39 @@ class AssetFinder(object):
 
         return matches, missing
 
-    def _compute_asset_lifetimes(self, country_codes):
-        """
-        Compute and cache a recarray of asset lifetimes.
-        """
+    def _compute_asset_lifetimes(self, **kwargs):
+        """Compute and cache a recarray of asset lifetimes"""
         sids = starts = ends = []
         equities_cols = self.equities.c
-        if country_codes:
-            results = sa.select((
-                equities_cols.sid,
-                equities_cols.start_date,
-                equities_cols.end_date,
-            )).where(
-                (self.exchanges.c.exchange == equities_cols.exchange) &
-                (self.exchanges.c.country_code.in_(country_codes))
-            ).execute().fetchall()
+        exchanges_cols = self.exchanges.c
+        if len(kwargs) == 1:
+            if "country_codes" in kwargs.keys():
+                condt = exchanges_cols.country_code.in_(kwargs["country_codes"])
+            if "exchange_names" in kwargs.keys():
+                condt = exchanges_cols.exchange.in_(kwargs["exchange_names"])
+
+            with self.engine.connect() as conn:
+                results = conn.execute(
+                    sa.select(
+                        equities_cols.sid,
+                        equities_cols.start_date,
+                        equities_cols.end_date,
+                    ).where(
+                        (exchanges_cols.exchange == equities_cols.exchange) & (condt)
+                    )
+                ).fetchall()
             if results:
                 sids, starts, ends = zip(*results)
 
-        sid = np.array(sids, dtype='i8')
-        start = np.array(starts, dtype='f8')
-        end = np.array(ends, dtype='f8')
+        sid = np.array(sids, dtype="i8")
+        start = np.array(starts, dtype="f8")
+        end = np.array(ends, dtype="f8")
         start[np.isnan(start)] = 0  # convert missing starts to 0
         end[np.isnan(end)] = np.iinfo(int).max  # convert missing end to INTMAX
-        return Lifetimes(sid, start.astype('i8'), end.astype('i8'))
+        return Lifetimes(sid, start.astype("i8"), end.astype("i8"))
 
     def lifetimes(self, dates, include_start_date, country_codes):
-        """
-        Compute a DataFrame representing asset lifetimes for the specified date
+        """Compute a DataFrame representing asset lifetimes for the specified date
         range.
 
         Parameters
@@ -1475,7 +1449,7 @@ class AssetFinder(object):
         numpy.putmask
         zipline.pipeline.engine.SimplePipelineEngine._compute_root_mask
         """
-        if isinstance(country_codes, string_types):
+        if isinstance(country_codes, str):
             raise TypeError(
                 "Got string {!r} instead of an iterable of strings in "
                 "AssetFinder.lifetimes.".format(country_codes),
@@ -1487,7 +1461,7 @@ class AssetFinder(object):
         lifetimes = self._asset_lifetimes.get(country_codes)
         if lifetimes is None:
             self._asset_lifetimes[country_codes] = lifetimes = (
-                self._compute_asset_lifetimes(country_codes)
+                self._compute_asset_lifetimes(country_codes=country_codes)
             )
 
         raw_dates = as_column(dates.asi8)
@@ -1495,7 +1469,7 @@ class AssetFinder(object):
             mask = lifetimes.start <= raw_dates
         else:
             mask = lifetimes.start < raw_dates
-        mask &= (raw_dates <= lifetimes.end)
+        mask &= raw_dates <= lifetimes.end
 
         return pd.DataFrame(mask, index=dates, columns=lifetimes.sid)
 
@@ -1512,37 +1486,51 @@ class AssetFinder(object):
         tuple[int]
             The sids whose exchanges are in this country.
         """
-        sids = self._compute_asset_lifetimes([country_code]).sid
+        sids = self._compute_asset_lifetimes(country_codes=[country_code]).sid
+        return tuple(sids.tolist())
+
+    def equities_sids_for_exchange_name(self, exchange_name):
+        """Return all of the sids for a given exchange_name.
+
+        Parameters
+        ----------
+        exchange_name : str
+
+        Returns
+        -------
+        tuple[int]
+            The sids whose exchanges are in this country.
+        """
+        sids = self._compute_asset_lifetimes(exchange_names=[exchange_name]).sid
         return tuple(sids.tolist())
 
 
-class AssetConvertible(with_metaclass(ABCMeta)):
+class AssetConvertible(ABC):
     """
     ABC for types that are convertible to integer-representations of
     Assets.
 
-    Includes Asset, six.string_types, and Integral
+    Includes Asset, str, and Integral
     """
+
     pass
 
 
 AssetConvertible.register(Integral)
 AssetConvertible.register(Asset)
-# Use six.string_types for Python2/3 compatibility
-for _type in string_types:
-    AssetConvertible.register(_type)
+AssetConvertible.register(str)
 
 
 class NotAssetConvertible(ValueError):
     pass
 
 
-class PricingDataAssociable(with_metaclass(ABCMeta)):
-    """
-    ABC for types that can be associated with pricing data.
+class PricingDataAssociable(ABC):
+    """ABC for types that can be associated with pricing data.
 
     Includes Asset, Future, ContinuousFuture
     """
+
     pass
 
 
@@ -1552,8 +1540,7 @@ PricingDataAssociable.register(ContinuousFuture)
 
 
 def was_active(reference_date_value, asset):
-    """
-    Whether or not `asset` was active at the time corresponding to
+    """Whether or not `asset` was active at the time corresponding to
     `reference_date_value`.
 
     Parameters
@@ -1570,16 +1557,11 @@ def was_active(reference_date_value, asset):
     was_active : bool
         Whether or not the `asset` existed at the specified time.
     """
-    return (
-        asset.start_date.value
-        <= reference_date_value
-        <= asset.end_date.value
-    )
+    return asset.start_date.value <= reference_date_value <= asset.end_date.value
 
 
 def only_active_assets(reference_date_value, assets):
-    """
-    Filter an iterable of Asset objects down to just assets that were alive at
+    """Filter an iterable of Asset objects down to just assets that were alive at
     the time corresponding to `reference_date_value`.
 
     Parameters

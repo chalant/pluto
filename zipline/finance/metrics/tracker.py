@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): MetricsTracker accepts an injected ledger.
 #
 # Copyright 2017 Quantopian, Inc.
 #
@@ -12,18 +13,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import division
-
-import logbook
+import logging
 
 from ..ledger import Ledger
 from zipline.utils.exploding_object import NamedExplodingObject
 
 
-log = logbook.Logger(__name__)
+log = logging.getLogger(__name__)
 
 
-class MetricsTracker(object):
+class MetricsTracker:
     """The algorithm's interface to the registered risk and performance
     metrics.
 
@@ -46,34 +45,40 @@ class MetricsTracker(object):
     metrics : list[Metric]
         The metrics to track.
     """
+
     _hooks = (
-        'start_of_simulation',
-        'end_of_simulation',
-
-        'start_of_session',
-        'end_of_session',
-
-        'end_of_bar',
+        "start_of_simulation",
+        "end_of_simulation",
+        "start_of_session",
+        "end_of_session",
+        "end_of_bar",
     )
 
     @staticmethod
     def _execution_open_and_close(calendar, session):
-        open_, close = calendar.open_and_close_for_session(session)
-        execution_open = calendar.execution_time_from_open(open_)
-        execution_close = calendar.execution_time_from_close(close)
+        if session.tzinfo is not None:
+            session = session.tz_localize(None)
+
+        open_ = calendar.session_first_minute(session)
+        close = calendar.session_close(session)
+
+        execution_open = open_
+        execution_close = close
 
         return execution_open, execution_close
 
-    def __init__(self,
-                 trading_calendar,
-                 first_session,
-                 last_session,
-                 capital_base,
-                 emission_rate,
-                 data_frequency,
-                 asset_finder,
-                 metrics,
-                 ledger=None):
+    def __init__(
+        self,
+        trading_calendar,
+        first_session,
+        last_session,
+        capital_base,
+        emission_rate,
+        data_frequency,
+        asset_finder,
+        metrics,
+        ledger=None,
+    ):
         self.emission_rate = emission_rate
 
         self._trading_calendar = trading_calendar
@@ -95,21 +100,23 @@ class MetricsTracker(object):
         )
         self._total_session_count = len(sessions)
 
-        if not ledger:
-            self._ledger = Ledger(sessions, capital_base, data_frequency)
-        else:
-            self._ledger = ledger
-
-        self._benchmark_source = NamedExplodingObject(
-            'self._benchmark_source',
-            '_benchmark_source is not set until ``handle_start_of_simulation``'
-            ' is called',
+        self._ledger = (
+            Ledger(sessions, capital_base, data_frequency) if ledger is None else ledger
         )
 
-        if emission_rate == 'minute':
+        self._benchmark_source = NamedExplodingObject(
+            "self._benchmark_source",
+            "_benchmark_source is not set until ``handle_start_of_simulation``"
+            " is called",
+        )
+
+        if emission_rate == "minute":
+
             def progress(self):
                 return 1.0  # a fake value
+
         else:
+
             def progress(self):
                 return self._session_count / self._total_session_count
 
@@ -160,12 +167,14 @@ class MetricsTracker(object):
     def positions(self):
         return self._ledger.position_tracker.positions
 
-    def update_position(self,
-                        asset,
-                        amount=None,
-                        last_sale_price=None,
-                        last_sale_date=None,
-                        cost_basis=None):
+    def update_position(
+        self,
+        asset,
+        amount=None,
+        last_sale_price=None,
+        last_sale_date=None,
+        cost_basis=None,
+    ):
         self._ledger.position_tracker.update_position(
             asset,
             amount,
@@ -195,10 +204,7 @@ class MetricsTracker(object):
     def capital_change(self, amount):
         self._ledger.capital_change(amount)
 
-    def sync_last_sale_prices(self,
-                              dt,
-                              data_portal,
-                              handle_non_market_minutes=False):
+    def sync_last_sale_prices(self, dt, data_portal, handle_non_market_minutes=False):
         self._ledger.sync_last_sale_prices(
             dt,
             data_portal,
@@ -206,8 +212,7 @@ class MetricsTracker(object):
         )
 
     def handle_minute_close(self, dt, data_portal):
-        """
-        Handles the close of the given minute in minute emission.
+        """Handles the close of the given minute in minute emission.
 
         Parameters
         ----------
@@ -221,19 +226,19 @@ class MetricsTracker(object):
         self.sync_last_sale_prices(dt, data_portal)
 
         packet = {
-            'period_start': self._first_session,
-            'period_end': self._last_session,
-            'capital_base': self._capital_base,
-            'minute_perf': {
-                'period_open': self._market_open,
-                'period_close': dt,
+            "period_start": self._first_session,
+            "period_end": self._last_session,
+            "capital_base": self._capital_base,
+            "minute_perf": {
+                "period_open": self._market_open,
+                "period_close": dt,
             },
-            'cumulative_perf': {
-                'period_open': self._first_session,
-                'period_close': self._last_session,
+            "cumulative_perf": {
+                "period_open": self._first_session,
+                "period_close": self._last_session,
             },
-            'progress': self._progress(self),
-            'cumulative_risk_metrics': {},
+            "progress": self._progress(self),
+            "cumulative_risk_metrics": {},
         }
         ledger = self._ledger
         ledger.end_of_bar(self._session_count)
@@ -260,7 +265,6 @@ class MetricsTracker(object):
         ledger.start_of_session(session_label)
 
         adjustment_reader = data_portal.adjustment_reader
-
         if adjustment_reader is not None:
             # this is None when running with a dataframe source
             ledger.process_dividends(
@@ -271,8 +275,9 @@ class MetricsTracker(object):
 
         self._current_session = session_label
 
+        cal = self._trading_calendar
         self._market_open, self._market_close = self._execution_open_and_close(
-            self._trading_calendar,
+            cal,
             session_label,
         )
 
@@ -294,7 +299,7 @@ class MetricsTracker(object):
         """
         completed_session = self._current_session
 
-        if self.emission_rate == 'daily':
+        if self.emission_rate == "daily":
             # this method is called for both minutely and daily emissions, but
             # this chunk of code here only applies for daily emissions. (since
             # it's done every minute, elsewhere, for minutely emission).
@@ -305,19 +310,19 @@ class MetricsTracker(object):
         self._session_count += 1
 
         packet = {
-            'period_start': self._first_session,
-            'period_end': self._last_session,
-            'capital_base': self._capital_base,
-            'daily_perf': {
-                'period_open': self._market_open,
-                'period_close': dt,
+            "period_start": self._first_session,
+            "period_end": self._last_session,
+            "capital_base": self._capital_base,
+            "daily_perf": {
+                "period_open": self._market_open,
+                "period_close": dt,
             },
-            'cumulative_perf': {
-                'period_open': self._first_session,
-                'period_close': self._last_session,
+            "cumulative_perf": {
+                "period_open": self._first_session,
+                "period_close": self._last_session,
             },
-            'progress': self._progress(self),
-            'cumulative_risk_metrics': {},
+            "progress": self._progress(self),
+            "cumulative_risk_metrics": {},
         }
         ledger = self._ledger
         ledger.end_of_session(session_ix)
@@ -332,17 +337,16 @@ class MetricsTracker(object):
         return packet
 
     def handle_simulation_end(self, data_portal):
-        """
-        When the simulation is complete, run the full period risk report
+        """When the simulation is complete, run the full period risk report
         and send it out on the results socket.
         """
         log.info(
-            'Simulated {} trading days\n'
-            'first open: {}\n'
-            'last close: {}',
-            self._session_count,
-            self._trading_calendar.session_open(self._first_session),
-            self._trading_calendar.session_close(self._last_session),
+            "Simulated %(days)s trading days\n first open: %(first)s\n last close: %(last)s",
+            dict(
+                days=self._session_count,
+                first=self._trading_calendar.session_open(self._first_session),
+                last=self._trading_calendar.session_close(self._last_session),
+            ),
         )
 
         packet = {}

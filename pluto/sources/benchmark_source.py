@@ -57,7 +57,7 @@ class BenchmarkSource(abc.ABC):
         self._benchmark = benchmark
 
         if len(sessions) == 0:
-            self._precalculated_series = pd.Series()
+            self._precalculated_series = pd.Series(dtype='float64')
         else:
             # self._validate_benchmark(benchmark_asset, sessions, benchmark)
             # in live, we get the previous session, and in simulation we get the current session.
@@ -128,7 +128,7 @@ class BenchmarkSource(abc.ABC):
                 period_returns = self._precalculated_series.values
                 self._minute_cumulative_returns = np.cumprod(1 + period_returns) - 1
                 self._minute_annual_volatility = minute_annual_volatility(
-                    period_returns.index.normalize().view('int64'),
+                    period_returns.index.normalize().as_unit('ns').asi8,
                     period_returns.values,
                     self._daily_returns.values)
                 self._minute_index = -1
@@ -234,13 +234,10 @@ class BenchmarkSource(abc.ABC):
 
     @classmethod
     def downsample_minute_return_series(cls, trading_calendar, minutely_returns):
-        sessions = trading_calendar.minute_index_to_session_labels(
+        sessions = trading_calendar.minutes_to_sessions(
             minutely_returns.index,
         )
-        closes = trading_calendar.session_closes_in_range(
-            sessions[0],
-            sessions[-1],
-        )
+        closes = trading_calendar.closes.loc[sessions[0]:sessions[-1]]
         daily_returns = minutely_returns[closes]
         daily_returns.index = closes.index
         return daily_returns.iloc[1:]

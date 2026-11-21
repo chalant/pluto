@@ -31,26 +31,22 @@ Position Tracking
 
 """
 
-from __future__ import division
 from math import copysign
 import numpy as np
-import logbook
+import logging
 
 from zipline.assets import Future
 import zipline.protocol as zp
 
-log = logbook.Logger('Performance')
+log = logging.getLogger("Performance")
 
 
-class Position(object):
-    __slots__ = 'inner_position', 'protocol_position', '_calls'
+class Position:
+    __slots__ = "inner_position", "protocol_position"
 
-    def __init__(self,
-                 asset,
-                 amount=0,
-                 cost_basis=0.0,
-                 last_sale_price=0.0,
-                 last_sale_date=None):
+    def __init__(
+        self, asset, amount=0, cost_basis=0.0, last_sale_price=0.0, last_sale_date=None
+    ):
         inner = zp.InnerPosition(
             asset=asset,
             amount=amount,
@@ -58,8 +54,8 @@ class Position(object):
             last_sale_price=last_sale_price,
             last_sale_date=last_sale_date,
         )
-        object.__setattr__(self, 'inner_position', inner)
-        object.__setattr__(self, 'protocol_position', zp.Position(inner))
+        object.__setattr__(self, "inner_position", inner)
+        object.__setattr__(self, "protocol_position", zp.Position(inner))
 
     def __getattr__(self, attr):
         return getattr(self.inner_position, attr)
@@ -72,20 +68,22 @@ class Position(object):
         Register the number of shares we held at this dividend's ex date so
         that we can pay out the correct amount on the dividend's pay date.
         """
-        return {
-            'amount': self.amount * dividend.amount
-        }
+        return {"amount": self.amount * dividend.amount}
 
     def earn_stock_dividend(self, stock_dividend):
         """
         Register the number of shares we held at this dividend's ex date so
         that we can pay out the correct amount on the dividend's pay date.
         """
+        share_count = self.amount * float(stock_dividend.ratio)
+        nearest_integer = np.rint(share_count)
+        # Correct at most one floating-point step of multiplication roundoff,
+        # such as 100 * 0.29 landing just below 29. Other fractions truncate.
+        if abs(share_count - nearest_integer) <= np.spacing(abs(share_count)):
+            share_count = nearest_integer
         return {
-            'payment_asset': stock_dividend.payment_asset,
-            'share_count': np.floor(
-                self.amount * float(stock_dividend.ratio)
-            )
+            "payment_asset": stock_dividend.payment_asset,
+            "share_count": np.trunc(share_count),
         }
 
     def handle_split(self, asset, ratio):
@@ -108,7 +106,7 @@ class Position(object):
         raw_share_count = self.amount / float(ratio)
 
         # e.g., 33
-        full_share_count = np.floor(raw_share_count)
+        full_share_count = np.trunc(raw_share_count)
 
         # e.g., 0.333
         fractional_share_count = raw_share_count - full_share_count
@@ -130,12 +128,11 @@ class Position(object):
 
     def update(self, txn):
         if self.asset != txn.asset:
-            raise Exception('updating position with txn for a '
-                            'different asset')
+            raise Exception("updating position with txn for a " "different asset")
 
         total_shares = self.amount + txn.amount
 
-        if total_shares == 0.0:
+        if total_shares == 0:
             self.cost_basis = 0.0
         else:
             prev_direction = copysign(1, self.amount)
@@ -173,13 +170,13 @@ class Position(object):
         """
 
         if asset != self.asset:
-            raise Exception('Updating a commission for a different asset?')
+            raise Exception("Updating a commission for a different asset?")
         if cost == 0.0:
             return
 
         # If we no longer hold this position, there is no cost basis to
         # adjust.
-        if self.amount == 0.0:
+        if self.amount == 0:
             return
 
         # We treat cost basis as the share price where we have broken even.
@@ -209,7 +206,7 @@ last_sale_price: {last_sale_price}"
             asset=self.asset,
             amount=self.amount,
             cost_basis=self.cost_basis,
-            last_sale_price=self.last_sale_price
+            last_sale_price=self.last_sale_price,
         )
 
     def to_dict(self):
@@ -218,8 +215,8 @@ last_sale_price: {last_sale_price}"
         Returns a dict object of the form:
         """
         return {
-            'sid': self.asset,
-            'amount': self.amount,
-            'cost_basis': self.cost_basis,
-            'last_sale_price': self.last_sale_price
+            "sid": self.asset,
+            "amount": self.amount,
+            "cost_basis": self.cost_basis,
+            "last_sale_price": self.last_sale_price,
         }

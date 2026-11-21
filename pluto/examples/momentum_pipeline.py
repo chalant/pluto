@@ -43,7 +43,7 @@ def rebalance(context, data):
         order_target_percent(asset, -one_third)
 
     # Remove any assets that should no longer be in our portfolio.
-    portfolio_assets = longs | shorts
+    portfolio_assets = longs.union(shorts)
     positions = context.portfolio.positions
 
     for asset in set(positions.keys()) - set(portfolio_assets):
@@ -78,7 +78,7 @@ def before_trading_start(context, data):
     longs = all_assets[pipeline_data.longs]
     shorts = all_assets[pipeline_data.shorts]
 
-    set_watchlist(longs | shorts)
+    set_watchlist(longs.union(shorts))
 
 
 def _test_args():

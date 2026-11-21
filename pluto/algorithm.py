@@ -1,5 +1,6 @@
 from itertools import chain, repeat
-from collections import Iterable, namedtuple
+from collections import namedtuple
+from collections.abc import Iterable
 
 from six import (
     string_types
@@ -10,17 +11,14 @@ import warnings
 
 import numpy as np
 import pandas as pd
-from trading_calendars import get_calendar
+from zipline.utils.calendar_utils import get_calendar
 
 import pluto.control.controllable.controllable
 
 from zipline import algorithm
 from zipline.utils import events
 from zipline.utils import cache
-from zipline.utils.pandas_utils import (
-    clear_dataframe_indexer_caches,
-    normalize_date
-)
+
 
 from zipline.utils.math_utils import (
     tolerant_equals,
@@ -101,9 +99,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
         # Create an already-expired cache so that we compute the first time
         # data is requested.
-        self._pipeline_cache = cache.ExpiringCache(
-            cleanup=clear_dataframe_indexer_caches
-        )
+        self._pipeline_cache = cache.ExpiringCache()
 
         self.blotter = blotter
 
@@ -143,6 +139,12 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
 
     def set_trading_calendar(self, calendar):
         self._trading_calendar = calendar
+
+    @property
+    def trading_calendar(self):
+        # zipline-reloaded's TradingAlgorithm methods (_can_order_asset, ...)
+        # read self.trading_calendar
+        return self._controllable.trading_calendar
 
     def initialize(self, *args, **kwargs):
         self._initialize(self, *args, **kwargs)
@@ -237,7 +239,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         return pipeline
 
     def _get_chunk_size(self, sessions):
-        return sessions.get_loc(normalize_date(self.get_datetime()))
+        return sessions.get_loc(self.get_datetime().normalize().tz_localize(None))
 
     @api_method
     def schedule_function(self,
@@ -520,7 +522,9 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         # yet found a good way to do that.
 
         dt = self.datetime
-        normalized_date = normalize_date(dt)
+        # mirrors zipline-reloaded 2642caa7 (exchange-calendars 4.x): the
+        # order date is the session label of the calendar
+        normalized_date = self._controllable.trading_calendar.minute_to_session(dt)
 
         if normalized_date < asset.start_date:
             raise CannotOrderDelistedAsset(
@@ -558,7 +562,7 @@ class TradingAlgorithm(algorithm.TradingAlgorithm):
         return value / (last_price * value_multiplier)
 
     def run_pipeline(self, pipeline, start_session, chunksize):
-        sessions = self._controllable.trading_calendar.all_sessions
+        sessions = self._controllable.trading_calendar.sessions
 
         # Load data starting from the previous trading day...
         start_date_loc = sessions.get_loc(start_session)
@@ -624,7 +628,7 @@ class LiveTradingAlgorithm(TradingAlgorithm):
         --------
         PipelineEngine.run_pipeline
         """
-        sessions = self._controllable.trading_calendar.all_sessions
+        sessions = self._controllable.trading_calendar.sessions
 
         # Load data until the day before end session...
         start_loc = sessions.get_loc(end_session) - chunksize

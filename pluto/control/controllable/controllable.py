@@ -8,6 +8,7 @@ import pandas as pd
 import logbook
 
 from zipline.finance import trading
+from zipline.gens.sim_engine import SESSION_END
 from zipline.finance.order import ORDER_STATUS
 
 from zipline.data import data_portal as dp
@@ -144,7 +145,7 @@ class Controllable(ABC):
         # self._benchmark_source = None
         self._last_session_close = None
 
-        self._sessions = pd.Series()
+        self._sessions = pd.Series(dtype='float64')
         self._sessions_array = deque()
 
         self._name = None
@@ -413,7 +414,8 @@ class Controllable(ABC):
 
         # todo: this could be loaded from files and account parameters (capital etc.)
         self._params = params = trading.SimulationParameters(
-            start_dt,
+            # sessions are time-zone naive (exchange_calendars)
+            start_dt.tz_localize(None) if start_dt.tzinfo is not None else start_dt,
             end_dt,
             calendar,
             run_setup.capital,
@@ -442,12 +444,12 @@ class Controllable(ABC):
             trading_calendar=calendar,
             first_trading_day=max(
                 bundle.first_trading_day,
-                calendar.all_sessions[0]),
+                calendar.sessions[0]),
             equity_minute_reader=bundle.equity_minute_bar_reader,
             equity_daily_reader=bundle.equity_daily_bar_reader,
             adjustment_reader=bundle.adjustment_reader,
             last_available_session=last_session,
-            last_available_minute=calendar.minutes_for_session(last_session)[-1])
+            last_available_minute=calendar.session_last_minute(last_session))
 
         # self._benchmark_source = benchmark_source = bs.SimulationBenchmarkSource(
         #     calendar,
@@ -791,8 +793,15 @@ class Controllable(ABC):
 
         # fixme: validate account controls controller side.
 
-        # todo execute cancellation policy on trade end events not session end
-        # blotter.execute_cancel_policy(sim_engine.SESSION_END)
+        # mirrors zipline-reloaded 698b7dbb (ENH: enabled EODCancel for daily
+        # frequency): at the end of a daily session the oldest of the open
+        # orders of an asset that has several is cancelled; the cancellation is
+        # relayed (to the controller) with the orders of the next bar.
+        # todo: the cancel policy of minute runs (blotter.execute_cancel_policy)
+        #  needs the controller to cancel its copies of the orders: it is not
+        #  executed (it never was on this path).
+        if self._data_frequency == 'daily':
+            blotter.execute_daily_cancel_policy(SESSION_END)
         algo.validate_account_controls()
         return self._get_daily_message(
             dt,
@@ -1049,6 +1058,9 @@ class Controllable(ABC):
 
         def past_auto_close_date(asset):
             acd = asset.auto_close_date
+            if acd is not None:
+                # mirrors zipline-reloaded 2642caa7: asset dates are naive
+                acd = acd.tz_localize(dt.tzinfo)
             return acd is not None and acd <= dt
 
         # Remove positions in any sids that have reached their auto_close date.

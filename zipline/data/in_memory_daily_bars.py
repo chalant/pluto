@@ -1,10 +1,7 @@
-from six import iteritems
-
-import numpy as np
 import pandas as pd
 from pandas import NaT
 
-from trading_calendars import TradingCalendar
+from zipline.utils.calendar_utils import TradingCalendar
 
 from zipline.data.bar_reader import OHLCV, NoDataOnDate, NoDataForSid
 from zipline.data.session_bars import CurrencyAwareSessionBarReader
@@ -29,19 +26,16 @@ class InMemoryDailyBarReader(CurrencyAwareSessionBarReader):
         Whether or not to verify that input data is correctly aligned to the
         given calendar. Default is True.
     """
+
     @expect_types(
         frames=dict,
         calendar=TradingCalendar,
         verify_indices=bool,
         currency_codes=pd.Series,
     )
-    def __init__(self,
-                 frames,
-                 calendar,
-                 currency_codes,
-                 verify_indices=True):
+    def __init__(self, frames, calendar, currency_codes, verify_indices=True):
         self._frames = frames
-        self._values = {key: frame.values for key, frame in iteritems(frames)}
+        self._values = {key: frame.values for key, frame in frames.items()}
         self._calendar = calendar
         self._currency_codes = currency_codes
 
@@ -49,14 +43,13 @@ class InMemoryDailyBarReader(CurrencyAwareSessionBarReader):
         if verify_indices:
             verify_frames_aligned(list(frames.values()), calendar)
 
-        self._sessions = frames['close'].index
-        self._sids = frames['close'].columns
+        self._sessions = frames["close"].index
+        self._sids = frames["close"].columns
 
     @classmethod
-    def from_panel(cls, panel, calendar, currency_codes):
-        """Helper for construction from a pandas.Panel.
-        """
-        return cls(dict(panel.iteritems()), calendar, currency_codes)
+    def from_dfs(cls, dfs, calendar, currency_codes):
+        """Helper for construction from a dict of DataFrames."""
+        return cls(dfs, calendar, currency_codes)
 
     @property
     def last_available_dt(self):
@@ -126,7 +119,7 @@ class InMemoryDailyBarReader(CurrencyAwareSessionBarReader):
                        NaT if no trade is found before the given dt.
         """
         try:
-            return self.frames['close'].loc[:, asset.sid].last_valid_index()
+            return self.frames["close"].loc[:, asset.sid].last_valid_index()
         except IndexError:
             return NaT
 
@@ -136,12 +129,11 @@ class InMemoryDailyBarReader(CurrencyAwareSessionBarReader):
 
     def currency_codes(self, sids):
         codes = self._currency_codes
-        return np.array([codes[sid] for sid in sids])
+        return codes.loc[sids].to_numpy()
 
 
 def verify_frames_aligned(frames, calendar):
-    """
-    Verify that DataFrames in ``frames`` have the same indexing scheme and are
+    """Verify that DataFrames in ``frames`` have the same indexing scheme and are
     aligned to ``calendar``.
 
     Parameters
@@ -156,6 +148,7 @@ def verify_frames_aligned(frames, calendar):
         match a contiguous region of ``calendar``.
     """
     indexes = [f.index for f in frames]
+
     check_indexes_all_same(indexes, message="DataFrame indexes don't match:")
 
     columns = [f.columns for f in frames]
@@ -163,8 +156,7 @@ def verify_frames_aligned(frames, calendar):
 
     start, end = indexes[0][[0, -1]]
     cal_sessions = calendar.sessions_in_range(start, end)
-
     check_indexes_all_same(
-        [indexes[0], cal_sessions],
-        "DataFrame index doesn't match {} calendar:".format(calendar.name),
+        [indexes[0].tz_localize(None), cal_sessions],
+        f"DataFrame index doesn't match {calendar.name} calendar:",
     )

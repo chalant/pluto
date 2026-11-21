@@ -1,35 +1,33 @@
-"""
-Caching utilities for zipline
-"""
-from collections import MutableMapping
+"""Caching utilities for zipline"""
+
+from collections.abc import MutableMapping
 import errno
 from functools import partial
 import os
 import pickle
-from distutils import dir_util
+
+# from distutils import dir_util
+from shutil import copytree
 from shutil import rmtree, move
 from tempfile import mkdtemp, NamedTemporaryFile
 
 import pandas as pd
 
-from .compat import PY2
 from .context_tricks import nop_context
 from .paths import ensure_directory
 from .sentinel import sentinel
 
 
 class Expired(Exception):
-    """Marks that a :class:`CachedObject` has expired.
-    """
+    """Marks that a :class:`CachedObject` has expired."""
 
 
-ExpiredCachedObject = sentinel('ExpiredCachedObject')
-AlwaysExpired = sentinel('AlwaysExpired')
+ExpiredCachedObject = sentinel("ExpiredCachedObject")
+AlwaysExpired = sentinel("AlwaysExpired")
 
 
-class CachedObject(object):
-    """
-    A simple struct for maintaining a cached object with an expiration date.
+class CachedObject:
+    """A simple struct for maintaining a cached object with an expiration date.
 
     Parameters
     ----------
@@ -54,14 +52,14 @@ class CachedObject(object):
         ...
     Expired: 2014-01-01 00:00:00+00:00
     """
+
     def __init__(self, value, expires):
         self._value = value
         self._expires = expires
 
     @classmethod
     def expired(cls):
-        """Construct a CachedObject that's expired at any time.
-        """
+        """Construct a CachedObject that's expired at any time."""
         return cls(ExpiredCachedObject, expires=AlwaysExpired)
 
     def unwrap(self, dt):
@@ -88,9 +86,8 @@ class CachedObject(object):
         return self._value
 
 
-class ExpiringCache(object):
-    """
-    A cache of multiple CachedObjects, which returns the wrapped the value
+class ExpiringCache:
+    """A cache of multiple CachedObjects, which returns the wrapped the value
     or raises and deletes the CachedObject if the value has expired.
 
     Parameters
@@ -151,10 +148,10 @@ class ExpiringCache(object):
         """
         try:
             return self._cache[key].unwrap(dt)
-        except Expired:
+        except Expired as exc:
             self.cleanup(self._cache[key]._unsafe_get_value())
             del self._cache[key]
-            raise KeyError(key)
+            raise KeyError(key) from exc
 
     def set(self, key, value, expiration_dt):
         """Adds a new key value pair to the cache.
@@ -203,37 +200,33 @@ class dataframe_cache(MutableMapping):
     The cache uses a temporary file format that is subject to change between
     versions of zipline.
     """
-    def __init__(self,
-                 path=None,
-                 lock=None,
-                 clean_on_failure=True,
-                 serialization='msgpack'):
+
+    def __init__(
+        self, path=None, lock=None, clean_on_failure=True, serialization="pickle"
+    ):
         self.path = path if path is not None else mkdtemp()
         self.lock = lock if lock is not None else nop_context
         self.clean_on_failure = clean_on_failure
 
-        if serialization == 'msgpack':
+        if serialization == "msgpack":
             self.serialize = pd.DataFrame.to_msgpack
             self.deserialize = pd.read_msgpack
             self._protocol = None
         else:
-            s = serialization.split(':', 1)
-            if s[0] != 'pickle':
+            s = serialization.split(":", 1)
+            if s[0] != "pickle":
                 raise ValueError(
                     "'serialization' must be either 'msgpack' or 'pickle[:n]'",
                 )
             self._protocol = int(s[1]) if len(s) == 2 else None
 
             self.serialize = self._serialize_pickle
-            self.deserialize = (
-                pickle.load if PY2 else
-                partial(pickle.load, encoding='latin-1')
-            )
+            self.deserialize = partial(pickle.load, encoding="latin-1")
 
         ensure_directory(self.path)
 
     def _serialize_pickle(self, df, path):
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             pickle.dump(df, f, protocol=self._protocol)
 
     def _keypath(self, key):
@@ -256,12 +249,12 @@ class dataframe_cache(MutableMapping):
 
         with self.lock:
             try:
-                with open(self._keypath(key), 'rb') as f:
+                with open(self._keypath(key), "rb") as f:
                     return self.deserialize(f)
-            except IOError as e:
-                if e.errno != errno.ENOENT:
+            except IOError as exc:
+                if exc.errno != errno.ENOENT:
                     raise
-                raise KeyError(key)
+                raise KeyError(key) from exc
 
     def __setitem__(self, key, value):
         with self.lock:
@@ -271,10 +264,10 @@ class dataframe_cache(MutableMapping):
         with self.lock:
             try:
                 os.remove(self._keypath(key))
-            except OSError as e:
-                if e.errno == errno.ENOENT:
+            except OSError as exc:
+                if exc.errno == errno.ENOENT:
                     # raise a keyerror if this directory did not exist
-                    raise KeyError(key)
+                    raise KeyError(key) from exc
                 # reraise the actual oserror otherwise
                 raise
 
@@ -285,13 +278,13 @@ class dataframe_cache(MutableMapping):
         return len(os.listdir(self.path))
 
     def __repr__(self):
-        return '<%s: keys={%s}>' % (
+        return "<%s: keys={%s}>" % (
             type(self).__name__,
-            ', '.join(map(repr, sorted(self))),
+            ", ".join(map(repr, sorted(self))),
         )
 
 
-class working_file(object):
+class working_file:
     """A context manager for managing a temporary file that will be moved
     to a non-temporary location if no exceptions are raised in the context.
 
@@ -308,6 +301,7 @@ class working_file(object):
     ``working_file`` uses :func:`shutil.move` to move the actual files,
     meaning it has as strong of guarantees as :func:`shutil.move`.
     """
+
     def __init__(self, final_path, *args, **kwargs):
         self._tmpfile = NamedTemporaryFile(delete=False, *args, **kwargs)
         self._final_path = final_path
@@ -320,8 +314,7 @@ class working_file(object):
         return self._tmpfile.name
 
     def _commit(self):
-        """Sync the temporary file to the final path.
-        """
+        """Sync the temporary file to the final path."""
         move(self.path, self._final_path)
 
     def __enter__(self):
@@ -334,7 +327,7 @@ class working_file(object):
             self._commit()
 
 
-class working_dir(object):
+class working_dir:
     """A context manager for managing a temporary directory that will be moved
     to a non-temporary location if no exceptions are raised in the context.
 
@@ -351,6 +344,7 @@ class working_dir(object):
     ``working_dir`` uses :func:`dir_util.copy_tree` to move the actual files,
     meaning it has as strong of guarantees as :func:`dir_util.copy_tree`.
     """
+
     def __init__(self, final_path, *args, **kwargs):
         self.path = mkdtemp()
         self._final_path = final_path
@@ -378,9 +372,8 @@ class working_dir(object):
         return os.path.join(self.path, *path_parts)
 
     def _commit(self):
-        """Sync the temporary directory to the final path.
-        """
-        dir_util.copy_tree(self.path, self._final_path)
+        """Sync the temporary directory to the final path."""
+        copytree(src=self.path, dst=self._final_path, dirs_exist_ok=True)
 
     def __enter__(self):
         return self

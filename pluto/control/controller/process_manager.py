@@ -4,7 +4,8 @@ import typing
 from collections import defaultdict
 
 import numpy as np
-from trading_calendars import calendar_utils
+
+from pluto.trading_calendars import calendar_utils as cu
 
 import zipline
 from zipline import protocol
@@ -68,8 +69,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._watchlist = set()
 
         self._watchlist_complete = threading.Event()
-
-        self._aliases = calendar_utils._default_calendar_aliases
 
         self._order_counter = 0
         self._orders_complete = threading.Event()
@@ -272,7 +271,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         watchlist = defaultdict(list)
 
         for asset in self._watchlist:
-            watchlist[self._aliases[asset.exchange]].append(asset)
+            watchlist[cu.resolve_alias(asset.exchange)].append(asset)
 
         return watchlist
 
@@ -282,11 +281,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         blotters = self._blotters
         ledgers = self._ledgers
-        aliases = self._aliases
 
         for order in orders:
             # fixme: find a better way of getting calendar names (from disk ?)
-            calendar_name = aliases[order.asset.exchange]
+            calendar_name = cu.resolve_alias(order.asset.exchange)
             blotter = blotters[calendar_name]
 
             if order.status == ORDER_STATUS.CANCELLED:
@@ -295,8 +293,13 @@ class StrategyManager(brk_rpc.BrokerServicer):
                 # as zipline's blotter.cancel; an order placed and cancelled
                 # in the same bar is only recorded.
                 if order.id in blotter.orders:
+                    # the time of the cancellation is the one the strategy's
+                    # blotter stamped (the cancel policy runs at the end of the
+                    # session, the order is relayed with the next bar)
+                    cancelled_at = order.dt
                     blotter.cancel(order.id, relay_status=False)
                     order = blotter.orders[order.id]
+                    order.dt = cancelled_at
                 else:
                     blotter.orders[order.id] = order
                 ledgers[calendar_name].process_order(order)
@@ -404,6 +407,9 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         def past_auto_close_date(asset):
             acd = asset.auto_close_date
+            if acd is not None:
+                # mirrors zipline-reloaded 2642caa7: asset dates are naive
+                acd = acd.tz_localize(dt.tzinfo)
             return acd is not None and acd <= dt
 
         blotter = self._blotters[calendar_name]

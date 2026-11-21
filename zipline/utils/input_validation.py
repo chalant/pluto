@@ -18,7 +18,6 @@ from operator import attrgetter
 from numpy import dtype
 import pandas as pd
 from pytz import timezone
-from six import iteritems, string_types, PY3
 from toolz import valmap, complement, compose
 import toolz.curried.operator as op
 
@@ -26,25 +25,7 @@ from zipline.utils.compat import wraps
 from zipline.utils.functional import getattrs
 from zipline.utils.preprocess import call, preprocess
 
-
-if PY3:
-    _qualified_name = attrgetter('__qualname__')
-else:
-    def _qualified_name(obj):
-        """
-        Return the fully-qualified name (ignoring inner classes) of a type.
-        """
-        # If the obj has an explicitly-set __qualname__, use it.
-        try:
-            return getattr(obj, '__qualname__')
-        except AttributeError:
-            pass
-
-        # If not, build our own __qualname__ as best we can.
-        module = obj.__module__
-        if module in ('__builtin__', '__main__', 'builtins'):
-            return obj.__name__
-        return '.'.join([module, obj.__name__])
+_qualified_name = attrgetter("__qualname__")
 
 
 def verify_indices_all_unique(obj):
@@ -67,10 +48,12 @@ def verify_indices_all_unique(obj):
         If any axis has duplicate entries.
     """
     axis_names = [
-        ('index',),                            # Series
-        ('index', 'columns'),                  # DataFrame
-        ('items', 'major_axis', 'minor_axis')  # Panel
-    ][obj.ndim - 1]  # ndim = 1 should go to entry 0,
+        ("index",),  # Series
+        ("index", "columns"),  # DataFrame
+        ("items", "major_axis", "minor_axis"),  # Panel
+    ][
+        obj.ndim - 1
+    ]  # ndim = 1 should go to entry 0,
 
     for axis_name, index in zip(axis_names, obj.axes):
         if index.is_unique:
@@ -119,6 +102,7 @@ def optionally(preprocessor):
     >>> f(None) is None  # call with explicit None
     True
     """
+
     @wraps(preprocessor)
     def wrapper(func, argname, arg):
         return arg if arg is None else preprocessor(func, argname, arg)
@@ -127,7 +111,7 @@ def optionally(preprocessor):
 
 
 def ensure_upper_case(func, argname, arg):
-    if isinstance(arg, string_types):
+    if isinstance(arg, str):
         return arg.upper()
     else:
         raise TypeError(
@@ -157,7 +141,7 @@ def ensure_dtype(func, argname, arg):
     """
     try:
         return dtype(arg)
-    except TypeError:
+    except TypeError as exc:
         raise TypeError(
             "{func}() couldn't convert argument "
             "{argname}={arg!r} to a numpy dtype.".format(
@@ -165,7 +149,7 @@ def ensure_dtype(func, argname, arg):
                 argname=argname,
                 arg=arg,
             ),
-        )
+        ) from exc
 
 
 def ensure_timezone(func, argname, arg):
@@ -182,7 +166,7 @@ def ensure_timezone(func, argname, arg):
     """
     if isinstance(arg, tzinfo):
         return arg
-    if isinstance(arg, string_types):
+    if isinstance(arg, str):
         return timezone(arg)
 
     raise TypeError(
@@ -210,7 +194,7 @@ def ensure_timestamp(func, argname, arg):
     """
     try:
         return pd.Timestamp(arg)
-    except ValueError as e:
+    except ValueError as exc:
         raise TypeError(
             "{func}() couldn't convert argument "
             "{argname}={arg!r} to a pandas Timestamp.\n"
@@ -218,10 +202,10 @@ def ensure_timestamp(func, argname, arg):
                 func=_qualified_name(func),
                 argname=argname,
                 arg=arg,
-                t=_qualified_name(type(e)),
-                e=e,
+                t=_qualified_name(type(exc)),
+                e=exc,
             ),
-        )
+        ) from exc
 
 
 def expect_dtypes(__funcname=_qualified_name, **named):
@@ -244,18 +228,21 @@ def expect_dtypes(__funcname=_qualified_name, **named):
     TypeError: ...foo() expected a value with dtype 'int8' for argument 'x',
     but got 'float64' instead.
     """
-    for name, type_ in iteritems(named):
+    for name, type_ in named.items():
         if not isinstance(type_, (dtype, tuple)):
             raise TypeError(
                 "expect_dtypes() expected a numpy dtype or tuple of dtypes"
                 " for argument {name!r}, but got {dtype} instead.".format(
-                    name=name, dtype=dtype,
+                    name=name,
+                    dtype=dtype,
                 )
             )
 
     if isinstance(__funcname, str):
+
         def get_funcname(_):
             return __funcname
+
     else:
         get_funcname = __funcname
 
@@ -265,6 +252,7 @@ def expect_dtypes(__funcname=_qualified_name, **named):
         Factory for dtype-checking functions that work with the @preprocess
         decorator.
         """
+
         def error_message(func, argname, value):
             # If the bad value has a dtype, but it's wrong, show the dtype
             # name.  Otherwise just show the value.
@@ -277,13 +265,13 @@ def expect_dtypes(__funcname=_qualified_name, **named):
                 "for argument {argname!r}, but got {value!r} instead."
             ).format(
                 funcname=get_funcname(func),
-                dtype_str=' or '.join(repr(d.name) for d in dtypes),
+                dtype_str=" or ".join(repr(d.name) for d in dtypes),
                 argname=argname,
                 value=value_to_show,
             )
 
         def _actual_preprocessor(func, argname, argvalue):
-            if getattr(argvalue, 'dtype', object()) not in dtypes:
+            if getattr(argvalue, "dtype", object()) not in dtypes:
                 raise TypeError(error_message(func, argname, argvalue))
             return argvalue
 
@@ -313,12 +301,13 @@ def expect_kinds(**named):
     TypeError: ...foo() expected a numpy object of kind 'i' for argument 'x',
     but got 'f' instead.
     """
-    for name, kind in iteritems(named):
+    for name, kind in named.items():
         if not isinstance(kind, (str, tuple)):
             raise TypeError(
                 "expect_dtype_kinds() expected a string or tuple of strings"
                 " for argument {name!r}, but got {kind} instead.".format(
-                    name=name, kind=dtype,
+                    name=name,
+                    kind=dtype,
                 )
             )
 
@@ -328,6 +317,7 @@ def expect_kinds(**named):
         Factory for kind-checking functions that work the @preprocess
         decorator.
         """
+
         def error_message(func, argname, value):
             # If the bad value has a dtype, but it's wrong, show the dtype
             # kind.  Otherwise just show the value.
@@ -340,13 +330,13 @@ def expect_kinds(**named):
                 "for argument {argname!r}, but got {value!r} instead."
             ).format(
                 funcname=_qualified_name(func),
-                kinds=' or '.join(map(repr, kinds)),
+                kinds=" or ".join(map(repr, kinds)),
                 argname=argname,
                 value=value_to_show,
             )
 
         def _actual_preprocessor(func, argname, argvalue):
-            if getattrs(argvalue, ('dtype', 'kind'), object()) not in kinds:
+            if getattrs(argvalue, ("dtype", "kind"), object()) not in kinds:
                 raise TypeError(error_message(func, argname, argvalue))
             return argvalue
 
@@ -380,12 +370,13 @@ def expect_types(__funcname=_qualified_name, **named):
     or __new__ methods to make errors refer to the class name instead of the
     function name.
     """
-    for name, type_ in iteritems(named):
+    for name, type_ in named.items():
         if not isinstance(type_, (type, tuple)):
             raise TypeError(
                 "expect_types() expected a type or tuple of types for "
                 "argument '{name}', but got {type_} instead.".format(
-                    name=name, type_=type_,
+                    name=name,
+                    type_=type_,
                 )
             )
 
@@ -397,7 +388,7 @@ def expect_types(__funcname=_qualified_name, **named):
         )
         if isinstance(type_, tuple):
             template = _template.format(
-                type_or_types=' or '.join(map(_qualified_name, type_))
+                type_or_types=" or ".join(map(_qualified_name, type_))
             )
         else:
             template = _template.format(type_or_types=_qualified_name(type_))
@@ -439,21 +430,25 @@ def make_check(exc_type, template, pred, actual, funcname):
         to refer to the class name instead of the method name.
     """
     if isinstance(funcname, str):
+
         def get_funcname(_):
             return funcname
+
     else:
         get_funcname = funcname
 
     def _check(func, argname, argvalue):
         if pred(argvalue):
             raise exc_type(
-                template % {
-                    'funcname': get_funcname(func),
-                    'argname': argname,
-                    'actual': actual(argvalue),
+                template
+                % {
+                    "funcname": get_funcname(func),
+                    "argname": argname,
+                    "actual": actual(argvalue),
                 },
             )
         return argvalue
+
     return _check
 
 
@@ -513,6 +508,7 @@ def expect_element(__funcname=_qualified_name, **named):
     This allows us to use any custom container as long as the object supports
     the container protocol.
     """
+
     def _expect_element(collection):
         if isinstance(collection, (set, frozenset)):
             # Special case the error message for set and frozen set to make it
@@ -532,6 +528,7 @@ def expect_element(__funcname=_qualified_name, **named):
             repr,
             funcname=__funcname,
         )
+
     return preprocess(**valmap(_expect_element, named))
 
 
@@ -583,19 +580,26 @@ def expect_bounded(__funcname=_qualified_name, **named):
     ValueError: ...foo() expected a value less than or equal to 5 for
     argument 'x', but got 6 instead.
     """
+
     def _make_bounded_check(bounds):
         (lower, upper) = bounds
         if lower is None:
+
             def should_fail(value):
                 return value > upper
+
             predicate_descr = "less than or equal to " + str(upper)
         elif upper is None:
+
             def should_fail(value):
                 return value < lower
+
             predicate_descr = "greater than or equal to " + str(lower)
         else:
+
             def should_fail(value):
                 return not (lower <= value <= upper)
+
             predicate_descr = "inclusively between %s and %s" % bounds
 
         template = (
@@ -662,19 +666,26 @@ def expect_strictly_bounded(__funcname=_qualified_name, **named):
     ValueError: ...foo() expected a value strictly less than 5 for
     argument 'x', but got 5 instead.
     """
+
     def _make_bounded_check(bounds):
         (lower, upper) = bounds
         if lower is None:
+
             def should_fail(value):
                 return value >= upper
+
             predicate_descr = "strictly less than " + str(upper)
         elif upper is None:
+
             def should_fail(value):
                 return value <= lower
+
             predicate_descr = "strictly greater than " + str(lower)
         else:
+
             def should_fail(value):
                 return not (lower < value < upper)
+
             predicate_descr = "exclusively between %s and %s" % bounds
 
         template = (
@@ -695,13 +706,9 @@ def expect_strictly_bounded(__funcname=_qualified_name, **named):
 
 def _expect_bounded(make_bounded_check, __funcname, **named):
     def valid_bounds(t):
-        return (
-            isinstance(t, tuple)
-            and len(t) == 2
-            and t != (None, None)
-        )
+        return isinstance(t, tuple) and len(t) == 2 and t != (None, None)
 
-    for name, bounds in iteritems(named):
+    for name, bounds in named.items():
         if not valid_bounds(bounds):
             raise TypeError(
                 "expect_bounded() expected a tuple of bounds for"
@@ -736,8 +743,10 @@ def expect_dimensions(__funcname=_qualified_name, **dimensions):
     but got a 1-D array instead.
     """
     if isinstance(__funcname, str):
+
         def get_funcname(_):
             return __funcname
+
     else:
         get_funcname = __funcname
 
@@ -746,7 +755,7 @@ def expect_dimensions(__funcname=_qualified_name, **dimensions):
             actual_ndim = argvalue.ndim
             if actual_ndim != expected_ndim:
                 if actual_ndim == 0:
-                    actual_repr = 'scalar'
+                    actual_repr = "scalar"
                 else:
                     actual_repr = "%d-D array" % actual_ndim
                 raise ValueError(
@@ -760,7 +769,9 @@ def expect_dimensions(__funcname=_qualified_name, **dimensions):
                     )
                 )
             return argvalue
+
         return _check
+
     return preprocess(**valmap(_expect_dimension, dimensions))
 
 
@@ -794,10 +805,12 @@ def coerce(from_, to, **to_kwargs):
     >>> add_binary_strings('101', '001')
     '110'
     """
+
     def preprocessor(func, argname, arg):
         if isinstance(arg, from_):
             return to(arg, **to_kwargs)
         return arg
+
     return preprocessor
 
 
@@ -820,33 +833,33 @@ def coerce_types(**kwargs):
     >>> func(1.0, 3)
     (1, '3')
     """
+
     def _coerce(types):
         return coerce(*types)
 
     return preprocess(**valmap(_coerce, kwargs))
 
 
-class error_keywords(object):
-
+class error_keywords:
     def __init__(self, *args, **kwargs):
         self.messages = kwargs
 
     def __call__(self, func):
         @wraps(func)
         def assert_keywords_and_call(*args, **kwargs):
-            for field, message in iteritems(self.messages):
+            for field, message in self.messages.items():
                 if field in kwargs:
                     raise TypeError(message)
             return func(*args, **kwargs)
+
         return assert_keywords_and_call
 
 
-coerce_string = partial(coerce, string_types)
+coerce_string = partial(coerce, str)
 
 
 def validate_keys(dict_, expected, funcname):
-    """Validate that a dictionary has an expected set of keys.
-    """
+    """Validate that a dictionary has an expected set of keys."""
     expected = set(expected)
     received = set(dict_)
 

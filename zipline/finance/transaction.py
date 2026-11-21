@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): create_transaction accepts fractional amounts.
 #
 # Copyright 2015 Quantopian, Inc.
 #
@@ -12,8 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import division
-
 from copy import copy
 
 from zipline.assets import Asset
@@ -21,7 +20,7 @@ from zipline.protocol import DATASOURCE_TYPE
 from zipline.utils.input_validation import expect_types
 
 
-class Transaction(object):
+class Transaction:
     @expect_types(asset=Asset)
     def __init__(self, asset, amount, dt, price, order_id):
         self.asset = asset
@@ -35,50 +34,40 @@ class Transaction(object):
         return self.__dict__[name]
 
     def __repr__(self):
-        template = (
-            "{cls}(asset={asset}, dt={dt},"
-            " amount={amount}, price={price})"
-        )
+        template = "{cls}(asset={asset}, dt={dt}," " amount={amount}, price={price})"
 
         return template.format(
             cls=type(self).__name__,
             asset=self.asset,
             dt=self.dt,
             amount=self.amount,
-            price=self.price
+            price=self.price,
         )
 
     def to_dict(self):
         py = copy(self.__dict__)
-        del py['type']
-        del py['asset']
+        del py["type"]
+        del py["asset"]
 
-        # Adding 'sid' for backwards compatibility with downstream consumers.
-        py['sid'] = self.asset
+        # Adding 'sid' for backwards compatibility with downstrean consumers.
+        py["sid"] = self.asset
+
+        # If you think this looks dumb, that is because it is! We once stored
+        # commission here, but haven't for over a year. I don't want to change
+        # the perf packet structure yet.
+        py["commission"] = None
 
         return py
 
 
 def create_transaction(order, dt, price, amount):
-    # note: we remove the amount check since we allow
-    #  fractional trades.
-
-    # floor the amount to protect against non-whole number orders
-    # TODO: Investigate whether we can add a robust check in blotter
-    # and/or tradesimulation, as well.
-    # amount_magnitude = int(abs(amount))
-
-    # if amount_magnitude < 1:
-    #     raise Exception("Transaction magnitude must be at least 1.")
-
-    # removed amount conversion to integer to support fractional amounts
+    # Pluto: no minimum magnitude, and a fractional amount is kept (it is
+    # traded as is); a whole amount stays an int, as in zipline.
+    if int(amount) == amount:
+        amount = int(amount)
 
     transaction = Transaction(
-        asset=order.asset,
-        amount=amount,
-        dt=dt,
-        price=price,
-        order_id=order.id
+        asset=order.asset, amount=amount, dt=dt, price=price, order_id=order.id
     )
 
     return transaction

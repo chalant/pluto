@@ -24,8 +24,8 @@ class Domain(domain.Domain):
                 'data must be ready before market open (offset must be < 0)',
             )
 
-    def all_sessions(self):
-        return self._calendar.all_sessions
+    def sessions(self):
+        return self._calendar.sessions
 
     @property
     def calendar(self):
@@ -37,7 +37,8 @@ class Domain(domain.Domain):
 
     def data_query_cutoff_for_sessions(self, sessions):
         # note: if data isn't available before the next open session, query will be cutoff...
-        opens = self.calendar.opens.loc[sessions].values
+        # mirrors zipline-reloaded 2642caa7: the first minute of each session
+        opens = self.calendar.first_minutes.reindex(sessions)
         missing_mask = pd.isnull(opens)
 
         if missing_mask.any():
@@ -50,7 +51,7 @@ class Domain(domain.Domain):
                 ),
             )
 
-        return pd.DatetimeIndex(opens + self._data_query_offset, tz='UTC')
+        return pd.DatetimeIndex(opens) + self._data_query_offset
 
     def __repr__(self):
         return "EquityCalendarDomain({})".format(

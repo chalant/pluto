@@ -192,6 +192,56 @@ class SimulationBlotter(blotter.Blotter):
         assert not orders
         del self._open_orders[asset]
 
+    def execute_daily_cancel_policy(self, event):
+        """End of day cancel for daily frequency; mirrors zipline-reloaded
+        698b7dbb (ENH: enabled EODCancel for daily frequency): of the open
+        orders of an asset with more than one, the oldest one is canceled."""
+        if self.cancel_policy.should_cancel(event):
+            warn = self.cancel_policy.warn_on_cancel
+            for asset in copy(self._open_orders):
+                orders = self._open_orders[asset]
+                if len(orders) > 1:
+                    order = orders[0]
+                    self.cancel(order.id, relay_status=True)
+                    if warn:
+                        if order.filled > 0:
+                            warning_logger.warn(
+                                'Your order for {order_amt} shares of '
+                                '{order_sym} has been partially filled. '
+                                '{order_filled} shares were successfully '
+                                'purchased. {order_failed} shares were not '
+                                'filled by the end of day and '
+                                'were canceled.'.format(
+                                    order_amt=order.amount,
+                                    order_sym=order.asset.symbol,
+                                    order_filled=order.filled,
+                                    order_failed=order.amount - order.filled,
+                                )
+                            )
+                        elif order.filled < 0:
+                            warning_logger.warn(
+                                'Your order for {order_amt} shares of '
+                                '{order_sym} has been partially filled. '
+                                '{order_filled} shares were successfully '
+                                'sold. {order_failed} shares were not '
+                                'filled by the end of day and '
+                                'were canceled.'.format(
+                                    order_amt=order.amount,
+                                    order_sym=order.asset.symbol,
+                                    order_filled=-1 * order.filled,
+                                    order_failed=-1 * (order.amount - order.filled),
+                                )
+                            )
+                        else:
+                            warning_logger.warn(
+                                'Your order for {order_amt} shares of '
+                                '{order_sym} failed to fill by the end of day '
+                                'and was canceled.'.format(
+                                    order_amt=order.amount,
+                                    order_sym=order.asset.symbol,
+                                )
+                            )
+
     def execute_cancel_policy(self, event):
         if self.cancel_policy.should_cancel(event):
             warn = self.cancel_policy.warn_on_cancel
@@ -262,6 +312,20 @@ class SimulationBlotter(blotter.Blotter):
             orders_to_modify = self._open_orders[asset]
             for order in orders_to_modify:
                 order.handle_split(ratio)
+
+            # mirrors zipline-reloaded 62cb4a13 and a85e787b: a reverse split can
+            # leave an order with no shares to trade. Such an order reports
+            # FILLED, so `cancel` skips it and it would stay in the book forever
+            # (and trip the `assert not orders` in cancel_all_orders_for_asset
+            # when the asset is auto-closed): drop it.
+            emptied = [order for order in orders_to_modify if order.open_amount == 0]
+            for order in emptied:
+                orders_to_modify.remove(order)
+                if order in self.new_orders:
+                    self.new_orders.remove(order)
+
+            if not orders_to_modify:
+                del self._open_orders[asset]
 
     def get_transactions(self, bar_data):
         """

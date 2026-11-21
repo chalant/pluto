@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): connections can be used from another thread.
 # Copyright 2016 Quantopian, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +18,7 @@ import os
 import sqlite3
 
 import sqlalchemy as sa
-from six.moves import range
+from sqlalchemy.pool import NullPool
 
 from .input_validation import coerce_string
 
@@ -26,25 +27,24 @@ SQLITE_MAX_VARIABLE_NUMBER = 998
 
 def group_into_chunks(items, chunk_size=SQLITE_MAX_VARIABLE_NUMBER):
     items = list(items)
-    return [items[x:x+chunk_size]
-            for x in range(0, len(items), chunk_size)]
+    return [items[x : x + chunk_size] for x in range(0, len(items), chunk_size)]
 
 
 def verify_sqlite_path_exists(path):
-    if path != ':memory:' and not os.path.exists(path):
+    if path != ":memory:" and not os.path.exists(path):
         raise ValueError("SQLite file {!r} doesn't exist.".format(path))
 
 
 def check_and_create_connection(path, require_exists):
     if require_exists:
         verify_sqlite_path_exists(path)
-    return sqlite3.connect(path,check_same_thread=False)
+    return sqlite3.connect(path, check_same_thread=False)
 
 
 def check_and_create_engine(path, require_exists):
     if require_exists:
         verify_sqlite_path_exists(path)
-    return sa.create_engine('sqlite:///' + path)
+    return sa.create_engine("sqlite:///" + path, poolclass=NullPool)
 
 
 def coerce_string_to_conn(require_exists):

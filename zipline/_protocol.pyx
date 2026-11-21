@@ -15,40 +15,23 @@
 import warnings
 from contextlib import contextmanager
 from functools import wraps
-
 import pandas as pd
 import numpy as np
 
-from six import iteritems, PY2, string_types
 from cpython cimport bool
-from collections import Iterable
+from collections.abc import Iterable
 
 from zipline.assets import (
-    AssetConvertible,
     PricingDataAssociable,
 )
-from zipline.assets._assets cimport Asset, Future
+from zipline.assets._assets cimport Asset
 from zipline.assets.continuous_futures import ContinuousFuture
-from zipline.utils.pandas_utils import normalize_date
 from zipline.zipline_warnings import ZiplineDeprecationWarning
 
-
 cdef bool _is_iterable(obj):
-    return isinstance(obj, Iterable) and not isinstance(obj, string_types)
+    return isinstance(obj, Iterable) and not isinstance(obj, str)
 
-
-if PY2:
-    def no_wraps_py2(f):
-        def dec(g):
-            g.__doc__ = f.__doc__
-            g.__name__ = f.__name__
-            return g
-        return dec
-else:
-    no_wraps_py2 = wraps
-
-
-cdef class check_parameters(object):
+cdef class check_parameters:
     """
     Asserts that the keywords passed into the wrapped function are included
     in those passed into this decorator. If not, raise a TypeError with a
@@ -69,7 +52,7 @@ cdef class check_parameters(object):
         self.keys_to_types = dict(zip(keyword_names, types))
 
     def __call__(self, func):
-        @no_wraps_py2(func)
+        @wraps(func)
         def assert_keywords_and_call(*args, **kwargs):
             cdef short i
 
@@ -94,13 +77,13 @@ cdef class check_parameters(object):
                         else ', '.join([type_.__name__ for type_ in expected_type])
 
                     raise TypeError("Expected %s argument to be of type %s%s" %
-                        (self.keyword_names[i],
-                         'or iterable of type ' if i in (0, 1) else '',
-                         expected_type_name)
-                    )
+                                    (self.keyword_names[i],
+                                     'or iterable of type ' if i in (0, 1) else '',
+                                     expected_type_name)
+                                    )
 
             # verify type of each kwarg
-            for keyword, arg in iteritems(kwargs):
+            for keyword, arg in kwargs.items():
                 if keyword in ('assets', 'fields') and _is_iterable(arg):
                     if len(arg) == 0:
                         continue
@@ -109,19 +92,18 @@ cdef class check_parameters(object):
                     expected_type = self.keys_to_types[keyword].__name__ \
                         if not _is_iterable(self.keys_to_types[keyword]) \
                         else ', '.join([type_.__name__ for type_ in
-                            self.keys_to_types[keyword]])
+                                        self.keys_to_types[keyword]])
 
                     raise TypeError("Expected %s argument to be of type %s%s" %
                                     (keyword,
                                      'or iterable of type ' if keyword in
-                                     ('assets', 'fields') else '',
+                                                               ('assets', 'fields') else '',
                                      expected_type)
-                    )
+                                    )
 
             return func(*args, **kwargs)
 
         return assert_keywords_and_call
-
 
 @contextmanager
 def handle_non_market_minutes(bar_data):
@@ -131,10 +113,8 @@ def handle_non_market_minutes(bar_data):
     finally:
         bar_data._handle_non_market_minutes = False
 
-
 cdef class BarData:
-    """
-    Provides methods for accessing minutely and daily price/volume data from
+    """Provides methods for accessing minutely and daily price/volume data from
     Algorithm API functions.
 
     Also provides utility methods to determine if an asset is alive, and if it
@@ -157,18 +137,12 @@ cdef class BarData:
     restrictions : zipline.finance.asset_restrictions.Restrictions
         Object that combines and returns restricted list information from
         multiple sources
-    universe_func : callable, optional
-        Function which returns the current 'universe'.  This is for
-        backwards compatibility with older API concepts.
     """
     cdef object data_portal
     cdef object simulation_dt_func
     cdef object data_frequency
     cdef object restrictions
     cdef dict _views
-    cdef object _universe_func
-    cdef object _last_calculated_universe
-    cdef object _universe_last_updated_at
     cdef bool _daily_mode
     cdef object _trading_calendar
     cdef object _is_restricted
@@ -176,7 +150,7 @@ cdef class BarData:
     cdef bool _adjust_minutes
 
     def __init__(self, data_portal, simulation_dt_func, data_frequency,
-                 trading_calendar, restrictions, universe_func=None):
+                 trading_calendar, restrictions):
         self.data_portal = data_portal
         self.simulation_dt_func = simulation_dt_func
         self.data_frequency = data_frequency
@@ -184,54 +158,13 @@ cdef class BarData:
 
         self._daily_mode = (self.data_frequency == "daily")
 
-        self._universe_func = universe_func
-        self._last_calculated_universe = None
-        self._universe_last_updated_at = None
-
         self._adjust_minutes = False
 
         self._trading_calendar = trading_calendar
         self._is_restricted = restrictions.is_restricted
 
-    cdef _get_equity_price_view(self, asset):
-        """
-        Returns a DataPortalSidView for the given asset.  Used to support the
-        data[sid(N)] public API.  Not needed if DataPortal is used standalone.
-
-        Parameters
-        ----------
-        asset : Asset
-            Asset that is being queried.
-
-        Returns
-        -------
-        SidView : Accessor into the given asset's data.
-        """
-        try:
-            self._warn_deprecated("`data[sid(N)]` is deprecated. Use "
-                            "`data.current`.")
-            view = self._views[asset]
-        except KeyError:
-            try:
-                asset = self.data_portal.asset_finder.retrieve_asset(asset)
-            except ValueError:
-                # assume fetcher
-                pass
-            view = self._views[asset] = self._create_sid_view(asset)
-
-        return view
-
-    cdef _create_sid_view(self, asset):
-        return SidView(
-            asset,
-            self.data_portal,
-            self.simulation_dt_func,
-            self.data_frequency
-        )
-
     cdef _get_current_minute(self):
-        """
-        Internal utility method to get the current simulation time.
+        """Internal utility method to get the current simulation time.
 
         Possible answers are:
         - whatever the algorithm's get_datetime() method returns (this is what
@@ -249,15 +182,14 @@ cdef class BarData:
         if self._daily_mode:
             # if we're in daily mode, take the given dt (which is the last
             # minute of the session) and get the session label for it.
-            dt = self.data_portal.trading_calendar.minute_to_session_label(dt)
+            dt = self.data_portal.trading_calendar.minute_to_session(dt)
 
         return dt
 
     @check_parameters(('assets', 'fields'),
-                      ((Asset, ContinuousFuture) + string_types, string_types))
+                      ((Asset, ContinuousFuture, str), (str,)))
     def current(self, assets, fields):
-        """
-        Returns the "current" value of the given fields for the given assets
+        """Returns the "current" value of the given fields for the given assets
         at the current simulation time.
 
         Parameters
@@ -356,22 +288,22 @@ cdef class BarData:
                 if not self._adjust_minutes:
                     return pd.Series(data={
                         field: self.data_portal.get_spot_value(
-                                    asset,
-                                    field,
-                                    self._get_current_minute(),
-                                    self.data_frequency
-                               )
+                            asset,
+                            field,
+                            self._get_current_minute(),
+                            self.data_frequency
+                        )
                         for field in fields
                     }, index=fields, name=assets.symbol)
                 else:
                     return pd.Series(data={
                         field: self.data_portal.get_adjusted_value(
-                                    asset,
-                                    field,
-                                    self._get_current_minute(),
-                                    self.simulation_dt_func(),
-                                    self.data_frequency
-                               )
+                            asset,
+                            field,
+                            self._get_current_minute(),
+                            self.simulation_dt_func(),
+                            self.data_frequency
+                        )
                         for field in fields
                     }, index=fields, name=assets.symbol)
         else:
@@ -383,24 +315,24 @@ cdef class BarData:
                 if not self._adjust_minutes:
                     return pd.Series(data={
                         asset: self.data_portal.get_spot_value(
-                                    asset,
-                                    field,
-                                    self._get_current_minute(),
-                                    self.data_frequency
-                               )
+                            asset,
+                            field,
+                            self._get_current_minute(),
+                            self.data_frequency
+                        )
                         for asset in assets
-                        }, index=assets, name=fields)
+                    }, index=assets, name=fields)
                 else:
                     return pd.Series(data={
                         asset: self.data_portal.get_adjusted_value(
-                                    asset,
-                                    field,
-                                    self._get_current_minute(),
-                                    self.simulation_dt_func(),
-                                    self.data_frequency
-                               )
+                            asset,
+                            field,
+                            self._get_current_minute(),
+                            self.simulation_dt_func(),
+                            self.data_frequency
+                        )
                         for asset in assets
-                        }, index=assets, name=fields)
+                    }, index=assets, name=fields)
 
             else:
                 # both assets and fields are iterable
@@ -410,26 +342,26 @@ cdef class BarData:
                     for field in fields:
                         series = pd.Series(data={
                             asset: self.data_portal.get_spot_value(
-                                        asset,
-                                        field,
-                                        self._get_current_minute(),
-                                        self.data_frequency
-                                   )
+                                asset,
+                                field,
+                                self._get_current_minute(),
+                                self.data_frequency
+                            )
                             for asset in assets
-                            }, index=assets, name=field)
+                        }, index=assets, name=field)
                         data[field] = series
                 else:
                     for field in fields:
                         series = pd.Series(data={
                             asset: self.data_portal.get_adjusted_value(
-                                        asset,
-                                        field,
-                                        self._get_current_minute(),
-                                        self.simulation_dt_func(),
-                                        self.data_frequency
-                                   )
+                                asset,
+                                field,
+                                self._get_current_minute(),
+                                self.simulation_dt_func(),
+                                self.data_frequency
+                            )
                             for asset in assets
-                            }, index=assets, name=field)
+                        }, index=assets, name=field)
                         data[field] = series
 
                 return pd.DataFrame(data)
@@ -443,8 +375,7 @@ cdef class BarData:
 
     @check_parameters(('assets',), (Asset,))
     def can_trade(self, assets):
-        """
-        For the given asset or iterable of assets, returns True if all of the
+        """For the given asset or iterable of assets, returns True if all of the
         following are true:
 
         1. The asset is alive for the session of the current simulation time
@@ -507,7 +438,7 @@ cdef class BarData:
         if self._is_restricted(asset, adjusted_dt):
             return False
 
-        session_label = self._trading_calendar.minute_to_session_label(dt)
+        session_label = self._trading_calendar.minute_to_session(dt)
 
         if not asset.is_alive_for_session(session_label):
             # asset isn't alive
@@ -522,8 +453,7 @@ cdef class BarData:
             if self._trading_calendar.is_open_on_minute(dt):
                 dt_to_use_for_exchange_check = dt
             else:
-                dt_to_use_for_exchange_check = \
-                    self._trading_calendar.next_open(dt)
+                dt_to_use_for_exchange_check = self._trading_calendar.next_open(dt)
 
             if not asset.is_exchange_open(dt_to_use_for_exchange_check):
                 return False
@@ -537,8 +467,7 @@ cdef class BarData:
 
     @check_parameters(('assets',), (Asset,))
     def is_stale(self, assets):
-        """
-        For the given asset or iterable of assets, returns True if the asset
+        """For the given asset or iterable of assets, returns True if the asset
         is alive and there is no trade data for the current simulation time.
 
         If the asset has never traded, returns False.
@@ -579,13 +508,13 @@ cdef class BarData:
             })
 
     cdef bool _is_stale_for_asset(self, asset, dt, adjusted_dt, data_portal):
-        session_label = normalize_date(dt) # FIXME
+        session_label = dt.normalize()  # FIXME
 
         if not asset.is_alive_for_session(session_label):
             return False
 
         current_volume = data_portal.get_spot_value(
-            asset, "volume",  adjusted_dt, self.data_frequency
+            asset, "volume", adjusted_dt, self.data_frequency
         )
 
         if current_volume > 0:
@@ -600,18 +529,15 @@ cdef class BarData:
 
             return not (last_traded_dt is pd.NaT)
 
-    @check_parameters(('assets', 'fields', 'bar_count',
-                       'frequency'),
-                      ((Asset, ContinuousFuture) + string_types, string_types,
+    @check_parameters(('assets', 'fields', 'bar_count', 'frequency'),
+                      ((Asset, ContinuousFuture, str),
+                       (str,),
                        int,
-                       string_types))
+                       (str,)))
     def history(self, assets, fields, bar_count, frequency):
-        """
-        Returns a trailing window of length ``bar_count`` containing data for
-        the given assets, fields, and frequency.
-
-        Returned data is adjusted for splits, dividends, and mergers as of the
-        current simulation time.
+        """Returns a trailing window of length ``bar_count`` with data for
+        the given assets, fields, and frequency, adjusted for splits, dividends,
+        and mergers as of the current simulation time.
 
         The semantics for missing data are identical to the ones described in
         the notes for :meth:`current`.
@@ -654,25 +580,26 @@ cdef class BarData:
           :class:`pd.DatetimeIndex`, and its columns will be ``assets``.
 
         - If multiple assets and multiple fields are requested, the returned
-          value is a :class:`pd.Panel` with shape
-          ``(len(fields), bar_count, len(assets))``. The axes of the returned
-          panel will be:
+          value is a :class:`pd.DataFrame` with a pd.MultiIndex containing
+          pairs of :class:`pd.DatetimeIndex`, and ``assets``, while the columns
+          while contain the field(s). It has shape ``(bar_count * len(assets),
+          len(fields))``. The names of the pd.MultiIndex are
 
-          - ``panel.items`` : ``fields``
-          - ``panel.major_axis`` : :class:`pd.DatetimeIndex` of length ``bar_count``
-          - ``panel.minor_axis`` : ``assets``
+              - ``date`` if frequency == '1d'`` or ``date_time`` if frequency == '1m``, and
+              - ``asset``
 
-        If the current simulation time is not a valid market time, we use the
-        last market close instead.
+        If the current simulation time is not a valid market time, we use the last market close instead.
         """
-        if isinstance(fields, string_types):
-            single_asset = isinstance(assets, PricingDataAssociable)
 
-            if single_asset:
-                asset_list = [assets]
-            else:
-                asset_list = assets
+        single_field = isinstance(fields, str)
 
+        single_asset = isinstance(assets, PricingDataAssociable)
+        if single_asset:
+            asset_list = [assets]
+        else:
+            asset_list = assets
+
+        if single_field:  # for one or more assets:
             df = self.data_portal.get_history_window(
                 asset_list,
                 self._get_current_minute(),
@@ -684,7 +611,7 @@ cdef class BarData:
 
             if self._adjust_minutes:
                 adjs = self.data_portal.get_adjustments(
-                    assets,
+                    asset_list,
                     fields,
                     self._get_current_minute(),
                     self.simulation_dt_func()
@@ -693,76 +620,52 @@ cdef class BarData:
                 df = df * adjs
 
             if single_asset:
-                # single asset, single field, return a series.
-                return df[assets]
+                # single asset, single field: return pd.Series with pd.DateTimeIndex
+                return df.loc[:, assets]
             else:
-                # multiple assets, single field, return a dataframe whose
-                # columns are the assets, indexed by dt.
+                # multiple assets, single field: return DataFrame with pd.DateTimeIndex
+                # and assets in columns.
                 return df
-        else:
-            if isinstance(assets, PricingDataAssociable):
-                # one asset, multiple fields. for now, just make multiple
-                # history calls, one per field, then stitch together the
-                # results. this can definitely be optimized!
+        else:  # multiple fields
+            # if single_asset:
+            # todo: optimize by querying multiple fields
+            # Make multiple history calls, one per field, then combine results
 
-                df_dict = {
-                    field: self.data_portal.get_history_window(
-                        [assets],
-                        self._get_current_minute(),
-                        bar_count,
-                        frequency,
-                        field,
-                        self.data_frequency,
-                    )[assets] for field in fields
-                }
+            df_dict = {
+                field: self.data_portal.get_history_window(asset_list,
+                                                           self._get_current_minute(),
+                                                           bar_count,
+                                                           frequency,
+                                                           field,
+                                                           self.data_frequency,
+                                                           ).loc[:, asset_list]
+                for field in fields
+            }
 
-                if self._adjust_minutes:
-                    adjs = {
-                        field: self.data_portal.get_adjustments(
-                            assets,
-                            field,
-                            self._get_current_minute(),
-                            self.simulation_dt_func()
-                        )[0] for field in fields
-                    }
-
-                    df_dict = {field: df * adjs[field]
-                               for field, df in iteritems(df_dict)}
-
-                # returned dataframe whose columns are the fields, indexed by
-                # dt.
-                return pd.DataFrame(df_dict)
-
-            else:
-                df_dict = {
-                    field: self.data_portal.get_history_window(
+            if self._adjust_minutes:
+                adjs = {
+                    field: self.data_portal.get_adjustments(
                         assets,
-                        self._get_current_minute(),
-                        bar_count,
-                        frequency,
                         field,
-                        self.data_frequency,
-                    ) for field in fields
+                        self._get_current_minute(),
+                        self.simulation_dt_func()
+                    )[0] for field in fields
                 }
 
-                if self._adjust_minutes:
-                    adjs = {
-                        field: self.data_portal.get_adjustments(
-                            assets,
-                            field,
-                            self._get_current_minute(),
-                            self.simulation_dt_func()
-                        ) for field in fields
-                    }
+                df_dict = {field: df * adjs[field]
+                           for field, df in df_dict.items()}
 
-                    df_dict = {field: df * adjs[field]
-                               for field, df in iteritems(df_dict)}
-
-                # returned panel has:
-                # items: fields
-                # major axis: dt
-                # minor axis: assets
-                return pd.Panel(df_dict)
+            dt_label = 'date' if frequency == '1d' else 'date_time'
+            from zipline.utils.pandas_utils import stack_future_compatible
+            df = (stack_future_compatible(
+                      pd.concat(df_dict,
+                                keys=df_dict.keys(),
+                                names=['fields', dt_label]),
+                      future_stack=True  # ensure we return all fields/assets/dates despite missing values
+                  )
+                  .unstack(level='fields'))
+            df.index.set_names([dt_label, 'asset'])
+            return df.sort_index()
 
     property current_dt:
         def __get__(self):
@@ -778,193 +681,16 @@ cdef class BarData:
 
     property current_session:
         def __get__(self):
-            return self._trading_calendar.minute_to_session_label(
+            return self._trading_calendar.minute_to_session(
                 self.simulation_dt_func(),
                 direction="next"
             )
 
     property current_session_minutes:
         def __get__(self):
-            return self._trading_calendar.minutes_for_session(
+            return self._trading_calendar.session_minutes(
                 self.current_session
             )
-
-    #################
-    # OLD API SUPPORT
-    #################
-    cdef _calculate_universe(self):
-        if self._universe_func is None:
-            return []
-
-        simulation_dt = self.simulation_dt_func()
-        if self._last_calculated_universe is None or \
-                self._universe_last_updated_at != simulation_dt:
-
-            self._last_calculated_universe = self._universe_func()
-            self._universe_last_updated_at = simulation_dt
-
-        return self._last_calculated_universe
-
-    def __iter__(self):
-        self._warn_deprecated("Iterating over the assets in `data` is "
-                        "deprecated.")
-        for asset in self._calculate_universe():
-            yield asset
-
-    def __contains__(self, asset):
-        self._warn_deprecated("Checking whether an asset is in data is "
-                        "deprecated.")
-        universe = self._calculate_universe()
-        return asset in universe
-
-    def items(self):
-        self._warn_deprecated("Iterating over the assets in `data` is "
-                        "deprecated.")
-        return [(asset, self[asset]) for asset in self._calculate_universe()]
-
-    def iteritems(self):
-        self._warn_deprecated("Iterating over the assets in `data` is "
-                        "deprecated.")
-        for asset in self._calculate_universe():
-            yield asset, self[asset]
-
-    def __len__(self):
-        self._warn_deprecated("Iterating over the assets in `data` is "
-                        "deprecated.")
-
-        return len(self._calculate_universe())
-
-    def keys(self):
-        self._warn_deprecated("Iterating over the assets in `data` is "
-                        "deprecated.")
-
-        return list(self._calculate_universe())
-
-    def iterkeys(self):
-        return iter(self.keys())
-
-    def __getitem__(self, name):
-        return self._get_equity_price_view(name)
-
-    cdef _warn_deprecated(self, msg):
-        warnings.warn(
-            msg,
-            category=ZiplineDeprecationWarning,
-            stacklevel=1
-        )
-
-cdef class SidView:
-    cdef object asset
-    cdef object data_portal
-    cdef object simulation_dt_func
-    cdef object data_frequency
-
-    """
-    This class exists to temporarily support the deprecated data[sid(N)] API.
-    """
-    def __init__(self, asset, data_portal, simulation_dt_func, data_frequency):
-        """
-        Parameters
-        ---------
-        asset : Asset
-            The asset for which the instance retrieves data.
-
-        data_portal : DataPortal
-            Provider for bar pricing data.
-
-        simulation_dt_func: function
-            Function which returns the current simulation time.
-            This is usually bound to a method of TradingSimulation.
-
-        data_frequency: string
-            The frequency of the bar data; i.e. whether the data is
-            'daily' or 'minute' bars
-        """
-        self.asset = asset
-        self.data_portal = data_portal
-        self.simulation_dt_func = simulation_dt_func
-        self.data_frequency = data_frequency
-
-    def __getattr__(self, column):
-        # backwards compatibility code for Q1 API
-        if column == "close_price":
-            column = "close"
-        elif column == "open_price":
-            column = "open"
-        elif column == "dt":
-            return self.dt
-        elif column == "datetime":
-            return self.datetime
-        elif column == "sid":
-            return self.sid
-
-        return self.data_portal.get_spot_value(
-            self.asset,
-            column,
-            self.simulation_dt_func(),
-            self.data_frequency
-        )
-
-    def __contains__(self, column):
-        return self.data_portal.contains(self.asset, column)
-
-    def __getitem__(self, column):
-        return self.__getattr__(column)
-
-    property sid:
-        def __get__(self):
-            return self.asset
-
-    property dt:
-        def __get__(self):
-            return self.datetime
-
-    property datetime:
-        def __get__(self):
-            return self.data_portal.get_last_traded_dt(
-                self.asset,
-                self.simulation_dt_func(),
-                self.data_frequency)
-
-    property current_dt:
-        def __get__(self):
-            return self.simulation_dt_func()
-
-    def mavg(self, num_minutes):
-        self._warn_deprecated("The `mavg` method is deprecated.")
-        return self.data_portal.get_simple_transform(
-            self.asset, "mavg", self.simulation_dt_func(),
-            self.data_frequency, bars=num_minutes
-        )
-
-    def stddev(self, num_minutes):
-        self._warn_deprecated("The `stddev` method is deprecated.")
-        return self.data_portal.get_simple_transform(
-            self.asset, "stddev", self.simulation_dt_func(),
-            self.data_frequency, bars=num_minutes
-        )
-
-    def vwap(self, num_minutes):
-        self._warn_deprecated("The `vwap` method is deprecated.")
-        return self.data_portal.get_simple_transform(
-            self.asset, "vwap", self.simulation_dt_func(),
-            self.data_frequency, bars=num_minutes
-        )
-
-    def returns(self):
-        self._warn_deprecated("The `returns` method is deprecated.")
-        return self.data_portal.get_simple_transform(
-            self.asset, "returns", self.simulation_dt_func(),
-            self.data_frequency
-        )
-
-    cdef _warn_deprecated(self, msg):
-        warnings.warn(
-            msg,
-            category=ZiplineDeprecationWarning,
-            stacklevel=1
-        )
-
 
 cdef class InnerPosition:
     """The real values of a position.
@@ -987,13 +713,13 @@ cdef class InnerPosition:
 
     def __repr__(self):
         return (
-            '%s(asset=%r, amount=%r, cost_basis=%r,'
-            ' last_sale_price=%r, last_sale_date=%r)' % (
-                type(self).__name__,
-                self.asset,
-                self.amount,
-                self.cost_basis,
-                self.last_sale_price,
-                self.last_sale_date,
-            )
+                '%s(asset=%r, amount=%r, cost_basis=%r,'
+                ' last_sale_price=%r, last_sale_date=%r)' % (
+                    type(self).__name__,
+                    self.asset,
+                    self.amount,
+                    self.cost_basis,
+                    self.last_sale_price,
+                    self.last_sale_date,
+                )
         )

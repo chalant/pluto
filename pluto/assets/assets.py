@@ -20,7 +20,8 @@ class AssetFinder(assets.AssetFinder):
     def lifetimes(self, dates, include_start_date, country_codes):
         lifetimes = self._compute_asset_lifetimes(country_codes)
 
-        raw_dates = as_column(dates.asi8)
+        # lifetimes are stored in nanoseconds: do not depend on the index's unit
+        raw_dates = as_column(dates.as_unit('ns').asi8)
         if include_start_date:
             mask = lifetimes.start <= raw_dates
         else:
@@ -33,13 +34,16 @@ class AssetFinder(assets.AssetFinder):
         sids = starts = ends = []
         equities_cols = self.equities.c
 
-        results = sa.select((
-            equities_cols.sid,
-            equities_cols.start_date,
-            equities_cols.end_date,
-        )).where(
-            (self.exchanges.c.exchange == equities_cols.exchange)
-        ).execute().fetchall()
+        with self.engine.connect() as conn:
+            results = conn.execute(
+                sa.select(
+                    equities_cols.sid,
+                    equities_cols.start_date,
+                    equities_cols.end_date,
+                ).where(
+                    (self.exchanges.c.exchange == equities_cols.exchange)
+                )
+            ).fetchall()
         if results:
             sids, starts, ends = zip(*results)
 

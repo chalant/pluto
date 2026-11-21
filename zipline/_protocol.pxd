@@ -1,5 +1,6 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): InnerPosition.amount is float64 (fractional positions).
 cimport numpy as np
-
+import numpy; numpy.import_array()
 from zipline.assets._assets cimport Asset
 
 
