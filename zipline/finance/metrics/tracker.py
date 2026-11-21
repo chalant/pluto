@@ -1,3 +1,4 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): MetricsTracker accepts an injected ledger.
 #
 # Copyright 2017 Quantopian, Inc.
 #
@@ -76,6 +77,7 @@ class MetricsTracker:
         data_frequency,
         asset_finder,
         metrics,
+        ledger=None,
     ):
         self.emission_rate = emission_rate
 
@@ -98,7 +100,9 @@ class MetricsTracker:
         )
         self._total_session_count = len(sessions)
 
-        self._ledger = Ledger(sessions, capital_base, data_frequency)
+        self._ledger = (
+            Ledger(sessions, capital_base, data_frequency) if ledger is None else ledger
+        )
 
         self._benchmark_source = NamedExplodingObject(
             "self._benchmark_source",
