@@ -11,7 +11,7 @@ collection fix, one commit each. A successor continues from the Status list.
 - [x] PM25 delete `pluto/_protocol.pyx`
 - [ ] PM27 fix the zipline.testing pipeline-engine fixtures (owner decision, added during the work)
 - [ ] PM26 delete dead code, stale files, the 2019 test-suite copy
-- [ ] `test_resource_path` collected as a test
+- [x] `test_resource_path` collected as a test
 - [ ] final run from a fresh clone
 
 ## Removed
@@ -170,6 +170,19 @@ Why dead:
   these two, not reported before the first errors stop compilation].
 
 Replaces: nothing (the vendored `zipline/_protocol.pyx` is what `zipline.protocol` and Pluto use).
+
+## Fixes
+
+### `test_resource_path` collected as a test
+
+`zipline/testing/core.py:1282` defines `def test_resource_path(*path_parts)` (path of `tests/resources/<parts>`; the
+`@nottest` decorator is commented out in the vendored file). `tests/test_pluto_examples.py` and
+`tests/test_pluto_zipline_oracle.py` imported it by name (`from zipline.testing import test_resource_path, core`), so
+pytest collected the imported function in those two modules as a test item that "passed" with no arguments (baseline
+master: 2 such items [INFERENCE from counts: 83 baseline - 10 dropped 0.22 tests - 71 now collected = 2; the assignment said 3; `grep` finds the import in two
+test modules only]). Fix, in Pluto's test files only (vendored zipline untouched): import the module only
+(`from zipline.testing import core`) and call `core.test_resource_path(...)`; a module attribute is not collected.
+`pytest --collect-only` of the seven files afterwards: 71 items, none named `test_resource_path`.
 
 ## Appendix: members of `tests/resources/example_data.tar.gz`
 

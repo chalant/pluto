@@ -21,7 +21,7 @@ from parameterized import parameterized
 from directory import utils as tdr
 
 from zipline import examples as zipline_examples
-from zipline.testing import test_resource_path, core
+from zipline.testing import core
 
 from pluto import examples as pluto_examples
 from pluto.data import benchmark as bm
@@ -104,7 +104,7 @@ class ZiplinePlutoFixture(unittest.TestCase):
         cls._pluto_tempdir = stack.enter_context(root_dir)
 
         cls._zpl_tempdir = dir_ = stack.enter_context(core.tmp_dir())
-        with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
+        with tarfile.open(core.test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path, filter='data')
 
         cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}

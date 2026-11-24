@@ -11,7 +11,7 @@ import pandas as pd
 
 from directory import utils as tdr
 
-from zipline.testing import test_resource_path, core
+from zipline.testing import core
 from zipline.data import data_portal
 from zipline.utils import cache
 from zipline.assets.assets import Equity, Future
@@ -306,7 +306,7 @@ class PlutoExamplesTests(unittest.TestCase):
 
         cls._zpl_tempdir = dir_ = stack.enter_context(core.tmp_dir())
 
-        with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
+        with tarfile.open(core.test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path, filter='data')
 
         # environ.setdefault('ZIPLINE_ROOT', dir_.getpath('example_data/root'))
