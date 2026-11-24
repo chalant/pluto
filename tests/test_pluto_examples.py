@@ -48,6 +48,18 @@ from pluto.setup import engine_setup
 # under the pandas version in use (dashes: 2-3-3 in the pinned environment)
 NEW_PANDAS_VERSION = pd.__version__.replace('.', '-')
 
+# zipline's perf frame has these and Pluto's tracker does not:
+# recorded variables: the zipline examples call record(); the Pluto ports of
+# the examples have their record() calls commented out, and the controller
+# side tracker has no recorded-variables channel.
+ZIPLINE_ONLY = {
+    'buy_and_hold': set(),
+    'buyapple': {'AAPL'},
+    'dual_ema_talib': {'AAPL', 'short_ema', 'long_ema', 'buy', 'sell'},
+    'dual_moving_average': {'AAPL', 'short_mavg', 'long_mavg'},
+    'momentum_pipeline': {'universe_size'},
+}
+
 
 def _build_data_frame(mon, process_id):
     daily_perfs = []
@@ -351,24 +363,9 @@ class PlutoExamplesTests(unittest.TestCase):
         errors = test_utils.frame_errors(desired, actual)
         self.assertEqual(errors, [])
         self.assertEqual(set(actual.columns) - set(desired.columns), set())
+        self.assertEqual(set(desired.columns) - set(actual.columns),
+                         ZIPLINE_ONLY[example_name])
 
     @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
     def test_simulation(self, example_name):
         self.check_new_expected(example_name)
-
-    # @parameterized.expand(sorted(examples.EXAMPLE_MODULES))
-    # def test_live_simulation(self, example_name):
-    #     thread_pool = self._thread_pool
-    #     framework_url = self._framework_url
-    #
-    #     client = test.InMemoryTestClient(
-    #         self._pluto_tempdir,
-    #         framework_url,
-    #         mode_utils.LiveSimulationModeFactory(
-    #             framework_url,
-    #             factory.LiveSimulationMarketFactory(
-    #                 blotter_factory.MultiSimulationBlotterFactory()),
-    #             thread_pool),
-    #         loop_utils.SimpleSimulationLoopFactory())
-    #
-    #     _run(client, example_name, self._expected_perf)

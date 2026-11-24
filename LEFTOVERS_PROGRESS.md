@@ -2,7 +2,7 @@
 
 Base: `origin/master` = `4f9d2519`. Worktree: `/home/yves/.cache/hades-pluto-dev/leftovers/wt`; env
 `/home/yves/.cache/hades-pluto-dev/leftovers/env313` (built with `dev/setup_env.sh`); scratch
-`/home/yves/.cache/hades-pluto-dev/leftovers/scratch`. Owner decisions PM24 to PM26 and the `test_resource_path`
+`/home/yves/.cache/hades-pluto-dev/leftovers/scratch`. Owner decisions PM24 to PM27 and the `test_resource_path`
 collection fix, one commit each. A successor continues from the Status list.
 
 ## Status
@@ -47,7 +47,7 @@ Pluto's test helpers from `2cb82849 2026-11-21`, `STORED_EXPECTED_DIFFERENCES` f
 | What | Where | Notes |
 |---|---|---|
 | `STORED_PANDAS_VERSION = '0-22-0'` | `tests/test_pluto_examples.py` | lookup key of the 0.22 set |
-| `STORED_EXPECTED_DIFFERENCES` (dict, 43 lines with its comment) | `tests/test_pluto_examples.py` | verbatim below |
+| `STORED_EXPECTED_DIFFERENCES` (dict, 37 lines with its comment; 43 with `STORED_PANDAS_VERSION` and `NEW_PANDAS_VERSION` above it) | `tests/test_pluto_examples.py` | verbatim below |
 | `cls._expected_perf` (dataframe_cache of the 0.22 directory) | `PlutoExamplesTests.setUpClass` | |
 | `check_stored`, `test_stored_results` (5 tests), `test_stored_results_expected_differences` (5 expectedFailure tests) | `PlutoExamplesTests` | 0.22 comparison, all columns not in the dict at the tolerance; the dict's columns as expected failures |
 | `STORED_RTOL = {'momentum_pipeline': 2e-12}` (+ 8 line comment) | `pluto/test_utils/test_utils.py` | verbatim below |
@@ -127,7 +127,7 @@ the originals.
 | | before (`origin/master`) | after |
 |---|---|---|
 | members | 160 | 153 |
-| `.tar.gz` bytes | 4937417 (sha256 `bbc262d4...b3b`) | 3923901 (sha256 `50a115e1...95d`) |
+| `.tar.gz` bytes | 4937417 (sha256 `bbc262d4...35b`) | 3923901 (sha256 `50a115e1...95d`) |
 | tar bytes (uncompressed) | 15462400 | 12328960 |
 
 Removed members (size in bytes): `expected_perf/0-22-0/` (dir), `buy_and_hold` 499651, `buyapple` 132002, `dual_ema_talib`
@@ -513,7 +513,7 @@ read in detail]; all from the same Zipline snapshot as above):
 
 ### `test_resource_path` collected as a test
 
-`zipline/testing/core.py:1282` defines `def test_resource_path(*path_parts)` (path of `tests/resources/<parts>`; the
+`zipline/testing/core.py:1282` (1285 after PM27) defines `def test_resource_path(*path_parts)` (path of `tests/resources/<parts>`; the
 `@nottest` decorator is commented out in the vendored file). `tests/test_pluto_examples.py` and
 `tests/test_pluto_zipline_oracle.py` imported it by name (`from zipline.testing import test_resource_path, core`), so
 pytest collected the imported function in those two modules as a test item that "passed" with no arguments (baseline
@@ -598,7 +598,7 @@ Reported, not deleted (not clearly dead, or outside what the decisions name):
 
 - `tests/resources/example_data.tar.gz` members `expected_perf/0-18-1/` and `expected_perf/0-19-2/` (6 files each, 3.1 MB and
   3.4 MB): no reference in code or tests (PM24 asked to keep them).
-- `conda/` (31 files: conda recipes of `zipline` and of its 2019 dependencies; newest commit `a55ee7b9 2020-01-03 Yves Chalant`,
+- `conda/` (25 files: conda recipes of `zipline` and of its 2019 dependencies; newest commit `a55ee7b9 2020-01-03 Yves Chalant`,
   oldest `e4caa431 2014-02-16 twiecki`): packaging of the removed Python 2.7 to 3.6 setup, called only by the deleted CI files
   (`conda build conda/$recipe`) and by the deleted `etc/conda_build_matrix.py`, but the owner touched it in 2020: not deleted.
 - `docs/` (Sphinx sources of Zipline 1.x with notebooks and `docs/deploy.py`): `docs/source/development-guidelines.rst`

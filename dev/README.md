@@ -161,10 +161,11 @@ Pipelines may use the generic `EquityPricing` columns or the US ones (`USEquityP
 the universe's loader serves `EquityPricing` specialised to any domain of its country, and
 the engine runs a `USEquityPricing` pipeline on `US_EQUITIES`, as Zipline does.
 
-The rest of `tests/` is Zipline's own old suite (a 2019 copy). It does not run on the fork and
-is out of scope; the tests of the vendored `zipline/` are those of zipline-reloaded 3.2.1
-(`tests/test_examples.py`, `tests/finance/test_transaction.py` and `tests/test_algorithm.py` of
-its repository were run against the vendored package, see `PY313_PROGRESS.md`).
+`tests/` holds only Pluto's suite. The 2019 copy of Zipline's own tests that was there was
+deleted (PM26; each file is recorded in `LEFTOVERS_PROGRESS.md`); the tests of the vendored
+`zipline/` are those of zipline-reloaded 3.2.1 (`tests/test_examples.py`,
+`tests/finance/test_transaction.py`, `tests/test_algorithm.py` and its pipeline tests were run
+against the vendored package, see `PY313_PROGRESS.md` and `LEFTOVERS_PROGRESS.md`).
 
 ## Out of scope (not repaired, still in the tree)
 

@@ -30,24 +30,12 @@ from pluto.trading_calendars import calendar_utils as cu
 from pluto.setup import directory_setup as dsp
 from pluto.test_utils import test_utils
 
-from tests.test_pluto_examples import _run
+from tests.test_pluto_examples import _run, ZIPLINE_ONLY
 
 # exact: Pluto equals the fork's Zipline bit for bit on the five examples
 # (measured 2026-11-20, ALIGN_PROGRESS.md)
 RTOL = 0.0
 ATOL = 0.0
-
-# zipline's perf frame has these and Pluto's tracker does not:
-# recorded variables: the zipline examples call record(); the Pluto ports of
-# the examples have their record() calls commented out, and the controller
-# side tracker has no recorded-variables channel.
-ZIPLINE_ONLY = {
-    'buy_and_hold': set(),
-    'buyapple': {'AAPL'},
-    'dual_ema_talib': {'AAPL', 'short_ema', 'long_ema', 'buy', 'sell'},
-    'dual_moving_average': {'AAPL', 'short_mavg', 'long_mavg'},
-    'momentum_pipeline': {'universe_size'},
-}
 
 
 def zipline_example_modules():
