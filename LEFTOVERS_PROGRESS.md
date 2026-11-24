@@ -9,7 +9,7 @@ collection fix, one commit each. A successor continues from the Status list.
 
 - [x] PM24 drop the pandas 0.22 stored results
 - [x] PM25 delete `pluto/_protocol.pyx`
-- [ ] PM27 fix the zipline.testing pipeline-engine fixtures (owner decision, added during the work)
+- [x] PM27 fix the zipline.testing pipeline-engine fixtures (owner decision, added during the work)
 - [ ] PM26 delete dead code, stale files, the 2019 test-suite copy
 - [x] `test_resource_path` collected as a test
 - [ ] final run from a fresh clone
@@ -183,6 +183,56 @@ master: 2 such items [INFERENCE from counts: 83 baseline - 10 dropped 0.22 tests
 test modules only]). Fix, in Pluto's test files only (vendored zipline untouched): import the module only
 (`from zipline.testing import core`) and call `core.test_resource_path(...)`; a module attribute is not collected.
 `pytest --collect-only` of the seven files afterwards: 71 items, none named `test_resource_path`.
+
+### PM27: `zipline.testing` pipeline-engine fixtures fixed (owner decision: fix, do not delete)
+
+Problem: Pluto's `SimplePipelineEngine(get_loader, controllable, default_domain=GENERIC, populate_initial_workspace=None,
+default_hooks=None)` (K30) takes a controllable (anything with an `.asset_finder` attribute; `engine.py:487` and `:767` read
+`self._controllable.asset_finder`), but three helpers in `zipline/testing` still built it the upstream way:
+
+- `zipline/testing/fixtures.py` `WithUSEquityPricingPipelineEngine.init_class_fixtures` (line ~1782):
+  `SimplePipelineEngine(get_loader=..., asset_finder=cls.asset_finder, default_domain=US_EQUITIES)` -> `TypeError:
+  unexpected keyword argument 'asset_finder'`;
+- `fixtures.py` `WithSeededRandomPipelineEngine.init_class_fixtures` (line ~1840): same keyword -> same error;
+- `zipline/testing/core.py` `temp_pipeline_engine` (line ~1031): `SimplePipelineEngine(get_loader, calendar, finder)`: the
+  positional layout of an older upstream signature (and wrong for upstream 3.2.1 too, where the second argument is
+  `asset_finder`: `calendar` would be taken as the controllable and `finder` as `default_domain`, rejected by
+  `expect_types`). The assignment called it `make_seeded_random_pipeline_engine`; the function is `temp_pipeline_engine`.
+  No caller in this repository (only re-exported by `zipline/testing/__init__.py`).
+
+Change (engine signature untouched): each passes `SimpleNamespace(asset_finder=<finder>)` as the controllable (`from types
+import SimpleNamespace` in both modules; no helper, three call sites); the two files carry "Modified by Pluto" header
+lines and the `temp_pipeline_engine` docstring is corrected. Other `SimplePipelineEngine(` callers in `zipline/` and
+`pluto/`: `zipline/algorithm.py:412` and `pluto/algorithm.py:177` pass the algorithm / `self._controllable`: fine.
+
+Proof, upstream tests of zipline-reloaded (clone `/home/yves/.cache/hades-pluto-dev/py313/port/zr`, tag 3.2.1) run
+against this tree (`PYTHONPATH=<worktree>`, cwd `zr`, `-o addopts="" -p no:randomly --maxfail=100000`) on
+`tests/pipeline/{test_column,test_domain,test_downsampling,test_engine,test_factor,test_filter,test_hooks,test_slice,test_statistical}.py`
+(the nine files that use `pipeline_engine` / `seeded_random_engine`; logs `leftovers/pm27-before.log`, `pm27-after.log`):
+
+| | passed | failed | errors | skipped | xfailed |
+|---|---|---|---|---|---|
+| before | 488 | 31 | 60 (all `TypeError ... unexpected keyword argument 'asset_finder'` in fixture setup) | 2 | 1 |
+| after | 539 | 31 | 8 | 3 | 1 |
+
+52 of the 60 errors are gone through the fixtures (51 more passes, 1 more skip); the other 8 were never the fixtures'
+(7 + 1, below). What remains is upstream test code that builds the engine with the upstream API or reads its private
+names:
+
+- 31 failed = 30 with `AttributeError: 'AssetFinder' object has no attribute 'asset_finder'` at `engine.py:487` plus 1
+  `SubTestFailures` (`PopulateInitialWorkspaceTestCase`, same AttributeError inside); in `test_engine.py` (21:
+  `ConstantInputTestCase` 14, `ParameterizedFactorTestCase` 3, `SyntheticBcolzTestCase` 2, `FrameInputTestCase` 1,
+  `PopulateInitialWorkspaceTestCase` 1) and `test_statistical.py::TestStatisticalBuiltIns` (10): those tests call
+  `SimplePipelineEngine(loader, asset_finder, ...)` themselves (17 such calls in the upstream `tests/`);
+- 7 errors `test_column.py::LatestTestCase`: `AttributeError: 'SimplePipelineEngine' object has no attribute '_finder'`
+  (`test_column.py:48`, `cls.engine._finder`; Pluto's engine stores `_controllable`);
+- 1 error `test_downsampling.py::TestDownsampledRowwiseOperation`: the test builds `SimplePipelineEngine(get_loader=...,
+  asset_finder=cls.asset_finder, ...)` itself (line 760).
+
+Also run after (`test_us_equity_pricing_loader.py`, `test_pipeline_algo.py`, `test_bundle_pipeline.py`, `test_testing.py`):
+42 passed, 2 failed (`test_testing.py::TestTestingSlippage::test_fill_all` and `test_constant_filled_per_tick`:
+`TypeError: Order.__init__() missing 1 required positional argument: 'amount'`, unrelated to the engine, not fixed;
+not run before the change [INFERENCE: not caused by it]).
 
 ## Appendix: members of `tests/resources/example_data.tar.gz`
 
