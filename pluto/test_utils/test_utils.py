@@ -14,16 +14,6 @@ from pluto.control.controller import behavior as bv
 
 from pluto.finance import metrics as mtr
 
-# Relative tolerance per example for the comparison with the stored expected
-# results (tests/resources/example_data.tar.gz); atol is 0 and every other
-# example is compared exactly. Pluto equals the fork's Zipline bit for bit on
-# all five examples (tests/test_pluto_zipline_oracle.py). For
-# momentum_pipeline both differ from the stored results by floating-point
-# summation noise, measured 2026-11-20 (ALIGN_PROGRESS.md): largest relative
-# difference 1.06e-12 (alpha), 6.4e-13 (pnl), largest absolute 1.3e-10
-# (ending_cash, portfolio_value ~1e5).
-STORED_RTOL = {'momentum_pipeline': 2e-12}
-
 # columns holding lists of dicts, compared after _normalize
 LIST_COLUMNS = ('positions', 'orders', 'transactions')
 
@@ -104,30 +94,6 @@ def compare_column(col, desired, actual, rtol=0.0, atol=0.0):
     except AssertionError as e:
         return '{}: {}'.format(col, str(e).strip().splitlines()[:6])
     return None
-
-
-def stored_with_utc_timestamps(frame):
-    """A copy of a stored expected frame (pickled with pandas 0.22) in which the
-    Timestamps inside the positions, orders and transactions dicts are UTC.
-
-    Under pandas 2 the 0.22 pickles of a time-zone aware Timestamp load as a
-    naive Timestamp with the same UTC wall time; the Timestamps of the frame's
-    own columns and index keep their zone.
-    """
-    def fix(value):
-        if isinstance(value, pd.Timestamp) and value.tzinfo is None:
-            return value.tz_localize('UTC')
-        return value
-
-    frame = frame.copy()
-    for col in LIST_COLUMNS:
-        if col in frame:
-            # element by element: numpy would turn equal-length lists into a 2-d array
-            fixed = np.empty(len(frame), dtype=object)
-            for i, items in enumerate(frame[col]):
-                fixed[i] = [{k: fix(v) for k, v in item.items()} for item in items]
-            frame[col] = fixed
-    return frame
 
 
 class TestMetricsTracker(object):

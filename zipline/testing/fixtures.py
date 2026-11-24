@@ -1,9 +1,12 @@
+# Modified by Pluto (Apache-2.0 section 4(b)): the pipeline engine fixtures pass a controllable (an object with an
+# ``asset_finder`` attribute) to SimplePipelineEngine, as Pluto's engine takes (PM27).
 import os
 from pathlib import Path
 import sqlite3
 from unittest import TestCase
 import warnings
 import sys
+from types import SimpleNamespace
 import gc
 import time as time_module
 
@@ -1778,7 +1781,7 @@ class WithUSEquityPricingPipelineEngine(WithAdjustmentReader, WithTradingSession
 
         cls.pipeline_engine = SimplePipelineEngine(
             get_loader=get_loader,
-            asset_finder=cls.asset_finder,
+            controllable=SimpleNamespace(asset_finder=cls.asset_finder),
             default_domain=US_EQUITIES,
         )
 
@@ -1836,7 +1839,7 @@ class WithSeededRandomPipelineEngine(WithTradingSessions, WithAssetFinder):
         )
         cls.seeded_random_engine = SimplePipelineEngine(
             get_loader=lambda column: loader,
-            asset_finder=cls.asset_finder,
+            controllable=SimpleNamespace(asset_finder=cls.asset_finder),
             default_domain=cls.SEEDED_RANDOM_PIPELINE_DEFAULT_DOMAIN,
             default_hooks=cls.make_seeded_random_pipeline_engine_hooks(),
             populate_initial_workspace=(

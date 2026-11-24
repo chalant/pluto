@@ -1,4 +1,5 @@
-# Modified by Pluto (Apache-2.0 section 4(b)): zipline_reloaded_git_root for the flat layout.
+# Modified by Pluto (Apache-2.0 section 4(b)): zipline_reloaded_git_root for the flat layout; temp_pipeline_engine
+# passes a controllable (an object with an ``asset_finder`` attribute) to SimplePipelineEngine (PM27).
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 import gzip
@@ -11,6 +12,7 @@ import tempfile
 from itertools import combinations, count, product
 from os.path import abspath, dirname, join, realpath
 from traceback import format_exception
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -999,12 +1001,13 @@ def gen_calendars(start, stop, critical_dates):
 @contextmanager
 def temp_pipeline_engine(calendar, sids, random_seed, symbols=None):
     """A contextManager that yields a SimplePipelineEngine holding a reference to
-    an AssetFinder generated via tmp_asset_finder.
+    an AssetFinder generated via tmp_asset_finder (wrapped in a minimal
+    controllable: the engine reads ``controllable.asset_finder``).
 
     Parameters
     ----------
     calendar : pd.DatetimeIndex
-        Calendar to pass to the constructed PipelineEngine.
+        Sessions of the temp assets and of the seeded random loader.
     sids : iterable[int]
         Sids to use for the temp asset finder.
     random_seed : int
@@ -1025,7 +1028,7 @@ def temp_pipeline_engine(calendar, sids, random_seed, symbols=None):
         return loader
 
     with tmp_asset_finder(equities=equity_info) as finder:
-        yield SimplePipelineEngine(get_loader, calendar, finder)
+        yield SimplePipelineEngine(get_loader, SimpleNamespace(asset_finder=finder))
 
 
 def bool_from_envvar(name, default=False, env=None):

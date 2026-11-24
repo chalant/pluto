@@ -21,7 +21,7 @@ from parameterized import parameterized
 from directory import utils as tdr
 
 from zipline import examples as zipline_examples
-from zipline.testing import test_resource_path, core
+from zipline.testing import core
 
 from pluto import examples as pluto_examples
 from pluto.data import benchmark as bm
@@ -30,24 +30,12 @@ from pluto.trading_calendars import calendar_utils as cu
 from pluto.setup import directory_setup as dsp
 from pluto.test_utils import test_utils
 
-from tests.test_pluto_examples import _run
+from tests.test_pluto_examples import _run, ZIPLINE_ONLY
 
 # exact: Pluto equals the fork's Zipline bit for bit on the five examples
 # (measured 2026-11-20, ALIGN_PROGRESS.md)
 RTOL = 0.0
 ATOL = 0.0
-
-# zipline's perf frame has these and Pluto's tracker does not:
-# recorded variables: the zipline examples call record(); the Pluto ports of
-# the examples have their record() calls commented out, and the controller
-# side tracker has no recorded-variables channel.
-ZIPLINE_ONLY = {
-    'buy_and_hold': set(),
-    'buyapple': {'AAPL'},
-    'dual_ema_talib': {'AAPL', 'short_ema', 'long_ema', 'buy', 'sell'},
-    'dual_moving_average': {'AAPL', 'short_mavg', 'long_mavg'},
-    'momentum_pipeline': {'universe_size'},
-}
 
 
 def zipline_example_modules():
@@ -104,7 +92,7 @@ class ZiplinePlutoFixture(unittest.TestCase):
         cls._pluto_tempdir = stack.enter_context(root_dir)
 
         cls._zpl_tempdir = dir_ = stack.enter_context(core.tmp_dir())
-        with tarfile.open(test_resource_path('example_data.tar.gz')) as tar:
+        with tarfile.open(core.test_resource_path('example_data.tar.gz')) as tar:
             tar.extractall(dir_.path, filter='data')
 
         cls._environ = {'ZIPLINE_ROOT': dir_.getpath('example_data/root')}

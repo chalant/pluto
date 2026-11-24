@@ -1,6 +1,6 @@
 """Adds the expected results of the examples for the pandas version in use to
-tests/resources/example_data.tar.gz (PM19: the pandas 0.22 results stay as they
-are, as a reference).
+tests/resources/example_data.tar.gz (PM24: the pandas 0.22 results were dropped
+from the tarball; the 0-18-1 and 0-19-2 sets are still in it, unused).
 
 The results are what zipline's own run path produces on the vendored zipline
 (zipline.examples.run_example -> run_algorithm) on the example data of the
