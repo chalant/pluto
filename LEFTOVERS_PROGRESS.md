@@ -10,9 +10,9 @@ collection fix, one commit each. A successor continues from the Status list.
 - [x] PM24 drop the pandas 0.22 stored results
 - [x] PM25 delete `pluto/_protocol.pyx`
 - [x] PM27 fix the zipline.testing pipeline-engine fixtures (owner decision, added during the work)
-- [x] PM26 delete dead code, stale files, the 2019 test-suite copy (commit pending; see Removed)
+- [x] PM26 delete dead code, stale files, the 2019 test-suite copy
 - [x] `test_resource_path` collected as a test
-- [ ] final run from a fresh clone
+- [x] final run from a fresh clone (71 passed)
 
 ## Removed
 
@@ -571,6 +571,26 @@ Also run after (`test_us_equity_pricing_loader.py`, `test_pipeline_algo.py`, `te
 42 passed, 2 failed (`test_testing.py::TestTestingSlippage::test_fill_all` and `test_constant_filled_per_tick`:
 `TypeError: Order.__init__() missing 1 required positional argument: 'amount'`, unrelated to the engine, not fixed;
 not run before the change [INFERENCE: not caused by it]).
+
+## Final run
+
+Fresh clone `git clone --no-local --branch py313-leftovers <worktree> .../leftovers/verify` at `153afba7`, fresh environment from
+`dev/setup_env.sh` (34 s, uv cache warm), then, from the clone:
+
+```
+python -c 'import pluto, zipline'     -> import ok
+python -m pytest -p no:randomly tests/test_pluto_examples.py tests/test_pluto_zipline_oracle.py tests/test_pluto_isolation.py \
+    tests/test_pluto_assets.py tests/test_pluto_scenarios.py tests/test_pluto_state.py tests/test_pluto_upstream_fixes.py
+-> 71 passed in 61.09 s, 0 failed, 0 xfailed, 0 skipped
+python -m pytest --collect-only -q tests | grep -c test_resource_path   -> 0
+```
+
+Delta from the baseline of master (78 passed + 5 xfailed = 83): minus 5 passed (`test_stored_results`, one per example, the 0.22
+comparison at the existing tolerance), minus 5 xfailed (`test_stored_results_expected_differences`), minus 2 passed that were the
+imported function `test_resource_path` collected as a test (83 - 10 - 2 = 71; the assignment expected 3 of those, only two modules import
+it). The five `test_simulation` tests compare Pluto with the `2-3-3` set at `rtol=0, atol=0` and pass: Pluto equals it exactly.
+
+PM27 was verified separately on the upstream zipline-reloaded tests (table in its section above).
 
 ## Left in place (doubtful), not deleted
 
