@@ -8,7 +8,8 @@ collection fix, one commit each. A successor continues from the Status list.
 ## Status
 
 - [x] PM24 drop the pandas 0.22 stored results
-- [ ] PM25 delete `pluto/_protocol.pyx`
+- [x] PM25 delete `pluto/_protocol.pyx`
+- [ ] PM27 fix the zipline.testing pipeline-engine fixtures (owner decision, added during the work)
 - [ ] PM26 delete dead code, stale files, the 2019 test-suite copy
 - [ ] `test_resource_path` collected as a test
 - [ ] final run from a fresh clone
@@ -139,6 +140,36 @@ Python 3.13 port; they are 0.18.1 (6 files, 3.1 MB) and 0.19.2 (6 files, 3.4 MB)
 weight, left for the owner.]
 
 Member lists (`tar tvf`, mode/size/name) are in the appendix at the end.
+
+### PM25: `pluto/_protocol.pyx` (1002 lines)
+
+What it was: Pluto's own copy of Zipline's Cython module `zipline/_protocol.pyx` as of the 2019 Zipline state (header
+`Copyright 2016 Quantopian`, docstring edits of Zipline commits `249124f2 2019-07-22` / `05417dcc 2019-07-23 Scott
+Sanderson`): the `check_parameters` decorator class, `handle_non_market_minutes` context manager, `cdef class BarData`
+(`current`, `history`, `can_trade`, `is_stale`, the data the strategy sees as `data`), `cdef class SidView`,
+`cdef class InnerPosition`. It was meant to become Pluto's own `BarData` (`pluto/finance/blotter/simulation_blotter.py`
+docstrings still say `zipline._protocol.BarData`); it differs from the vendored `zipline/_protocol.pyx` by 692 diff lines
+(`diff <(git show 4f9d2519:zipline/_protocol.pyx) pluto/_protocol.pyx | wc -l`; mostly the 2019 vs zipline-reloaded 3.2.1
+versions, Pluto-specific edits not analysed [INFERENCE]).
+
+Where from: added to Pluto by `48bc9293 2022-07-25 chalant engine refactoring` (`git log --diff-filter=A`; one commit
+only in Pluto's history of the path); `git log --follow` traces it to `16fd6681 2016-04-04 Eddie Hebert ENH: Rewrite of
+Zipline to use lazy access pattern` (upstream Zipline, 42 commits, last `48bc9293`).
+
+Why dead:
+
+- not in `setup.py` (`ext_modules` has `extension("zipline._protocol")` at line 62 and, from `pluto/`, only
+  `extension("pluto.control.clock.sim_engine")`: nothing named `pluto._protocol`);
+- no importer: `grep -rn "_protocol" pluto zipline tests dev setup.py` finds only `zipline._protocol` (the vendored module:
+  `zipline/protocol.py:22`, `zipline/algorithm.py:30`, `zipline/finance/_finance_ext.pyx:9`, tests) and docstrings
+  `zipline._protocol.BarData`; there is no `pluto._protocol` anywhere, no `pluto/_protocol.pxd`, no built `.so`;
+- does not compile: `cython -3 -I . pluto/_protocol.pyx` (Cython 3.3.1 of the env) reports
+  `pluto/_protocol.pyx:220:69: undeclared name not builtin: data_frequency`,
+  `:492:44` and `:497:41: Call with wrong number of arguments (expected 6, got 5)`; and
+  `from collections import Iterable` (line 24) and `from six import ... PY2` do not exist on Python 3.13 [INFERENCE for
+  these two, not reported before the first errors stop compilation].
+
+Replaces: nothing (the vendored `zipline/_protocol.pyx` is what `zipline.protocol` and Pluto use).
 
 ## Appendix: members of `tests/resources/example_data.tar.gz`
 
