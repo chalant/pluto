@@ -190,22 +190,13 @@ applied. `pluto/_protocol.pyx` (not in `setup.py`, no importer, does not compile
 
 ## Open owner items
 
-- Stored 0.22 comparisons (expected failures, numbers in `STORED_EXPECTED_DIFFERENCES`): `alpha` differs by construction
-  (empyrical-reloaded 0.7.3 compounds `(1 + mean) ** n - 1`; the 0.22-era empyrical multiplied: PM3), up to 1.2 % relative in
-  `buyapple` and 60 % relative (1.36 absolute) in `momentum_pipeline`; `benchmark_volatility` and `beta` differ by about one unit in
-  the last place in some rows (cause not analysed: numpy/pandas rounding is the likely one). Decide whether to keep the 0.22 set as
-  a reference only (current state) or drop it.
-- `pluto/_protocol.pyx` (1000 lines, 2019 copy of `zipline/_protocol.pyx`; not in `setup.py`, no importer, does not compile) was NOT
-  ported (11 upstream commits) and not deleted: delete it?
-- Dead code left (no importer): `pluto/coms/client/ledger.py` (pandas 1 `Series.append`), `pluto/data/io/*`, `pluto/coms/client/protos/`.
-- Legacy CI/infra files (`.travis.yml`, `.appveyor.yml`, `Dockerfile-dev`, `vagrant_init.sh`, `etc/dev-install`, `ci/`) still name removed
-  `etc/requirements_{blaze,talib}.txt` and Python 3.6.
-- The rest of `tests/` (test_algorithm.py, test_assets.py, ... 2019 copies of Zipline's own tests) does not run; the vendored
-  zipline's own tests are in the zipline-reloaded repository (C1a/C1b).
-- The `test_resource_path` function imported into three test modules is collected by pytest as a (spurious, passing) test:
-  counts include 3 of those.
+- RESOLVED by the owner decisions PM24, PM25, PM26 and the `test_resource_path` fix (branch `py313-leftovers`, every deletion
+  documented in `LEFTOVERS_PROGRESS.md`, section "Removed"): the stored 0.22 set and its comparison tests (PM24), `pluto/_protocol.pyx`
+  (PM25), `pluto/coms/client/ledger.py`, `pluto/data/io/*`, `pluto/coms/client/protos/`, the legacy CI/infra files and the 2019 copy of
+  Zipline's tests (PM26), the spurious `test_resource_path` test items.
 - The minute-data cancel policy is not executed on the Pluto path (never was); only the daily one (`698b7dbb`).
 - Pluto's stock dividends and splits use zipline's `Position` (whole shares, floor/trunc), not fractional shares:
   `pluto/finance/position.py` (fractional override) was dead and is deleted.
-- `pluto/coms/*_pb2.py` and `pluto/finance/metrics/tracker_state_pb2.py` have no `.proto` source and do not import.
-- Zipline pipeline tests that pass an `AssetFinder` to `SimplePipelineEngine` (zipline.testing fixtures) are incompatible with K30.
+- RESOLVED (PM26, PM27; `LEFTOVERS_PROGRESS.md`): the stale `*_pb2.py` modules are deleted; the zipline.testing pipeline-engine
+  fixtures pass a controllable to `SimplePipelineEngine`. Upstream zipline pipeline tests that build `SimplePipelineEngine(loader,
+  asset_finder)` themselves stay incompatible with K30 (listed there).
