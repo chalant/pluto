@@ -131,7 +131,7 @@ $ENV/bin/python -m pytest -p no:randomly \
 
 | File | Checks |
 |---|---|
-| `tests/test_pluto_examples.py` | each example through Pluto, compared exactly with the results generated on this stack by zipline's own run path (`example_data/expected_perf/2-3-3`, key = pandas version), and with the stored pandas 0.22 results (`0-22-0`) at the existing tolerances, with the known differences recorded and marked `expectedFailure` |
+| `tests/test_pluto_examples.py` | each example through Pluto, compared exactly with the results generated on this stack by zipline's own run path (`example_data/expected_perf/2-3-3`, key = pandas version) |
 | `tests/test_pluto_zipline_oracle.py` | each example through the vendored Zipline (`zipline.examples.run_example`) and through Pluto in the same process, with the same benchmark returns; every common column, exactly |
 | `tests/test_pluto_scenarios.py` | the strategies in `tests/pluto_scenarios/` (limit, stop and stop-limit orders, targets, shorts, cancellation, partial fills, commission models, schedule rules and calendars, history, pipeline screen, a pipeline on `USEquityPricing` with a `CustomFactor`, leverage, splits, dividends, delisting, the strategy's portfolio view) through plain Zipline (`run_algorithm`) and Pluto; every common column, exactly, and no column on one side only |
 | `tests/test_pluto_isolation.py` | the examples run in a child interpreter in which the third-party packages that only removed code needed are blocked by a `find_spec` finder; a negative control proves that the finder blocks |
@@ -140,16 +140,10 @@ $ENV/bin/python -m pytest -p no:randomly \
 | `tests/test_pluto_upstream_fixes.py` | the zipline-reloaded fixes mirrored into Pluto's own copies (splits, stock dividends, daily cancel policy) |
 
 Tolerance policy: **Pluto against the vendored Zipline is exact** (`rtol=0, atol=0`), on every
-common column of the five examples and of the scenarios; against the new expected set (`2-3-3`)
-too. No tolerance or assertion is ever loosened. Against the stored pandas 0.22 results the
-existing tolerances stay (exact, except `momentum_pipeline`: `rtol=2e-12`,
-`pluto.test_utils.test_utils.STORED_RTOL`), and the columns that differ on this stack are
-recorded in `STORED_EXPECTED_DIFFERENCES` (`tests/test_pluto_examples.py`) with the measured
-largest absolute and relative differences, in a separate test marked
-`unittest.expectedFailure` (every other column is compared at the tolerance, and passes):
-`alpha` (empyrical-reloaded compounds, `(1 + mean) ** n - 1`, where the 0.22-era empyrical
-multiplied the mean by `n`) and, by one unit in the last place in some rows,
-`benchmark_volatility` and `beta`. All columns are compared, `positions`, `orders` and
+common column of the five examples and of the scenarios; against the stored expected set
+(`2-3-3`) too. No tolerance or assertion is ever loosened. The stored pandas 0.22 results were
+dropped from the tarball (PM24; the measured differences are recorded in
+`LEFTOVERS_PROGRESS.md`). All columns are compared, `positions`, `orders` and
 `transactions` included (`pluto.test_utils.test_utils.compare_column`: lists of dicts compared
 after sorting, identifiers left out, same keys). Zipline reports NaN where Pluto's tracker reports
 0 (first-day volatility and ratios); NaN in the reference counts as 0. The stored pickles are
