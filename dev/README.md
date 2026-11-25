@@ -50,18 +50,18 @@ A run has one bus (`pluto/bus/`; `StrategyManager(asset_finder, stp, bus=None).b
 `Bus` can be given: the in-process wiring of the tests picks it up from the manager). The controller owns the clock and
 does not call its components: at each clock event it publishes one event per phase and runs the bus until it is idle
 (`pluto/control/phases.py`), then checks that every participant of the phase said `done` before it publishes the next
-(lock-step; a missing `done`, a `done` that carries an error, a stale or doubled one, or a message the bus gave up on
+(lock-step; a `done` of a participant that is not expected is accepted; a missing `done`, a `done` that carries an error, a stale or doubled one, or a message the bus gave up on
 raises `PhaseError`, there is no timeout). The order is the order of the calls before the bus, and the floating point
 sums depend on it (transactions before commissions; `revalue` right before each metrics read; the prices of the tick
 are read before its writes; with two calendars the book and metrics phases run signal after signal).
 
 | phase (rank) | topic | published | subscribers | `done` |
 |---|---|---|---|---|
-| book (10) | `phase.book` | per signal (`SignalEvent`: calendar time, event, last sale prices) | broker: sync prices, match, dividends and splits, expiries, `revalue` where the tracker reads | broker: fill ids, stream events, stream watermark |
-| metrics (20) | `phase.metrics` | per signal | metrics tracker: reads the ledger (`end_of_bar`, `start_of_session`, `end_of_session`) | metrics: tracker calls (0 or 1) |
-| account (30) | `phase.account` (`AccountEvent`) | per tick | broker: sends each strategy its `BrokerState` (fills, last sale prices) on `strategy.account.<process id>`; the runtime applies it | broker: fill ids, states sent; runtime: fill ids, prices |
-| trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send `WatchList` and `OrderBatch` on `strategy.watchlist` and `strategy.orders` (key: process id), taken by the strategy manager | runtime: number of orders it sent; the broker side checks it against the orders it received, per strategy, in the submit phase |
-| submit (50) | `phase.submit` (`ClockEvent`) | per tick | broker: submits the orders of the tick to the book, starts the next tick | broker: submitted ids, stream events, watermark |
+| book (10) | `phase.book` | per signal (`SignalEvent`: calendar time, event, last sale prices) | broker: sync prices, match, dividends and splits, expiries, `revalue` where the tracker reads | broker |
+| metrics (20) | `phase.metrics` | per signal | metrics tracker: reads the ledger (`end_of_bar`, `start_of_session`, `end_of_session`) | metrics |
+| account (30) | `phase.account` (`AccountEvent`) | per tick | broker: sends each strategy its `BrokerState` (fills, last sale prices) on `strategy.account.<process id>`; the runtime applies it | broker, each runtime |
+| trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send `WatchList` and `OrderBatch` on `strategy.watchlist` and `strategy.orders` (key: process id), taken by the strategy manager | each runtime: the number of orders it sent; the broker side checks it against the orders it received, per strategy, in the submit phase |
+| submit (50) | `phase.submit` (`ClockEvent`) | per tick | broker: submits the orders of the tick to the book, starts the next tick | broker |
 
 Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `phase` = the rank; a `done` (topic
 `phase.done`, `PhaseDone`) has the rank plus one. Every payload is a protobuf message (`protos/phases.proto` and the
@@ -174,8 +174,8 @@ $ENV/bin/python -m pytest -p no:randomly tests
 | `tests/test_bus_contract.py` | the bus contract (rules S1 to S14) on `InMemoryBus` and on `SerializingBus(InMemoryBus)`, including the delivery trace under different `PYTHONHASHSEED`s |
 | `tests/test_bus_memory.py` | what holds for the in-memory bus only: bounded queues and overflow, log positions, group assignment |
 | `tests/test_bus_serializing.py` | what only the serialising wrapper does: bytes on the inner bus, codecs, undecodable payloads |
-| `tests/test_pluto_phases.py` | the controller's lock-step (`PhaseDriver`) on a bare bus with fake participants: dones by participant, a missing, failed, stale or doubled `done`, a message the bus gave up on; the phase ranks; every payload through a `SerializingBus` |
-| `tests/test_pluto_phases_run.py` | whole runs driven by phases: `buy_and_hold`, `momentum_pipeline` and two scenarios give the same frames over `InMemoryBus` and `SerializingBus(InMemoryBus)`; the messages and `done`s of a run; a failing strategy aborts the run with a `PhaseError` |
+| `tests/test_pluto_phases.py` | the controller's lock-step (`PhaseDriver`) on a bare bus with fake participants: a missing, failed, stale or doubled `done`, a message the bus gave up on; the phase ranks; every payload through a `SerializingBus` |
+| `tests/test_pluto_phases_run.py` | whole runs driven by phases: `buy_and_hold`, `momentum_pipeline` and two scenarios give the same frames over `InMemoryBus` and `SerializingBus(InMemoryBus)`; the messages of a run and the order counts of its `done`s; a failing strategy aborts the run with a `PhaseError` |
 
 Tolerance policy: **Pluto against the vendored Zipline is exact** (`rtol=0, atol=0`), on every
 common column of the five examples and of the scenarios; against the stored expected set

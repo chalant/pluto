@@ -23,7 +23,7 @@ def clock_event():
 class FakeParticipant(object):
     """Says done in a phase, with the work it is given."""
 
-    def __init__(self, bus, name, phase, work=lambda: phases.Summary()):
+    def __init__(self, bus, name, phase, work=lambda: None):
         self.name = name
         self.calls = 0
         self._bus = bus
@@ -42,16 +42,13 @@ class PhaseDriverTests(unittest.TestCase):
         self.bus = InMemoryBus()
         self.driver = phases.PhaseDriver(self.bus)
 
-    def test_dones_by_participant_with_their_content(self):
-        FakeParticipant(self.bus, 'b', phases.BOOK, lambda: phases.Summary(('x', 'y'), 2, 7))
-        FakeParticipant(self.bus, 'a', phases.BOOK)
+    def test_every_expected_participant_says_done(self):
+        a = FakeParticipant(self.bus, 'a', phases.BOOK)
+        b = FakeParticipant(self.bus, 'b', phases.BOOK)
 
-        dones = self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+        self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
 
-        self.assertEqual([d.participant for d in dones], ['a', 'b'])
-        self.assertEqual(list(dones[1].ids), ['x', 'y'])
-        self.assertEqual((dones[1].count, dones[1].sequence), (2, 7))
-        self.assertEqual(dones[1].phase, 'phase.book')
+        self.assertEqual((a.calls, b.calls), (1, 1))
 
     def test_missing_done_aborts(self):
         FakeParticipant(self.bus, 'a', phases.BOOK)
@@ -89,8 +86,8 @@ class PhaseDriverTests(unittest.TestCase):
 
     def test_done_of_another_phase_or_time_aborts(self):
         FakeParticipant(self.bus, 'a', phases.BOOK)
-        phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late', phases.Summary())
-        phases.publish_done(self.bus, phases.BOOK, TS_NS - 1, 'old', phases.Summary())
+        phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late')
+        phases.publish_done(self.bus, phases.BOOK, TS_NS - 1, 'old')
 
         with self.assertRaises(PhaseError) as raised:
             self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
@@ -106,14 +103,14 @@ class PhaseDriverTests(unittest.TestCase):
         with self.assertRaisesRegex(PhaseError, 'a said done twice'):
             self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
 
-    def test_done_of_an_unexpected_participant_is_not_an_error(self):
-        # only the expected ones are required: a participant that joined late may answer
+    def test_done_of_an_unexpected_participant_is_accepted(self):
+        # policy: only the expected participants are required; a participant that joined late may answer
         FakeParticipant(self.bus, 'a', phases.BOOK)
-        FakeParticipant(self.bus, 'extra', phases.BOOK)
+        extra = FakeParticipant(self.bus, 'extra', phases.BOOK)
 
-        dones = self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+        self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
 
-        self.assertEqual([d.participant for d in dones], ['a', 'extra'])
+        self.assertEqual(extra.calls, 1)
 
     def test_dones_of_a_phase_do_not_leak_into_the_next(self):
         FakeParticipant(self.bus, 'a', phases.BOOK)
@@ -158,7 +155,7 @@ class CodecTests(unittest.TestCase):
                                         calendar_name='XNYS'),
                 last_sale_prices=[broker_pb2.AssetPrice(sid=2, price=0.1)]),
             'AccountEvent': phases_pb2.AccountEvent(clock=clock_event()),
-            'PhaseDone': phases_pb2.PhaseDone(phase='phase.book', participant='broker', ids=['a'], count=1),
+            'PhaseDone': phases_pb2.PhaseDone(phase='phase.trade', participant='aaa', orders=3, error='e'),
         }
         self.assertEqual(set(messages), set(phases.message_types()))
 

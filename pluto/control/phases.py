@@ -6,14 +6,13 @@ phase's topic and waits, lock-step, until the bus is idle and every participant 
 stays deterministic. The order of the phases is the order the controller called its components before the bus:
 
 ==========  ====  ===============  ==========  ==========================  ===========================================
-phase       rank  topic            published   subscribers                 done (participant: content)
+phase       rank  topic            published   subscribers                 done
 ==========  ====  ===============  ==========  ==========================  ===========================================
-book        10    phase.book       per signal  broker                      broker: fill ids, stream events, watermark
-metrics     20    phase.metrics    per signal  metrics                     metrics: tracker calls (0 or 1)
-account     30    phase.account    per tick    broker, then the runtimes   broker: fill ids, states sent;
-                                                                           runtime: fill ids, prices applied
-trade       40    phase.trade      per tick    the runtimes                runtime: number of orders it sent
-submit      50    phase.submit     per tick    broker                      broker: submitted ids, events, watermark
+book        10    phase.book       per signal  broker                      broker
+metrics     20    phase.metrics    per signal  metrics                     metrics
+account     30    phase.account    per tick    broker, then the runtimes   broker, each runtime
+trade       40    phase.trade      per tick    the runtimes                each runtime: the number of orders it sent
+submit      50    phase.submit     per tick    broker                      broker
 ==========  ====  ===============  ==========  ==========================  ===========================================
 
 A signal is one calendar's event of the tick: its two phases run one after the other for each signal, in the order of the
@@ -27,13 +26,15 @@ the process id: what the runtime sends back), with the rank of the phase that ma
 Payloads are protobuf messages (``protos/clock.proto``, ``broker.proto``, ``phases.proto``), so ``codec()`` serialises every
 one of them.
 """
+from collections.abc import Callable, Iterable
 from typing import NamedTuple
 
 import logbook
 import pandas as pd
 from google.protobuf import timestamp_pb2
+from google.protobuf.message import Message
 
-from pluto.bus import Bus, ProtobufCodec
+from pluto.bus import Bus, Delivery, ProtobufCodec
 
 from protos import broker_pb2, clock_pb2, phases_pb2
 
@@ -102,29 +103,18 @@ class PhaseError(RuntimeError):
     """A phase did not complete: a participant failed or did not say done."""
 
 
-class Summary(NamedTuple):
-    """What a participant published in a phase."""
-    ids: tuple[str, ...] = ()
-    count: int = 0
-    sequence: int = 0
-
-
 def publish_done(
         bus: Bus,
         phase: Phase,
         logical_ts: int,
         participant: str,
-        summary: Summary = Summary(),
+        orders: int = 0,
         error: str = '') -> None:
+    """Says that ``participant`` finished its work of ``phase`` at ``logical_ts``, or failed (``error``). ``orders`` is
+    the number of orders a runtime sent in the trade phase."""
     bus.publish(
         DONE_TOPIC,
-        phases_pb2.PhaseDone(
-            phase=phase.topic,
-            participant=participant,
-            ids=summary.ids,
-            count=summary.count,
-            sequence=summary.sequence,
-            error=error),
+        phases_pb2.PhaseDone(phase=phase.topic, participant=participant, orders=orders, error=error),
         type=message_type(phases_pb2.PhaseDone),
         logical_ts=logical_ts,
         producer_id=participant,
@@ -139,14 +129,20 @@ def fail(bus: Bus, phase: Phase, logical_ts: int, participant: str, error: Excep
     publish_done(bus, phase, logical_ts, participant, error='{}: {}'.format(type(error).__name__, error))
 
 
-def report(bus: Bus, phase: Phase, logical_ts: int, participant: str, work, log: logbook.Logger) -> None:
-    """Runs ``work()``, which returns a ``Summary``, and says done; a failure is reported (``fail``)."""
+def report(
+        bus: Bus,
+        phase: Phase,
+        logical_ts: int,
+        participant: str,
+        work: Callable[[], None],
+        log: logbook.Logger) -> None:
+    """Runs ``work()`` and says done; a failure is reported (``fail``)."""
     try:
-        summary = work()
+        work()
     except Exception as e:
         fail(bus, phase, logical_ts, participant, e, log)
     else:
-        publish_done(bus, phase, logical_ts, participant, summary)
+        publish_done(bus, phase, logical_ts, participant)
 
 
 class PhaseDriver(object):
@@ -159,13 +155,21 @@ class PhaseDriver(object):
 
         bus.subscribe(DONE_TOPIC, self._on_done)
 
-    def _on_done(self, delivery) -> None:
+    def _on_done(self, delivery: Delivery) -> None:
         self._dones.append((delivery.envelope.logical_ts, delivery.envelope.payload))
 
-    def drive(self, phase: Phase, payload, logical_ts: int, expected, key: str = '') -> tuple:
-        """Publishes ``payload`` on the topic of ``phase``, runs the bus until it is idle and returns the dones, by
-        participant name. ``expected`` are the participants that must say done; ``PhaseError`` if one did not, one
-        failed, or the bus gave up on a delivery."""
+    def drive(
+            self,
+            phase: Phase,
+            payload: Message,
+            logical_ts: int,
+            expected: Iterable[str],
+            key: str = '') -> None:
+        """Publishes ``payload`` on the topic of ``phase`` and runs the bus until it is idle. ``expected`` are the
+        participants that must say done; ``PhaseError`` if one did not, one failed, or the bus gave up on a delivery.
+        A done of a participant that is not expected is accepted (policy: only the expected ones are required, a
+        participant that joined late may answer); it is an error only if it is not of this phase and tick or is
+        doubled."""
         bus = self._bus
         dones = self._dones
         dones.clear()
@@ -206,5 +210,3 @@ class PhaseDriver(object):
         if problems:
             raise PhaseError('{} at {}: {}'.format(
                 phase.topic, pd.Timestamp(logical_ts, tz='UTC'), '; '.join(problems)))
-
-        return tuple(seen[name] for name in sorted(seen))

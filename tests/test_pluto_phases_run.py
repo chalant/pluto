@@ -138,7 +138,7 @@ class PhasesRunTests(ZiplinePlutoFixture):
         published = [(topic, payload) for topic, _, payload in bus.published]
         batches = [p for t, p in published if t == phases.ORDERS_TOPIC]
         sent = [order.id for batch in batches for order in batch.orders]
-        counted = sum(p.count for t, p in published if t == phases.DONE_TOPIC and p.phase == phases.TRADE.topic)
+        counted = sum(p.orders for t, p in published if t == phases.DONE_TOPIC and p.phase == phases.TRADE.topic)
         told = [c.transaction.order_id for t, p in published if t.startswith('strategy.account.')
                 for c in p.transactions]
 

@@ -21,12 +21,10 @@ message AccountEvent {
     repeated AssetPrice last_sale_prices = 2;
 }
 
-// phase.done: what a participant published in a phase
+// phase.done: a participant has finished its work of a phase
 message PhaseDone {
     string phase = 1;              // topic of the phase event
     string participant = 2;
-    repeated string ids = 3;       // order ids it published in the phase (fills, orders sent, orders submitted)
-    uint64 count = 4;              // events or messages it published in the phase
-    uint64 sequence = 5;           // stream watermark of the book after the phase (0: not the book's)
-    string error = 6;              // set when the participant failed in the phase
+    uint32 orders = 3;             // trade phase: the number of orders the runtime sent
+    string error = 4;              // set when the participant failed in the phase
 }

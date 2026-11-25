@@ -146,3 +146,9 @@ Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. 
   the tick): a lost batch or a stale one (ignored by the manager) is a `PhaseError` before anything is submitted. Tests: no batch,
   lost batch, stale batch (`tests/test_pluto_phase_participants.py`); `test_what_a_run_publishes` asserts counts in the dones and
   compares the orders of the batches with the fills the strategy was told (the ids of the removed done content).
+- **M3 (unused `PhaseDone` content)**: confirmed: nobody read `ids`, `sequence`, nor `count` except the trade done after M2.
+  `protos/phases.proto` `PhaseDone` is now `phase`, `participant`, `orders` (trade phase: orders the runtime sent) and `error`;
+  `protos/phases_pb2.py` regenerated with `python -m grpc_tools.protoc -I. --python_out=. protos/phases.proto`. `Summary` is gone;
+  `publish_done(bus, phase, ts, participant, orders=0, error='')`; the participants' work returns nothing; `BrokerParticipant`
+  no longer follows the book's stream (it only did so to fill the dones); `PhaseDriver.drive` returns nothing (the controller
+  never read what it returned).

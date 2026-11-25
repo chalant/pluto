@@ -63,12 +63,8 @@ class RuntimeEndpoint(object):
             lambda: self._account(envelope.payload),
             log)
 
-    def _account(self, state) -> phases.Summary:
+    def _account(self, state) -> None:
         self._process.account_update(state)
-
-        return phases.Summary(
-            tuple(commission.transaction.order_id for commission in state.transactions),
-            len(state.last_sale_prices))
 
     def _on_trade(self, delivery) -> None:
         envelope = delivery.envelope
@@ -89,5 +85,4 @@ class RuntimeEndpoint(object):
                 self._id,
                 error='sent no batch of orders (a runtime must run its clock event synchronously)')
         else:
-            phases.publish_done(
-                self._bus, phases.TRADE, envelope.logical_ts, self._id, phases.Summary(count=self._orders))
+            phases.publish_done(self._bus, phases.TRADE, envelope.logical_ts, self._id, self._orders)
