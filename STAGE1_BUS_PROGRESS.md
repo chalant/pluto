@@ -66,4 +66,8 @@ matters at stage 2, the first candidates are publish (3.5 microseconds of it) an
 
 ## Final run
 
-Filled in below when the fresh-clone run is done.
+Fresh clone of `stage1-bus` at `79e21e8d` (clone with `--no-hardlinks`, new env from `dev/setup_env.sh`), the seven existing
+files plus `tests/test_bus_contract.py` and `tests/test_bus_serializing.py`: **210 passed** (71 existing, unchanged, 132
+contract, 7 serializing), also under `PYTHONHASHSEED` 1, 2 and 3 (210 passed each). The contract suite itself starts child
+interpreters under `PYTHONHASHSEED` 1 to 5 and compares the delivery trace of a 200-message scenario (wildcards, ranks, a
+group, failures, cascades, a late replay). The verify clone was removed.
