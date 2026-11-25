@@ -11,7 +11,3 @@ class AbstractMarket(ABC):
     @abstractmethod
     def set_calendar_timestamp(self, calendar_name: str, ts: pandas.Timestamp) -> None:
         pass
-
-    @abstractmethod
-    def place_orders(self, orders, strategy_manager):
-        pass

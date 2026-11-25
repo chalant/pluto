@@ -28,7 +28,7 @@ class SimulationControllerBehavior(AbstractControllerBehavior):
         data_frequency = self._data_frequency
 
         targets = [
-            (cts, calendar.name, manager.get_positions(calendar.name))
+            (cts, calendar.name, manager.broker.get_positions(calendar.name))
             for cts, c_evt, calendar in signals
             if c_evt == BAR or
                c_evt == MINUTE_END or

@@ -237,6 +237,29 @@ class Ledger(object):
         )
         self._dirty_portfolio = True
 
+    def mark_prices(self, prices, dt):
+        """Sets the last sale price of the positions from prices the caller
+        already has (the controller side reads them once for all books),
+        instead of fetching them from a data portal.
+
+        Parameters
+        ----------
+        prices: iterable of (sid, price)
+        dt: pandas.Timestamp
+            The time of the prices.
+        """
+        tracker = self._position_tracker
+
+        self._dirty_portfolio = True
+        tracker._dirty_stats = True
+
+        for sid, price in prices:
+            position = tracker.positions[sid].inner_position
+
+            if not np.isnan(price):
+                position.last_sale_price = price
+                position.last_sale_date = dt
+
     @staticmethod
     def _calculate_payout(multiplier, amount, old_price, price):
         return (price - old_price) * multiplier * amount
@@ -353,6 +376,8 @@ class Ledger(object):
         self._cash_flow(-cost)
 
     def close_position(self, asset, dt, data_portal, data_frequency):
+        """Closes the position of an asset (auto close date); returns the
+        closing transaction, or None if there was no position."""
         txn = self._position_tracker.maybe_create_close_position_transaction(
             asset,
             dt,
@@ -360,33 +385,22 @@ class Ledger(object):
             data_frequency)
         if txn is not None:
             self.process_transaction(txn)
+        return txn
 
-    def process_dividends(self, next_session, asset_finder, adjustment_reader):
+    def process_dividends(self, next_session, cash_dividends, stock_dividends):
         """Process dividends for the next session.
 
-        This will earn us any dividends whose ex-date is the next session as
-        well as paying out any dividends whose pay-date is the next session
+        ``cash_dividends`` and ``stock_dividends`` are the dividends whose
+        ex-date is the next session, for the assets held (the adjustment
+        reader's answer, which the caller reads). This will earn us those
+        dividends as well as paying out any dividends whose pay-date is the
+        next session.
         """
         position_tracker = self._position_tracker
 
-        # Earn dividends whose ex_date is the next trading day. We need to
-        # check if we own any of these stocks so we know to pay them out when
-        # the pay date comes.
-        held_sids = set(position_tracker.positions)
-        if held_sids:
-            cash_dividends = adjustment_reader.get_dividends_with_ex_date(
-                held_sids,
-                next_session,
-                asset_finder)
-            stock_dividends = (
-                adjustment_reader.get_stock_dividends_with_ex_date(
-                    held_sids,
-                    next_session,
-                    asset_finder))
-
-            # Earning a dividend just marks that we need to get paid out on
-            # the dividend's pay-date. This does not affect our cash yet.
-            position_tracker.earn_dividends(cash_dividends, stock_dividends,)
+        # Earning a dividend just marks that we need to get paid out on
+        # the dividend's pay-date. This does not affect our cash yet.
+        position_tracker.earn_dividends(cash_dividends, stock_dividends)
 
         # Pay out the dividends whose pay-date is the next session. This does
         # affect out cash.

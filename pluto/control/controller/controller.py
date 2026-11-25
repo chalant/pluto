@@ -5,9 +5,6 @@ from pluto.finance.markets import core
 from pluto.control.controller import process_manager
 from pluto.control.controller import behavior as bv
 
-from pluto.data.data_sources import data_source as ds
-from pluto.coms.utils import conversions
-
 from protos.clock_pb2 import (
 	BAR,
 	TRADE_END,
@@ -31,12 +28,14 @@ class Controller(object):
 
 		self._strategy_manager = strategy_manager
 		self._metrics_tracker = metrics_tracker
-		self._market = market
 		self._behavior = behavior
+
+		# the broker service fills the open orders against this market
+		strategy_manager.broker.attach_market(market)
 
 	def clock_update(self, ts, evt, signals):
 		strategy_manager = self._strategy_manager
-		market = self._market
+		broker = strategy_manager.broker
 		behavior = self._behavior
 
 		strategies = strategy_manager.strategies
@@ -69,59 +68,17 @@ class Controller(object):
 		# populate broker state to send to controllableWe need to update positions before calling handle_data
 		for cts, c_evt, calendar in signals:
 			calendar_name = calendar.name
-			market.set_calendar_timestamp(calendar_name, cts)
-			# as zipline's algo.on_dt_changed: orders the blotter cancels
-			# (expired assets, cancel policies) get stamped with this time
-			strategy_manager.get_blotter(calendar_name).set_date(cts)
+			broker.set_time(calendar_name, cts)
 
 			# bar events
 			if c_evt == BAR or c_evt == TRADE_END:
-				strategy_manager.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
+				broker.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
 				# fetch executed transactions, commissions etc.
 				# todo: need to apply tax models...
-				blotter = strategy_manager.get_blotter(calendar_name)
-
-				transactions, closed_orders = market.get_transactions(
-					calendar_name, blotter)
-
-				# transactions, closed_orders = strategy_manager.get_transactions(calendar_name)
-
-				# update states: all the transactions first, then all the
-				# commissions, in this order (as zipline's AlgorithmSimulator
-				# every_bar); interleaving them changes the floating-point
-				# summation of the cash.
-				commissions = []
-				for transaction in transactions:
-					order = transaction['order']
-
-					strategy_manager.process_transaction(
-						calendar_name,
-						transaction['transaction'])
-
-					if transaction['commission'] > 0:
-						commissions.append({
-							'asset': order.asset,
-							'order': order.to_dict(),
-							'cost': transaction['commission']
-						})
-
-					broker_states[order.session_id].transactions.append(
-						broker_pb2.TransactionCommission(
-							transaction=conversions.to_proto_transaction(transaction['transaction'].to_dict()),
-							commission=transaction['commission']
-						))
-
-				for commission in commissions:
-					strategy_manager.process_commission(
-						calendar_name,
-						commission)
-
-				blotter.prune_orders(closed_orders)
-				# note: here we force synchronization of sale prices
-				# strategy_manager.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
+				broker.match(calendar_name)
 
 			elif c_evt == MINUTE_END:
-				strategy_manager.sync_last_sale_prices(
+				broker.sync_last_sale_prices(
 					calendar_name,
 					last_sale_prices[calendar_name],
 					cts)
@@ -129,48 +86,29 @@ class Controller(object):
 				metrics_tracker.end_of_bar(
 					cts,
 					calendar_name,
-					strategy_manager.get_ledger(calendar_name))
+					broker.get_ledger(calendar_name))
 
 			elif c_evt == SESSION_START:
-				# todo: each session start check if leverage have changed
-				ledger = strategy_manager.get_ledger(calendar_name)
-				data_portal = strategy_manager.get_data_portal(calendar_name)
-				strategy_manager.process_dividends(
-					cts,
-					calendar_name,
-					data_portal.adjustment_reader)
-				positions = set([position.asset
-								 for position in strategy_manager.get_positions(calendar_name)
-								 if position.amount != 0])
-				open_orders = strategy_manager.get_open_orders(calendar_name)
-				strategy_manager.handle_market_open(ts, calendar_name)
-				assets_we_care_about = positions | open_orders.keys()
-				if assets_we_care_about:
-					splits = data_portal.get_splits(assets_we_care_about, cts)
-					if splits:
-						strategy_manager.process_splits(
-							calendar_name,
-							splits)
-				# ledger.start_of_session(0)
-				metrics_tracker.start_of_session(cts, calendar_name, ledger)
+				broker.start_session(calendar_name, cts)
+				metrics_tracker.start_of_session(cts, calendar_name, broker.get_ledger(calendar_name))
 			elif c_evt == BEFORE_TRADING_START:
-				strategy_manager.sync_last_sale_prices(
+				broker.sync_last_sale_prices(
 					calendar_name,
 					last_sale_prices[calendar_name],
 					cts)
 
 			elif c_evt == SESSION_END:
-				strategy_manager.sync_last_sale_prices(
+				broker.sync_last_sale_prices(
 					calendar_name,
 					last_sale_prices[calendar_name],
 					cts)
-				strategy_manager.cleanup_expired_assets(calendar_name, cts)
+				broker.end_session(calendar_name, cts)
 
 				# todo: we need to ingest data befor calling this...
 				metrics_tracker.end_of_session(
 					cts,
 					calendar_name,
-					strategy_manager.get_ledger(calendar_name))
+					broker.get_ledger(calendar_name))
 
 		# flatten last sale prices to send to
 		values = []
@@ -219,7 +157,7 @@ class Controller(object):
 		# self._controller_script.update()
 
 		# todo: we should call the manager script to handle new orders here, before placing new orders.
-		market.place_orders(new_orders, strategy_manager)
+		broker.submit(new_orders)
 
 		# clear all events
 		strategy_manager.clear()

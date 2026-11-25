@@ -61,3 +61,27 @@ metrics tracker reads the ledger.
 ## Steps
 
 (filled in below as they are done)
+
+### Step 2 done: broker service (in process)
+
+`pluto/broker_service/service.py` `BrokerService` is the single writer of the controller side book (portfolio,
+positions, account, per calendar a `Ledger` and the controller's blotter copy). `StrategyManager` creates it
+(`manager.broker`), keeps only what the gRPC servicer and the process barrier need, and still offers `add_data_portal`,
+`add_ledger`, `add_blotter`, `add_strategy` (the tests build the run through them) which delegate. `Controller.__init__`
+attaches the market (`broker.attach_market(market)`; the market is the matching venue: `MarketSimulation.get_transactions`
+is unchanged and is called by `BrokerService.match`).
+
+Interface (all calls per calendar name; the controller calls them where it called the old code, same order):
+`set_time(cal, dt)` (market clock + blotter date), `sync_last_sale_prices(cal, prices, dt)`, `match(cal)`,
+`start_session(cal, dt)` (dividends, ledger session start, splits), `end_session(cal, dt)` (expired assets),
+`submit(orders)` (new orders and relayed cancellations; an order of a known id is rejected, nothing recorded),
+reads `get_ledger`, `get_positions`, `get_open_orders`; `subscribe(callback)` for `events.StreamEvent`;
+`set_strategy(id)` (one strategy per book: a different second id raises).
+`StrategyManager` subscribes to turn `Fill` events into the `TransactionCommission` of the strategy's next broker state.
+Ledger additions: `Ledger.mark_prices(prices, dt)` (the controller's price push), `process_dividends` takes the dividends
+(the service reads the adjustment reader), `close_position` returns the transaction.
+Removed as obsolete: `StrategyManager` ledger/blotter/portfolio/account/position tracker state and methods,
+`place_orders`, `get_transactions` comment, `AbstractMarket.place_orders`, `MarketSimulation.place_orders`.
+Left alone: the unused gRPC `CancelOrder`/`CancelAllOrdersForAsset` handlers of `StrategyManager` (they referenced a
+non-existent `self._broker` before and still do), and the unused `pluto/finance/broker/broker_service.py`.
+Seven files: 71 passed (baseline 71 passed).
