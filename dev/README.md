@@ -23,19 +23,57 @@ commit says `mirrors zipline-reloaded <commit>`).
 ```
 SimulationLoop (24/7 clock)                   pluto/control/loop/simulation_loop.py
   └─ Controller.clock_update                  pluto/control/controller/controller.py
+       │     phases on the bus of the run (below), in lock-step
        ├─ SimulationControllerBehavior        pluto/control/controller/simulation_behavior.py
        │     last sale prices from the data portal; data hooks are no-ops
-       ├─ StrategyManager                     pluto/control/controller/process_manager.py
-       │     account side: ledger, blotter, positions per calendar
-       ├─ MarketSimulation                    pluto/finance/markets/market_simulation.py
-       │     fills (slippage, commission) against the bundle
-       └─ Process -> InMemoryControllableStub pluto/control/processes/, pluto/control/controllable/
+       ├─ BrokerParticipant                   pluto/control/controller/participants.py
+       │   ├─ StrategyManager                 pluto/control/controller/process_manager.py
+       │   │     strategy registry, broker states and orders of the strategies
+       │   ├─ BrokerService                   pluto/broker_service/
+       │   │     the book: ledger, blotter, positions per calendar; stream of its writes
+       │   └─ MarketSimulation                pluto/finance/markets/market_simulation.py
+       │         fills (slippage, commission) against the bundle
+       ├─ MetricsParticipant                  pluto/control/controller/participants.py
+       │     the metrics tracker, reads the ledger of the book
+       └─ RuntimeEndpoint -> StrategyStub -> InMemoryControllableStub
+                                              pluto/control/processes/, pluto/control/controllable/
              one Controllable per strategy: pluto TradingAlgorithm, clock, pipeline
 ```
 
 `tests/test_pluto_examples.py` (helpers in `pluto/test_utils/test_utils.py`) wires it up for
 the five strategies in `pluto/examples/` on the `test` bundle (`pluto/data/bundles/test.py`,
 bcolz data from `tests/resources/example_data.tar.gz`).
+
+## How a run is driven: phases on the bus
+
+A run has one bus (`pluto/bus/`; `StrategyManager(asset_finder, stp, bus=None).bus`, an `InMemoryBus` by default, any
+`Bus` can be given: the in-process wiring of the tests picks it up from the manager). The controller owns the clock and
+does not call its components: at each clock event it publishes one event per phase and runs the bus until it is idle
+(`pluto/control/phases.py`), then checks that every participant of the phase said `done` before it publishes the next
+(lock-step; a missing `done`, a `done` that carries an error, a stale or doubled one, or a message the bus gave up on
+raises `PhaseError`, there is no timeout). The order is the order of the calls before the bus, and the floating point
+sums depend on it (transactions before commissions; `revalue` right before each metrics read; the prices of the tick
+are read before its writes; with two calendars the book and metrics phases run signal after signal).
+
+| phase (rank) | topic | published | subscribers | `done` |
+|---|---|---|---|---|
+| book (10) | `phase.book` | per signal (`SignalEvent`: calendar time, event, last sale prices) | broker: sync prices, match, dividends and splits, expiries, `revalue` where the tracker reads | broker: fill ids, stream events, stream watermark |
+| metrics (20) | `phase.metrics` | per signal | metrics tracker: reads the ledger (`end_of_bar`, `start_of_session`, `end_of_session`) | metrics: tracker calls (0 or 1) |
+| account (30) | `phase.account` (`AccountEvent`) | per tick | broker: sends each strategy its `BrokerState` (fills, last sale prices) on `strategy.account.<process id>`; the runtime applies it | broker: fill ids, states sent; runtime: fill ids, prices |
+| trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send `WatchList` and `OrderBatch` on `strategy.watchlist` and `strategy.orders` (key: process id), taken by the strategy manager | runtime: ids of the orders in its batch |
+| submit (50) | `phase.submit` (`ClockEvent`) | per tick | broker: submits the orders of the tick to the book, starts the next tick | broker: submitted ids, stream events, watermark |
+
+Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `phase` = the rank; a `done` (topic
+`phase.done`, `PhaseDone`) has the rank plus one. Every payload is a protobuf message (`protos/phases.proto` and the
+existing `ClockEvent`, `BrokerState`, `OrderBatch`, `WatchList`), so a `SerializingBus(inner, phases.codec())` carries
+a whole run through bytes with identical results (`tests/test_pluto_phases_run.py`). A participant's failure is caught
+where it happens, logged with its traceback and reported in its `done` (the bus redelivers a handler that raises, and a
+phase is not idempotent). What stays direct, in process: the controller's behavior reads the book's positions to
+price them, and the metrics tracker reads the ledger object.
+
+The runtimes must run their clock event synchronously (`running_behavior.Blocking`): their batch must be on the bus when
+the trade phase ends, which is what the in-memory stub does. The bus logs every message (retention is open in
+`STAGE1_BUS_PROGRESS.md`).
 
 ## Strategy scripts (interim convention)
 
@@ -119,14 +157,7 @@ are at the boundaries (`SimulationParameters`, `pluto.coms.utils.conversions`,
 
 ```bash
 ENV=~/.cache/pluto-dev/env313
-$ENV/bin/python -m pytest -p no:randomly \
-    tests/test_pluto_examples.py \
-    tests/test_pluto_zipline_oracle.py \
-    tests/test_pluto_isolation.py \
-    tests/test_pluto_assets.py \
-    tests/test_pluto_scenarios.py \
-    tests/test_pluto_state.py \
-    tests/test_pluto_upstream_fixes.py
+$ENV/bin/python -m pytest -p no:randomly tests
 ```
 
 | File | Checks |
@@ -138,6 +169,13 @@ $ENV/bin/python -m pytest -p no:randomly \
 | `tests/test_pluto_assets.py` | the asset finder |
 | `tests/test_pluto_state.py` | the metrics tracker's saved state (ledger, positions, orders) with fractional amounts and prices not representable in 32 bits: restored bit for bit and written again identically; state from the 32-bit modules refused; the monitor's performance packet round trip |
 | `tests/test_pluto_upstream_fixes.py` | the zipline-reloaded fixes mirrored into Pluto's own copies (splits, stock dividends, daily cancel policy) |
+| `tests/test_pluto_order_ids.py` | the deterministic order ids of the strategy's blotter: the process id as namespace plus the sequence of the orders placed, runs and strategies not confused, no number for an order of no shares, a given id kept, a rebuilt blotter continuing from a checkpointed sequence, compact alphanumeric ids |
+| `tests/test_pluto_broker_service.py` | the broker service's stream of the strategy's book: folding it rebuilds the engine's ledger state byte for byte on every example and scenario; duplicate and cancelled orders, revaluation, sequence gaps, two calendars, state versions |
+| `tests/test_bus_contract.py` | the bus contract (rules S1 to S14) on `InMemoryBus` and on `SerializingBus(InMemoryBus)`, including the delivery trace under different `PYTHONHASHSEED`s |
+| `tests/test_bus_memory.py` | what holds for the in-memory bus only: bounded queues and overflow, log positions, group assignment |
+| `tests/test_bus_serializing.py` | what only the serialising wrapper does: bytes on the inner bus, codecs, undecodable payloads |
+| `tests/test_pluto_phases.py` | the controller's lock-step (`PhaseDriver`) on a bare bus with fake participants: dones by participant, a missing, failed, stale or doubled `done`, a message the bus gave up on; the phase ranks; every payload through a `SerializingBus` |
+| `tests/test_pluto_phases_run.py` | whole runs driven by phases: `buy_and_hold`, `momentum_pipeline` and two scenarios give the same frames over `InMemoryBus` and `SerializingBus(InMemoryBus)`; the messages and `done`s of a run; a failing strategy aborts the run with a `PhaseError` |
 
 Tolerance policy: **Pluto against the vendored Zipline is exact** (`rtol=0, atol=0`), on every
 common column of the five examples and of the scenarios; against the stored expected set
