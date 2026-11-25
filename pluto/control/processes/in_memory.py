@@ -50,20 +50,10 @@ class BrokerStub(broker_stub.BrokerStub):
         ----------
         servicer: pluto.control.controller.process_manager.StrategyManager
         '''
+        # the orders and the watchlist of the runtime go onto the bus of the run through its endpoint
+        # (pluto.control.processes.endpoint.RuntimeEndpoint), which counts the orders for its done
         self._servicer = servicer
         self._session_id = session_id
-
-    def _publish(self, topic, message, timestamp):
-        # the runtime sends its orders and watchlist to the controller side on the bus of the run, in the
-        # trade phase of the clock event that made them (the phase's ``done`` is the endpoint's)
-        self._servicer.bus.publish(
-            topic,
-            message,
-            type=phases.message_type(message),
-            logical_ts=timestamp.ToNanoseconds(),
-            producer_id=self._session_id,
-            phase=phases.TRADE.rank,
-            key=self._session_id)
 
     def _execute_cancel_policy(self, request, metadata):
         return self._servicer.ExecuteCancelPolicy(
@@ -74,7 +64,7 @@ class BrokerStub(broker_stub.BrokerStub):
         batch = broker_pb2.OrderBatch()
         batch.ParseFromString(_unchunk(request_iterator))
 
-        self._publish(phases.ORDERS_TOPIC, batch, batch.ts)
+        self._servicer.runtime(self._session_id).send(phases.ORDERS_TOPIC, batch)
 
     def _cancel_all_orders_for_asset(self, request, metadata):
         return self._servicer.CancelAllOrdersForAsset(
@@ -95,7 +85,7 @@ class BrokerStub(broker_stub.BrokerStub):
         watchlist = broker_pb2.WatchList()
         watchlist.ParseFromString(_unchunk(request))
 
-        self._publish(phases.WATCHLIST_TOPIC, watchlist, watchlist.ts)
+        self._servicer.runtime(self._session_id).send(phases.WATCHLIST_TOPIC, watchlist)
 
 
 class InMemoryControllableFactory(factory.ControllableFactory):

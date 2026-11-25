@@ -12,7 +12,7 @@ book        10    phase.book       per signal  broker                      broke
 metrics     20    phase.metrics    per signal  metrics                     metrics: tracker calls (0 or 1)
 account     30    phase.account    per tick    broker, then the runtimes   broker: fill ids, states sent;
                                                                            runtime: fill ids, prices applied
-trade       40    phase.trade      per tick    the runtimes                runtime: ids of the orders it sent
+trade       40    phase.trade      per tick    the runtimes                runtime: number of orders it sent
 submit      50    phase.submit     per tick    broker                      broker: submitted ids, events, watermark
 ==========  ====  ===============  ==========  ==========================  ===========================================
 

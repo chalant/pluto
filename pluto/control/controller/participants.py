@@ -34,7 +34,11 @@ class BrokerParticipant(object):
         self._events = 0
         self._sequence = 0
 
+        # the orders each runtime says it sent in the trade phase, by process id
+        self._sent = {}
+
         broker.subscribe(self._on_stream)
+        bus.subscribe(phases.DONE_TOPIC, self._on_done)
         bus.subscribe(phases.BOOK.topic, self._on_book)
         bus.subscribe(phases.ACCOUNT.topic, self._on_account)
         bus.subscribe(phases.SUBMIT.topic, self._on_submit)
@@ -45,6 +49,12 @@ class BrokerParticipant(object):
 
         if isinstance(stream_event.event, events.Fill):
             self._fills.append(stream_event.event.order.id)
+
+    def _on_done(self, delivery) -> None:
+        done = delivery.envelope.payload
+
+        if done.phase == phases.TRADE.topic and not done.error:
+            self._sent[done.participant] = done.count
 
     def _begin(self) -> None:
         self._fills = []
@@ -143,16 +153,36 @@ class BrokerParticipant(object):
 
         return phases.Summary(tuple(ids), states)
 
+    def _check_orders(self) -> None:
+        """Each runtime said how many orders it sent in the tick: the manager must have received as many (a batch lost
+        on the way, or one for another clock event that was ignored, would otherwise go unnoticed)."""
+        manager = self._manager
+        sent = self._sent
+        problems = []
+
+        for process_id in manager.session_ids:
+            expected = sent.get(process_id)
+            received = manager.received_orders(process_id)
+
+            if expected != received:
+                problems.append('{} sent {} orders, the broker received {}'.format(process_id, expected, received))
+
+        sent.clear()
+
+        if problems:
+            raise phases.PhaseError('; '.join(problems))
+
     def _on_submit(self, delivery) -> None:
         envelope = delivery.envelope
         phases.report(self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, self._submit, log)
 
     def _submit(self) -> phases.Summary:
-        """The orders the strategies sent in this tick reach the book, in the order they arrived; then the manager
-        starts the next tick (new orders, watchlist and broker states)."""
+        """The orders the strategies sent in this tick reach the book, by strategy in registration order; then the
+        manager starts the next tick (new orders, watchlist and broker states)."""
         self._begin()
 
         manager = self._manager
+        self._check_orders()
         orders = manager.new_orders
         ids = tuple(order.id for order in orders)
 

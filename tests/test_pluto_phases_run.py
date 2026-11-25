@@ -133,18 +133,18 @@ class PhasesRunTests(ZiplinePlutoFixture):
             counts[phases.DONE_TOPIC],
             counts[phases.BOOK.topic] + counts[phases.METRICS.topic] + 4 * ticks)
 
-        # the dones say what was published: the ids of the orders the strategy sent, and of the fills it was told
-        dones = [p for t, _, p in bus.published if t == phases.DONE_TOPIC]
-        sent = [i for d in dones if d.phase == phases.TRADE.topic for i in d.ids]
-        submitted = [i for d in dones if d.phase == phases.SUBMIT.topic for i in d.ids]
-        filled = [i for d in dones if d.phase == phases.BOOK.topic for i in d.ids]
-        told = [i for d in dones if d.phase == phases.ACCOUNT.topic and d.participant == phases.BROKER_ID
-                for i in d.ids]
+        # the trade done of the strategy says how many orders it sent: the ones of its batches; the fills it was told
+        # (in its broker states) are those orders
+        published = [(topic, payload) for topic, _, payload in bus.published]
+        batches = [p for t, p in published if t == phases.ORDERS_TOPIC]
+        sent = [order.id for batch in batches for order in batch.orders]
+        counted = sum(p.count for t, p in published if t == phases.DONE_TOPIC and p.phase == phases.TRADE.topic)
+        told = [c.transaction.order_id for t, p in published if t.startswith('strategy.account.')
+                for c in p.transactions]
 
         self.assertGreater(len(sent), 0)
-        self.assertEqual(sent, submitted)
-        self.assertEqual(filled, told)
-        self.assertEqual(sorted(filled), sorted(sent))
+        self.assertEqual(counted, len(sent))
+        self.assertEqual(sorted(told), sorted(sent))
         self.assertEqual(bus.dead_letters(), ())
 
     def test_a_failing_strategy_aborts_the_run_in_the_trade_phase(self):

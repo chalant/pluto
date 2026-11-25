@@ -137,3 +137,12 @@ Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. 
   process id (`_received_orders`) and `new_orders` builds the list in registration order (`_processes`) when the broker side
   submits. Test `tests/test_pluto_phase_participants.py`: three fake runtimes registered as `zzz`, `aaa`, `mmm` (ids on both sides of
   `'controller'`), each ordering the same asset in one tick; the submitted order is `zzz, aaa, mmm` (fails without the fix: `aaa, mmm, zzz`).
+- **M2 (the runtime's trade `done`)**: confirmed (N+1 deliveries per batch). `RuntimeEndpoint` no longer subscribes to
+  `strategy.orders`: it publishes the trade `done` at the end of its trade handler, after the clock event ran, with the number of
+  orders it sent. It counts them because the runtime's orders and watchlist now go out through `RuntimeEndpoint.send` (the in-memory
+  `BrokerStub` reaches it with `StrategyManager.runtime(process id)`). A runtime that sent no batch says so in its done (error,
+  aborts the run; the controllable always sends one, possibly empty). In the submit phase `BrokerParticipant` (which listens to the
+  trade dones) compares, per process, the number of orders in the done with `StrategyManager.received_orders` (batches accepted for
+  the tick): a lost batch or a stale one (ignored by the manager) is a `PhaseError` before anything is submitted. Tests: no batch,
+  lost batch, stale batch (`tests/test_pluto_phase_participants.py`); `test_what_a_run_publishes` asserts counts in the dones and
+  compares the orders of the batches with the fills the strategy was told (the ids of the removed done content).

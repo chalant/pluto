@@ -32,6 +32,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._bus = InMemoryBus() if bus is None else bus
 
         self._processes = {}
+        self._runtimes = {}
 
         self._setup = stp
 
@@ -222,6 +223,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         return [order for process_id in self._processes for order in received.get(process_id, ())]
 
+    def received_orders(self, process_id) -> int:
+        """The number of orders the strategy's batches of this tick had."""
+        return len(self._received_orders.get(process_id, ()))
+
     def get_watchlist(self) -> typing.Dict[str, typing.List[zipline.assets.Asset]]:
         self._watchlist_complete.wait()
 
@@ -243,7 +248,11 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._active_processes += 1
 
         # in process, the strategy's runtime is on this bus: it answers the phases and sends its orders back
-        endpoint.RuntimeEndpoint(self._bus, process)
+        self._runtimes[process_id] = endpoint.RuntimeEndpoint(self._bus, process)
+
+    def runtime(self, process_id) -> endpoint.RuntimeEndpoint:
+        """The endpoint of a strategy's runtime on the bus: what the runtime sends goes through it."""
+        return self._runtimes[process_id]
 
     def add_data_portal(self, calendar_name, data_portal):
         self._service.add_data_portal(calendar_name, data_portal)

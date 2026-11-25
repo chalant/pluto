@@ -134,6 +134,9 @@ class FakeProcess(object):
         self.account_updates = []
         self.clock_events = 0
         self.fail_account = False
+        self.sends = True
+        # the clock time of the batch it sends: None for the time of the clock event
+        self.batch_ts = None
 
     def account_update(self, state):
         if self.fail_account:
@@ -143,19 +146,26 @@ class FakeProcess(object):
 
     def clock_event(self, event):
         self.clock_events += 1
-        self.send(event)
 
-    def send(self, event):
-        ts = phases.pandas_timestamp(event.timestamp)
+        if self.sends:
+            ts = phases.pandas_timestamp(event.timestamp) if self.batch_ts is None else self.batch_ts
+            batch = order_batch(self.process_id, ts, ['order-' + self.process_id])
 
-        self.manager.bus.publish(
-            phases.ORDERS_TOPIC,
-            order_batch(self.process_id, ts, ['order-' + self.process_id]),
-            type='OrderBatch',
-            logical_ts=ts.value,
-            producer_id=self.process_id,
-            phase=phases.TRADE.rank,
-            key=self.process_id)
+            self.manager.runtime(self.process_id).send(phases.ORDERS_TOPIC, batch)
+
+
+class LossyBus(InMemoryBus):
+    """An in-memory bus that loses the batches of orders of the given producers."""
+
+    def __init__(self):
+        super().__init__()
+        self.lost = set()
+
+    def publish(self, topic, payload, **kwargs):
+        if topic == phases.ORDERS_TOPIC and kwargs['key'] in self.lost:
+            return None
+
+        return super().publish(topic, payload, **kwargs)
 
 
 class RunTests(unittest.TestCase):
@@ -166,8 +176,9 @@ class RunTests(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
+        self.bus = LossyBus()
         setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
-        self.manager = process_manager.StrategyManager(None, setup, bus=InMemoryBus())
+        self.manager = process_manager.StrategyManager(None, setup, bus=self.bus)
         self.broker = self.manager.broker
         self.controller = controller.Controller(
             self.manager, None, FakeTracker(self.broker), FakeBehavior())
@@ -190,6 +201,33 @@ class RunTests(unittest.TestCase):
         self.tick()
 
         self.assertEqual(self.broker.calls[-1], ('submit', ['order-zzz', 'order-aaa', 'order-mmm']))
+
+    def test_a_runtime_that_sends_no_batch_aborts_the_run(self):
+        self.add_process('aaa').sends = False
+
+        with self.assertRaisesRegex(phases.PhaseError, r'phase\.trade .*aaa failed: sent no batch of orders'):
+            self.tick()
+
+    def test_a_lost_batch_aborts_the_run_in_the_submit_phase(self):
+        self.add_process('aaa')
+        self.add_process('bbb')
+        self.bus.lost.add('bbb')
+
+        with self.assertRaisesRegex(
+                phases.PhaseError, r'phase\.submit .*bbb sent 1 orders, the broker received 0') as raised:
+            self.tick()
+
+        self.assertNotIn('aaa sent', str(raised.exception))
+        self.assertNotIn(('submit', ['order-aaa']), self.broker.calls)
+
+    def test_a_batch_of_another_clock_event_aborts_the_run_in_the_submit_phase(self):
+        process = self.add_process('aaa')
+        process.batch_ts = TS - pd.Timedelta(minutes=1)
+
+        with self.assertRaisesRegex(phases.PhaseError, r'phase\.submit .*aaa sent 1 orders, the broker received 0'):
+            self.tick()
+
+        self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [])
 
 
 if __name__ == '__main__':
