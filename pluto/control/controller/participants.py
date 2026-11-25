@@ -44,7 +44,7 @@ class BrokerParticipant(object):
         # the orders each runtime says it sent in the trade phase, by process id
         self._sent = {}
 
-        bus.subscribe(phases.DONE_TOPIC, self._on_done)
+        bus.subscribe(phases.TRADE.done_topic, self._on_done)
         bus.subscribe(phases.BOOK.topic, self._on_book)
         bus.subscribe(phases.ACCOUNT.topic, self._on_account)
         bus.subscribe(phases.SUBMIT.topic, self._on_submit)
@@ -52,7 +52,7 @@ class BrokerParticipant(object):
     def _on_done(self, delivery: Delivery) -> None:
         done = delivery.envelope.payload
 
-        if done.phase == phases.TRADE.topic and not done.error:
+        if not done.error:
             self._sent[done.participant] = done.orders
 
     def _on_book(self, delivery: Delivery) -> None:

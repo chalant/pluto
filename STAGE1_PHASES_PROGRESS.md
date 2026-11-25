@@ -94,7 +94,7 @@ strategy aborts the run in the trade phase with the error in the `PhaseError`.
 
 Suite wall time, the 341 tests of `origin/master` (the new test files left out), alternating runs, same machine and env, each from
 its own worktree: before 80.3 s and 79.3 s (pytest), after 98.7 s and 98.7 s: **about +23 %**, on every run. The cost is the bus, not
-the work: a `buy_and_hold` run (7312 clock events) under cProfile goes from 5.4 s to 8.4 s; 93,276 messages published and 132,604
+the work: a `buy_and_hold` run (7312 clock events) under cProfile goes from 5.4 s to 8.4 s; 93,276 messages published and 100,588
 deliveries per run (about 11 microseconds per message in `publish` under the profiler, plus dispatch and the protobuf messages and
 timestamp conversions around them). The dones are 42 % of the messages.
 
@@ -178,9 +178,17 @@ Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. 
 
 ### After the review fixes
 
-`buy_and_hold`, serialised: **93,276 messages per run, as before** (2.38 MB; `phase.done` 39,328): the fixes change who says done
-and what a done holds, not how many messages there are. Deliveries drop by one per batch, the runtime no longer sees its own batch
-on the bus: 7,312 fewer per run, 132,604 to about 125,292 [INFERENCE: derived from the single strategy, not counted].
+`buy_and_hold` (7,312 clock events, one strategy), plain `InMemoryBus`, measured by counting the calls of the handlers (the same as the
+return of `run_until_idle` summed): 93,276 messages and **100,588 deliveries per run at `139ed2f7`** (the branch before the review
+fixes); **132,604 at `eb5d89ff`, the first version of the fixes** (`BrokerParticipant` subscribed to every `phase.done`: +39,328 for it, -7,312 for the runtime's
+own `strategy.orders` subscription that M2 dropped: the reviewer was right, deliveries went up by 32,016); **100,588 after the
+per-phase done topics** (the broker side only gets the 7,312 trade dones: back to the number of `139ed2f7`, 7,312 fewer for the
+runtime and 7,312 more for the broker side). The 132,604 of step 5 above was not reproduced for `139ed2f7` (it is the number of `eb5d89ff`);
+messages are 93,276 in all three states (2.38 MB; the dones are 39,328 of them), the fixes change who hears a done, not how many are
+published.
+
+Done topics: `phase.done.<phase>` (`Phase.done_topic`), the controller's `PhaseDriver` subscribes to `phase.done.>`, `BrokerParticipant` only
+to `phase.done.trade`.
 
 ### Left open (protocol changes, not done in the review round)
 

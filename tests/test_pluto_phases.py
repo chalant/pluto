@@ -120,6 +120,17 @@ class PhaseDriverTests(unittest.TestCase):
         with self.assertRaisesRegex(PhaseError, 'no done from a'):
             self.driver.drive(phases.METRICS, clock_event(), TS_NS, ('a',))
 
+    def test_a_done_is_published_on_the_done_topic_of_its_phase(self):
+        FakeParticipant(self.bus, 'a', phases.BOOK)
+        book, trade = [], []
+        self.bus.subscribe('phase.done.book', book.append)
+        self.bus.subscribe('phase.done.trade', trade.append)
+
+        self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual([d.envelope.payload.participant for d in book], ['a'])
+        self.assertEqual(trade, [])
+
     def test_phases_are_in_the_order_of_the_calls(self):
         ranks = [phase.rank for phase in (
             phases.BOOK, phases.METRICS, phases.ACCOUNT, phases.TRADE, phases.SUBMIT)]

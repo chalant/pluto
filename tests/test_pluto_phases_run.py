@@ -127,18 +127,20 @@ class PhasesRunTests(ZiplinePlutoFixture):
         # the broker state of the strategy, once per tick, on its own topic
         self.assertEqual(counts[ACCOUNT_STATES], ticks)
 
-        # every participant says done once per phase: book and metrics (1 each), account (broker and runtime),
-        # trade (runtime), submit (broker)
-        self.assertEqual(
-            counts[phases.DONE_TOPIC],
-            counts[phases.BOOK.topic] + counts[phases.METRICS.topic] + 4 * ticks)
+        # every participant says done once per phase, on the done topic of the phase: book and metrics (1 each per
+        # signal), account (broker and runtime), trade (runtime), submit (broker)
+        self.assertEqual(counts[phases.BOOK.done_topic], counts[phases.BOOK.topic])
+        self.assertEqual(counts[phases.METRICS.done_topic], counts[phases.METRICS.topic])
+        self.assertEqual(counts[phases.ACCOUNT.done_topic], 2 * ticks)
+        self.assertEqual(counts[phases.TRADE.done_topic], ticks)
+        self.assertEqual(counts[phases.SUBMIT.done_topic], ticks)
 
         # the trade done of the strategy says how many orders it sent: the ones of its batches; the fills it was told
         # (in its broker states) are those orders
         published = [(topic, payload) for topic, _, payload in bus.published]
         batches = [p for t, p in published if t == phases.ORDERS_TOPIC]
         sent = [order.id for batch in batches for order in batch.orders]
-        counted = sum(p.orders for t, p in published if t == phases.DONE_TOPIC and p.phase == phases.TRADE.topic)
+        counted = sum(p.orders for t, p in published if t == phases.TRADE.done_topic)
         told = [c.transaction.order_id for t, p in published if t.startswith('strategy.account.')
                 for c in p.transactions]
 

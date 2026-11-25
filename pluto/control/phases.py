@@ -42,17 +42,28 @@ from protos import broker_pb2, clock_pb2, phases_pb2
 
 
 class Phase(NamedTuple):
-    topic: str
+    name: str
     rank: int
 
+    @property
+    def topic(self) -> str:
+        """The topic of the phase event."""
+        return 'phase.' + self.name
 
-BOOK = Phase('phase.book', 10)
-METRICS = Phase('phase.metrics', 20)
-ACCOUNT = Phase('phase.account', 30)
-TRADE = Phase('phase.trade', 40)
-SUBMIT = Phase('phase.submit', 50)
+    @property
+    def done_topic(self) -> str:
+        """The topic of the dones of the phase: a participant listens to the phases it needs, the controller to all."""
+        return 'phase.done.' + self.name
 
-DONE_TOPIC = 'phase.done'
+
+BOOK = Phase('book', 10)
+METRICS = Phase('metrics', 20)
+ACCOUNT = Phase('account', 30)
+TRADE = Phase('trade', 40)
+SUBMIT = Phase('submit', 50)
+
+# the dones of every phase
+DONES = 'phase.done.>'
 # a done is dispatched right after the messages of its phase
 DONE_AFTER = 1
 
@@ -115,7 +126,7 @@ def publish_done(
     """Says that ``participant`` finished its work of ``phase`` at ``logical_ts``, or failed (``error``). ``orders`` is
     the number of orders a runtime sent in the trade phase."""
     bus.publish(
-        DONE_TOPIC,
+        phase.done_topic,
         phases_pb2.PhaseDone(phase=phase.topic, participant=participant, orders=orders, error=error),
         type=message_type(phases_pb2.PhaseDone),
         logical_ts=logical_ts,
@@ -155,7 +166,7 @@ class PhaseDriver(object):
         self._producer_id = producer_id
         self._dones = []
 
-        bus.subscribe(DONE_TOPIC, self._on_done)
+        bus.subscribe(DONES, self._on_done)
 
     def _on_done(self, delivery: Delivery) -> None:
         self._dones.append((delivery.envelope.logical_ts, delivery.envelope.payload))

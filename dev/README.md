@@ -63,8 +63,8 @@ are read before its writes; with two calendars the book and metrics phases run s
 | trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send `WatchList` and `OrderBatch` on `strategy.watchlist` and `strategy.orders` (key: process id), taken by the strategy manager | each runtime: the number of orders it sent; the broker side checks it against the orders it received, per strategy, in the submit phase |
 | submit (50) | `phase.submit` (`ClockEvent`) | per tick | broker: submits the orders of the tick to the book, starts the next tick | broker |
 
-Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `phase` = the rank; a `done` (topic
-`phase.done`, `PhaseDone`) has the rank plus one. Every payload is a protobuf message (`protos/phases.proto` and the
+Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `phase` = the rank; a `done` (`PhaseDone`, on the
+topic `phase.done.<phase>`; the controller listens to `phase.done.>`, a participant only to the phases it needs) has the rank plus one. Every payload is a protobuf message (`protos/phases.proto` and the
 existing `ClockEvent`, `BrokerState`, `OrderBatch`, `WatchList`), so a `SerializingBus(inner, phases.codec())` carries
 a whole run through bytes with identical results (`tests/test_pluto_phases_run.py`). A participant's failure is caught
 where it happens, logged with its traceback and reported in its `done` (the bus redelivers a handler that raises, and a
