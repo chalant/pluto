@@ -115,6 +115,12 @@ class StrategyStub(object):
         return self._process_id
 
 
+def make_process_id(strategy_id, session_id):
+    """The id of the process of a run of a strategy. It is a hash of the pair,
+    not of the concatenation: ('ab', 'c') and ('a', 'bc') are two runs."""
+    return hashlib.md5(repr((strategy_id, session_id)).encode()).hexdigest()
+
+
 class ProcessInitializer(object):
     def __init__(self, controllable):
         # self._execute_events = execute_events
@@ -138,7 +144,7 @@ class ProcessInitializer(object):
 
         session_id = setup.session_id
 
-        process_id = hashlib.md5(str(self._strategy_id + session_id).encode()).hexdigest()
+        process_id = make_process_id(self._strategy_id, session_id)
 
         # convert python objects into protobuf messages
 

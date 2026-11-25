@@ -17,6 +17,7 @@ from zipline.finance.transaction import Transaction
 
 from pluto import examples
 from pluto.broker_service import events, service, stream
+from pluto.control.processes import processes
 from pluto.finance import ledger, position_tracker
 from pluto.finance.blotter import simulation_blotter
 
@@ -32,9 +33,6 @@ CAPITAL = 100000.0
 
 # RunSetup('test'): the session id of the runs of tests.test_pluto_examples._run
 SESSION_ID = 'test'
-
-# where the process id ends and the sequence of an order id begins
-PROCESS_ID_LENGTH = 32
 
 ALL_MODULES = dict(examples.EXAMPLE_MODULES)
 ALL_MODULES.update(SCENARIO_MODULES)
@@ -105,19 +103,20 @@ class StreamOfRunsTests(ZiplinePlutoFixture):
         self.assertEqual(folded.ledgers['XNYS'].get_state(DT), engine_state)
 
         # the book of one strategy, nothing was refused
-        process_id = hashlib.md5((name + SESSION_ID).encode()).hexdigest()
+        process_id = processes.make_process_id(name, SESSION_ID)
         for stream_event in broker.stream:
             self.assertEqual(stream_event.strategy_id, process_id)
             self.assertNotIsInstance(stream_event.event, events.OrderRejected)
 
-        # the orders of the strategy are numbered 1, 2, 3... after its id
+        # the orders of the strategy are numbered 1, 2, 3... after its namespace
+        namespace = hashlib.md5(process_id.encode()).hexdigest()[:16]
         numbers = set()
         for stream_event in broker.stream:
             if isinstance(stream_event.event, (
                     events.OrderAccepted, events.OrderCancelled, events.OrderExpired)):
                 order_id = stream_event.event.order.id
-                self.assertEqual(order_id[:PROCESS_ID_LENGTH], process_id)
-                numbers.add(int(order_id[PROCESS_ID_LENGTH:], 16))
+                self.assertEqual(order_id[:len(namespace)], namespace)
+                numbers.add(int(order_id[len(namespace):], 16))
         self.assertEqual(sorted(numbers), list(range(1, len(numbers) + 1)))
 
     def test_orders_are_cancelled(self):
