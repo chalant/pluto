@@ -127,3 +127,13 @@ order id and phase test files, the test command is `pytest tests`.
   `RuntimeEndpoint` loggers), no longer the original exception object.
 - The bus is injected through `StrategyManager(..., bus=...)`; the tests build the manager through the unchanged test wiring, so
   the serialising-bus tests replace the default bus (`mock.patch` of `process_manager.InMemoryBus`).
+
+## Review fixes
+
+Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. Each fix is one commit.
+
+- **H1 (order of the orders with several strategies)**: confirmed. A runtime's batch has `producer_id` = its process id, so with two
+  strategies the batches arrived by process id, not in registration order. `StrategyManager` now keeps the received batches by
+  process id (`_received_orders`) and `new_orders` builds the list in registration order (`_processes`) when the broker side
+  submits. Test `tests/test_pluto_phase_participants.py`: three fake runtimes registered as `zzz`, `aaa`, `mmm` (ids on both sides of
+  `'controller'`), each ordering the same asset in one tick; the submitted order is `zzz, aaa, mmm` (fails without the fix: `aaa, mmm, zzz`).

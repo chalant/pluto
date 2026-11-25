@@ -53,7 +53,9 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         self._broker_states = {}
 
-        self._new_orders = []
+        # the batch of orders of each strategy for this tick, by process id (the bus delivers the batches of different
+        # strategies in the order of their producer ids: registration order is rebuilt when they are submitted)
+        self._received_orders = {}
 
         self._watchlist_counter = 0
         self._watchlist = set()
@@ -127,7 +129,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self.receive_orders(session_id, batch)
 
     def receive_orders(self, session_id, batch):
-        """The orders of a strategy's batch, appended in the order they were placed (``strategy.orders`` on the bus,
+        """The orders of a strategy's batch, kept in the order they were placed (``strategy.orders`` on the bus,
         ``PlaceOrders`` over gRPC). A batch of another clock event than the current one is ignored."""
         # todo: instead of using a locking mechanism for the strategy manager, we should have multiple
         #  channels, one per strategy, where they can write there states.
@@ -145,7 +147,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
             orders = [conversions.to_zp_order(order) for order in batch.orders]
 
             with self._order_lock:
-                self._new_orders.extend(orders)
+                self._received_orders.setdefault(session_id, []).extend(orders)
 
     @service_access.framework
     @service_access.per_session
@@ -214,8 +216,11 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     @property
     def new_orders(self):
-        """The orders the strategies sent in this tick, in the order they arrived."""
-        return self._new_orders
+        """The orders the strategies sent in this tick: by strategy in registration order, each in the order it
+        placed them."""
+        received = self._received_orders
+
+        return [order for process_id in self._processes for order in received.get(process_id, ())]
 
     def get_watchlist(self) -> typing.Dict[str, typing.List[zipline.assets.Asset]]:
         self._watchlist_complete.wait()
@@ -253,7 +258,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._watchlist_counter = 0
 
         self._watchlist_complete.clear()
-        self._new_orders.clear()
+        self._received_orders.clear()
         self._watchlist.clear()
 
         broker_states = self._broker_states
