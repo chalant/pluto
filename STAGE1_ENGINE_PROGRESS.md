@@ -167,4 +167,11 @@ tracker reads the ledger: that is where `Revalued` events come from), `get_posit
 
 ## Verification
 
-(final clone and PYTHONHASHSEED results below)
+Fresh clone of branch `stage1-engine` at `8ae799d6` (code identical to the final head: the later commit changes only this
+file), fresh env (`dev/setup_env.sh`, uv, build_ext): the seven files 71 passed (the files are unchanged: the diff against
+`origin/master` adds only `tests/test_pluto_order_ids.py` and `tests/test_pluto_broker_service.py`), plus 6 order id tests and
+43 broker service tests: 120 passed (82 s). The same 120 under `PYTHONHASHSEED` 1 to 10: 120 passed each. Baseline of
+`origin/master` before the work: the seven files 71 passed (64 s).
+Measured: no result differs (the exact oracle and the stored expected results pass unchanged); the fold equals the engine's
+ledger state byte for byte on the 5 examples and 23 scenarios; a fold that skips `PricesMarked` or `Commission` fails the test.
+Not exercised by any daily run: `Revalued` mattering (unit test only), `OrderTriggered`, `OrderRejected`.
