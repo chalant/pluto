@@ -561,11 +561,14 @@ class Ledger(object):
         l = acc.LedgerState()
         l.ParseFromString(state)
         if not OLDEST_READABLE_VERSION <= l.version <= STATE_VERSION:
+            if l.version > STATE_VERSION:
+                hint = 'it was saved by a newer version of the modules'
+            else:
+                hint = ('state saved before the protobuf fields were widened to 64 bits'
+                        ' (no version) cannot be read: its 32-bit values would be lost')
             raise ValueError(
-                'cannot restore the ledger state: format version {}, expected'
-                ' {} to {}. State saved before the protobuf fields were widened to'
-                ' 64 bits (no version) cannot be read: its 32-bit values would'
-                ' be lost.'.format(l.version, OLDEST_READABLE_VERSION, STATE_VERSION))
+                'cannot restore the ledger state: format version {}, expected {} to {}:'
+                ' {}.'.format(l.version, OLDEST_READABLE_VERSION, STATE_VERSION, hint))
 
         position_tracker = self._position_tracker
         for position in l.positions:

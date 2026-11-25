@@ -40,7 +40,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._broker_states = {}
 
         self._new_orders = []
-        self._orders_batches = []
 
         self._watchlist_counter = 0
         self._watchlist = set()
@@ -149,31 +148,23 @@ class StrategyManager(brk_rpc.BrokerServicer):
     @service_access.framework
     @service_access.per_session
     def CancelAllOrdersForAsset(self, request, session_id):
-        # todo
-        self._broker.cancel_all_orders_for_asset(
-            session_id,
-            conversions.to_zp_asset(request))
+        raise NotImplementedError(
+            'CancelAllOrdersForAsset: not implemented; strategies cancel by relaying'
+            ' cancelled orders with their next batch (BrokerService.submit)')
 
     @service_access.framework
     @service_access.per_session
     def CancelOrder(self, request, session_id):
-        # todo: if the order is placed before the controller sends orders to the
-        #  broker, cancel immediately
-        self._broker.cancel(
-            session_id,
-            conversions.to_zp_order(request.order))
+        raise NotImplementedError(
+            'CancelOrder: not implemented; strategies cancel by relaying'
+            ' cancelled orders with their next batch (BrokerService.submit)')
 
     @service_access.framework
     @service_access.per_session
     def ExecuteCancelPolicy(self, request, session_id):
-        # todo: this should be handled by the controller.
-        # self._broker.execute_cancel_policy(
-        #     session_id,
-        #     request.event_type)
-
-        # for blotter in self._blotters.values():
-        #     blotter.
-        pass
+        raise NotImplementedError(
+            'ExecuteCancelPolicy: not implemented; the strategy executes its cancel'
+            ' policy and relays the cancelled orders')
 
     @service_access.framework
     @service_access.per_session
@@ -247,9 +238,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     def add_ledger(self, calendar_name):
         self._service.add_ledger(calendar_name)
-
-    def get_orders_batches(self):
-        return self._orders_batches
 
     def clear(self):
         self._order_counter = 0
