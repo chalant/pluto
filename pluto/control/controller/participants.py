@@ -8,6 +8,7 @@ import logbook
 
 from pluto.bus import Bus
 from pluto.broker_service import events
+from pluto.coms.utils import conversions
 from pluto.control import phases
 from pluto.control.controller import process_manager
 
@@ -35,6 +36,8 @@ class BrokerParticipant(object):
 
         broker.subscribe(self._on_stream)
         bus.subscribe(phases.BOOK.topic, self._on_book)
+        bus.subscribe(phases.ACCOUNT.topic, self._on_account)
+        bus.subscribe(phases.SUBMIT.topic, self._on_submit)
 
     def _on_stream(self, stream_event) -> None:
         self._events += 1
@@ -100,6 +103,72 @@ class BrokerParticipant(object):
             broker.revalue(calendar_name)
 
         return self._summary()
+
+    def _on_account(self, delivery) -> None:
+        envelope = delivery.envelope
+        phases.report(
+            self._bus,
+            phases.ACCOUNT,
+            envelope.logical_ts,
+            phases.BROKER_ID,
+            lambda: self._account(envelope.payload, envelope.logical_ts),
+            log)
+
+    def _account(self, event, logical_ts) -> phases.Summary:
+        """The broker state of each strategy, in registration order: its fills (collected from the book's stream since
+        the last tick) and the last sale prices of the tick, sent on the strategy's own topic."""
+        manager = self._manager
+
+        # the clock event the strategies are about to run: the orders of another one are ignored
+        manager.set_global_timestamp(conversions.to_datetime(event.clock.timestamp))
+
+        ids = []
+        states = 0
+
+        for process_id in manager.session_ids:
+            state = manager.broker_states[process_id]
+            state.last_sale_prices.extend(event.last_sale_prices)
+
+            self._bus.publish(
+                phases.account_topic(process_id),
+                state,
+                type=phases.message_type(state),
+                logical_ts=logical_ts,
+                producer_id=phases.BROKER_ID,
+                phase=phases.ACCOUNT.rank,
+                key=process_id)
+
+            ids.extend(commission.transaction.order_id for commission in state.transactions)
+            states += 1
+
+        return phases.Summary(tuple(ids), states)
+
+    def _on_submit(self, delivery) -> None:
+        envelope = delivery.envelope
+        phases.report(self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, self._submit, log)
+
+    def _submit(self) -> phases.Summary:
+        """The orders the strategies sent in this tick reach the book, in the order they arrived; then the manager
+        starts the next tick (new orders, watchlist and broker states)."""
+        self._begin()
+
+        manager = self._manager
+        orders = manager.new_orders
+        ids = tuple(order.id for order in orders)
+
+        # todo: catch any account control errors here...
+        #  given the new orders and the current portfolio and
+        #  the current open orders and the last sale price, determine
+        #  if we go above the maximum leverage
+
+        # check if strategies don't go above allocated capital and leverage
+
+        # todo: we should call the manager script to handle new orders here, before placing new orders.
+        self._broker.submit(orders)
+
+        manager.clear()
+
+        return phases.Summary(ids, self._events, self._sequence)
 
 
 class MetricsParticipant(object):

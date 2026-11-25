@@ -132,14 +132,19 @@ def publish_done(
         key=participant)
 
 
+def fail(bus: Bus, phase: Phase, logical_ts: int, participant: str, error: Exception, log: logbook.Logger) -> None:
+    """Logs ``error``, which is being handled, with its traceback and reports it in a done: the controller aborts the
+    run, and the bus never redelivers the phase (a handler that raises is redelivered, a phase is not idempotent)."""
+    log.exception('{} failed in {}', participant, phase.topic)
+    publish_done(bus, phase, logical_ts, participant, error='{}: {}'.format(type(error).__name__, error))
+
+
 def report(bus: Bus, phase: Phase, logical_ts: int, participant: str, work, log: logbook.Logger) -> None:
-    """Runs ``work()``, which returns a ``Summary``, and says done. A failure is logged with its traceback and
-    reported in the done: the controller aborts the run, and the bus never redelivers the phase."""
+    """Runs ``work()``, which returns a ``Summary``, and says done; a failure is reported (``fail``)."""
     try:
         summary = work()
     except Exception as e:
-        log.exception('{} failed in {}', participant, phase.topic)
-        publish_done(bus, phase, logical_ts, participant, error='{}: {}'.format(type(e).__name__, e))
+        fail(bus, phase, logical_ts, participant, e, log)
     else:
         publish_done(bus, phase, logical_ts, participant, summary)
 

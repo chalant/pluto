@@ -1,5 +1,6 @@
 from pluto.finance.broker import broker_stub
 
+from pluto.control import phases
 from pluto.control.controllable import server
 from pluto.control.controllable.utils import factory
 from pluto.control.controllable import simulation_controllable
@@ -9,6 +10,8 @@ from pluto.control.controllable import stub
 from pluto.interface import monitor
 
 from pluto.interface.utils import service_access
+
+from protos import broker_pb2
 
 
 class FakeContext(object):
@@ -35,6 +38,10 @@ class FakeContext(object):
             message)
 
 
+def _unchunk(request_iterator):
+    return b''.join(chunk.data for chunk in request_iterator)
+
+
 class BrokerStub(broker_stub.BrokerStub):
     def __init__(self, servicer, session_id):
         '''
@@ -46,14 +53,28 @@ class BrokerStub(broker_stub.BrokerStub):
         self._servicer = servicer
         self._session_id = session_id
 
+    def _publish(self, topic, message, timestamp):
+        # the runtime sends its orders and watchlist to the controller side on the bus of the run, in the
+        # trade phase of the clock event that made them (the phase's ``done`` is the endpoint's)
+        self._servicer.bus.publish(
+            topic,
+            message,
+            type=phases.message_type(message),
+            logical_ts=timestamp.ToNanoseconds(),
+            producer_id=self._session_id,
+            phase=phases.TRADE.rank,
+            key=self._session_id)
+
     def _execute_cancel_policy(self, request, metadata):
         return self._servicer.ExecuteCancelPolicy(
             request,
             FakeContext(metadata))
 
     def _place_orders(self, request_iterator, metadata):
-        return self._servicer.PlaceOrders(
-            request_iterator, FakeContext(metadata))
+        batch = broker_pb2.OrderBatch()
+        batch.ParseFromString(_unchunk(request_iterator))
+
+        self._publish(phases.ORDERS_TOPIC, batch, batch.ts)
 
     def _cancel_all_orders_for_asset(self, request, metadata):
         return self._servicer.CancelAllOrdersForAsset(
@@ -71,7 +92,10 @@ class BrokerStub(broker_stub.BrokerStub):
             FakeContext(metadata))
 
     def _set_watchlist(self, request, metadata):
-        self._servicer.SetWatchList(request, FakeContext(metadata))
+        watchlist = broker_pb2.WatchList()
+        watchlist.ParseFromString(_unchunk(request))
+
+        self._publish(phases.WATCHLIST_TOPIC, watchlist, watchlist.ts)
 
 
 class InMemoryControllableFactory(factory.ControllableFactory):
