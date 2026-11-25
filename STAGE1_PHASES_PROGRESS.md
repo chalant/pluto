@@ -67,3 +67,25 @@ owns the bus of the run (`InMemoryBus` by default), `Controller` drives through 
 report it in the `done` (the bus would redeliver a handler that raises: a phase is not idempotent); the controller raises
 `PhaseError` for a missing done, a done with an error, a stale or duplicate done, or a dead letter. Examples + scenarios exact
 (26 passed); `tests/test_pluto_phases.py`: 13 tests of the driver and the codec on a bare bus.
+
+### Step 2b/3 done: account, trade and submit phases; orders, watchlist and broker state over the bus
+
+`phase.account` (the broker side sends each strategy its `BrokerState` on `strategy.account.<process id>`: the fills of the tick
+and the last sale prices; the runtime applies it), `phase.trade` (the runtime runs the clock event), `phase.submit` (the broker side
+submits the orders of the tick and starts the next one). `pluto/control/processes/endpoint.py` `RuntimeEndpoint` is the runtime's
+side (built by `StrategyManager.add_strategy`, the in-process wiring; the tests build the run through `manager.add_strategy`).
+The in-memory `BrokerStub` of the controllable publishes the `OrderBatch` and `WatchList` on `strategy.orders` and
+`strategy.watchlist` (key = process id) instead of calling the servicer; `StrategyManager.receive_orders` / `receive_watchlist` are
+the shared bodies of the bus handlers and of the gRPC `PlaceOrders` / `SetWatchList`. The runtime's `done` of the trade phase is
+published when its batch of orders is seen on the bus (publish only enqueues, so the ids cannot be known earlier): a runtime that sends
+no batch leaves the phase without its done and the run aborts. Removed as obsolete: the order barrier (`get_orders`,
+`_orders_complete`, `_order_counter`: the controller waits for the dones), `StrategyStub.clock_update` (now `clock_event(event)`:
+the runtime runs the `ClockEvent` the controller published). Full suite exact.
+
+### Step 4 done: runs over a serialising bus
+
+`tests/test_pluto_phases_run.py` (patches the default bus of `StrategyManager` with a recording bus, plain or behind
+`SerializingBus(..., phases.codec())`): `buy_and_hold`, `momentum_pipeline`, `cancel_orders` and `dividends` give the same frame
+(every column, exact) over both, the same messages, only bytes on the inner bus, no dead letter. Every payload is a protobuf
+message and is serialised: nothing is left out. Also: what a run publishes (counts per topic, content of the dones), and a failing
+strategy aborts the run in the trade phase with the error in the `PhaseError`.
