@@ -57,4 +57,13 @@ tracker: the three calls of step 4 (the tracker is on the controller side and re
 
 ## Steps
 
-(see below, one entry per step, added as they are done)
+### Step 2a done: book and metrics phases
+
+`pluto/control/phases.py` (phase table, `PhaseDriver` = the controller's lock-step, `report`/`publish_done` for the participants,
+`codec()`), `protos/phases.proto` (`SignalEvent`, `AccountEvent`, `PhaseDone`; generated with grpcio-tools like the others),
+`pluto/control/controller/participants.py` (`BrokerParticipant`, `MetricsParticipant`). `StrategyManager(asset_finder, stp, bus=None)`
+owns the bus of the run (`InMemoryBus` by default), `Controller` drives through `manager.bus`. The signals' writes go through
+`phase.book` and the tracker reads through `phase.metrics`, per signal, in lock-step. Handlers catch their own failure and
+report it in the `done` (the bus would redeliver a handler that raises: a phase is not idempotent); the controller raises
+`PhaseError` for a missing done, a done with an error, a stale or duplicate done, or a dead letter. Examples + scenarios exact
+(26 passed); `tests/test_pluto_phases.py`: 13 tests of the driver and the codec on a bare bus.

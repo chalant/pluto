@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+import "protos/clock.proto";
+import "protos/broker.proto";
+
+// Payloads of the phase topics of a simulated run (pluto/control/phases.py).
+// The trade and submit phases carry a ClockEvent.
+
+// phase.book and phase.metrics: the signal of one calendar at a tick
+message SignalEvent {
+    google.protobuf.Timestamp timestamp = 1;  // clock time of the tick
+    Signal signal = 2;                        // calendar time, event, calendar name
+    repeated AssetPrice last_sale_prices = 3; // of the calendar (phase.book)
+}
+
+// phase.account: the tick, with the last sale prices of every calendar
+message AccountEvent {
+    ClockEvent clock = 1;
+    repeated AssetPrice last_sale_prices = 2;
+}
+
+// phase.done: what a participant published in a phase
+message PhaseDone {
+    string phase = 1;              // topic of the phase event
+    string participant = 2;
+    repeated string ids = 3;       // order ids it published in the phase (fills, orders sent, orders submitted)
+    uint64 count = 4;              // events or messages it published in the phase
+    uint64 sequence = 5;           // stream watermark of the book after the phase (0: not the book's)
+    string error = 6;              // set when the participant failed in the phase
+}

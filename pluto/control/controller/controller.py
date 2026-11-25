@@ -2,18 +2,16 @@ import logbook
 
 from pluto.finance.markets import core
 
+from pluto.control import phases
 from pluto.control.controller import process_manager
 from pluto.control.controller import behavior as bv
+from pluto.control.controller import participants
 
-from protos.clock_pb2 import (
-	BAR,
-	TRADE_END,
-	SESSION_END,
-	SESSION_START,
-	MINUTE_END,
-	BEFORE_TRADING_START)
+from protos import broker_pb2, clock_pb2, phases_pb2
 
-from protos import broker_pb2
+
+def _asset_prices(pairs):
+	return [broker_pb2.AssetPrice(sid=sid, price=price) for sid, price in pairs]
 
 log = logbook.Logger("Controller")
 
@@ -27,22 +25,27 @@ class Controller(object):
 			behavior: bv.AbstractControllerBehavior):
 
 		self._strategy_manager = strategy_manager
-		self._metrics_tracker = metrics_tracker
 		self._behavior = behavior
 
 		# the broker service fills the open orders against this market
 		strategy_manager.broker.attach_market(market)
 
+		# the run is driven through the bus of the manager, in lock-step (pluto.control.phases)
+		bus = strategy_manager.bus
+		participants.BrokerParticipant(bus, strategy_manager)
+		participants.MetricsParticipant(bus, strategy_manager, metrics_tracker)
+		self._driver = phases.PhaseDriver(bus)
+
 	def clock_update(self, ts, evt, signals):
 		strategy_manager = self._strategy_manager
 		broker = strategy_manager.broker
 		behavior = self._behavior
+		driver = self._driver
 
 		strategies = strategy_manager.strategies
 		broker_states = strategy_manager.broker_states
 		# set timestamp ahead of time so that we know which events to wait for...
 		strategy_manager.set_global_timestamp(ts)
-		metrics_tracker = self._metrics_tracker
 		# data update hook
 		behavior.ingest_watchlist_data(ts, strategy_manager, signals)
 		
@@ -66,52 +69,32 @@ class Controller(object):
 		#  bar, trade end are high priority, since they involve trading...
 
 		# populate broker state to send to controllableWe need to update positions before calling handle_data
+		ts_ns = ts.value
+		stamp = phases.proto_timestamp(ts)
+
 		for cts, c_evt, calendar in signals:
 			calendar_name = calendar.name
-			broker.set_time(calendar_name, cts)
+			signal = clock_pb2.Signal(
+				timestamp=phases.proto_timestamp(cts),
+				event=c_evt,
+				calendar_name=calendar_name)
 
-			# bar events
-			if c_evt == BAR or c_evt == TRADE_END:
-				broker.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
-				# fetch executed transactions, commissions etc.
-				# todo: need to apply tax models...
-				broker.match(calendar_name)
+			driver.drive(
+				phases.BOOK,
+				phases_pb2.SignalEvent(
+					timestamp=stamp,
+					signal=signal,
+					last_sale_prices=_asset_prices(last_sale_prices.get(calendar_name, ()))),
+				ts_ns,
+				(phases.BROKER_ID,),
+				key=calendar_name)
 
-			elif c_evt == MINUTE_END:
-				broker.sync_last_sale_prices(
-					calendar_name,
-					last_sale_prices[calendar_name],
-					cts)
-
-				broker.revalue(calendar_name)
-				metrics_tracker.end_of_bar(
-					cts,
-					calendar_name,
-					broker.get_ledger(calendar_name))
-
-			elif c_evt == SESSION_START:
-				broker.start_session(calendar_name, cts)
-				broker.revalue(calendar_name)
-				metrics_tracker.start_of_session(cts, calendar_name, broker.get_ledger(calendar_name))
-			elif c_evt == BEFORE_TRADING_START:
-				broker.sync_last_sale_prices(
-					calendar_name,
-					last_sale_prices[calendar_name],
-					cts)
-
-			elif c_evt == SESSION_END:
-				broker.sync_last_sale_prices(
-					calendar_name,
-					last_sale_prices[calendar_name],
-					cts)
-				broker.end_session(calendar_name, cts)
-
-				# todo: we need to ingest data befor calling this...
-				broker.revalue(calendar_name)
-				metrics_tracker.end_of_session(
-					cts,
-					calendar_name,
-					broker.get_ledger(calendar_name))
+			driver.drive(
+				phases.METRICS,
+				phases_pb2.SignalEvent(timestamp=stamp, signal=signal),
+				ts_ns,
+				(phases.METRICS_ID,),
+				key=calendar_name)
 
 		# flatten last sale prices to send to
 		values = []

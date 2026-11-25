@@ -9,6 +9,7 @@ import zipline
 
 import pluto.assets.assets
 from pluto.broker_service import events, service
+from pluto.bus import Bus, InMemoryBus
 from pluto.setup import run_setup
 
 from pluto.coms.utils import conversions
@@ -19,7 +20,14 @@ from protos import broker_pb2
 
 
 class StrategyManager(brk_rpc.BrokerServicer):
-    def __init__(self, asset_finder: pluto.assets.assets.AssetFinder, stp: run_setup.RunSetup):
+    def __init__(
+            self,
+            asset_finder: pluto.assets.assets.AssetFinder,
+            stp: run_setup.RunSetup,
+            bus: Bus | None = None):
+
+        # the bus of the run: the controller drives the run through it (pluto.control.phases)
+        self._bus = InMemoryBus() if bus is None else bus
 
         self._processes = {}
 
@@ -53,6 +61,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._watchlist_lock = threading.Lock()
 
         self._active_processes = 0
+
+    @property
+    def bus(self) -> Bus:
+        return self._bus
 
     @property
     def broker(self) -> service.BrokerService:
