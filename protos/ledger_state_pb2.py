@@ -26,7 +26,7 @@ from protos import protocol_pb2 as protos_dot_protocol__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19protos/ledger_state.proto\x1a\x15protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xad\x02\n\x0bLedgerState\x12\x1d\n\tportfolio\x18\x01 \x01(\x0b\x32\n.Portfolio\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12\x33\n\x0flast_checkpoint\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x04 \x03(\x0b\x32\x06.Order\x12\x31\n\rfirst_session\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1e\n\rdaily_returns\x18\x06 \x03(\x0b\x32\x07.Return\x12\x15\n\rsession_count\x18\x07 \x01(\x05\x12\x1c\n\tpositions\x18\x08 \x03(\x0b\x32\t.Position\x12\x0f\n\x07version\x18\t \x01(\r\"F\n\x06Return\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05value\x18\x02 \x01(\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x19protos/ledger_state.proto\x1a\x15protos/protocol.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x02\n\x0bLedgerState\x12\x1d\n\tportfolio\x18\x01 \x01(\x0b\x32\n.Portfolio\x12\x19\n\x07\x61\x63\x63ount\x18\x02 \x01(\x0b\x32\x08.Account\x12\x33\n\x0flast_checkpoint\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x16\n\x06orders\x18\x04 \x03(\x0b\x32\x06.Order\x12\x31\n\rfirst_session\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1e\n\rdaily_returns\x18\x06 \x03(\x0b\x32\x07.Return\x12\x15\n\rsession_count\x18\x07 \x01(\x05\x12\x1c\n\tpositions\x18\x08 \x03(\x0b\x32\t.Position\x12\x0f\n\x07version\x18\t \x01(\r\x12\x17\n\x0fstream_sequence\x18\n \x01(\x04\"F\n\x06Return\x12-\n\ttimestamp\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\r\n\x05value\x18\x02 \x01(\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,7 +34,7 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'protos.ledger_state_pb2', _
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_LEDGERSTATE']._serialized_start=86
-  _globals['_LEDGERSTATE']._serialized_end=387
-  _globals['_RETURN']._serialized_start=389
-  _globals['_RETURN']._serialized_end=459
+  _globals['_LEDGERSTATE']._serialized_end=412
+  _globals['_RETURN']._serialized_start=414
+  _globals['_RETURN']._serialized_end=484
 # @@protoc_insertion_point(module_scope)

@@ -12,7 +12,9 @@ from protos import ledger_state_pb2 as acc
 # 1: 64-bit (double) values and positions. State without a version was
 # written by the modules with 32-bit fields: its values would parse as
 # unknown fields (silently 0), so it is refused.
-STATE_VERSION = 1
+# 2: adds stream_sequence; version 1 reads with sequence 0.
+STATE_VERSION = 2
+OLDEST_READABLE_VERSION = 1
 
 
 class Ledger(object):
@@ -45,6 +47,11 @@ class Ledger(object):
         self._dirty_account = True
 
         self._last_checkpoint = None
+
+        # the sequence number of the last event of the stream of the book that
+        # has been applied to the book of this ledger (0: none); written by
+        # whoever writes the ledger from a stream (the broker service, the fold)
+        self.stream_sequence = 0
 
         self._previous_total_returns = 0.0
 
@@ -215,6 +222,17 @@ class Ledger(object):
         # the portfolio has been fully synced
         self._dirty_portfolio = False
 
+    def revalue(self):
+        """Brings the portfolio up to date, as reading it does (it is lazy: each
+        read after a change revalues, and each revaluation compounds returns
+        and pnl, so where they happen is part of the state). Returns whether
+        it had to."""
+        if not self._dirty_portfolio:
+            return False
+
+        self._update_portfolio()
+        return True
+
     def _calculate_period_stats(self, portfolio_value, position_stats):
         if portfolio_value == 0:
             gross_leverage = net_leverage = np.inf
@@ -236,6 +254,29 @@ class Ledger(object):
             handle_non_market_minutes=handle_non_market_minutes,
         )
         self._dirty_portfolio = True
+
+    def mark_prices(self, prices, dt):
+        """Sets the last sale price of the positions from prices the caller
+        already has (the controller side reads them once for all books),
+        instead of fetching them from a data portal.
+
+        Parameters
+        ----------
+        prices: iterable of (sid, price)
+        dt: pandas.Timestamp
+            The time of the prices.
+        """
+        tracker = self._position_tracker
+
+        self._dirty_portfolio = True
+        tracker._dirty_stats = True
+
+        for sid, price in prices:
+            position = tracker.positions[sid].inner_position
+
+            if not np.isnan(price):
+                position.last_sale_price = price
+                position.last_sale_date = dt
 
     @staticmethod
     def _calculate_payout(multiplier, amount, old_price, price):
@@ -353,6 +394,8 @@ class Ledger(object):
         self._cash_flow(-cost)
 
     def close_position(self, asset, dt, data_portal, data_frequency):
+        """Closes the position of an asset (auto close date); returns the
+        closing transaction, or None if there was no position."""
         txn = self._position_tracker.maybe_create_close_position_transaction(
             asset,
             dt,
@@ -360,33 +403,22 @@ class Ledger(object):
             data_frequency)
         if txn is not None:
             self.process_transaction(txn)
+        return txn
 
-    def process_dividends(self, next_session, asset_finder, adjustment_reader):
+    def process_dividends(self, next_session, cash_dividends, stock_dividends):
         """Process dividends for the next session.
 
-        This will earn us any dividends whose ex-date is the next session as
-        well as paying out any dividends whose pay-date is the next session
+        ``cash_dividends`` and ``stock_dividends`` are the dividends whose
+        ex-date is the next session, for the assets held (the adjustment
+        reader's answer, which the caller reads). This will earn us those
+        dividends as well as paying out any dividends whose pay-date is the
+        next session.
         """
         position_tracker = self._position_tracker
 
-        # Earn dividends whose ex_date is the next trading day. We need to
-        # check if we own any of these stocks so we know to pay them out when
-        # the pay date comes.
-        held_sids = set(position_tracker.positions)
-        if held_sids:
-            cash_dividends = adjustment_reader.get_dividends_with_ex_date(
-                held_sids,
-                next_session,
-                asset_finder)
-            stock_dividends = (
-                adjustment_reader.get_stock_dividends_with_ex_date(
-                    held_sids,
-                    next_session,
-                    asset_finder))
-
-            # Earning a dividend just marks that we need to get paid out on
-            # the dividend's pay-date. This does not affect our cash yet.
-            position_tracker.earn_dividends(cash_dividends, stock_dividends,)
+        # Earning a dividend just marks that we need to get paid out on
+        # the dividend's pay-date. This does not affect our cash yet.
+        position_tracker.earn_dividends(cash_dividends, stock_dividends)
 
         # Pay out the dividends whose pay-date is the next session. This does
         # affect out cash.
@@ -499,11 +531,14 @@ class Ledger(object):
         return self._processed_transactions.get(dt, [])
 
     def get_state(self, dt):
-        # the properties bring the portfolio and the account up to date
+        # the properties bring the portfolio and the account up to date: a
+        # ledger of the broker service is revalued first (BrokerService.revalue)
+        # so that this read changes nothing the stream does not tell
         portfolio = self.portfolio
         account = self.account
         state = acc.LedgerState(
             version=STATE_VERSION,
+            stream_sequence=self.stream_sequence,
             session_count=self._session_count,
             portfolio=cv.to_proto_portfolio(portfolio),
             account=cv.to_proto_account(account),
@@ -525,12 +560,15 @@ class Ledger(object):
 
         l = acc.LedgerState()
         l.ParseFromString(state)
-        if l.version != STATE_VERSION:
+        if not OLDEST_READABLE_VERSION <= l.version <= STATE_VERSION:
+            if l.version > STATE_VERSION:
+                hint = 'it was saved by a newer version of the modules'
+            else:
+                hint = ('state saved before the protobuf fields were widened to 64 bits'
+                        ' (no version) cannot be read: its 32-bit values would be lost')
             raise ValueError(
-                'cannot restore the ledger state: format version {}, expected'
-                ' {}. State saved before the protobuf fields were widened to'
-                ' 64 bits (no version) cannot be read: its 32-bit values would'
-                ' be lost.'.format(l.version, STATE_VERSION))
+                'cannot restore the ledger state: format version {}, expected {} to {}:'
+                ' {}.'.format(l.version, OLDEST_READABLE_VERSION, STATE_VERSION, hint))
 
         position_tracker = self._position_tracker
         for position in l.positions:
@@ -557,6 +595,7 @@ class Ledger(object):
         self._dirty_account = False
 
         self._session_count = l.session_count
+        self.stream_sequence = l.stream_sequence
         for order in [cv.to_zp_order(order) for order in l.orders]:
             self.process_order(order)
         self._start_dt = cv.to_datetime(l.first_session)

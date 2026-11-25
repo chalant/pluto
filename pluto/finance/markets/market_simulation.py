@@ -37,9 +37,6 @@ class MarketSimulation(core.AbstractMarket):
                 data_portal,
                 asset_restrictions)
 
-    def place_orders(self, orders, strategy_manager):
-        strategy_manager.place_orders(orders)
-
     def get_transactions(self, calendar_name, blotter):
         """
         Creates a list of transactions based on the current open orders,

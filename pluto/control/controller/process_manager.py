@@ -3,16 +3,12 @@ import typing
 
 from collections import defaultdict
 
-import numpy as np
-
 from pluto.trading_calendars import calendar_utils as cu
 
 import zipline
-from zipline import protocol
-from zipline.finance.order import ORDER_STATUS
 
 import pluto.assets.assets
-from pluto.finance import ledger, position_tracker
+from pluto.broker_service import events, service
 from pluto.setup import run_setup
 
 from pluto.coms.utils import conversions
@@ -27,43 +23,23 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         self._processes = {}
 
-        self._last_sync_dt = None
-
         self._setup = stp
 
-        self._start_dt = stp.start
+        # the book of the strategy: written by the broker service, only
+        self._service = service.BrokerService(
+            asset_finder,
+            stp.start,
+            stp.capital,
+            stp.data_frequency)
 
-        self._portfolio = protocol.Portfolio(stp.start, stp.capital)
-        self._positions = positions = protocol.Positions()
-        self._account = protocol.Account()
-        self._asset_finder = asset_finder
-
-        # todo: we need to change the sync last sale prices function
-        #  the price should be injected externally by the controller.
-        #  the controller sends the sale prices to the controllables.
-        self._position_tracker = position_tracker.PositionTracker(positions)
-
-        self._data_frequency = stp.data_frequency
-
-        # self._ledger = ledger.Ledger(
-        #     start_dt,
-        #     portfolio,
-        #     emission_rate)
-
-        self._ledgers = {}
-        self._position_trackers = {}
-        self._bar_data_dict = {}
-        self._blotters = {}
-        self._data_portals = {}
+        # the fills are the strategies' news: sent with the next broker state
+        self._service.subscribe(self._on_book_event)
 
         self._global_ts = None
-
-        self._sync_times = {}
 
         self._broker_states = {}
 
         self._new_orders = []
-        self._orders_batches = []
 
         self._watchlist_counter = 0
         self._watchlist = set()
@@ -79,20 +55,16 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._active_processes = 0
 
     @property
+    def broker(self) -> service.BrokerService:
+        return self._service
+
+    @property
     def max_leverage(self):
         return self._setup.leverage
 
     @max_leverage.setter
     def max_leverage(self, value):
         self._setup.leverage = value
-
-    @property
-    def portfolio(self):
-        return self._portfolio
-
-    @property
-    def account(self):
-        return self._account
 
     @property
     def session_ids(self):
@@ -105,6 +77,16 @@ class StrategyManager(brk_rpc.BrokerServicer):
     @property
     def strategies(self):
         return self._processes.values()
+
+    def _on_book_event(self, stream_event):
+        event = stream_event.event
+
+        if isinstance(event, events.Fill):
+            self._broker_states[event.order.session_id].transactions.append(
+                broker_pb2.TransactionCommission(
+                    transaction=conversions.to_proto_transaction(event.transaction.to_dict()),
+                    commission=event.commission
+                ))
 
     @service_access.framework
     @service_access.per_session
@@ -166,31 +148,23 @@ class StrategyManager(brk_rpc.BrokerServicer):
     @service_access.framework
     @service_access.per_session
     def CancelAllOrdersForAsset(self, request, session_id):
-        # todo
-        self._broker.cancel_all_orders_for_asset(
-            session_id,
-            conversions.to_zp_asset(request))
+        raise NotImplementedError(
+            'CancelAllOrdersForAsset: not implemented; strategies cancel by relaying'
+            ' cancelled orders with their next batch (BrokerService.submit)')
 
     @service_access.framework
     @service_access.per_session
     def CancelOrder(self, request, session_id):
-        # todo: if the order is placed before the controller sends orders to the
-        #  broker, cancel immediately
-        self._broker.cancel(
-            session_id,
-            conversions.to_zp_order(request.order))
+        raise NotImplementedError(
+            'CancelOrder: not implemented; strategies cancel by relaying'
+            ' cancelled orders with their next batch (BrokerService.submit)')
 
     @service_access.framework
     @service_access.per_session
     def ExecuteCancelPolicy(self, request, session_id):
-        # todo: this should be handled by the controller.
-        # self._broker.execute_cancel_policy(
-        #     session_id,
-        #     request.event_type)
-
-        # for blotter in self._blotters.values():
-        #     blotter.
-        pass
+        raise NotImplementedError(
+            'ExecuteCancelPolicy: not implemented; the strategy executes its cancel'
+            ' policy and relays the cancelled orders')
 
     @service_access.framework
     @service_access.per_session
@@ -223,37 +197,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
                 if self._watchlist_counter == len(self._processes):
                     self._watchlist_complete.set()
 
-    def set_asset_finder(self, asset_finder):
-        self._asset_finder = asset_finder
-
     def set_global_timestamp(self, ts):
         self._global_ts = ts
-
-    def sync_last_sale_prices(self, calendar_name, prices, dt):
-        ledger_ = self._ledgers[calendar_name]
-        tracker = self._position_trackers[calendar_name]
-
-        ledger_._dirty_portfolio = True
-        tracker._dirty_stats = True
-
-        for sid, price in prices:
-            position = tracker.positions[sid].inner_position
-
-            if not np.isnan(price):
-                position.last_sale_price = price
-                position.last_sale_date = dt
-
-        # mark portfolio as dirty so that we can recompute read only portfolio
-
-        # if dt != self._sync_times[calendar_name]:
-        #
-        #     ledger_.sync_last_sale_prices(
-        #         dt,
-        #         self._data_portals[calendar_name],
-        #         self._setup.data_frequency,
-        #         handle_non_market_minutes)
-        #
-        #     self._sync_times[calendar_name] = dt
 
     def get_orders(self):
         # with self._lock:
@@ -275,178 +220,24 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         return watchlist
 
-    def place_orders(self, orders):
-
-        # todo: send orders to the broker service...
-
-        blotters = self._blotters
-        ledgers = self._ledgers
-
-        for order in orders:
-            # fixme: find a better way of getting calendar names (from disk ?)
-            calendar_name = cu.resolve_alias(order.asset.exchange)
-            blotter = blotters[calendar_name]
-
-            if order.status == ORDER_STATUS.CANCELLED:
-                # a cancellation relayed by the strategy's blotter
-                # (cancel_order, cancel policy): cancel the controller's copy,
-                # as zipline's blotter.cancel; an order placed and cancelled
-                # in the same bar is only recorded.
-                if order.id in blotter.orders:
-                    # the time of the cancellation is the one the strategy's
-                    # blotter stamped (the cancel policy runs at the end of the
-                    # session, the order is relayed with the next bar)
-                    cancelled_at = order.dt
-                    blotter.cancel(order.id, relay_status=False)
-                    order = blotter.orders[order.id]
-                    order.dt = cancelled_at
-                else:
-                    blotter.orders[order.id] = order
-                ledgers[calendar_name].process_order(order)
-                continue
-
-            blotter.open_orders[order.asset].append(order)
-            blotter.orders[order.id] = order
-            # record the order in the period it was placed (as zipline's
-            # AlgorithmSimulator does with metrics_tracker.process_order)
-            ledgers[calendar_name].process_order(order)
-
-    def get_data_portal(self, calendar_name):
-        return self._data_portals[calendar_name]
-
-    # def get_transactions(self, calendar_name):
-    #     return self._blotters[calendar_name].transactions_per_order(self._bar_data_dict[calendar_name])
-
-    def get_positions(self, calendar_name):
-        for asset, position in self._position_trackers[calendar_name].get_positions().items():
-            yield position
-
-    def get_position_assets(self, calendar_name):
-        for asset, position in self._position_trackers[calendar_name].get_positions().items():
-            yield asset
-
-    def get_open_orders(self, calendar_name):
-        return self._blotters[calendar_name].open_orders
-
-    def handle_market_open(self, gts, calendar_name):
-        self._ledgers[calendar_name].start_of_session(gts)
-
-    def process_transaction(self, calendar_name, transaction):
-        ledger_ = self._ledgers[calendar_name]
-
-        blotter = self._blotters[calendar_name]
-        orders = blotter.orders
-
-        ledger_.process_transaction(transaction)
-        ledger_.process_order(orders[transaction.order_id])
-
-    def process_commission(self, calendar_name, commission):
-        self._ledgers[calendar_name].process_commission(commission)
-
-    def process_splits(self, calendar_name, splits):
-        self._blotters[calendar_name].process_splits(splits)
-        self._ledgers[calendar_name].process_splits(splits)
-
-    def prune_orders(self, calendar_name, closed_orders):
-        self._blotters[calendar_name].prune_orders(
-            closed_orders)
-
-    def process_dividends(self, cts, calendar_name, adjustment_reader):
-        self._ledgers[calendar_name].process_dividends(
-            cts,
-            self._asset_finder,
-            adjustment_reader)
-
     def add_strategy(self, process):
         process_id = process.process_id
+
+        self._service.set_strategy(process_id)
 
         self._processes[process_id] = process
         self._broker_states[process_id] = broker_pb2.BrokerState()
 
         self._active_processes += 1
 
-    def get_blotter(self, calendar_name):
-        return self._blotters[calendar_name]
-
     def add_data_portal(self, calendar_name, data_portal):
-        self._data_portals[calendar_name] = data_portal
+        self._service.add_data_portal(calendar_name, data_portal)
 
     def add_blotter(self, calendar_name, blotter):
-        self._blotters[calendar_name] = blotter
+        self._service.add_blotter(calendar_name, blotter)
 
     def add_ledger(self, calendar_name):
-        self._position_trackers[calendar_name] = tracker = position_tracker.PositionTracker(
-            self._positions)
-
-        self._ledgers[calendar_name] = ledger.Ledger(
-            self._start_dt,
-            self._portfolio,
-            self._account,
-            tracker
-        )
-
-        self._sync_times[calendar_name] = None
-
-    def get_ledger(self, calendar_name):
-        return self._ledgers[calendar_name]
-
-    def get_orders_batches(self):
-        return self._orders_batches
-
-    def cleanup_expired_assets(self, calendar_name, dt):
-
-        """
-        Clear out any assets that have expired before starting a new sim day.
-        Performs two functions:
-        1. Finds all assets for which we have open orders and clears any
-           orders whose assets are on or after their auto_close_date.
-        2. Finds all assets for which we have positions and generates
-           close_position events for any assets that have reached their
-           auto_close_date.
-        """
-
-        def past_auto_close_date(asset):
-            acd = asset.auto_close_date
-            if acd is not None:
-                # mirrors zipline-reloaded 2642caa7: asset dates are naive
-                acd = acd.tz_localize(dt.tzinfo)
-            return acd is not None and acd <= dt
-
-        blotter = self._blotters[calendar_name]
-
-        data_portal = self._data_portals[calendar_name]
-        ledger_ = self._ledgers[calendar_name]
-
-        # todo: check if this block of code works with real-time data...
-
-        position_assets = self._asset_finder.retrieve_all([position['sid'] for position in ledger_.positions])
-
-        # Remove positions in any sids that have reached their auto_close date.
-        assets_to_clear = [asset for asset in position_assets if past_auto_close_date(asset)]
-
-        data_frequency = self._data_frequency
-
-        for asset in assets_to_clear:
-            ledger_.close_position(asset, dt, data_portal, data_frequency)
-
-        # Remove open orders for any sids that have reached their auto close
-        # date. These orders get processed immediately because otherwise they
-        # would not be processed until the first bar of the next day.
-
-        assets_to_cancel = [
-            asset for asset in blotter.open_orders
-            if past_auto_close_date(asset)
-        ]
-
-        for asset in assets_to_cancel:
-            blotter.cancel_all_orders_for_asset(asset)
-
-        # Make a copy here so that we are not modifying the list that is being
-        # iterated over.
-        for order in blotter.new_orders.copy():
-            if order.status == ORDER_STATUS.CANCELLED:
-                ledger_.process_order(order)
-                blotter.new_orders.remove(order)
+        self._service.add_ledger(calendar_name)
 
     def clear(self):
         self._order_counter = 0
@@ -461,4 +252,3 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         for process_id in broker_states:
             broker_states[process_id] = broker_pb2.BrokerState()
-

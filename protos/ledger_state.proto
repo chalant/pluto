@@ -15,8 +15,12 @@ message LedgerState {
     repeated Position positions = 8;
     // format of the saved state (pluto.finance.ledger.STATE_VERSION); 0
     // (absent): written by the modules with 32-bit fields, which these
-    // modules cannot read (their float values parse as unknown fields)
+    // modules cannot read (their float values parse as unknown fields);
+    // 1: without stream_sequence (read as 0)
     uint32 version = 9;
+    // sequence number of the last event of the book's stream (broker service)
+    // folded into this state; 0: none
+    uint64 stream_sequence = 10;
 }
 
 message Return {

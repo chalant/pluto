@@ -1,3 +1,4 @@
+import hashlib
 from collections import defaultdict
 from logbook import Logger
 from copy import copy
@@ -13,8 +14,11 @@ warning_logger = Logger('AlgoWarning')
 
 
 class SimulationBlotter(blotter.Blotter):
-    def __init__(self, engine_setup, cancel_policy=None):
+    def __init__(self, engine_setup, cancel_policy=None, start_sequence=1):
         super(SimulationBlotter, self).__init__(cancel_policy)
+
+        # the number of the next order id (see _next_order_id)
+        self._order_sequence = start_sequence
 
         # these orders are aggregated by asset
         self._open_orders = defaultdict(list)
@@ -48,6 +52,28 @@ class SimulationBlotter(blotter.Blotter):
     @property
     def open_orders(self):
         return self._open_orders
+
+    @property
+    def order_sequence(self):
+        """The number the next order id will carry: what a checkpoint keeps so
+        that a rebuilt blotter (``start_sequence``) goes on from there."""
+        return self._order_sequence
+
+    def _next_order_id(self, session_id):
+        """The id of the next order of the strategy session: 16 hexadecimal
+        digits of the md5 of ``session_id`` (the process id, itself the md5 of
+        the strategy and the run: another run, another namespace), then the
+        sequence of the orders placed through this blotter in hexadecimal, 8
+        digits at least: alphanumeric, 24 characters for the first 4 billion
+        orders (client order ids are capped at 32 characters here).
+        The same session placing the same orders in the same order gets the
+        same ids (an id is safe to send again)."""
+        sequence = self._order_sequence
+        self._order_sequence += 1
+
+        return '{}{:08x}'.format(
+            hashlib.md5(session_id.encode()).hexdigest()[:16],
+            sequence)
 
     @expect_types(asset=Asset)
     def order(self, asset, amount, style, session_id, order_id=None):
@@ -97,6 +123,9 @@ class SimulationBlotter(blotter.Blotter):
                                 self.max_shares)
 
         is_buy = (amount > 0)
+        if order_id is None:
+            order_id = self._next_order_id(session_id)
+
         order = Order(
             session_id=session_id,
             dt=self.current_dt,

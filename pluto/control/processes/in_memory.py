@@ -41,7 +41,7 @@ class BrokerStub(broker_stub.BrokerStub):
 
         Parameters
         ----------
-        servicer: pluto.broker.broker_service.BrokerService
+        servicer: pluto.control.controller.process_manager.StrategyManager
         '''
         self._servicer = servicer
         self._session_id = session_id

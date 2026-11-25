@@ -1,4 +1,5 @@
-# Modified by Pluto (Apache-2.0 section 4(b)): orders carry a session_id; id_ replaces id; hash and equality by id.
+# Modified by Pluto (Apache-2.0 section 4(b)): orders carry a session_id; id_ replaces id; hash (of the id string, so
+# that ids need not be hexadecimal) and equality by id.
 #
 # Copyright 2016 Quantopian, Inc.
 #
@@ -296,7 +297,7 @@ class Order:
         return "Order(%s)" % self.to_dict().__repr__()
 
     def __hash__(self):
-        return int(self.id, 16)
+        return hash(self.id)
 
     def __eq__(self, other):
         return other.id == self.id
