@@ -89,3 +89,41 @@ the runtime runs the `ClockEvent` the controller published). Full suite exact.
 (every column, exact) over both, the same messages, only bytes on the inner bus, no dead letter. Every payload is a protobuf
 message and is serialised: nothing is left out. Also: what a run publishes (counts per topic, content of the dones), and a failing
 strategy aborts the run in the trade phase with the error in the `PhaseError`.
+
+### Step 5 done: measurements (indicative: a shared 16-core machine, load average 12 to 17 during all runs)
+
+Suite wall time, the 341 tests of `origin/master` (the new test files left out), alternating runs, same machine and env, each from
+its own worktree: before 80.3 s and 79.3 s (pytest), after 98.7 s and 98.7 s: **about +23 %**, on every run. The cost is the bus, not
+the work: a `buy_and_hold` run (7312 clock events) under cProfile goes from 5.4 s to 8.4 s; 93,276 messages published and 132,604
+deliveries per run (about 11 microseconds per message in `publish` under the profiler, plus dispatch and the protobuf messages and
+timestamp conversions around them). The dones are 42 % of the messages.
+
+Messages per run of `buy_and_hold`, serialised (`SerializingBus`): 93,276 messages, 2.45 MB: `phase.done` 39,328 (1.33 MB), `phase.book`
+5,040, `phase.metrics` 5,040, `phase.account` 7,312, `phase.trade` 7,312, `phase.submit` 7,312, `strategy.account.<id>` 7,312,
+`strategy.orders` 7,312, `strategy.watchlist` 7,308. The metrics phase is published also for events that need no read (`BAR`,
+`BEFORE_TRADING_START`: the participant says done with count 0): the controller does not know which events the tracker reads.
+
+### Step 6 done: docs
+
+`dev/README.md`: the run as phases on the bus (table, rules), the tree of what runs, the tests table with the bus, broker service,
+order id and phase test files, the test command is `pytest tests`.
+
+## Left open
+
+- Cost of the bus (+23 % on the suite): fewer messages are possible (a metrics phase only for the events the tracker reads, one done
+  for several participants), not done: it changes what the controller knows, a design choice.
+- Signals of one tick run one after the other (book, metrics per signal), which keeps today's interleaving for several calendars
+  (not exercised through the controller: every run in the suite has one calendar, XNYS); multi-calendar decision schedules need the
+  phases per calendar to be rethought (stage 1 stays on today's calendar path).
+- The runtime must run synchronously (`running_behavior.Blocking`); a `NonBlocking` runtime in process would publish from another
+  thread (the in-memory bus is single-threaded) and its trade done would come late or never [INFERENCE: not run]; a missing done
+  aborts the run.
+- The controller's behavior still reads `broker.get_positions` to price them, and the metrics tracker reads the ledger object of the
+  book: two direct reads that a distributed deployment would have to replace (stream fold, price request).
+- `StrategyManager.add_strategy` builds the runtime's endpoint (the in-process wiring); the registry of components of a distributed
+  deployment is not designed here.
+- The bus logs every message and never trims (open in `STAGE1_BUS_PROGRESS.md`): 93k messages for the 7312 clock events of `buy_and_hold`.
+- A strategy exception is now a `PhaseError` carrying the error type and message (the traceback is in the log, `Participants` /
+  `RuntimeEndpoint` loggers), no longer the original exception object.
+- The bus is injected through `StrategyManager(..., bus=...)`; the tests build the manager through the unchanged test wiring, so
+  the serialising-bus tests replace the default bus (`mock.patch` of `process_manager.InMemoryBus`).
