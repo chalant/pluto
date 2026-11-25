@@ -222,3 +222,7 @@ file), fresh env (`dev/setup_env.sh`, uv, build_ext): the seven files 71 passed 
 Measured: no result differs (the exact oracle and the stored expected results pass unchanged); the fold equals the engine's
 ledger state byte for byte on the 5 examples and 23 scenarios; a fold that skips `PricesMarked` or `Commission` fails the test.
 Not exercised by any daily run: `Revalued` mattering (unit test only), `OrderTriggered`, `OrderRejected`.
+
+After the review fixes: fresh clone at `de84e260` (code identical to the final head), fresh env: the seven files 71 passed
+(unchanged; only `tests/test_pluto_order_ids.py` and `tests/test_pluto_broker_service.py` are added), 9 order id tests, 56
+broker service tests: 136 passed; the same 136 under `PYTHONHASHSEED` 0 to 10: 136 passed each.
