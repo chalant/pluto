@@ -89,10 +89,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def broker_states(self):
         return self._broker_states
 
-    @property
-    def strategies(self):
-        return self._processes.values()
-
     def _on_book_event(self, stream_event):
         event = stream_event.event
 
