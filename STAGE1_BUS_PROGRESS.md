@@ -106,4 +106,8 @@ The serialising wrapper's gain comes from building `Envelope` and `Delivery` dir
 
 ## Final run
 
-Filled in below when the fresh-clone run is done.
+Fresh clone of `stage1-bus` at `b6c9289e` (`--no-hardlinks`, new env from `dev/setup_env.sh`), the seven existing files plus the
+three bus files: **276 passed** (71 existing, unchanged; 168 contract + 26 in-memory + 11 serializing = 205 bus tests), also
+under `PYTHONHASHSEED` 1, 2 and 3 (276 each). The contract suite itself starts child interpreters under `PYTHONHASHSEED` 1 to 5
+and compares the delivery trace and checkpoints of a 200-message scenario (phases, wildcards, ranks, a group, transient
+failures, dead letters, cascades, a late replay). The verify clone was removed.
