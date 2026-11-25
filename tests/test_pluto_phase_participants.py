@@ -139,6 +139,8 @@ class FakeProcess(object):
         self.sends = True
         # the clock time of the batch it sends: None for the time of the clock event
         self.batch_ts = None
+        # the ids of the orders in its batch: None for one order
+        self.order_ids = None
 
     def account_update(self, state):
         if self.fail_account:
@@ -151,23 +153,29 @@ class FakeProcess(object):
 
         if self.sends:
             ts = phases.pandas_timestamp(event.timestamp) if self.batch_ts is None else self.batch_ts
-            batch = order_batch(self.process_id, ts, ['order-' + self.process_id])
+            ids = ['order-' + self.process_id] if self.order_ids is None else self.order_ids
 
-            self.manager.runtime(self.process_id).send(phases.ORDERS_TOPIC, batch)
+            self.manager.runtime(self.process_id).send(phases.ORDERS_TOPIC, order_batch(self.process_id, ts, ids))
 
 
-class LossyBus(InMemoryBus):
-    """An in-memory bus that loses the batches of orders of the given producers."""
+class FaultyBus(InMemoryBus):
+    """An in-memory bus that loses the batches of orders of some producers, and delivers those of others twice."""
 
     def __init__(self):
         super().__init__()
         self.lost = set()
+        self.doubled = set()
 
     def publish(self, topic, payload, **kwargs):
         if topic == phases.ORDERS_TOPIC and kwargs['key'] in self.lost:
             return None
 
-        return super().publish(topic, payload, **kwargs)
+        receipt = super().publish(topic, payload, **kwargs)
+
+        if topic == phases.ORDERS_TOPIC and kwargs['key'] in self.doubled:
+            super().publish(topic, payload, **kwargs)
+
+        return receipt
 
 
 class RunTests(unittest.TestCase):
@@ -178,7 +186,7 @@ class RunTests(unittest.TestCase):
         patch.start()
         self.addCleanup(patch.stop)
 
-        self.bus = LossyBus()
+        self.bus = FaultyBus()
         setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
         self.manager = process_manager.StrategyManager(None, setup, bus=self.bus)
         self.broker = self.manager.broker
@@ -216,7 +224,8 @@ class RunTests(unittest.TestCase):
         self.bus.lost.add('bbb')
 
         with self.assertRaisesRegex(
-                phases.PhaseError, r'phase\.submit .*bbb sent 1 orders, the broker received 0') as raised:
+                phases.PhaseError, r'phase\.submit .*bbb sent 1 orders in 1 batches, the broker received 0 in 0'
+        ) as raised:
             self.tick()
 
         self.assertNotIn('aaa sent', str(raised.exception))
@@ -226,10 +235,38 @@ class RunTests(unittest.TestCase):
         process = self.add_process('aaa')
         process.batch_ts = TS - pd.Timedelta(minutes=1)
 
-        with self.assertRaisesRegex(phases.PhaseError, r'phase\.submit .*aaa sent 1 orders, the broker received 0'):
+        with self.assertRaisesRegex(
+                phases.PhaseError, r'phase\.submit .*aaa sent 1 orders in 1 batches, the broker received 0 in 0'):
             self.tick()
 
         self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [])
+
+    def test_an_empty_batch_of_another_clock_event_aborts_the_run(self):
+        # nothing in it to count: the batch counts are what tell
+        process = self.add_process('aaa')
+        process.batch_ts = TS - pd.Timedelta(minutes=1)
+        process.order_ids = []
+
+        with self.assertRaisesRegex(
+                phases.PhaseError, r'phase\.submit .*aaa sent 0 orders in 1 batches, the broker received 0 in 0'):
+            self.tick()
+
+    def test_a_batch_delivered_twice_aborts_the_run(self):
+        process = self.add_process('aaa')
+        process.order_ids = []
+        self.bus.doubled.add('aaa')
+
+        with self.assertRaisesRegex(
+                phases.PhaseError, r'phase\.submit .*aaa sent 0 orders in 1 batches, the broker received 0 in 2'):
+            self.tick()
+
+    def test_a_batch_of_orders_delivered_twice_aborts_the_run(self):
+        self.add_process('aaa')
+        self.bus.doubled.add('aaa')
+
+        with self.assertRaisesRegex(
+                phases.PhaseError, r'phase\.submit .*aaa sent 1 orders in 1 batches, the broker received 2 in 2'):
+            self.tick()
 
     def test_a_runtime_in_another_process_is_not_supported_yet(self):
         # PlaceOrders, SetWatchList and Stopped over gRPC are not on the bus: they say so instead of leaving the run

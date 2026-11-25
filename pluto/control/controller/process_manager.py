@@ -55,6 +55,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # the batch of orders of each strategy for this tick, by process id (the bus delivers the batches of different
         # strategies in the order of their producer ids: registration order is rebuilt when they are submitted)
         self._received_orders = {}
+        self._received_batches = {}
 
         self._watchlist = set()
 
@@ -127,6 +128,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
             orders = [conversions.to_zp_order(order) for order in batch.orders]
 
             self._received_orders.setdefault(session_id, []).extend(orders)
+            self._received_batches[session_id] = self._received_batches.get(session_id, 0) + 1
 
     @service_access.framework
     @service_access.per_session
@@ -180,6 +182,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
         """The number of orders the strategy's batches of this tick had."""
         return len(self._received_orders.get(process_id, ()))
 
+    def received_batches(self, process_id) -> int:
+        """The number of batches of orders of the strategy in this tick; an empty one counts."""
+        return self._received_batches.get(process_id, 0)
+
     @property
     def watchlist(self) -> frozenset:
         """The assets the strategies asked for in this tick."""
@@ -211,6 +217,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     def clear(self):
         self._received_orders.clear()
+        self._received_batches.clear()
         self._watchlist.clear()
 
         broker_states = self._broker_states

@@ -210,3 +210,10 @@ Counts measured on the same run (`buy_and_hold`, 7,312 clock events, one strateg
   another asset (sid 2); the test asserts the manager keeps no order and no asset of the stale clock event, and then those of the current
   one only (sid 1). Checked: with the `ts == _global_ts` guard of `receive_watchlist` replaced by `if True` the test fails
   (`Equity(2 [TEST2])` in the watchlist).
+- **Batches counted as well as orders**: `PhaseDone.batches` (regenerated `phases_pb2.py`; `error` is now field 5), the endpoint counts the
+  batches it sent, `StrategyManager.received_batches(process id)` the ones it accepted for the tick (an empty batch counts, a stale one
+  does not). The submit phase compares `(orders, batches)` per process; the message reads `aaa sent 0 orders in 1 batches, the broker
+  received 0 in 2`. Tests: an empty batch of another clock event, an empty batch delivered twice and a batch with an order delivered
+  twice (a bus that delivers the batches of a producer twice) abort the run in the submit phase; the run test also compares the
+  batches of the dones with the batches published. A runtime that itself sends two batches in a tick is not an error (both reach the
+  book, in the order placed).

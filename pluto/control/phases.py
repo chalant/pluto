@@ -13,7 +13,7 @@ phase       rank  topic            published   subscribers                 done
 book        10    phase.book       per signal  broker                      broker
 metrics     20    phase.metrics    per signal  metrics                     metrics
 account     30    phase.account    per tick    broker, then the runtimes   broker, each runtime
-trade       40    phase.trade      per tick    the runtimes                each runtime: the number of orders it sent
+trade       40    phase.trade      per tick    the runtimes                each runtime: its orders and batches sent
 submit      50    phase.submit     per tick    broker                      broker
 ==========  ====  ===============  ==========  ==========================  ===========================================
 
@@ -122,12 +122,14 @@ def publish_done(
         logical_ts: int,
         participant: str,
         orders: int = 0,
+        batches: int = 0,
         error: str = '') -> None:
-    """Says that ``participant`` finished its work of ``phase`` at ``logical_ts``, or failed (``error``). ``orders`` is
-    the number of orders a runtime sent in the trade phase."""
+    """Says that ``participant`` finished its work of ``phase`` at ``logical_ts``, or failed (``error``). ``orders`` and
+    ``batches`` are the number of orders, and of batches of orders, a runtime sent in the trade phase."""
     bus.publish(
         phase.done_topic,
-        phases_pb2.PhaseDone(phase=phase.topic, participant=participant, orders=orders, error=error),
+        phases_pb2.PhaseDone(
+            phase=phase.topic, participant=participant, orders=orders, batches=batches, error=error),
         type=message_type(phases_pb2.PhaseDone),
         logical_ts=logical_ts,
         producer_id=participant,

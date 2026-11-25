@@ -85,4 +85,5 @@ class RuntimeEndpoint(object):
                 self._id,
                 error='sent no batch of orders (a runtime must run its clock event synchronously)')
         else:
-            phases.publish_done(self._bus, phases.TRADE, envelope.logical_ts, self._id, self._orders)
+            phases.publish_done(
+                self._bus, phases.TRADE, envelope.logical_ts, self._id, self._orders, self._batches)

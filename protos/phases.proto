@@ -26,5 +26,6 @@ message PhaseDone {
     string phase = 1;              // topic of the phase event
     string participant = 2;
     uint32 orders = 3;             // trade phase: the number of orders the runtime sent
-    string error = 4;              // set when the participant failed in the phase
+    uint32 batches = 4;            // trade phase: the number of batches of orders it sent (a batch may be empty)
+    string error = 5;              // set when the participant failed in the phase
 }

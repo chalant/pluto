@@ -41,7 +41,7 @@ class BrokerParticipant(object):
         self._manager = manager
         self._broker = broker = manager.broker
 
-        # the orders each runtime says it sent in the trade phase, by process id
+        # what each runtime says it sent in the trade phase, by process id: (orders, batches)
         self._sent = {}
 
         bus.subscribe(phases.TRADE.done_topic, self._on_done)
@@ -53,7 +53,7 @@ class BrokerParticipant(object):
         done = delivery.envelope.payload
 
         if not done.error:
-            self._sent[done.participant] = done.orders
+            self._sent[done.participant] = (done.orders, done.batches)
 
     def _on_book(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
@@ -135,18 +135,20 @@ class BrokerParticipant(object):
                 key=process_id)
 
     def _check_orders(self) -> None:
-        """Each runtime said how many orders it sent in the tick: the manager must have received as many (a batch lost
-        on the way, or one for another clock event that was ignored, would otherwise go unnoticed)."""
+        """Each runtime said how many orders, in how many batches, it sent in the tick: the manager must have received
+        as many (a batch lost on the way, delivered twice, or for another clock event that was ignored, would
+        otherwise go unnoticed, an empty one too)."""
         manager = self._manager
         sent = self._sent
         problems = []
 
         for process_id in manager.session_ids:
-            expected = sent.get(process_id)
-            received = manager.received_orders(process_id)
+            expected = sent.get(process_id, (0, 0))
+            received = (manager.received_orders(process_id), manager.received_batches(process_id))
 
             if expected != received:
-                problems.append('{} sent {} orders, the broker received {}'.format(process_id, expected, received))
+                problems.append('{} sent {} orders in {} batches, the broker received {} in {}'.format(
+                    process_id, *expected, *received))
 
         sent.clear()
 

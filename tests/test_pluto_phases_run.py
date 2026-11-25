@@ -146,6 +146,8 @@ class PhasesRunTests(ZiplinePlutoFixture):
 
         self.assertGreater(len(sent), 0)
         self.assertEqual(counted, len(sent))
+        self.assertEqual(
+            sum(p.batches for t, p in published if t == phases.TRADE.done_topic), len(batches))
         self.assertEqual(sorted(told), sorted(sent))
         self.assertEqual(bus.dead_letters(), ())
 
