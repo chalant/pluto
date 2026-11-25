@@ -105,11 +105,11 @@ class FakeBehavior(object):
         pass
 
 
-def _equity():
+def _equity(sid=1):
     return Equity(
-        1,
+        sid,
         ExchangeInfo('XNYS', 'XNYS', 'US'),
-        symbol='TEST',
+        symbol='TEST{}'.format(sid),
         asset_name='TEST',
         start_date=pd.Timestamp('2004-01-02', tz='UTC'),
         end_date=pd.Timestamp('2014-12-31', tz='UTC'),
@@ -264,22 +264,28 @@ class RunTests(unittest.TestCase):
         self.add_process('aaa')
         self.manager.set_global_timestamp(TS)
         stale = TS - pd.Timedelta(minutes=1)
-        asset = conversions.to_proto_asset(_equity())
 
-        for ts, orders, assets in ((stale, ['old'], [asset]), (TS, ['new'], [asset])):
+        def send(ts, order_id, sid):
+            """A batch of one order and a watchlist of one asset, for the clock event ``ts``."""
             self.bus.publish(
                 phases.ORDERS_TOPIC,
-                order_batch('aaa', ts, orders),
+                order_batch('aaa', ts, [order_id]),
                 type='OrderBatch', logical_ts=ts.value, producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
             self.bus.publish(
                 phases.WATCHLIST_TOPIC,
-                broker_pb2.WatchList(ts=phases.proto_timestamp(ts), assets=assets if ts == TS else []),
+                broker_pb2.WatchList(ts=phases.proto_timestamp(ts), assets=[conversions.to_proto_asset(_equity(sid))]),
                 type='WatchList', logical_ts=ts.value, producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
             self.bus.run_until_idle()
 
-            # only the batch of the clock event the strategies run is kept
-            self.assertEqual([order.id for order in self.manager.new_orders], ['new'] if ts == TS else [])
+        # what a runtime sent for another clock event is ignored: its orders and its assets
+        send(stale, 'old', 2)
 
+        self.assertEqual(self.manager.new_orders, [])
+        self.assertEqual(self.manager.watchlist, frozenset())
+
+        send(TS, 'new', 1)
+
+        self.assertEqual([order.id for order in self.manager.new_orders], ['new'])
         self.assertEqual([asset.sid for asset in self.manager.watchlist], [1])
 
     def test_a_failure_in_the_account_phase_aborts_the_run(self):

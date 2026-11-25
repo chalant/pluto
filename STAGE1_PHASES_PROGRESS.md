@@ -203,3 +203,10 @@ Counts measured on the same run (`buy_and_hold`, 7,312 clock events, one strateg
   event plus one done per participant; the metrics phase is 10,080 messages (10.8 %) with its dones, and the dones are 42 % of all messages.
   Merging changes where the lock-step is checked and what the controller knows: a design choice.
 - Bus log trimming and retention (open in `STAGE1_BUS_PROGRESS.md`).
+
+### Follow-ups of the second review
+
+- **Stale watchlist test**: the watchlist half was vacuous (the stale watchlist had no assets). The stale batch and watchlist now carry
+  another asset (sid 2); the test asserts the manager keeps no order and no asset of the stale clock event, and then those of the current
+  one only (sid 1). Checked: with the `ts == _global_ts` guard of `receive_watchlist` replaced by `if True` the test fails
+  (`Equity(2 [TEST2])` in the watchlist).
