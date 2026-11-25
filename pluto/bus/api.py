@@ -7,7 +7,7 @@ Every implementation (in-memory, serialising wrapper, later a networked one) pas
 import enum
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 
 class BusError(Exception):
@@ -26,8 +26,7 @@ class NotIdle(BusError):
     """`run_until_idle` stopped at `max_deliveries` with messages still pending (a handler loop)."""
 
 
-@dataclass(frozen=True, slots=True)
-class Envelope:
+class Envelope(NamedTuple):
     """One message. Immutable; `payload` must be treated as immutable too (a serialising bus hands out copies)."""
 
     msg_id: str  # idempotency key; a retry of a request reuses it
@@ -35,6 +34,7 @@ class Envelope:
     key: str  # ordering lane within the topic: FIFO per (topic, key)
     type: str  # payload type name, e.g. the protobuf message name; selects the codec on a serialising bus
     logical_ts: int  # simulated time in nanoseconds; set by the producer, never read from a wall clock
+    phase: int  # order among messages of the same logical_ts, lower first (the controller's phase rank)
     producer_id: str
     seq: int  # per-producer sequence
     correlation_id: str | None = None
@@ -43,19 +43,18 @@ class Envelope:
     payload: Any = None
 
 
-@dataclass(frozen=True, slots=True)
-class Position:
-    """Opaque place in one topic's log. Store it with the consumer's state and pass it back as `start`.
+class Position(NamedTuple):
+    """Opaque place in one topic's log: store it with the consumer's state and pass it back as `start`.
 
-    Callers must not interpret or compare it; only the bus that issued it knows what the fields mean.
+    `topic` names the topic; `token` belongs to the bus that issued the position (the in-memory bus uses a log
+    offset, a networked bus would encode its partitions). Callers store and pass it back, nothing else.
     """
 
     topic: str
-    offset: int
+    token: Any
 
 
-@dataclass(frozen=True, slots=True)
-class Receipt:
+class Receipt(NamedTuple):
     """Returned by `publish` once the message is accepted (in memory: logged and enqueued, not delivered)."""
 
     msg_id: str
@@ -69,8 +68,7 @@ class Start(enum.Enum):
     LATEST = "latest"  # only messages published after the subscription (the default)
 
 
-@dataclass(frozen=True, slots=True)
-class Delivery:
+class Delivery(NamedTuple):
     """One delivery attempt of one message to one subscription. `attempt` counts from 1."""
 
     envelope: Envelope
@@ -81,22 +79,48 @@ class Delivery:
 
 @dataclass(frozen=True, slots=True)
 class DeadLetter:
-    """A message given up on after `attempts` failed deliveries to subscription `subscription`."""
+    """A message given up on after `attempts` failed deliveries to subscription `subscription`.
+
+    The last failure is described by strings so that the record can cross a process boundary: the class name
+    and the message of the exception, both None when the last outcome was an explicit nack.
+    """
 
     envelope: Envelope
     subscription: int
     attempts: int
-    error: Exception | None  # the last exception, None when the last outcome was an explicit nack
+    error_type: str | None
+    error_message: str | None
 
 
 type Handler = Callable[[Delivery], None]
+
+
+def topic_tokens(topic_or_pattern: str) -> tuple[str, ...]:
+    """Split a dotted topic or pattern (`*` one token, a final `>` the rest); ValueError when malformed."""
+    if not isinstance(topic_or_pattern, str) or not topic_or_pattern:
+        raise ValueError(f"topic or pattern must be a non-empty string, got {topic_or_pattern!r}")
+    tokens = tuple(topic_or_pattern.split("."))
+    if "" in tokens or ">" in tokens[:-1]:
+        raise ValueError(f"malformed topic or pattern {topic_or_pattern!r}")
+    return tokens
+
+
+def is_exact(tokens: tuple[str, ...]) -> bool:
+    return "*" not in tokens and ">" not in tokens
+
+
+def exact_topic(topic: str) -> str:
+    """Return `topic` if it can be published to (dotted, no empty or wildcard token); ValueError otherwise."""
+    if not is_exact(topic_tokens(topic)):
+        raise ValueError(f"{topic!r} is a pattern, not a topic")
+    return topic
 
 
 class Subscription(Protocol):
     id: int  # registration order, starting at 1
 
     def cancel(self) -> None:
-        """Stop deliveries; messages still queued for it are dropped. Idempotent."""
+        """Stop deliveries; messages still queued for it are dropped. Idempotent, also after `Bus.close`."""
 
 
 class Bus(Protocol):
@@ -108,6 +132,7 @@ class Bus(Protocol):
         type: str,
         logical_ts: int,
         producer_id: str,
+        phase: int = 0,
         key: str = "",
         seq: int | None = None,
         msg_id: str | None = None,
@@ -116,7 +141,7 @@ class Bus(Protocol):
         schema_version: int = 1,
     ) -> Receipt:
         """Log and enqueue a message; never runs a handler. `seq` defaults to the next number of `producer_id`,
-        `msg_id` to `f"{producer_id}:{seq}"`."""
+        `msg_id` to `f"{producer_id}:{seq}"`. A refused publish (`QueueFull`, bad argument) changes nothing."""
 
     def subscribe(
         self,
@@ -130,8 +155,9 @@ class Bus(Protocol):
         """Register `handler` for a topic or a dotted pattern (`*` one token, a final `>` the rest).
 
         `start`: None (default) means `Start.LATEST`; a `Position` needs an exact topic and delivers from that
-        message on. A handler that returns acknowledges the delivery, one that raises is nacked.
-        Subscriptions of one `group` share a single stream: each (topic, key) lane goes to one member.
+        position on. A handler that returns acknowledges the delivery, one that raises is nacked.
+        Subscriptions of one `group` share a single stream: each (topic, key) lane goes to one member. The first
+        member decides `start`; later members join with `start` None or `Start.LATEST` and the same pattern.
         Lower `rank` runs first when several subscriptions receive the same message."""
 
     def ack(self, delivery: Delivery) -> None:
@@ -141,8 +167,11 @@ class Bus(Protocol):
         """Mark the delivery being handled for redelivery (also the outcome of a handler that raises)."""
 
     def position_of(self, delivery: Delivery) -> Position:
-        """The position just after the delivered message: store it as the consumer's checkpoint and pass it as
-        `start` to resume with the next message."""
+        """The resume position of the delivery's subscription in the delivered message's topic: every message of
+        that topic below it has been settled (acknowledged or dead-lettered) by the subscription, counting this
+        delivery as settled. Store it as the consumer's checkpoint and pass it as `start` to resume. Messages
+        above it that were already handled are delivered again (at-least-once), so deliveries that complete out
+        of log order never leave a gap."""
 
     def step(self) -> bool:
         """Run one handler invocation. False when nothing was pending."""
@@ -155,4 +184,5 @@ class Bus(Protocol):
         """The dead-letter records so far, oldest first."""
 
     def close(self) -> None:
-        """Drop everything pending; any later call raises `BusClosed`. Idempotent."""
+        """Drop everything pending and cancel every subscription. Idempotent; afterwards every call except
+        `close` and `Subscription.cancel` raises `BusClosed`."""

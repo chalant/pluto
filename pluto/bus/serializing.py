@@ -9,23 +9,27 @@ from pluto.bus.api import Bus, DeadLetter, Delivery, Envelope, Handler, Position
 
 
 class Codec(Protocol):
+    """Payload to bytes and back. `encode` must be deterministic: equal payloads give equal bytes."""
+
     def encode(self, payload: Any, type: str) -> bytes: ...
 
     def decode(self, data: bytes, type: str) -> Any: ...
 
 
 class JsonCodec:
-    """JSON for plain payloads (None, bool, int, float, str, list, dict with str keys). Tuples come back as lists."""
+    """JSON for plain payloads (None, bool, int, float, str, list, dict with str keys). Tuples come back as lists.
+    Keys are sorted, so equal dicts give equal bytes."""
 
     def encode(self, payload: Any, type: str) -> bytes:
-        return json.dumps(payload, separators=(",", ":")).encode()
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
 
     def decode(self, data: bytes, type: str) -> Any:
         return json.loads(data)
 
 
 class ProtobufCodec:
-    """Protobuf messages through `SerializeToString` and `FromString`, chosen by the envelope `type`.
+    """Protobuf messages through `SerializeToString(deterministic=True)` and `FromString`, chosen by the envelope
+    `type`.
 
     `message_types` maps a type name to the message class. Payloads of any other type go to `fallback`.
     """
@@ -40,7 +44,7 @@ class ProtobufCodec:
             return self._fallback.encode(payload, type)
         if not isinstance(payload, message_type):
             raise TypeError(f"type {type!r} is registered as {message_type.__name__}, got {payload.__class__.__name__}")
-        return payload.SerializeToString()
+        return payload.SerializeToString(deterministic=True)
 
     def decode(self, data: bytes, type: str) -> Any:
         message_type = self._types.get(type)
@@ -53,7 +57,8 @@ class SerializingBus:
     """Wraps a bus: the inner bus only ever carries bytes, each subscription decodes its own copy.
 
     Ordering, positions, acknowledgement and dispatch are the inner bus's; `Delivery` objects handed to handlers
-    are copies with a decoded payload and are accepted by `ack`, `nack` and `position_of`.
+    are copies with a decoded payload and are accepted by `ack`, `nack` and `position_of`. A payload that cannot be
+    decoded fails the handler's delivery like any handler error.
     """
 
     def __init__(self, inner: Bus, codec: Codec) -> None:
@@ -68,6 +73,7 @@ class SerializingBus:
         type: str,
         logical_ts: int,
         producer_id: str,
+        phase: int = 0,
         key: str = "",
         seq: int | None = None,
         msg_id: str | None = None,
@@ -81,6 +87,7 @@ class SerializingBus:
             type=type,
             logical_ts=logical_ts,
             producer_id=producer_id,
+            phase=phase,
             key=key,
             seq=seq,
             msg_id=msg_id,
@@ -119,13 +126,36 @@ class SerializingBus:
         return self._inner.run_until_idle(max_deliveries)
 
     def dead_letters(self) -> tuple[DeadLetter, ...]:
-        return tuple(replace(letter, envelope=self._decoded_envelope(letter.envelope)) for letter in self._inner.dead_letters())
+        """Dead letters with decoded payloads; one that cannot be decoded keeps its raw bytes."""
+        letters = []
+        for letter in self._inner.dead_letters():
+            try:
+                letter = replace(letter, envelope=self._decoded_envelope(letter.envelope))
+            except Exception:
+                pass
+            letters.append(letter)
+        return tuple(letters)
 
     def close(self) -> None:
         self._inner.close()
 
     def _decoded(self, delivery: Delivery) -> Delivery:
-        return replace(delivery, envelope=self._decoded_envelope(delivery.envelope))
+        return Delivery(
+            self._decoded_envelope(delivery.envelope), delivery.attempt, delivery.subscription, delivery.offset
+        )
 
     def _decoded_envelope(self, envelope: Envelope) -> Envelope:
-        return replace(envelope, payload=self._codec.decode(envelope.payload, envelope.type))
+        return Envelope(
+            envelope.msg_id,
+            envelope.topic,
+            envelope.key,
+            envelope.type,
+            envelope.logical_ts,
+            envelope.phase,
+            envelope.producer_id,
+            envelope.seq,
+            envelope.correlation_id,
+            envelope.reply_to,
+            envelope.schema_version,
+            self._codec.decode(envelope.payload, envelope.type),
+        )

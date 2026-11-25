@@ -11,37 +11,48 @@ S2 No nested delivery. `publish` logs and enqueues and returns; a handler only e
    `run_until_idle`, never inside `publish`, and never inside another handler (calling `step` from a handler
    raises `BusError`).
 S3 Deterministic dispatch. The next delivery is the smallest head among the ready lanes by
-   `(logical_ts, producer_id, seq)`, then handler rank, then registration order. It depends only on message
-   content and registration order, never on dict or set iteration order, hash values or wall-clock time: the same
-   publishes give the same delivery trace under any `PYTHONHASHSEED`. It is not causal: a handler may publish a
-   message with a smaller `logical_ts` than the one it is handling, and that message is dispatched first.
+   `(logical_ts, phase, producer_id, seq)`, then handler rank, then registration order, then (topic, key). It
+   depends only on message content and registration order, never on dict or set iteration order, hash values or
+   wall-clock time: the same publishes give the same delivery trace under any `PYTHONHASHSEED`, and a replay
+   delivers a log in the order a live subscriber saw it. It is not causal: a handler may publish a message with a
+   smaller `logical_ts` than the one it is handling, and that message is dispatched first.
 S5 Time. The bus never reads a clock. `logical_ts` (an int, nanoseconds) is chosen by the producer and travels in
-   the envelope; timers are messages the controller publishes.
+   the envelope; timers are messages the controller publishes. `phase` (an int) orders messages of one
+   `logical_ts`, so the controller's phases need not be encoded in timestamps or producer ids.
 S6 Handler order. `rank` is explicit, lower first; equal ranks follow registration order.
 S7 Failures. Delivery is at-least-once. A handler that raises, or calls `nack`, causes a redelivery of the same
    message with its dispatch key unchanged, so before anything later in its lane (per-key order holds), with
    `Delivery.attempt` counting up; after `max_attempts` the message is dropped for that subscription and a
-   `DeadLetter` is recorded. The publisher never sees a handler error. The bus does not deduplicate: a message
-   published twice with the same `msg_id` is delivered twice, and handlers must be idempotent on `msg_id`.
+   `DeadLetter` (strings only: error type and message) is recorded. The publisher never sees a handler error.
+   The bus does not deduplicate: a message published twice with the same `msg_id` is delivered twice, and
+   handlers must be idempotent on `msg_id`.
 S9 Replay. A subscription starts at `Start.EARLIEST`, `Start.LATEST` (default) or a `Position` of an exact topic.
-   Each topic has an append-only log, so replay delivers logged messages as if just published, merged by S3. A
-   `Position` is opaque and storable; `Receipt.position` is the published message (inclusive) and
-   `Bus.position_of(delivery)` the one after the delivered message (resume point).
+   Each topic has an append-only log, so replay delivers logged messages as if just published, merged by S3.
+   A `Position` is opaque and storable (its `token` belongs to the bus that issued it). `Receipt.position` is the
+   published message (inclusive). `Bus.position_of(delivery)` is the subscription's resume position in that
+   topic: every message below it is settled, so deliveries that complete out of log order (S3 does not follow
+   log order across keys) leave no gap; messages above it that were already handled are delivered again.
 S10 Request and reply. `request` and `reply` (module `pluto.bus.request`) are a library over publish and
-   subscribe with a correlation id and a reply topic; replies are ordinary logged messages. There is no timeout
-   in the bus (S5): the caller retries with the same `msg_id`.
+   subscribe with a correlation id and a reply topic (by default the inbox `reply.<producer_id>`); replies are
+   ordinary logged messages. There is no timeout in the bus (S5): the caller retries with the same `msg_id`.
 S11 Serialisation. Messages are immutable. `SerializingBus` round-trips every payload through bytes (protobuf
-   through `SerializeToString` and `FromString`, other types through a pluggable codec) and the contract suite
-   runs with it on and off.
+   through deterministic `SerializeToString` and `FromString`, other types through a pluggable codec) and the
+   contract suite runs with it on and off.
 S12 Backpressure. A subscription holds at most `queue_capacity` undelivered messages. A `publish` that would
    exceed that for any receiver raises `QueueFull` to the publisher and changes nothing (blocking would deadlock a
-   single thread, dropping would change results silently).
-S13 Hygiene. No unordered iteration, no randomness, deterministic ids (`seq` per producer, `msg_id` from it).
+   single thread, dropping would change results silently). This is a rule of the in-memory bus, tested in
+   `tests/test_bus_memory.py`, not of the shared contract.
+S13 Hygiene. No unordered iteration, no randomness, deterministic ids (`seq` per producer, `msg_id` from it),
+   deterministic encodings (sorted JSON keys, deterministic protobuf), group members chosen by a stable hash.
 S14 Quiescence. `run_until_idle()` runs handlers until nothing is pending (handlers may publish more) and
    `step()` runs exactly one, so the controller can drive a phase and a test can assert that nothing is left.
 
-Not here: S4 (the networked merge), seeded fault injection, start from a time, `seek`, deduplication, queue
-retention limits for logs (logs are never trimmed).
+Groups: subscriptions of one `group` share a stream; each (topic, key) lane goes to one member, chosen by a stable
+hash of the lane when it is created (so lanes created by a replay at subscribe time go to the members present
+then). Closing: `close()` cancels every subscription and any later call but `close` and `cancel` raises.
+
+Not here: S4 (the networked merge), seeded fault injection, start from a time, `seek`, deduplication, retention
+limits for logs (logs are never trimmed; open).
 """
 
 from pluto.bus.api import (
