@@ -85,3 +85,17 @@ Removed as obsolete: `StrategyManager` ledger/blotter/portfolio/account/position
 Left alone: the unused gRPC `CancelOrder`/`CancelAllOrdersForAsset` handlers of `StrategyManager` (they referenced a
 non-existent `self._broker` before and still do), and the unused `pluto/finance/broker/broker_service.py`.
 Seven files: 71 passed (baseline 71 passed).
+
+### Step 3 done: deterministic order ids (CR7)
+
+`SimulationBlotter.order` (the strategy's blotter, Pluto's own copy; zipline's blotter is untouched) mints
+`<session_id><sequence as 8 hex digits at least>` when no id is given: `session_id` is the strategy's process id
+(`md5(strategy_id + session_id)`, 32 hex digits: strategy and run in one), the sequence counts the orders the blotter placed
+(an order of no shares takes no number). The id stays hexadecimal because `zipline.finance.order.Order.__hash__` is
+`int(self.id, 16)`; 40 characters instead of the 64 of `uuid4().hex + session_id`.
+Checked before changing: no test compares an id. `pluto/test_utils/test_utils.py` `_normalize` drops `id`, `order_id`,
+`session_id` from the orders/transactions it compares with Zipline (whose ids stay random uuids: plain `TradingAlgorithm`,
+untouched), and the scenario strategies only pass ids back to `cancel_order`. `tests/test_pluto_order_ids.py` (6 tests).
+Open for the replay step: the sequence restarts at 1 when a blotter is rebuilt (a recovering runtime needs the counter in its
+checkpoint, or ids that survive: the controller rejects an id it already knows as `OrderRejected`).
+Seven files + order id tests: 77 passed.
