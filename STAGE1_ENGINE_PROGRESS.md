@@ -60,8 +60,6 @@ metrics tracker reads the ledger.
 
 ## Steps
 
-(filled in below as they are done)
-
 ### Step 2 done: broker service (in process)
 
 `pluto/broker_service/service.py` `BrokerService` is the single writer of the controller side book (portfolio,
@@ -134,3 +132,39 @@ service; the state serialised by `get_state` of the engine's ledger equals, byte
 also `orders()`, `transactions()`, `orders(dt)`, the saved sequence, ids numbered 1..n after the process id, no rejection,
 folding twice. Unit tests: duplicate, cancel, snapshots, sequence, gap, revaluation, trigger, state versions.
 I also made the fold fail on purpose (skipping `PricesMarked`, `Commission`): the test fails, so it is not vacuous.
+
+## Boundaries after stage 1 (for the next step: phase events over the bus)
+
+**What the broker service owns** (`pluto/broker_service/service.py`): the book of the controller side and nothing else writes it:
+`Portfolio`/`Positions`/`Account`, one `Ledger` + `PositionTracker` per calendar, the controller's blotter copy of the open
+orders (`blotter.orders`, `open_orders`, `new_orders`), the dividends/splits/expiry handling, the matching call, the stream and
+its sequence. `StrategyManager` keeps the process registry, the gRPC servicer (`PlaceOrders`, `SetWatchList`, `Stopped`), the
+two barriers (`get_orders`, `get_watchlist`), the per-strategy `BrokerState` that goes to the strategy with the next
+`account_update`; it builds the fills part of that state from `Fill` events (subscriber `_on_book_event`).
+
+**Interface** (everything per calendar name, called by the controller in this order per signal): `set_time(cal, dt)`;
+BAR/TRADE_END `sync_last_sale_prices(cal, prices, dt)` then `match(cal)`; MINUTE_END and BEFORE_TRADING_START
+`sync_last_sale_prices`; SESSION_START `start_session(cal, dt)`; SESSION_END `sync_last_sale_prices` then `end_session(cal, dt)`;
+after the strategies answered `submit(orders)`. Wiring: `StrategyManager(asset_finder, stp)` builds it (`manager.broker`),
+tests still call `manager.add_data_portal/add_ledger/add_blotter/add_strategy`; `Controller.__init__` calls
+`broker.attach_market(market)`; `subscribe(callback)` for the stream. Reads for the controller: `get_ledger(cal)` (the metrics
+tracker reads the ledger: that is where `Revalued` events come from), `get_positions(cal)`, `get_open_orders(cal)`.
+
+**What a bus step has to keep in mind**
+- the controller still computes the last sale prices (`SimulationControllerBehavior.get_last_sale_prices`, reading
+  `manager.broker.get_positions`) and pushes them: `PricesMarked` is the event of that push;
+- the metrics tracker (controller side) reads the ledger directly; a read after a change revalues (lazy) and publishes
+  `Revalued`: a handler that reads the ledger on another path changes the stream (and possibly the last digits);
+- `match` calls the market synchronously (`MarketSimulation.get_transactions`: slippage and commission models on the
+  calendar's `BarData`); the market clock is `set_time`;
+- one book per `BrokerService`, one strategy per book (`set_strategy` raises for a second one: before, a second strategy
+  silently shared the one portfolio);
+- order ids restart at 1 with a rebuilt strategy blotter (replay needs the counter in the checkpoint); the service rejects an id
+  it already knows (`OrderRejected`), nothing is recorded for it;
+- `pluto/finance/broker/broker_service.py` (gRPC `BrokerService`, `self._broker` undefined) is an older unused servicer with
+  the same class name; `StrategyManager.CancelOrder/CancelAllOrdersForAsset` still call `self._broker.*` which never existed
+  (todos); neither is on the simulation path. Left alone.
+
+## Verification
+
+(final clone and PYTHONHASHSEED results below)
