@@ -40,7 +40,9 @@ assert len(ALL_MODULES) == len(examples.EXAMPLE_MODULES) + len(SCENARIO_MODULES)
 
 
 class _RecordingBrokerService(service.BrokerService):
-    """The broker service of a run, with its stream kept."""
+    """The broker service of a run, with its stream kept, and checked against a
+    fold of the stream at the end of every session (what the engine's ledger
+    holds then: orders, transactions, saved state)."""
 
     created = []
 
@@ -48,7 +50,37 @@ class _RecordingBrokerService(service.BrokerService):
         super().__init__(*args)
         self.stream = stream.InMemoryStream()
         self.subscribe(self.stream)
+
+        self.replica = stream.Replica(args[1], args[2])
+        self._unfolded = []
+        self.subscribe(self._unfolded.append)
+        # (orders, transactions) counted at each comparison; what differed
+        self.compared = []
+        self.mismatches = []
+
         self.created.append(self)
+
+    def end_session(self, calendar_name, dt):
+        super().end_session(calendar_name, dt)
+        # the controller revalues here, before the metrics tracker reads
+        self.revalue(calendar_name)
+        self._compare(calendar_name, dt)
+
+    def _compare(self, calendar_name, dt):
+        stream.fold(self._unfolded, self.replica)
+        self._unfolded.clear()
+
+        engine = self.get_ledger(calendar_name)
+        folded = self.replica.ledgers[calendar_name]
+
+        self.compared.append((len(engine.orders()), len(engine.transactions())))
+        for what, engine_value, folded_value in (
+                ('orders', engine.orders(), folded.orders()),
+                ('transactions', engine.transactions(), folded.transactions()),
+                ('orders(dt)', engine.orders(dt), folded.orders(dt)),
+                ('state', engine.get_state(dt), folded.get_state(dt))):
+            if engine_value != folded_value:
+                self.mismatches.append((dt, what))
 
 
 class StreamOfRunsTests(ZiplinePlutoFixture):
@@ -73,8 +105,16 @@ class StreamOfRunsTests(ZiplinePlutoFixture):
     def check_fold(self, name):
         broker, args = self._run(name)
 
+        # what the folded book was found to differ in, at the end of each session
+        self.assertEqual(broker.mismatches, [])
+        if any(isinstance(e.event, events.Fill) for e in broker.stream):
+            # the comparisons were not empty ones: there were orders to compare
+            self.assertTrue(any(orders for orders, _ in broker.compared))
+            self.assertTrue(any(transactions for _, transactions in broker.compared))
+
         ledger_ = broker.get_ledger('XNYS')
-        # (the state read may revalue the portfolio: one more event)
+        # the checkpoint: revalue (it is published), then read
+        broker.revalue('XNYS')
         engine_state = ledger_.get_state(DT)
 
         folded = stream.Replica(args['start'], args['capital_base'])
@@ -155,11 +195,11 @@ for _name in sorted(ALL_MODULES):
 del _name
 
 
-def _equity():
+def _equity(sid=1, exchange='XNYS'):
     return Equity(
-        1,
-        ExchangeInfo('XNYS', 'XNYS', 'US'),
-        symbol='TEST',
+        sid,
+        ExchangeInfo(exchange, exchange, 'US'),
+        symbol='TEST{}'.format(sid),
         asset_name='TEST',
         start_date=pd.Timestamp('2004-01-02', tz='UTC'),
         end_date=pd.Timestamp('2014-12-31', tz='UTC'),
@@ -167,6 +207,12 @@ def _equity():
         auto_close_date=pd.Timestamp('2015-01-01', tz='UTC'),
         tick_size=0.01,
         multiplier=1.0)
+
+
+def _without_sequence(state):
+    message = ledger_state_pb2.LedgerState.FromString(state)
+    message.ClearField('stream_sequence')
+    return message.SerializeToString()
 
 
 class BrokerServiceTests(unittest.TestCase):
@@ -211,12 +257,11 @@ class BrokerServiceTests(unittest.TestCase):
             self._kinds(), [events.OrderAccepted, events.OrderCancelled])
         [recorded] = self.broker.get_ledger('XNYS').orders()
         self.assertEqual(recorded['status'], ORDER_STATUS.CANCELLED)
-        self.assertEqual(self.broker.get_open_orders('XNYS')[self.asset], [])
+        self.assertEqual(self.broker.get_open_orders('XNYS'), {})
 
     def test_events_are_snapshots(self):
-        order = self._order()
-        self.broker.submit([order])
-        order.filled = 5
+        self.broker.submit([self._order()])
+        self.broker._blotters['XNYS'].orders['o1'].filled = 5
 
         [accepted] = list(self.stream)
         self.assertEqual(accepted.event.order.filled, 0)
@@ -245,6 +290,82 @@ class BrokerServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sink(first)
 
+    def test_a_cancellation_is_idempotent(self):
+        self.broker.submit([self._order()])
+        cancelled = self._order()
+        cancelled.cancel()
+        self.broker.submit([cancelled])
+        state = self.broker.get_ledger('XNYS').get_state(DT)
+
+        later = self._order()
+        later.cancel()
+        later.dt = DT + pd.Timedelta(days=1)
+        self.broker.submit([later])
+
+        self.assertEqual(
+            self._kinds(), [events.OrderAccepted, events.OrderCancelled])
+        self.assertEqual(self.broker.get_ledger('XNYS').get_state(DT), state)
+
+    def test_a_cancellation_of_a_filled_order_changes_nothing(self):
+        market = _FillOnce()
+        self.broker.attach_market(market)
+        self.broker.submit([self._order()])
+        self.broker.set_time('XNYS', DT)
+        # the market fills the order of the book
+        order = self.broker._blotters['XNYS'].orders['o1']
+        order.filled = 10
+        market.fills = [{
+            'order': order,
+            'transaction': Transaction(self.asset, 10, DT, 100.0, 'o1'),
+            'commission': 0.0}]
+        self.broker.match('XNYS')
+        self.broker.revalue('XNYS')
+        state = _without_sequence(self.broker.get_ledger('XNYS').get_state(DT))
+        count = len(self.stream)
+
+        cancelled = self._order()
+        cancelled.cancel()
+        cancelled.dt = DT + pd.Timedelta(days=1)
+        self.broker.submit([cancelled])
+
+        [rejected] = [e.event for e in self.stream][count:]
+        self.assertIsInstance(rejected, events.OrderRejected)
+        self.assertEqual(rejected.reason, 'cancel of an order that is not open')
+        [recorded] = self.broker.get_ledger('XNYS').orders()
+        self.assertEqual(recorded['status'], ORDER_STATUS.FILLED)
+        self.assertEqual(recorded['dt'], DT)
+        self.assertEqual(
+            _without_sequence(self.broker.get_ledger('XNYS').get_state(DT)), state)
+
+    def test_a_cancellation_of_an_unknown_order_is_recorded(self):
+        cancelled = self._order()
+        cancelled.cancel()
+        self.broker.submit([cancelled])
+
+        self.assertEqual(self._kinds(), [events.OrderCancelled])
+        [recorded] = self.broker.get_ledger('XNYS').orders()
+        self.assertEqual(recorded['status'], ORDER_STATUS.CANCELLED)
+
+    def test_the_open_orders_are_copies_and_reading_them_changes_nothing(self):
+        self.broker.submit([self._order()])
+
+        open_orders = self.broker.get_open_orders('XNYS')
+        open_orders[self.asset][0].filled = 5
+        self.assertEqual(self.broker.get_open_orders('XNYS')[self.asset][0].filled, 0)
+
+        other = Equity(2, ExchangeInfo('XNYS', 'XNYS', 'US'), symbol='OTHER')
+        self.assertNotIn(other, self.broker.get_open_orders('XNYS'))
+        self.assertNotIn(other, self.broker._blotters['XNYS'].open_orders)
+
+    def test_the_book_keeps_its_own_copy_of_a_submitted_order(self):
+        order = self._order()
+        self.broker.submit([order])
+        order.filled = 5
+
+        [recorded] = self.broker.get_ledger('XNYS').orders()
+        self.assertEqual(recorded['filled'], 0)
+        self.assertEqual(self.broker.get_open_orders('XNYS')[self.asset][0].filled, 0)
+
 
 class _FillOnce(object):
     """A market that fills what it is told to, at once."""
@@ -256,18 +377,21 @@ class _FillOnce(object):
         pass
 
     def get_transactions(self, calendar_name, blotter):
-        fills, self.fills = self.fills, []
+        # the fills of the calendar (those without a calendar are anybody's)
+        fills = [fill for fill in self.fills if fill.get('calendar', calendar_name) == calendar_name]
+        self.fills = [fill for fill in self.fills if fill not in fills]
         return fills, [fill['order'] for fill in fills]
 
 
 class RevaluationTests(unittest.TestCase):
     """The portfolio is revalued when it is read, and each revaluation compounds
     returns and pnl: where it happened changes the last digits of the state, so
-    the stream carries it."""
+    the stream carries it: the broker service revalues explicitly (``revalue``),
+    publishing ``Revalued``; reading the ledger publishes nothing."""
 
     PRICES = (95.1, 99.91, 98.99)
 
-    def _book(self):
+    def _book(self, revalue_between=True):
         market = _FillOnce()
         broker = service.BrokerService(None, START, CAPITAL, 'daily')
         sink = stream.InMemoryStream()
@@ -277,9 +401,10 @@ class RevaluationTests(unittest.TestCase):
         broker.add_blotter('XNYS', simulation_blotter.SimulationBlotter(None))
 
         asset = _equity()
-        order = Order('session', DT, asset, 10, id_='o1')
-        broker.submit([order])
+        broker.submit([Order('session', DT, asset, 10, id_='o1')])
         broker.set_time('XNYS', DT)
+        # the market fills the order of the book
+        order = broker._blotters['XNYS'].orders['o1']
         order.filled = 10
         market.fills = [{
             'order': order,
@@ -287,14 +412,16 @@ class RevaluationTests(unittest.TestCase):
             'commission': 1.0}]
         broker.match('XNYS')
 
-        ledger_ = broker.get_ledger('XNYS')
         first, second, third = self.PRICES
         broker.sync_last_sale_prices('XNYS', [(asset.sid, first)], DT)
-        ledger_.portfolio
+        if revalue_between:
+            broker.revalue('XNYS')
         broker.sync_last_sale_prices('XNYS', [(asset.sid, second)], DT)
-        ledger_.portfolio
+        if revalue_between:
+            broker.revalue('XNYS')
         broker.sync_last_sale_prices('XNYS', [(asset.sid, third)], DT)
-        return ledger_, sink
+        broker.revalue('XNYS')
+        return broker, sink
 
     @staticmethod
     def _without_sequence(state):
@@ -303,8 +430,8 @@ class RevaluationTests(unittest.TestCase):
         return message.SerializeToString()
 
     def test_the_fold_revalues_where_the_book_did(self):
-        ledger_, sink = self._book()
-        engine_state = ledger_.get_state(DT)
+        broker, sink = self._book()
+        engine_state = broker.get_ledger('XNYS').get_state(DT)
         self.assertEqual(
             [type(e.event) for e in sink].count(events.Revalued), 3)
 
@@ -313,16 +440,53 @@ class RevaluationTests(unittest.TestCase):
 
         self.assertEqual(folded.ledgers['XNYS'].get_state(DT), engine_state)
 
-    def test_without_the_revaluations_the_state_differs(self):
-        ledger_, sink = self._book()
-        engine_state = ledger_.get_state(DT)
-
-        folded = stream.Replica(START, CAPITAL)
-        stream.fold([e for e in sink if not isinstance(e.event, events.Revalued)], folded)
+    def test_where_the_revaluations_happen_changes_the_state(self):
+        every, _ = self._book()
+        once, _ = self._book(revalue_between=False)
 
         self.assertNotEqual(
-            self._without_sequence(folded.ledgers['XNYS'].get_state(DT)),
-            self._without_sequence(engine_state))
+            self._without_sequence(every.get_ledger('XNYS').get_state(DT)),
+            self._without_sequence(once.get_ledger('XNYS').get_state(DT)))
+
+    def test_revaluing_a_clean_ledger_publishes_nothing(self):
+        broker, sink = self._book()
+        count = len(sink)
+
+        broker.revalue('XNYS')
+
+        self.assertEqual(len(sink), count)
+
+    def test_reading_the_ledger_after_a_revaluation_publishes_nothing(self):
+        broker, sink = self._book()
+        count = len(sink)
+        ledger_ = broker.get_ledger('XNYS')
+
+        ledger_.portfolio
+        ledger_.account
+        ledger_.returns
+        ledger_.get_state(DT)
+
+        self.assertEqual(len(sink), count)
+
+    def test_a_subscriber_that_publishes_does_not_overtake_the_others(self):
+        broker, sink = self._book(revalue_between=False)
+        late = []
+        asset = _equity()
+        republished = []
+
+        def republish(stream_event):
+            # as a handler of the next step might: change the book while handling
+            if isinstance(stream_event.event, events.PricesMarked) and not republished:
+                republished.append(stream_event)
+                broker.sync_last_sale_prices('XNYS', [(asset.sid, 97.0)], DT)
+
+        broker.subscribe(republish)
+        broker.subscribe(late.append)
+        broker.sync_last_sale_prices('XNYS', [(asset.sid, 96.0)], DT)
+
+        # `late` saw both events, in sequence (the second was queued, not
+        # delivered ahead of the first)
+        self.assertEqual([e.sequence for e in late], [len(sink) - 1, len(sink)])
 
 
 class _Trigger(_FillOnce):
@@ -378,6 +542,101 @@ class OrderTriggerTests(unittest.TestCase):
         self.assertEqual([type(e.event) for e in sink], [events.OrderAccepted])
 
 
+class TwoCalendarTests(unittest.TestCase):
+    """One book, two calendars: the ledgers share the portfolio and the stream
+    has one sequence for both."""
+
+    CALENDARS = ('XNYS', 'XLON')
+
+    def _book(self):
+        market = _FillOnce()
+        broker = service.BrokerService(None, START, CAPITAL, 'daily')
+        sink = stream.InMemoryStream()
+        broker.subscribe(sink)
+        broker.attach_market(market)
+
+        for sid, calendar_name in enumerate(self.CALENDARS, 1):
+            broker.add_ledger(calendar_name)
+            broker.add_blotter(calendar_name, simulation_blotter.SimulationBlotter(None))
+
+            asset = _equity(sid, calendar_name)
+            order = Order('session', DT, asset, 10 * sid, id_='o{}'.format(sid))
+            broker.submit([order])
+            broker.set_time(calendar_name, DT)
+            order = broker._blotters[calendar_name].orders[order.id]
+            order.filled = 10 * sid
+            market.fills = [{
+                'calendar': calendar_name,
+                'order': order,
+                'transaction': Transaction(asset, 10 * sid, DT, 100.0 + sid, order.id),
+                'commission': 1.0}]
+            broker.match(calendar_name)
+            broker.sync_last_sale_prices(calendar_name, [(sid, 101.5 + sid)], DT)
+            broker.revalue(calendar_name)
+        return broker, sink
+
+    def test_the_fold_rebuilds_both_ledgers(self):
+        broker, sink = self._book()
+        folded = stream.Replica(START, CAPITAL)
+        stream.fold(sink, folded)
+
+        for calendar_name in self.CALENDARS:
+            self.assertEqual(
+                folded.ledgers[calendar_name].get_state(DT),
+                broker.get_ledger(calendar_name).get_state(DT))
+            self.assertEqual(
+                folded.ledgers[calendar_name].orders(),
+                broker.get_ledger(calendar_name).orders())
+
+    def test_every_ledger_carries_the_sequence_of_the_book(self):
+        broker, sink = self._book()
+        folded = stream.Replica(START, CAPITAL)
+        stream.fold(sink, folded)
+
+        ledgers = [broker.get_ledger(name) for name in self.CALENDARS]
+        ledgers += [folded.ledgers[name] for name in self.CALENDARS]
+        for ledger_ in ledgers:
+            saved = ledger_state_pb2.LedgerState.FromString(ledger_.get_state(DT))
+            self.assertEqual(saved.stream_sequence, len(sink))
+        self.assertEqual(folded.sequence, len(sink))
+
+
+class FoldTests(unittest.TestCase):
+    def _events(self):
+        broker = service.BrokerService(None, START, CAPITAL, 'daily')
+        sink = stream.InMemoryStream()
+        broker.subscribe(sink)
+        broker.add_ledger('XNYS')
+        broker.add_blotter('XNYS', simulation_blotter.SimulationBlotter(None))
+        broker.sync_last_sale_prices('XNYS', [], DT)
+        broker.revalue('XNYS')
+        broker.sync_last_sale_prices('XNYS', [], DT)
+        return list(sink)
+
+    def test_a_gap_is_refused(self):
+        first, second, third = self._events()
+        folded = stream.Replica(START, CAPITAL)
+
+        with self.assertRaisesRegex(ValueError, 'gap'):
+            stream.fold([first, third], folded)
+
+        self.assertEqual(folded.sequence, 1)
+
+    def test_a_stream_can_be_folded_in_pieces_and_again(self):
+        events_ = self._events()
+        whole = stream.Replica(START, CAPITAL)
+        stream.fold(events_, whole)
+
+        pieces = stream.Replica(START, CAPITAL)
+        stream.fold(events_[:2], pieces)
+        stream.fold(events_, pieces)
+        stream.fold(events_[1:], pieces)
+
+        self.assertEqual(pieces.sequence, 3)
+        self.assertEqual(
+            pieces.ledgers['XNYS'].get_state(DT), whole.ledgers['XNYS'].get_state(DT))
+
+
 class LedgerStateVersionTests(unittest.TestCase):
     def _ledger(self):
         return ledger.Ledger(
@@ -416,3 +675,10 @@ class LedgerStateVersionTests(unittest.TestCase):
         for version in (0, ledger.STATE_VERSION + 1):
             with self.assertRaisesRegex(ValueError, 'format version {}'.format(version)):
                 self._ledger().restore_state(self._state(version=version))
+
+    def test_the_error_says_why(self):
+        with self.assertRaisesRegex(ValueError, 'widened to 64 bits'):
+            self._ledger().restore_state(self._state(version=0))
+
+        with self.assertRaisesRegex(ValueError, 'newer version'):
+            self._ledger().restore_state(self._state(version=ledger.STATE_VERSION + 1))

@@ -49,14 +49,9 @@ class Ledger(object):
         self._last_checkpoint = None
 
         # the sequence number of the last event of the stream of the book that
-        # this ledger has folded (0: none); written by whoever writes the
-        # ledger from a stream (the broker service)
+        # has been applied to the book of this ledger (0: none); written by
+        # whoever writes the ledger from a stream (the broker service, the fold)
         self.stream_sequence = 0
-
-        # called after every revaluation of the portfolio, which is lazy:
-        # it compounds returns and pnl on each read after a change, so the
-        # number of revaluations is part of the state (see the book stream)
-        self.on_revalue = None
 
         self._previous_total_returns = 0.0
 
@@ -227,12 +222,16 @@ class Ledger(object):
         # the portfolio has been fully synced
         self._dirty_portfolio = False
 
-        if self.on_revalue is not None:
-            self.on_revalue()
-
     def revalue(self):
-        """Brings the portfolio up to date, as reading it does."""
+        """Brings the portfolio up to date, as reading it does (it is lazy: each
+        read after a change revalues, and each revaluation compounds returns
+        and pnl, so where they happen is part of the state). Returns whether
+        it had to."""
+        if not self._dirty_portfolio:
+            return False
+
         self._update_portfolio()
+        return True
 
     def _calculate_period_stats(self, portfolio_value, position_stats):
         if portfolio_value == 0:
@@ -532,8 +531,9 @@ class Ledger(object):
         return self._processed_transactions.get(dt, [])
 
     def get_state(self, dt):
-        # the properties bring the portfolio and the account up to date (and
-        # that can publish a revaluation: read the stream sequence after it)
+        # the properties bring the portfolio and the account up to date: a
+        # ledger of the broker service is revalued first (BrokerService.revalue)
+        # so that this read changes nothing the stream does not tell
         portfolio = self.portfolio
         account = self.account
         state = acc.LedgerState(

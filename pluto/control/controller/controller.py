@@ -83,6 +83,7 @@ class Controller(object):
 					last_sale_prices[calendar_name],
 					cts)
 
+				broker.revalue(calendar_name)
 				metrics_tracker.end_of_bar(
 					cts,
 					calendar_name,
@@ -90,6 +91,7 @@ class Controller(object):
 
 			elif c_evt == SESSION_START:
 				broker.start_session(calendar_name, cts)
+				broker.revalue(calendar_name)
 				metrics_tracker.start_of_session(cts, calendar_name, broker.get_ledger(calendar_name))
 			elif c_evt == BEFORE_TRADING_START:
 				broker.sync_last_sale_prices(
@@ -105,6 +107,7 @@ class Controller(object):
 				broker.end_session(calendar_name, cts)
 
 				# todo: we need to ingest data befor calling this...
+				broker.revalue(calendar_name)
 				metrics_tracker.end_of_session(
 					cts,
 					calendar_name,

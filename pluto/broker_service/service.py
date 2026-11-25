@@ -14,21 +14,32 @@ when:
 
 Every write to the book is published to the subscribers, in order, as an
 ``events.StreamEvent`` with the sequence number of the stream of the strategy
-(see ``events``; ``stream.fold`` rebuilds the ledgers from them). The sequence
-number of the last event of a ledger is kept in the ledger
-(``Ledger.stream_sequence``, part of its saved state). The ledgers and blotters
-can be read (``get_ledger``, ``get_positions``, ``get_open_orders``), not written.
+(see ``events``; ``stream.fold`` rebuilds the ledgers from them). Delivery is
+FIFO even when a subscriber calls the service. The sequence number of the last
+event is kept in every ledger of the book (``Ledger.stream_sequence``, part of
+its saved state).
+
+Revaluation of the portfolio is an explicit operation (``revalue``), called
+where the metrics tracker is about to read the ledger and before the start of a
+session; it publishes ``Revalued`` when it had something to do. Nothing in the
+service revalues behind the stream's back, and the stream carries every
+revaluation the book made, as long as readers of a ledger call ``revalue``
+first (``get_ledger`` is for reading only).
 
 The order of the writes inside a call is the order of the simulation of
 Zipline, and the floating point sums depend on it: all the transactions of a
 bar are applied, then all the commissions.
 """
+import collections
 import copy
 
+from logbook import Logger
 from zipline.finance.order import ORDER_STATUS
 
 from pluto.broker_service import books, events
 from pluto.trading_calendars import calendar_utils as cu
+
+log = Logger('BrokerService')
 
 
 def _snapshot(order):
@@ -68,6 +79,8 @@ class BrokerService(object):
         self._strategy_id = None
         self._sequence = 0
         self._subscribers = []
+        self._pending = collections.deque()
+        self._delivering = False
 
     def attach_market(self, market):
         """The market that fills the open orders.
@@ -94,13 +107,18 @@ class BrokerService(object):
         self._data_portals[calendar_name] = data_portal
 
     def add_blotter(self, calendar_name, blotter):
+        """The service owns the blotter from now on (it is the controller's
+        copy of the open orders, written by the service only)."""
         self._blotters[calendar_name] = blotter
 
     def add_ledger(self, calendar_name):
-        ledger_ = self._books.add_ledger(calendar_name)
-        ledger_.on_revalue = lambda: self._publish(calendar_name, events.Revalued())
+        self._books.add_ledger(calendar_name)
 
     def get_ledger(self, calendar_name):
+        """The ledger of the calendar, to read (the metrics tracker does):
+        only the service writes it. Reading its portfolio revalues it when
+        something changed since the last ``revalue``, which the stream does not
+        tell: ``revalue`` first."""
         return self._ledgers[calendar_name]
 
     def get_positions(self, calendar_name):
@@ -108,7 +126,11 @@ class BrokerService(object):
             yield position
 
     def get_open_orders(self, calendar_name):
-        return self._blotters[calendar_name].open_orders
+        """Copies of the open orders by asset (only the assets that have some)."""
+        return {
+            asset: tuple(_snapshot(order) for order in orders)
+            for asset, orders in self._blotters[calendar_name].open_orders.items()
+            if orders}
 
     def set_time(self, calendar_name, dt):
         """The time of the calendar: the market's, and the time stamped on the
@@ -128,6 +150,16 @@ class BrokerService(object):
         self._ledgers[calendar_name].mark_prices(prices, dt)
         self._publish(calendar_name, events.PricesMarked(dt, prices))
 
+    def revalue(self, calendar_name):
+        """Brings the portfolio of the calendar's ledger up to date, publishing
+        ``Revalued`` if it had to. Revaluation compounds returns and pnl each
+        time, so where it happens is part of the state: the controller calls
+        this where the ledger is about to be read (the metrics tracker, a
+        checkpoint), which is where the lazy revaluation of the ledger used to
+        happen."""
+        if self._ledgers[calendar_name].revalue():
+            self._publish(calendar_name, events.Revalued())
+
     def submit(self, orders):
         """Orders relayed by the strategies, in the order they were placed. A
         cancelled order is a cancellation of the order of that id.
@@ -137,6 +169,9 @@ class BrokerService(object):
         orders: iterable of zipline.finance.order.Order
         """
         for order in orders:
+            # the book keeps its own copy: the caller may go on using the order
+            order = _snapshot(order)
+
             # fixme: find a better way of getting calendar names (from disk ?)
             calendar_name = cu.resolve_alias(order.asset.exchange)
             blotter = self._blotters[calendar_name]
@@ -147,7 +182,10 @@ class BrokerService(object):
                 continue
 
             if order.id in blotter.orders:
-                # at-least-once delivery: an order of a known id is not a new order
+                # at-least-once delivery: an order of a known id is not a new
+                # order; the strategy that sent it would wait for it forever
+                # if nobody noticed
+                log.warn('order {} refused: duplicate order id', order.id)
                 rejected = _snapshot(order)
                 rejected.reject('duplicate order id')
                 self._publish(
@@ -167,18 +205,31 @@ class BrokerService(object):
         # cancel policy): cancel the controller's copy, as zipline's
         # blotter.cancel; an order placed and cancelled in the same bar is
         # only recorded.
-        if order.id in blotter.orders:
+        known = blotter.orders.get(order.id)
+
+        if known is None:
+            blotter.orders[order.id] = known = order
+        elif known.status == ORDER_STATUS.CANCELLED:
+            # at-least-once delivery: already cancelled, nothing to do
+            return
+        elif not known.open:
+            # filled (or rejected) meanwhile: the order stays as it is
+            rejected = _snapshot(order)
+            log.warn('cancel of order {} which is not open ({})', order.id, known.status.name)
+            self._publish(
+                calendar_name,
+                events.OrderRejected(rejected, 'cancel of an order that is not open'))
+            return
+        else:
             # the time of the cancellation is the one the strategy's blotter
             # stamped (the cancel policy runs at the end of the session, the
             # order is relayed with the next bar)
             cancelled_at = order.dt
             blotter.cancel(order.id, relay_status=False)
-            order = blotter.orders[order.id]
-            order.dt = cancelled_at
-        else:
-            blotter.orders[order.id] = order
-        ledger_.process_order(order)
-        self._publish(calendar_name, events.OrderCancelled(_snapshot(order)))
+            known.dt = cancelled_at
+
+        ledger_.process_order(known)
+        self._publish(calendar_name, events.OrderCancelled(_snapshot(known)))
 
     def match(self, calendar_name):
         """Fills the open orders of the calendar against its current bar, and
@@ -258,6 +309,9 @@ class BrokerService(object):
                          for position in self.get_positions(calendar_name)
                          if position.amount != 0])
         open_orders = blotter.open_orders
+        # the start of the session reads the portfolio: revalue explicitly,
+        # before it clears the orders of the last session
+        self.revalue(calendar_name)
         ledger_.start_of_session(dt)
         self._publish(calendar_name, events.SessionStarted(dt))
         assets_we_care_about = positions | open_orders.keys()
@@ -324,13 +378,25 @@ class BrokerService(object):
 
     def _publish(self, calendar_name, event):
         self._sequence += 1
-        self._ledgers[calendar_name].stream_sequence = self._sequence
+        for ledger_ in self._ledgers.values():
+            ledger_.stream_sequence = self._sequence
 
-        stream_event = events.StreamEvent(
+        self._pending.append(events.StreamEvent(
             self._strategy_id,
             self._sequence,
             calendar_name,
-            event)
+            event))
 
-        for callback in self._subscribers:
-            callback(stream_event)
+        if self._delivering:
+            # published by a subscriber handling an earlier event: queued, so
+            # that every subscriber gets the events in sequence
+            return
+
+        self._delivering = True
+        try:
+            while self._pending:
+                stream_event = self._pending.popleft()
+                for callback in self._subscribers:
+                    callback(stream_event)
+        finally:
+            self._delivering = False

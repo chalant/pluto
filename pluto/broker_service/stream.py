@@ -33,6 +33,9 @@ class Replica(books.Books):
     def __init__(self, start_dt, capital):
         super().__init__(start_dt, capital)
 
+        # sequence number of the last event folded (0: none), for the book
+        self.sequence = 0
+
         # the engine's ledgers hold the very order objects of the blotter,
         # which go on changing: an order is one object, updated in place by
         # each event that tells about it (id -> order)
@@ -52,10 +55,17 @@ class Replica(books.Books):
 
 def fold(stream_events, replica):
     """Applies the events, in order, to the ledgers of ``replica`` (created as
-    their calendars appear). An event the ledger of its calendar has already
-    folded (its sequence is not above the ledger's ``stream_sequence``) is
-    skipped: folding a stream again, or from the start after restoring a saved
-    state, leaves the book as it is.
+    their calendars appear). The events must follow the ones already folded
+    without a gap (ValueError); an event already folded (its sequence is not
+    above ``replica.sequence``) is skipped, so folding a stream again, or its
+    beginning again, leaves the book as it is.
+
+    It rebuilds a book from the beginning of its stream. It does not continue
+    from a ledger restored by ``Ledger.restore_state``: the saved state lacks
+    the unpaid dividends, the payout prices of futures, the returns of the
+    previous session and the transactions of the session, and restoring
+    replaces the portfolio and account that the ledgers of the calendars
+    share.
 
     Parameters
     ----------
@@ -65,14 +75,23 @@ def fold(stream_events, replica):
     ledgers = replica.ledgers
 
     for stream_event in stream_events:
+        sequence = stream_event.sequence
+
+        if sequence <= replica.sequence:
+            continue
+
+        if sequence != replica.sequence + 1:
+            raise ValueError('event {} after event {}: the stream has a gap'.format(
+                sequence, replica.sequence))
+
         calendar_name = stream_event.calendar_name
         ledger_ = ledgers[calendar_name] if calendar_name in ledgers else replica.add_ledger(calendar_name)
 
-        if stream_event.sequence <= ledger_.stream_sequence:
-            continue
-
         _apply(replica, ledger_, stream_event.event)
-        ledger_.stream_sequence = stream_event.sequence
+
+        replica.sequence = sequence
+        for ledger_ in ledgers.values():
+            ledger_.stream_sequence = sequence
 
 
 def _apply(replica, ledger_, event):

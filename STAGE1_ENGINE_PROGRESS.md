@@ -112,8 +112,8 @@ Orders in events are snapshots (`copy.copy`).
 
 Why `PricesMarked`, `SessionStarted`, `OrderTriggered`, `Revalued` exist (found while making the fold exact):
 - `Ledger._update_portfolio` is lazy: every read of `portfolio` after a change compounds `returns` and `pnl`, so where the
-  reads happened changes the last digits (`RevaluationTests` has prices where it does). `Ledger.on_revalue` (set by the
-  service) publishes `Revalued` at each real recomputation; the fold calls `Ledger.revalue()` there. On the 28 examples and
+  reads happened changes the last digits (`RevaluationTests` has prices where it does). `BrokerService.revalue` (explicit, see
+  Review fixes) publishes `Revalued` at each real recomputation; the fold calls `Ledger.revalue()` there. On the 28 examples and
   scenarios (daily frequency) dropping `Revalued` does not change the state (measured: all 28 still equal), only the unit test
   with three price steps shows it; minute frequency has a read per minute.
 - the engine's ledger holds the blotter's live `Order` objects (so an order the market changes without filling, a stop or
@@ -148,13 +148,13 @@ BAR/TRADE_END `sync_last_sale_prices(cal, prices, dt)` then `match(cal)`; MINUTE
 after the strategies answered `submit(orders)`. Wiring: `StrategyManager(asset_finder, stp)` builds it (`manager.broker`),
 tests still call `manager.add_data_portal/add_ledger/add_blotter/add_strategy`; `Controller.__init__` calls
 `broker.attach_market(market)`; `subscribe(callback)` for the stream. Reads for the controller: `get_ledger(cal)` (the metrics
-tracker reads the ledger: that is where `Revalued` events come from), `get_positions(cal)`, `get_open_orders(cal)`.
+tracker reads the ledger: the controller calls `broker.revalue(cal)` before each such read), `get_positions(cal)`, `get_open_orders(cal)`.
 
 **What a bus step has to keep in mind**
 - the controller still computes the last sale prices (`SimulationControllerBehavior.get_last_sale_prices`, reading
   `manager.broker.get_positions`) and pushes them: `PricesMarked` is the event of that push;
 - the metrics tracker (controller side) reads the ledger directly; a read after a change revalues (lazy) and publishes
-  `Revalued`: a handler that reads the ledger on another path changes the stream (and possibly the last digits);
+  `Revalued`: a handler that reads a dirty ledger on another path without `revalue` changes the book unseen by the stream (and possibly the last digits);
 - `match` calls the market synchronously (`MarketSimulation.get_transactions`: slippage and commission models on the
   calendar's `BarData`); the market clock is `set_time`;
 - one book per `BrokerService`, one strategy per book (`set_strategy` raises for a second one: before, a second strategy
@@ -164,6 +164,53 @@ tracker reads the ledger: that is where `Revalued` events come from), `get_posit
 - `pluto/finance/broker/broker_service.py` (gRPC `BrokerService`, `self._broker` undefined) is an older unused servicer with
   the same class name; `StrategyManager.CancelOrder/CancelAllOrdersForAsset` still call `self._broker.*` which never existed
   (todos); neither is on the simulation path. Left alone.
+
+## Review fixes (NeonReviewEngine; they supersede the text above where they differ)
+
+- **H1 revaluation.** `Ledger.on_revalue` is gone. `BrokerService.revalue(cal)` is the explicit operation: it calls
+  `Ledger.revalue()` (returns whether the portfolio was dirty and had to be recomputed) and publishes `Revalued` only then.
+  The controller calls it exactly where the lazy recompute used to happen (the first read after a change): before
+  `metrics_tracker.end_of_bar`, `start_of_session` and `end_of_session`; `start_session` calls it before
+  `Ledger.start_of_session` (which reads the portfolio), so the stream order is `Dividends`, `Revalued`, `SessionStarted`,
+  with the ledger's orders still there when `Revalued` is published. Reading `portfolio`/`account`/`get_state` of a revalued
+  ledger publishes nothing (test). Recompute points are unchanged: the 71 tests and the oracle (rtol=0) pass exactly.
+  Caveat, documented in the service: a reader that reads a dirty ledger without `revalue` first still recomputes (that is
+  the ledger's lazy behaviour) and the stream does not tell it; a checkpoint is `revalue`, then `get_state`.
+  `_publish` is FIFO-safe: a publish made by a subscriber while an event is being delivered is queued behind it (test).
+- **H2 fold after restore.** Narrowed, not implemented: `fold` rebuilds a book from the beginning of its stream, and its
+  docstring says it does not continue from `Ledger.restore_state` (unsaved: unpaid dividends, futures payout prices, previous
+  session returns, the session's transactions; restoring replaces the portfolio and account that the calendars' ledgers share;
+  the restored orders are not the replica's). Done: the sequence is per book (`Replica.sequence`; the service sets
+  `stream_sequence` on every ledger of the book at each publish, the fold likewise), `fold` raises `ValueError` on a gap and
+  skips what is already folded (tests: gap, pieces and again, two calendars). Open: making restore+fold correct needs the
+  unsaved fields in `LedgerState` (not small), the shared portfolio kept shared on restore, and the replica's orders seeded
+  from the restored ledgers.
+- **H3 order ids.** `Order.__hash__` is `hash(self.id)` (note added to the header of `zipline/finance/order.py`, which was
+  already Pluto-modified; the only change under `zipline/`). Id = 16 hex digits of `md5(session_id)` (the process id) + the
+  sequence in hex, 8 digits at least: alphanumeric, 24 characters (cap 32). The process id is now
+  `md5(repr((strategy_id, session_id)))` (`processes.make_process_id`: `('ab','c')` and `('a','bc')` were the same run), so the
+  namespace carries strategy and run; another run id is another namespace. `SimulationBlotter(start_sequence=1)` and
+  `order_sequence` let a checkpoint carry the counter (not wired: the controllable has no restore of its blotter yet).
+  Re-checked that no test compares an id (`_normalize` drops `id`, `order_id`, `session_id`; the scenarios only pass ids back
+  to `cancel_order`). Duplicate ids are logged (`log.warn`) and published as `OrderRejected`; relaying a rejection to the
+  strategy needs a `BrokerState` field and strategy-side handling (not small): open.
+- **M1 single writer.** `submit` snapshots each order on entry (the book keeps its own copy); `get_open_orders` returns copies
+  of the non-empty entries and creates no keys; `get_ledger` is documented as read-only (revalue first). The blotter is still
+  built by the caller and handed over (`add_blotter` documents ownership): the tests build it (`SimulationBlotter(eng_stp)`)
+  and call `manager.add_blotter`, so the service cannot build it without changing the unchanged tests' wiring.
+- **M2 cancel.** A cancellation of an order already cancelled returns without writing or publishing; of an order that is
+  not open (filled, rejected) it changes nothing and publishes `OrderRejected('cancel of an order that is not open')`; of an
+  unknown id it is recorded as before; of an open order as before. No result changed (full suite exact).
+- **M3.** `pluto/finance/broker/broker_service.py` deleted, the docstring in `in_memory.py` fixed;
+  `StrategyManager.CancelOrder`, `CancelAllOrdersForAsset`, `ExecuteCancelPolicy` raise `NotImplementedError` with a message
+  (only `LiveBlotter.execute_cancel_policy` could reach `ExecuteCancelPolicy`, which was a silent no-op).
+- **M4 tests.** In the run tests the recording service folds the stream into a replica and compares engine and replica
+  (`orders()`, `transactions()`, `orders(dt)`, `get_state`) at the end of every session, and asserts that some comparisons had
+  orders and transactions in them; added: duplicate cancel, cancel after fill, cancel of an unknown order, copies, book copy
+  on submit, two calendars in one service (the shared portfolio works: states equal), gap, pieces, revalue tests, FIFO,
+  explanation of the version errors. Minute frequency is not tested (the test bundle runs are daily).
+- **L1.** `_orders_batches`/`get_orders_batches` removed; the state version error says "newer version" above 2 and keeps
+  the 64-bit explanation for version 0.
 
 ## Verification
 
