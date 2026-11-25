@@ -164,3 +164,8 @@ Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. 
   pricing, the metrics tracker reading the ledger object, the controller reading `session_ids`, behavior hooks receiving the manager,
   the broker stub reaching into the servicer (cancel stubs, the runtime's endpoint), `add_strategy` building the endpoint.
   `session_ids` keeps its name: `service_access.per_session` reads it too.
+- **Missing tests** (`tests/test_pluto_phase_participants.py`, all with a fake book and a fake tracker that record their calls in one
+  list, fast): the book and metrics participants over the six clock event types (calls and their order, `revalue` right before
+  each tracker read); a tick with two signals (two calendars): broker, metrics, broker, metrics; the stale-batch filter on the bus
+  path (a batch and a watchlist of another clock event are ignored); a failure in the account phase and one in the submit phase
+  abort with `PhaseError`.

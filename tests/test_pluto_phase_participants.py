@@ -12,11 +12,11 @@ from zipline.finance.order import Order
 from pluto.bus import InMemoryBus
 from pluto.coms.utils import conversions
 from pluto.control import phases
-from pluto.control.controller import controller, process_manager
+from pluto.control.controller import controller, participants, process_manager
 from pluto.control.processes import in_memory
 from pluto.interface.utils import service_access
 
-from protos import broker_pb2, clock_pb2
+from protos import broker_pb2, clock_pb2, phases_pb2
 
 TS = pd.Timestamp('2020-01-02 14:31', tz='UTC')
 PRICES = {'XNYS': [(1, 10.0)], 'XLON': [(2, 20.0)]}
@@ -240,6 +240,126 @@ class RunTests(unittest.TestCase):
         for name in ('PlaceOrders', 'SetWatchList', 'Stopped'):
             with self.assertRaisesRegex(NotImplementedError, r'{}: .*networked bus'.format(name)):
                 getattr(self.manager, name)(iter(()), context)
+
+    def test_a_tick_with_two_signals_interleaves_the_book_and_the_metrics_per_signal(self):
+        signals = [
+            (TS, clock_pb2.MINUTE_END, _calendar('XNYS')),
+            (TS, clock_pb2.SESSION_END, _calendar('XLON'))]
+
+        self.controller.clock_update(TS, clock_pb2.MINUTE_END, signals)
+
+        self.assertEqual(self.broker.calls, [
+            ('set_time', 'XNYS', TS),
+            ('sync_last_sale_prices', 'XNYS', [(1, 10.0)], TS),
+            ('revalue', 'XNYS'),
+            ('end_of_bar', 'XNYS', TS),
+            ('set_time', 'XLON', TS),
+            ('sync_last_sale_prices', 'XLON', [(2, 20.0)], TS),
+            ('end_session', 'XLON', TS),
+            ('revalue', 'XLON'),
+            ('end_of_session', 'XLON', TS),
+            ('submit', [])])
+
+    def test_the_stale_batch_filter_on_the_bus_path(self):
+        self.add_process('aaa')
+        self.manager.set_global_timestamp(TS)
+        stale = TS - pd.Timedelta(minutes=1)
+        asset = conversions.to_proto_asset(_equity())
+
+        for ts, orders, assets in ((stale, ['old'], [asset]), (TS, ['new'], [asset])):
+            self.bus.publish(
+                phases.ORDERS_TOPIC,
+                order_batch('aaa', ts, orders),
+                type='OrderBatch', logical_ts=ts.value, producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
+            self.bus.publish(
+                phases.WATCHLIST_TOPIC,
+                broker_pb2.WatchList(ts=phases.proto_timestamp(ts), assets=assets if ts == TS else []),
+                type='WatchList', logical_ts=ts.value, producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
+            self.bus.run_until_idle()
+
+            # only the batch of the clock event the strategies run is kept
+            self.assertEqual([order.id for order in self.manager.new_orders], ['new'] if ts == TS else [])
+
+        self.assertEqual([asset.sid for asset in self.manager.watchlist], [1])
+
+    def test_a_failure_in_the_account_phase_aborts_the_run(self):
+        self.add_process('aaa').fail_account = True
+
+        with self.assertRaisesRegex(phases.PhaseError, r'phase\.account .*aaa failed: ValueError: cannot apply the state'):
+            self.tick()
+
+        self.assertEqual(self.bus.dead_letters(), ())
+
+    def test_a_failure_in_the_submit_phase_aborts_the_run(self):
+        self.add_process('aaa')
+        self.broker.fail_submit = True
+
+        with self.assertRaisesRegex(
+                phases.PhaseError, r'phase\.submit .*broker failed: ValueError: the book refused the orders'):
+            self.tick()
+
+        self.assertEqual(self.bus.dead_letters(), ())
+
+
+class ParticipantTests(unittest.TestCase):
+    """The book and the metrics participants alone, on a bus, with a fake book and a fake tracker."""
+
+    def setUp(self):
+        patch = mock.patch.object(process_manager.service, 'BrokerService', FakeBroker)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+        self.bus = InMemoryBus()
+        setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
+        manager = process_manager.StrategyManager(None, setup, bus=self.bus)
+        self.broker = manager.broker
+
+        participants.BrokerParticipant(self.bus, manager)
+        participants.MetricsParticipant(self.bus, manager, FakeTracker(self.broker))
+        self.driver = phases.PhaseDriver(self.bus)
+
+    def signal(self, evt, calendar_name='XNYS'):
+        return phases_pb2.SignalEvent(
+            timestamp=phases.proto_timestamp(TS),
+            signal=clock_pb2.Signal(timestamp=phases.proto_timestamp(TS), event=evt, calendar_name=calendar_name),
+            last_sale_prices=[broker_pb2.AssetPrice(sid=sid, price=price) for sid, price in PRICES[calendar_name]])
+
+    def run_signal(self, evt):
+        """The book phase and the metrics phase of a signal, as the controller drives them."""
+        for phase, name in ((phases.BOOK, phases.BROKER_ID), (phases.METRICS, phases.METRICS_ID)):
+            self.driver.drive(phase, self.signal(evt), TS.value, (name,), key='XNYS')
+
+    def test_the_calls_of_each_clock_event(self):
+        prices = [(1, 10.0)]
+        expected = {
+            clock_pb2.BAR: [
+                ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('match', 'XNYS')],
+            clock_pb2.TRADE_END: [
+                ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('match', 'XNYS')],
+            # the book is revalued right before the tracker reads it
+            clock_pb2.MINUTE_END: [
+                ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('revalue', 'XNYS'),
+                ('end_of_bar', 'XNYS', TS)],
+            clock_pb2.SESSION_START: [
+                ('set_time', 'XNYS', TS), ('start_session', 'XNYS', TS), ('revalue', 'XNYS'),
+                ('start_of_session', 'XNYS', TS)],
+            clock_pb2.BEFORE_TRADING_START: [
+                ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS)],
+            clock_pb2.SESSION_END: [
+                ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('end_session', 'XNYS', TS),
+                ('revalue', 'XNYS'), ('end_of_session', 'XNYS', TS)],
+        }
+        self.assertEqual(set(expected), {
+            clock_pb2.BAR, clock_pb2.TRADE_END, clock_pb2.MINUTE_END, clock_pb2.SESSION_START,
+            clock_pb2.BEFORE_TRADING_START, clock_pb2.SESSION_END})
+
+        for evt, calls in expected.items():
+            with self.subTest(event=clock_pb2.EventType.Name(evt)):
+                self.broker.calls.clear()
+
+                self.run_signal(evt)
+
+                self.assertEqual(self.broker.calls, calls)
 
 
 if __name__ == '__main__':
