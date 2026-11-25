@@ -169,3 +169,29 @@ Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. 
   each tracker read); a tick with two signals (two calendars): broker, metrics, broker, metrics; the stale-batch filter on the bus
   path (a batch and a watchlist of another clock event are ignored); a failure in the account phase and one in the submit phase
   abort with `PhaseError`.
+- **Low items**: comment at the `set_global_timestamp` call (`BrokerParticipant._account`): it feeds the stale-batch filter of the
+  manager; the policy that a done from an unexpected participant is accepted is in the docstring of `phases` and of
+  `PhaseDriver.drive`, and tested; type hints added: `report(work: Callable[[], None])`, `drive(...)` (payload `Message`, `expected`
+  `Iterable[str]`, returns `None`), the delivery handlers (`Delivery`), `_on_book_event(StreamEvent)`, and the `metrics_tracker`
+  argument (`participants.MetricsTracker`, a `Protocol` of the three reads the participant makes; the tracker of the tests is duck
+  typed). `session_ids` is not renamed: `service_access.per_session` reads it too.
+
+### After the review fixes
+
+`buy_and_hold`, serialised: **93,276 messages per run, as before** (2.38 MB; `phase.done` 39,328): the fixes change who says done
+and what a done holds, not how many messages there are. Deliveries drop by one per batch, the runtime no longer sees its own batch
+on the bus: 7,312 fewer per run, 132,604 to about 125,292 [INFERENCE: derived from the single strategy, not counted].
+
+### Left open (protocol changes, not done in the review round)
+
+Counts measured on the same run (`buy_and_hold`, 7,312 clock events, one strategy, 5,040 signals); no time measured:
+
+- **Metrics phase only for the events the tracker reads** (`MINUTE_END`, `SESSION_START`, `SESSION_END`): of the 5,040 metrics phases
+  2,518 (`BEFORE_TRADING_START`, `TRADE_END`) read nothing: 2,518 messages and 2,518 dones, **5,036 fewer messages (5.4 %)**. The
+  controller would have to know which events the tracker reads.
+- **Watchlist folded into the order batch**: 7,308 `strategy.watchlist` messages (275 kB, 1,258 of them non-empty), 7,308 fewer
+  messages (7.8 %), the manager would take the watchlist from the batch it checks anyway.
+- **Merging phases** (one done for several participants, or the metrics reads inside the book phase): every phase costs its
+  event plus one done per participant; the metrics phase is 10,080 messages (10.8 %) with its dones, and the dones are 42 % of all messages.
+  Merging changes where the lock-step is checked and what the controller knows: a design choice.
+- Bus log trimming and retention (open in `STAGE1_BUS_PROGRESS.md`).

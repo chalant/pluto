@@ -22,7 +22,7 @@ class Controller(object):
             self,
             strategy_manager: process_manager.StrategyManager,
             market: core.AbstractMarket,
-            metrics_tracker,
+            metrics_tracker: participants.MetricsTracker,
             behavior: bv.AbstractControllerBehavior):
 
         self._strategy_manager = strategy_manager

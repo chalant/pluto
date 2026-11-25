@@ -1,6 +1,6 @@
 import pluto.assets.assets
 from pluto.broker_service import events, service
-from pluto.bus import Bus, InMemoryBus
+from pluto.bus import Bus, Delivery, InMemoryBus
 from pluto.control import phases
 from pluto.control.processes import endpoint
 from pluto.setup import run_setup
@@ -82,7 +82,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def broker_states(self):
         return self._broker_states
 
-    def _on_book_event(self, stream_event):
+    def _on_book_event(self, stream_event: events.StreamEvent) -> None:
         event = stream_event.event
 
         if isinstance(event, events.Fill):
@@ -96,12 +96,12 @@ class StrategyManager(brk_rpc.BrokerServicer):
         if session_id not in self._processes:
             raise PermissionError('access to this service is forbidden: unknown session {}'.format(session_id))
 
-    def _on_orders(self, delivery):
+    def _on_orders(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         self._check_session(envelope.key)
         self.receive_orders(envelope.key, envelope.payload)
 
-    def _on_watchlist(self, delivery):
+    def _on_watchlist(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         self._check_session(envelope.key)
         self.receive_watchlist(envelope.payload)

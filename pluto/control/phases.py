@@ -3,7 +3,9 @@
 The controller owns the clock. At each tick it drives the run through phases: it publishes one event per phase on the
 phase's topic and waits, lock-step, until the bus is idle and every participant of the phase said ``done``. A missing
 ``done`` (or one that carries an error) aborts the run with a ``PhaseError``; nothing waits for a timeout, so a run
-stays deterministic. The order of the phases is the order the controller called its components before the bus:
+stays deterministic. Only the participants the controller expects are required: a ``done`` from an unexpected participant
+is accepted (one for another phase or tick, or a doubled one, is an error). The order of the phases is the order the
+controller called its components before the bus:
 
 ==========  ====  ===============  ==========  ==========================  ===========================================
 phase       rank  topic            published   subscribers                 done

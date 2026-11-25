@@ -13,7 +13,7 @@ is another process it is this object, built there, that subscribes.
 """
 import logbook
 
-from pluto.bus import Bus
+from pluto.bus import Bus, Delivery
 from pluto.control import phases
 
 log = logbook.Logger('RuntimeEndpoint')
@@ -53,7 +53,7 @@ class RuntimeEndpoint(object):
             phase=phases.TRADE.rank,
             key=self._id)
 
-    def _on_account(self, delivery) -> None:
+    def _on_account(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         phases.report(
             self._bus,
@@ -66,7 +66,7 @@ class RuntimeEndpoint(object):
     def _account(self, state) -> None:
         self._process.account_update(state)
 
-    def _on_trade(self, delivery) -> None:
+    def _on_trade(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         self._batches = 0
         self._orders = 0

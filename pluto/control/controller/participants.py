@@ -4,9 +4,12 @@ controller called them for before the bus; each says ``done`` when its work of t
 ``BrokerParticipant`` is the broker side: the book (``BrokerService``) and the strategy registry (``StrategyManager``).
 ``MetricsParticipant`` is the metrics tracker's side: it reads the ledger of the book.
 """
-import logbook
+from typing import Protocol
 
-from pluto.bus import Bus
+import logbook
+import pandas as pd
+
+from pluto.bus import Bus, Delivery
 from pluto.coms.utils import conversions
 from pluto.control import phases
 from pluto.control.controller import process_manager
@@ -20,6 +23,16 @@ from protos.clock_pb2 import (
     BEFORE_TRADING_START)
 
 log = logbook.Logger('Participants')
+
+
+class MetricsTracker(Protocol):
+    """What the metrics participant needs of the tracker: it reads the ledger of a calendar at three clock events."""
+
+    def end_of_bar(self, dt: pd.Timestamp, calendar_name: str, ledger) -> None: ...
+
+    def start_of_session(self, dt: pd.Timestamp, calendar_name: str, ledger) -> None: ...
+
+    def end_of_session(self, dt: pd.Timestamp, calendar_name: str, ledger) -> None: ...
 
 
 class BrokerParticipant(object):
@@ -36,13 +49,13 @@ class BrokerParticipant(object):
         bus.subscribe(phases.ACCOUNT.topic, self._on_account)
         bus.subscribe(phases.SUBMIT.topic, self._on_submit)
 
-    def _on_done(self, delivery) -> None:
+    def _on_done(self, delivery: Delivery) -> None:
         done = delivery.envelope.payload
 
         if done.phase == phases.TRADE.topic and not done.error:
             self._sent[done.participant] = done.orders
 
-    def _on_book(self, delivery) -> None:
+    def _on_book(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         phases.report(
             self._bus,
@@ -89,7 +102,7 @@ class BrokerParticipant(object):
             # todo: we need to ingest data befor calling this...
             broker.revalue(calendar_name)
 
-    def _on_account(self, delivery) -> None:
+    def _on_account(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         phases.report(
             self._bus,
@@ -104,7 +117,8 @@ class BrokerParticipant(object):
         the last tick) and the last sale prices of the tick, sent on the strategy's own topic."""
         manager = self._manager
 
-        # the clock event the strategies are about to run: the orders of another one are ignored
+        # the stale-batch filter of the manager (``receive_orders``, ``receive_watchlist``): what the runtimes send
+        # for another clock event than the one they are about to run is ignored
         manager.set_global_timestamp(conversions.to_datetime(event.clock.timestamp))
 
         for process_id in manager.session_ids:
@@ -139,7 +153,7 @@ class BrokerParticipant(object):
         if problems:
             raise phases.PhaseError('; '.join(problems))
 
-    def _on_submit(self, delivery) -> None:
+    def _on_submit(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         phases.report(self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, self._submit, log)
 
@@ -164,14 +178,14 @@ class BrokerParticipant(object):
 
 
 class MetricsParticipant(object):
-    def __init__(self, bus: Bus, manager: process_manager.StrategyManager, metrics_tracker):
+    def __init__(self, bus: Bus, manager: process_manager.StrategyManager, metrics_tracker: MetricsTracker):
         self._bus = bus
         self._broker = manager.broker
         self._metrics_tracker = metrics_tracker
 
         bus.subscribe(phases.METRICS.topic, self._on_metrics)
 
-    def _on_metrics(self, delivery) -> None:
+    def _on_metrics(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         phases.report(
             self._bus,
