@@ -18,7 +18,6 @@ from pluto.interface.utils import paths
 from pluto.interface.utils.service_access import _framework_id
 
 from protos import controllable_pb2 as cbl
-from protos import clock_pb2
 from protos.data_pb2 import Chunk
 
 
@@ -73,11 +72,9 @@ class StrategyStub(object):
     def parameter_update(self, params):
         return self._controllable.ParameterUpdate(params, ())
 
-    def clock_update(self, ts, evt):
-        return self._controllable.ClockUpdate(
-            clock_pb2.ClockEvent(
-                timestamp=conversions.to_proto_timestamp(ts),
-                event=evt), ())
+    def clock_event(self, event):
+        """Runs a clock event (``clock_pb2.ClockEvent``) on the controllable."""
+        return self._controllable.ClockUpdate(event, ())
 
     def account_update(self, broker_state):
         return self._controllable.UpdateAccount(

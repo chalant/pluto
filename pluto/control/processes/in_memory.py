@@ -10,6 +10,8 @@ from pluto.interface import monitor
 
 from pluto.interface.utils import service_access
 
+from protos import broker_pb2
+
 
 class FakeContext(object):
     __slots__ = ['_invocation_metadata', '_status_code']
@@ -35,6 +37,10 @@ class FakeContext(object):
             message)
 
 
+def _unchunk(request_iterator):
+    return b''.join(chunk.data for chunk in request_iterator)
+
+
 class BrokerStub(broker_stub.BrokerStub):
     def __init__(self, servicer, session_id):
         '''
@@ -43,6 +49,8 @@ class BrokerStub(broker_stub.BrokerStub):
         ----------
         servicer: pluto.control.controller.process_manager.StrategyManager
         '''
+        # the orders and the watchlist of the runtime go onto the bus of the run through its endpoint
+        # (pluto.control.processes.endpoint.RuntimeEndpoint), which counts the orders for its done
         self._servicer = servicer
         self._session_id = session_id
 
@@ -52,8 +60,10 @@ class BrokerStub(broker_stub.BrokerStub):
             FakeContext(metadata))
 
     def _place_orders(self, request_iterator, metadata):
-        return self._servicer.PlaceOrders(
-            request_iterator, FakeContext(metadata))
+        batch = broker_pb2.OrderBatch()
+        batch.ParseFromString(_unchunk(request_iterator))
+
+        self._servicer.runtime(self._session_id).send_orders(batch)
 
     def _cancel_all_orders_for_asset(self, request, metadata):
         return self._servicer.CancelAllOrdersForAsset(
@@ -71,7 +81,10 @@ class BrokerStub(broker_stub.BrokerStub):
             FakeContext(metadata))
 
     def _set_watchlist(self, request, metadata):
-        self._servicer.SetWatchList(request, FakeContext(metadata))
+        watchlist = broker_pb2.WatchList()
+        watchlist.ParseFromString(_unchunk(request))
+
+        self._servicer.runtime(self._session_id).send_watchlist(watchlist)
 
 
 class InMemoryControllableFactory(factory.ControllableFactory):

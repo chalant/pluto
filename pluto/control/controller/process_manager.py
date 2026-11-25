@@ -1,14 +1,8 @@
-import threading
-import typing
-
-from collections import defaultdict
-
-from pluto.trading_calendars import calendar_utils as cu
-
-import zipline
-
 import pluto.assets.assets
 from pluto.broker_service import events, service
+from pluto.bus import Bus, Delivery, InMemoryBus
+from pluto.control import phases
+from pluto.control.processes import endpoint
 from pluto.setup import run_setup
 
 from pluto.coms.utils import conversions
@@ -18,10 +12,25 @@ from protos import broker_pb2_grpc as brk_rpc
 from protos import broker_pb2
 
 
+_NOT_ON_THE_BUS = (
+    '{}: not implemented; the strategy manager takes what the runtimes send on the bus of the run'
+    ' (strategy.orders, strategy.watchlist), and only a runtime in this process that runs its clock event'
+    ' synchronously (running_behavior.Blocking) is on it: a runtime in another process needs the networked bus'
+    ' (a later stage)')
+
+
 class StrategyManager(brk_rpc.BrokerServicer):
-    def __init__(self, asset_finder: pluto.assets.assets.AssetFinder, stp: run_setup.RunSetup):
+    def __init__(
+            self,
+            asset_finder: pluto.assets.assets.AssetFinder,
+            stp: run_setup.RunSetup,
+            bus: Bus | None = None):
+
+        # the bus of the run: the controller drives the run through it (pluto.control.phases)
+        self._bus = InMemoryBus() if bus is None else bus
 
         self._processes = {}
+        self._runtimes = {}
 
         self._setup = stp
 
@@ -35,24 +44,24 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # the fills are the strategies' news: sent with the next broker state
         self._service.subscribe(self._on_book_event)
 
+        # what the strategies' runtimes send back
+        self._bus.subscribe(phases.ORDERS_TOPIC, self._on_orders)
+        self._bus.subscribe(phases.WATCHLIST_TOPIC, self._on_watchlist)
+
         self._global_ts = None
 
         self._broker_states = {}
 
-        self._new_orders = []
+        # the batch of orders of each strategy for this tick, by process id (the bus delivers the batches of different
+        # strategies in the order of their producer ids: registration order is rebuilt when they are submitted)
+        self._received_orders = {}
+        self._received_batches = {}
 
-        self._watchlist_counter = 0
         self._watchlist = set()
 
-        self._watchlist_complete = threading.Event()
-
-        self._order_counter = 0
-        self._orders_complete = threading.Event()
-
-        self._order_lock = threading.Lock()
-        self._watchlist_lock = threading.Lock()
-
-        self._active_processes = 0
+    @property
+    def bus(self) -> Bus:
+        return self._bus
 
     @property
     def broker(self) -> service.BrokerService:
@@ -74,11 +83,7 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def broker_states(self):
         return self._broker_states
 
-    @property
-    def strategies(self):
-        return self._processes.values()
-
-    def _on_book_event(self, stream_event):
+    def _on_book_event(self, stream_event: events.StreamEvent) -> None:
         event = stream_event.event
 
         if isinstance(event, events.Fill):
@@ -88,62 +93,47 @@ class StrategyManager(brk_rpc.BrokerServicer):
                     commission=event.commission
                 ))
 
+    def _check_session(self, session_id):
+        if session_id not in self._processes:
+            raise PermissionError('access to this service is forbidden: unknown session {}'.format(session_id))
+
+    def _on_orders(self, delivery: Delivery) -> None:
+        envelope = delivery.envelope
+        self._check_session(envelope.key)
+        self.receive_orders(envelope.key, envelope.payload)
+
+    def _on_watchlist(self, delivery: Delivery) -> None:
+        envelope = delivery.envelope
+        self._check_session(envelope.key)
+        self.receive_watchlist(envelope.payload)
+
     @service_access.framework
     @service_access.per_session
     def PlaceOrders(self, request_iterator, session_id):
-        # todo: instead of using a locking mechanism for the strategy manager, we should have multiple
-        #  channels, one per strategy, where they can write there states.
+        raise NotImplementedError(_NOT_ON_THE_BUS.format('PlaceOrders'))
 
-        # broker = self._broker
+    def receive_orders(self, session_id, batch):
+        """The orders of a strategy's batch, kept in the order they were placed (``strategy.orders`` on the bus). A
+        batch of another clock event than the current one is ignored."""
         # todo: we receive a single batch of orders per session that contains
         #  the process id
-        new_orders = self._new_orders
-
-        bytes_ = b''
-
-        for chunk in request_iterator:
-            bytes_ += chunk.data
-
-        batch = broker_pb2.OrderBatch()
-        batch.ParseFromString(bytes_)
 
         # todo: handle cases where the controllable fails, also add a timeout in case
         #  it is a hardware crash...
 
-        processes = self._processes
-
         # todo: get portfolio and account data
         # check if it is the event we are waiting for...
         if conversions.to_datetime(batch.ts) == self._global_ts:
-            with self._order_lock:
-                if session_id in processes:
-                    self._order_counter += 1
+            # converted first: a batch is appended whole or not at all
+            orders = [conversions.to_zp_order(order) for order in batch.orders]
 
-                for order in batch.orders:
-                    # yield conversions.to_proto_order(
-                    #     broker.order(
-                    #         session_id,
-                    #         conversions.to_zp_order(order)).to_dict())
-
-                    new_orders.append(conversions.to_zp_order(order))
-
-                # trigger the event!
-                if self._order_counter == len(self._processes):
-                    self._orders_complete.set()
+            self._received_orders.setdefault(session_id, []).extend(orders)
+            self._received_batches[session_id] = self._received_batches.get(session_id, 0) + 1
 
     @service_access.framework
     @service_access.per_session
     def Stopped(self, request, session_id):
-        with self._order_lock:
-            self._active_processes -= 1
-
-            if self._active_processes == 0:
-                self._orders_complete.set()
-
-            # print("Stopped!", session_id, self._active_processes)
-
-        # if self._active_processes == 0:
-        #     self._orders_complete.set()
+        raise NotImplementedError(_NOT_ON_THE_BUS.format('Stopped'))
 
     @service_access.framework
     @service_access.per_session
@@ -169,56 +159,37 @@ class StrategyManager(brk_rpc.BrokerServicer):
     @service_access.framework
     @service_access.per_session
     def SetWatchList(self, request_iterator, session_id):
+        raise NotImplementedError(_NOT_ON_THE_BUS.format('SetWatchList'))
 
-        bytes_ = b''
-
-        for chunk in request_iterator:
-            bytes_ += chunk.data
-
-        watchlist = broker_pb2.WatchList()
-        watchlist.ParseFromString(bytes_)
-
-        ts = conversions.to_datetime(watchlist.ts)
-
-        processes = self._processes
-
-        # strategies call this at each clock event,
-
-        if ts == self._global_ts:
-            with self._watchlist_lock:
-                if session_id in processes:
-                    self._watchlist_counter += 1
-
-                # use set to remove redundant assets
-                if watchlist.assets:
-                    self._watchlist = set(self._watchlist) | set([conversions.to_zp_asset(asset)
-                                                                  for asset in watchlist.assets])
-
-                if self._watchlist_counter == len(self._processes):
-                    self._watchlist_complete.set()
+    def receive_watchlist(self, watchlist):
+        """The watchlist of a strategy at a clock event (``strategy.watchlist`` on the bus). A watchlist of another
+        clock event than the current one is ignored."""
+        if conversions.to_datetime(watchlist.ts) == self._global_ts:
+            self._watchlist.update(conversions.to_zp_asset(asset) for asset in watchlist.assets)
 
     def set_global_timestamp(self, ts):
         self._global_ts = ts
 
-    def get_orders(self):
-        # with self._lock:
-        #     print("Active Processes!", self._active_processes)
-        #     if self._active_processes == 0:
-        #         return self._new_orders
+    @property
+    def new_orders(self):
+        """The orders the strategies sent in this tick: by strategy in registration order, each in the order it
+        placed them."""
+        received = self._received_orders
 
-        self._orders_complete.wait()
+        return [order for process_id in self._processes for order in received.get(process_id, ())]
 
-        return self._new_orders
+    def received_orders(self, process_id) -> int:
+        """The number of orders the strategy's batches of this tick had."""
+        return len(self._received_orders.get(process_id, ()))
 
-    def get_watchlist(self) -> typing.Dict[str, typing.List[zipline.assets.Asset]]:
-        self._watchlist_complete.wait()
+    def received_batches(self, process_id) -> int:
+        """The number of batches of orders of the strategy in this tick; an empty one counts."""
+        return self._received_batches.get(process_id, 0)
 
-        watchlist = defaultdict(list)
-
-        for asset in self._watchlist:
-            watchlist[cu.resolve_alias(asset.exchange)].append(asset)
-
-        return watchlist
+    @property
+    def watchlist(self) -> frozenset:
+        """The assets the strategies asked for in this tick."""
+        return frozenset(self._watchlist)
 
     def add_strategy(self, process):
         process_id = process.process_id
@@ -228,7 +199,12 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._processes[process_id] = process
         self._broker_states[process_id] = broker_pb2.BrokerState()
 
-        self._active_processes += 1
+        # in process, the strategy's runtime is on this bus: it answers the phases and sends its orders back
+        self._runtimes[process_id] = endpoint.RuntimeEndpoint(self._bus, process)
+
+    def runtime(self, process_id) -> endpoint.RuntimeEndpoint:
+        """The endpoint of a strategy's runtime on the bus: what the runtime sends goes through it."""
+        return self._runtimes[process_id]
 
     def add_data_portal(self, calendar_name, data_portal):
         self._service.add_data_portal(calendar_name, data_portal)
@@ -240,12 +216,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._service.add_ledger(calendar_name)
 
     def clear(self):
-        self._order_counter = 0
-        self._watchlist_counter = 0
-
-        self._orders_complete.clear()
-        self._watchlist_complete.clear()
-        self._new_orders.clear()
+        self._received_orders.clear()
+        self._received_batches.clear()
         self._watchlist.clear()
 
         broker_states = self._broker_states

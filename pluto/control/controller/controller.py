@@ -1,166 +1,126 @@
-import logbook
-
 from pluto.finance.markets import core
 
+from pluto.control import phases
 from pluto.control.controller import process_manager
 from pluto.control.controller import behavior as bv
+from pluto.control.controller import participants
 
-from protos.clock_pb2 import (
-	BAR,
-	TRADE_END,
-	SESSION_END,
-	SESSION_START,
-	MINUTE_END,
-	BEFORE_TRADING_START)
+from protos import broker_pb2, clock_pb2, phases_pb2
 
-from protos import broker_pb2
 
-log = logbook.Logger("Controller")
+def _asset_prices(pairs):
+    return [broker_pb2.AssetPrice(sid=sid, price=price) for sid, price in pairs]
 
 
 class Controller(object):
-	def __init__(
-			self,
-			strategy_manager: process_manager.StrategyManager,
-			market: core.AbstractMarket,
-			metrics_tracker,
-			behavior: bv.AbstractControllerBehavior):
+    """Owns the clock of the run and drives it through the phases of ``pluto.control.phases``, on the bus of the
+    strategy manager: at each clock event it publishes one event per phase and waits for the ``done`` of every
+    participant before the next (``PhaseError`` if one is missing). The components do the work:
+    the broker service writes the book, the metrics tracker reads it, the strategies' runtimes trade."""
 
-		self._strategy_manager = strategy_manager
-		self._metrics_tracker = metrics_tracker
-		self._behavior = behavior
+    def __init__(
+            self,
+            strategy_manager: process_manager.StrategyManager,
+            market: core.AbstractMarket,
+            metrics_tracker: participants.MetricsTracker,
+            behavior: bv.AbstractControllerBehavior):
 
-		# the broker service fills the open orders against this market
-		strategy_manager.broker.attach_market(market)
+        self._strategy_manager = strategy_manager
+        self._behavior = behavior
 
-	def clock_update(self, ts, evt, signals):
-		strategy_manager = self._strategy_manager
-		broker = strategy_manager.broker
-		behavior = self._behavior
+        # the broker service fills the open orders against this market
+        strategy_manager.broker.attach_market(market)
 
-		strategies = strategy_manager.strategies
-		broker_states = strategy_manager.broker_states
-		# set timestamp ahead of time so that we know which events to wait for...
-		strategy_manager.set_global_timestamp(ts)
-		metrics_tracker = self._metrics_tracker
-		# data update hook
-		behavior.ingest_watchlist_data(ts, strategy_manager, signals)
-		
-		last_sale_prices = behavior.get_last_sale_prices(ts, strategy_manager, signals)
+        # in process, the broker side and the metrics tracker are participants on the bus of the run
+        bus = strategy_manager.bus
+        participants.BrokerParticipant(bus, strategy_manager)
+        participants.MetricsParticipant(bus, strategy_manager, metrics_tracker)
+        self._driver = phases.PhaseDriver(bus)
 
-		# todo: we need to optimize the control flow...
-		#  we don't want data downloads and ingestion from session end
-		#  events to block the execution of the other strategies
-		#  we might need thread-safety (for the blotter, ledger etc.)
+    def clock_update(self, ts, evt, signals):
+        strategy_manager = self._strategy_manager
+        behavior = self._behavior
+        driver = self._driver
 
-		# we could have a channel per calendar? 
+        # data update hook
+        behavior.ingest_watchlist_data(ts, strategy_manager, signals)
 
-		# todo: we need to trigger any of these functions once the data tasks have been executed!
-		#  this means that we need a class to handle each process callback
-		#  once all the processes have ran, we update the blotter, ledger, metrics tracker...
+        # read before any write of this tick: the prices of the positions the book holds now
+        last_sale_prices = behavior.get_last_sale_prices(ts, strategy_manager, signals)
 
-		# todo: instead of using a locking mechanism for the strategy manager, we should have multiple
-		#  channels, one per strategy, where they can write there states.
+        # todo: we need to optimize the control flow...
+        #  we don't want data downloads and ingestion from session end
+        #  events to block the execution of the other strategies
+        #  we might need thread-safety (for the blotter, ledger etc.)
 
-		# todo: session_end events for data must be executed last since they are low priority.
-		#  bar, trade end are high priority, since they involve trading...
+        # todo: we need to trigger any of these functions once the data tasks have been executed!
+        #  this means that we need a class to handle each process callback
+        #  once all the processes have ran, we update the blotter, ledger, metrics tracker...
 
-		# populate broker state to send to controllableWe need to update positions before calling handle_data
-		for cts, c_evt, calendar in signals:
-			calendar_name = calendar.name
-			broker.set_time(calendar_name, cts)
+        # todo: session_end events for data must be executed last since they are low priority.
+        #  bar, trade end are high priority, since they involve trading...
 
-			# bar events
-			if c_evt == BAR or c_evt == TRADE_END:
-				broker.sync_last_sale_prices(calendar_name, last_sale_prices[calendar_name], cts)
-				# fetch executed transactions, commissions etc.
-				# todo: need to apply tax models...
-				broker.match(calendar_name)
+        ts_ns = ts.value
+        stamp = phases.proto_timestamp(ts)
 
-			elif c_evt == MINUTE_END:
-				broker.sync_last_sale_prices(
-					calendar_name,
-					last_sale_prices[calendar_name],
-					cts)
+        # the book is updated before the strategies run, so that they see the positions and fills of this event;
+        # one signal after the other: the calendars' ledgers share a portfolio
+        for cts, c_evt, calendar in signals:
+            calendar_name = calendar.name
+            signal = clock_pb2.Signal(
+                timestamp=phases.proto_timestamp(cts),
+                event=c_evt,
+                calendar_name=calendar_name)
 
-				broker.revalue(calendar_name)
-				metrics_tracker.end_of_bar(
-					cts,
-					calendar_name,
-					broker.get_ledger(calendar_name))
+            driver.drive(
+                phases.BOOK,
+                phases_pb2.SignalEvent(
+                    timestamp=stamp,
+                    signal=signal,
+                    last_sale_prices=_asset_prices(last_sale_prices.get(calendar_name, ()))),
+                ts_ns,
+                (phases.BROKER_ID,),
+                key=calendar_name)
 
-			elif c_evt == SESSION_START:
-				broker.start_session(calendar_name, cts)
-				broker.revalue(calendar_name)
-				metrics_tracker.start_of_session(cts, calendar_name, broker.get_ledger(calendar_name))
-			elif c_evt == BEFORE_TRADING_START:
-				broker.sync_last_sale_prices(
-					calendar_name,
-					last_sale_prices[calendar_name],
-					cts)
+            driver.drive(
+                phases.METRICS,
+                phases_pb2.SignalEvent(timestamp=stamp, signal=signal),
+                ts_ns,
+                (phases.METRICS_ID,),
+                key=calendar_name)
 
-			elif c_evt == SESSION_END:
-				broker.sync_last_sale_prices(
-					calendar_name,
-					last_sale_prices[calendar_name],
-					cts)
-				broker.end_session(calendar_name, cts)
+        # the runtimes of the strategies: a missing done of one aborts the run (fixme of the barrier before the bus:
+        # a process might crash and we would wait forever)
+        runtimes = tuple(strategy_manager.session_ids)
+        clock = clock_pb2.ClockEvent(timestamp=stamp, event=evt)
 
-				# todo: we need to ingest data befor calling this...
-				broker.revalue(calendar_name)
-				metrics_tracker.end_of_session(
-					cts,
-					calendar_name,
-					broker.get_ledger(calendar_name))
+        # flatten last sale prices to send to the strategies
+        values = []
 
-		# flatten last sale prices to send to
-		values = []
+        for pairs in last_sale_prices.values():
+            values.extend(_asset_prices(pairs))
 
-		for pairs in last_sale_prices.values():
-			values.extend([
-				broker_pb2.AssetPrice(sid=sid, price=price)
-				for sid, price in pairs])
+        # update all strategies state
+        driver.drive(
+            phases.ACCOUNT,
+            phases_pb2.AccountEvent(clock=clock, last_sale_prices=values),
+            ts_ns,
+            (phases.BROKER_ID,) + runtimes)
 
-		# update all strategies state
-		for strategy in strategies:
-			brs = broker_states[strategy.process_id]
-			brs.last_sale_prices.extend(values)
-			strategy.account_update(brs)
+        # todo: we need to call all trade events first, then session end events next...
+        # we could separate them into different threads: we have a thread for executing live
+        # events and a thread for executing session end events...
+        # session end events trigger a write to the core database, for all assets in the database
+        # problem: what if there is a session start for a strategy before all its session end data
+        # is ingested?
 
-		# todo: we need to call all trade events first, then session end events next...
-		# we could separate them into different threads: we have a thread for executing live
-		# events and a thread for executing session end events...
-		# session end events trigger a write to the core database, for all assets in the database
-		# problem: what if there is a session start for a strategy before all its session end data
-		# is ingested?
+        # advance all processes; their new orders reach the manager on the bus
+        driver.drive(phases.TRADE, clock, ts_ns, runtimes)
 
-		# advance all processes
-		for strategy in strategies:
-			strategy.clock_update(ts, evt)
+        # process watchlist from strategies
+        # ingest for all assets before updating watchlist...
+        behavior.ingest_all_data(ts, strategy_manager, signals)
+        behavior.update_watchlist(ts, strategy_manager)
 
-		# fixme: a process might crash, and we would be waiting forever in the strategy manager
-		#  a solution would be to fix a maximum waiting time (timeout)
-		#  this shouldn't be a problem in local network, if a strategy crashed due to some
-		#  bug or error, everything should crash.
-		# retrieve new orders
-		new_orders = strategy_manager.get_orders()
-		# process watchlist from strategies
-		# ingest for all assets before updating watchlist...
-		behavior.ingest_all_data(ts, strategy_manager, signals)
-		behavior.update_watchlist(ts, strategy_manager) 
-
-		# todo: catch any account control errors here...
-		#  given the new orders and the current portfolio and
-		#  the current open orders and the last sale price, determine
-		#  if we go above the maximum leverage
-
-		# check if strategies don't go above allocated capital and leverage
-
-		# todo: call the controller script
-		# self._controller_script.update()
-
-		# todo: we should call the manager script to handle new orders here, before placing new orders.
-		broker.submit(new_orders)
-
-		# clear all events
-		strategy_manager.clear()
+        # new orders reach the book
+        driver.drive(phases.SUBMIT, clock, ts_ns, (phases.BROKER_ID,))
