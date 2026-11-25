@@ -1,6 +1,7 @@
 """SerializingBus: what only a serialising wrapper does (the shared contract is tests/test_bus_contract.py)."""
 import unittest
 
+from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from pluto.bus import InMemoryBus, JsonCodec, ProtobufCodec, SerializingBus, Start
@@ -91,6 +92,52 @@ class SerializingBusTests(unittest.TestCase):
         codec = ProtobufCodec({"timestamp": Timestamp}, fallback=JsonCodec())
         data = codec.encode([1, "x"], "other")
         self.assertEqual(codec.decode(data, "other"), [1, "x"])
+
+    def test_encodings_are_deterministic(self):
+        codec = ProtobufCodec({"struct": Struct})
+        first, second = Struct(), Struct()
+        for key in ("a", "b", "c", "d"):
+            first.fields[key].number_value = 1
+        for key in ("d", "c", "b", "a"):
+            second.fields[key].number_value = 1
+        self.assertEqual(codec.encode(first, "struct"), codec.encode(second, "struct"))
+        self.assertEqual(codec.encode({"a": 1, "b": 2}, "t"), codec.encode({"b": 2, "a": 1}, "t"))
+        self.assertEqual(codec.encode({"b": 2, "a": 1}, "t"), b'{"a":1,"b":2}')
+
+    def test_protobuf_is_serialised_with_deterministic_true(self):
+        calls = []
+
+        class Message:
+            def SerializeToString(self, deterministic=False):
+                calls.append(deterministic)
+                return b""
+
+        ProtobufCodec({"m": Message}).encode(Message(), "m")
+        self.assertEqual(calls, [True])
+
+    def test_dead_letters_are_decoded_and_an_undecodable_one_keeps_its_bytes(self):
+        bus = SerializingBus(self.inner, ProtobufCodec({"timestamp": Timestamp}))
+
+        def fail(delivery):
+            raise RuntimeError("no")
+
+        bus.subscribe("t", fail)
+        bus.publish("t", {"fine": 1}, type="t", logical_ts=1, producer_id="p", msg_id="fine")
+        self.inner.publish("t", b"\xff\xffnot protobuf", type="timestamp", logical_ts=2, producer_id="p", msg_id="broken")
+        bus.run_until_idle()
+        letters = bus.dead_letters()
+        self.assertEqual([letter.envelope.msg_id for letter in letters], ["fine", "broken"])
+        self.assertEqual(letters[0].envelope.payload, {"fine": 1})
+        self.assertEqual(letters[0].error_type, "RuntimeError")
+        self.assertEqual(letters[1].envelope.payload, b"\xff\xffnot protobuf")
+        self.assertEqual(letters[1].error_type, "DecodeError")
+
+    def test_a_payload_that_cannot_be_encoded_never_reaches_a_subscription(self):
+        seen = []
+        self.bus.subscribe("t", seen.append)
+        with self.assertRaises(TypeError):
+            publish(self.bus, "t", object())
+        self.assertEqual(self.bus.run_until_idle(), 0)
 
 
 if __name__ == "__main__":

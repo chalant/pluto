@@ -6,7 +6,6 @@
 Run as `python -m tests.test_bus_contract <implementation>` it prints the delivery trace of a fixed scenario,
 which the hash-seed test compares across interpreters started with different `PYTHONHASHSEED` values.
 """
-import dataclasses
 import json
 import os
 import random
@@ -24,9 +23,7 @@ from pluto.bus import (
     Envelope,
     InMemoryBus,
     NotIdle,
-    Position,
     ProtobufCodec,
-    QueueFull,
     SerializingBus,
     Start,
     reply,
@@ -74,26 +71,37 @@ class Recorder:
 
 
 def scenario_trace(make_bus):
-    """A fixed workload that exercises every ordering path: ties, wildcards, ranks, a group, failures, cascades."""
+    """A fixed workload that exercises every ordering path: ties, phases, wildcards, ranks, a group, failures with
+    dead letters, cascades, checkpoints."""
     bus = make_bus(max_attempts=3)
     rec = Recorder()
+    checkpoints = []
     rng = random.Random(1234)
 
     def flaky(delivery):
         if delivery.envelope.seq % 7 == 0 and delivery.attempt == 1:
             raise RuntimeError("transient")
 
+    def poison(delivery):
+        if delivery.envelope.seq % 11 == 0:
+            raise ValueError("poison %d" % delivery.envelope.seq)
+
     def follow_up(delivery):
         env = delivery.envelope
         if env.seq % 5 == 0 and env.topic.startswith("orders."):
             publish(bus, "fills." + env.topic[7:], env.payload, key=env.key, ts=env.logical_ts, producer="fill-" + env.key)
 
+    def checkpoint(delivery):
+        checkpoints.append((delivery.envelope.msg_id, list(bus.position_of(delivery))))
+
     bus.subscribe("orders.*", rec.handler("orders", follow_up), rank=1)
     bus.subscribe("orders.a", rec.handler("orders-a", flaky), rank=0)
+    bus.subscribe("orders.b", rec.handler("poison", poison), rank=2)
     bus.subscribe("fills.>", rec.handler("fills"))
     bus.subscribe(">", rec.handler("all"), rank=5, start=Start.LATEST)
     bus.subscribe("orders.*", rec.handler("g1"), group="g")
     bus.subscribe("orders.*", rec.handler("g2"), group="g")
+    bus.subscribe("orders.*", checkpoint, rank=9)
     for i in range(200):
         topic = ("orders.a", "orders.b", "orders.c")[rng.randrange(3)]
         publish(
@@ -102,6 +110,7 @@ def scenario_trace(make_bus):
             i,
             key="k%d" % rng.randrange(6),
             ts=rng.randrange(10),
+            phase=rng.randrange(3),
             producer="prod-%d" % rng.randrange(4),
         )
         if i % 40 == 39:
@@ -110,7 +119,12 @@ def scenario_trace(make_bus):
     late = Recorder()
     bus.subscribe("fills.>", late.handler("late"), start=Start.EARLIEST)
     bus.run_until_idle()
-    return {"calls": rec.calls, "late": late.calls, "dead": [(d.envelope.msg_id, d.attempts) for d in bus.dead_letters()]}
+    return {
+        "calls": rec.calls,
+        "late": late.calls,
+        "checkpoints": checkpoints,
+        "dead": [(d.envelope.msg_id, d.attempts, d.error_type, d.error_message) for d in bus.dead_letters()],
+    }
 
 
 class BusContract:
@@ -185,13 +199,35 @@ class BusContract:
         bus.run_until_idle()
         self.assertEqual(self.rec.names(), ["first", "second"])
 
-    def test_equal_content_in_one_subscription_falls_back_to_lane_creation_order(self):
+    def test_equal_content_falls_back_to_topic_then_key(self):
+        bus = self.bus()
+        bus.subscribe("t.*", self.rec.handler("s"))
+        for topic, key in (("t.b", "k1"), ("t.a", "k2"), ("t.a", "k1"), ("t.b", "k0")):
+            publish(bus, topic, key=key, ts=1, seq=1, msg_id=topic + key)
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["t.ak1", "t.ak2", "t.bk0", "t.bk1"])
+
+    def test_a_replay_delivers_in_the_order_a_live_subscriber_saw(self):
+        bus = self.bus()
+        live, replayed = Recorder(), Recorder()
+        bus.subscribe("t.*", live.handler("s"))
+        for topic, key in (("t.b", "k1"), ("t.a", "k2"), ("t.b", "k0"), ("t.a", "k1"), ("t.c", "k0"), ("t.a", "k0")):
+            publish(bus, topic, key=key, ts=1, seq=1, msg_id=topic + key)
+        bus.run_until_idle()
+        bus.subscribe("t.*", replayed.handler("s"), start=Start.EARLIEST)
+        bus.run_until_idle()
+        self.assertEqual(len(live.ids()), 6)
+        self.assertEqual(replayed.ids(), live.ids())
+
+    def test_phase_orders_messages_of_the_same_logical_ts(self):
         bus = self.bus()
         bus.subscribe("t", self.rec.handler("s"))
-        for key in ("k2", "k1", "k3"):
-            publish(bus, "t", key=key, ts=1, seq=1, msg_id="m-" + key)
+        publish(bus, "t", key="a", ts=5, phase=2, producer="a", msg_id="phase2")
+        publish(bus, "t", key="b", ts=5, phase=0, producer="z", msg_id="phase0")
+        publish(bus, "t", key="c", ts=5, phase=1, producer="m", msg_id="phase1")
+        publish(bus, "t", key="d", ts=4, phase=9, producer="q", msg_id="earlier")
         bus.run_until_idle()
-        self.assertEqual(self.rec.ids(), ["m-k2", "m-k1", "m-k3"])
+        self.assertEqual(self.rec.ids(), ["earlier", "phase0", "phase1", "phase2"])
 
     def test_dispatch_is_across_topics_too(self):
         bus = self.bus()
@@ -384,7 +420,7 @@ class BusContract:
         (letter,) = bus.dead_letters()
         self.assertEqual((letter.envelope.msg_id, letter.envelope.payload), ("bad", "poison"))
         self.assertEqual(letter.attempts, 3)
-        self.assertIs(letter.error, error)
+        self.assertEqual((letter.error_type, letter.error_message), ("RuntimeError", "always"))
 
     def test_explicit_nack_dead_letter_has_no_error(self):
         bus = self.bus(max_attempts=2)
@@ -392,7 +428,8 @@ class BusContract:
         publish(bus, "t")
         bus.run_until_idle()
         (letter,) = bus.dead_letters()
-        self.assertIsNone(letter.error)
+        self.assertIsNone(letter.error_type)
+        self.assertIsNone(letter.error_message)
         self.assertEqual(letter.attempts, 2)
 
     def test_a_dead_letter_is_per_subscription(self):
@@ -513,17 +550,59 @@ class BusContract:
         bus.run_until_idle()
         self.assertEqual(self.rec.ids(), ["a2", "a3"])
 
-    def test_position_needs_its_exact_topic_and_a_place_in_the_log(self):
-        bus, receipts = self._filled(2)
-        position = receipts[0].position
-        with self.assertRaises(ValueError):
-            bus.subscribe("t.*", lambda d: None, start=position)
-        with self.assertRaises(ValueError):
-            bus.subscribe("other", lambda d: None, start=position)
-        with self.assertRaises(ValueError):
-            bus.subscribe("t", lambda d: None, start=Position("t", 3))
-        with self.assertRaises(ValueError):
-            bus.subscribe("t", lambda d: None, start=Position("t", -1))
+    def test_position_of_is_a_resume_point_without_gaps_when_keys_complete_out_of_log_order(self):
+        bus = self.bus()
+        publish(bus, "t", key="k1", ts=100, msg_id="late")  # log offset 0, dispatched second
+        publish(bus, "t", key="k2", ts=10, msg_id="early")  # log offset 1, dispatched first
+        first = []
+        bus.subscribe("t", first.append, start=Start.EARLIEST)
+        self.assertTrue(bus.step())
+        self.assertEqual(first[0].envelope.msg_id, "early")
+        checkpoint = bus.position_of(first[0])
+        bus.subscribe("t", self.rec.handler("resumed"), start=checkpoint)
+        bus.run_until_idle()
+        # "late" was never delivered to the first subscription, so the checkpoint is before it; "early" comes
+        # again (at-least-once)
+        self.assertEqual(self.rec.ids(), ["early", "late"])
+
+    def test_position_of_after_everything_is_settled_resumes_with_nothing_old(self):
+        bus = self.bus()
+        positions = []
+        bus.subscribe("t", lambda d: positions.append(bus.position_of(d)))
+        for i in range(4):
+            publish(bus, "t", i, key="k%d" % (i % 2), ts=10 - i, msg_id="m%d" % i)
+        bus.run_until_idle()
+        self.assertEqual({p.topic for p in positions}, {"t"})
+        bus.subscribe("t", self.rec.handler("resumed"), start=positions[-1])
+        bus.run_until_idle()
+        self.assertEqual(self.rec.calls, [])
+        publish(bus, "t", msg_id="new", ts=99)
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["new"])
+
+    def test_a_dead_lettered_message_counts_as_settled_for_the_position(self):
+        bus = self.bus(max_attempts=2)
+        positions = []
+
+        def handler(delivery):
+            if delivery.envelope.msg_id == "bad":
+                raise RuntimeError("always")
+            positions.append(bus.position_of(delivery))
+
+        bus.subscribe("t", handler)
+        publish(bus, "t", msg_id="bad", ts=1)
+        publish(bus, "t", msg_id="good", ts=2)
+        bus.run_until_idle()
+        bus.subscribe("t", self.rec.handler("resumed"), start=positions[-1])
+        bus.run_until_idle()
+        self.assertEqual(self.rec.calls, [])
+
+    def test_subscribing_never_delivers_inline(self):
+        bus, receipts = self._filled(3)
+        bus.subscribe("t", self.rec.handler("from earliest"), start=Start.EARLIEST)
+        bus.subscribe("t", self.rec.handler("from position"), start=receipts[1].position)
+        self.assertEqual(self.rec.calls, [])
+        self.assertEqual(bus.run_until_idle(), 5)
 
     def test_replay_redelivers_with_attempt_one_and_the_original_envelope(self):
         bus = self.bus()
@@ -635,6 +714,88 @@ class BusContract:
         bus.run_until_idle()
         self.assertEqual(len(errors), 1)
 
+    def test_requests_of_one_producer_share_its_reply_inbox(self):
+        bus = self.bus()
+        self._responder(bus)
+        one = request(bus, "svc.orders", 1, type="t", logical_ts=1, producer_id="strat", msg_id="strat:1")
+        two = request(bus, "svc.orders", 2, type="t", logical_ts=1, producer_id="strat", msg_id="strat:2")
+        other = request(bus, "svc.orders", 3, type="t", logical_ts=1, producer_id="other", msg_id="other:1")
+        self.assertEqual((one.reply_to, two.reply_to, other.reply_to), ("reply.strat", "reply.strat", "reply.other"))
+        bus.run_until_idle()
+        self.assertEqual([r.reply.payload for r in (one, two, other)], [{"echo": 1}, {"echo": 2}, {"echo": 3}])
+
+    def test_on_reply_is_called_from_the_dispatch_loop(self):
+        bus = self.bus()
+        self._responder(bus)
+        replies = []
+        pending = request(
+            bus, "svc.orders", 7, type="t", logical_ts=1, producer_id="strat", msg_id="strat:1", on_reply=replies.append
+        )
+        self.assertEqual(replies, [])
+        bus.run_until_idle()
+        self.assertEqual([r.payload for r in replies], [{"echo": 7}])
+        self.assertIs(replies[0], pending.reply)
+
+    def test_a_failing_on_reply_is_retried_by_the_bus(self):
+        bus = self.bus()
+        self._responder(bus)
+        calls = []
+
+        def on_reply(envelope):
+            calls.append(envelope.msg_id)
+            if len(calls) == 1:
+                raise RuntimeError("transient")
+
+        pending = request(
+            bus, "svc.orders", 7, type="t", logical_ts=1, producer_id="strat", msg_id="strat:1", on_reply=on_reply
+        )
+        bus.run_until_idle()
+        self.assertEqual(calls, ["strat:1:reply"] * 2)
+        self.assertTrue(pending.done)
+
+    def test_the_request_keeps_the_receipt_of_its_latest_send(self):
+        bus = self.bus()
+        pending = request(bus, "svc.orders", 1, type="t", logical_ts=1, producer_id="strat", msg_id="strat:1")
+        first = pending.receipt
+        self.assertEqual(first.msg_id, "strat:1")
+        again = pending.send()
+        self.assertIs(pending.receipt, again)
+        self.assertNotEqual(again.position, first.position)
+
+    def _leaked(self, bus, topic="reply.strat"):
+        """Deliveries a message to `topic` causes: nonzero if a request left its subscription behind."""
+        publish(bus, topic)
+        return bus.run_until_idle()
+
+    def test_a_request_that_cannot_be_published_leaves_no_subscription(self):
+        bus = self.bus()
+        for bad in (dict(logical_ts=1.5), dict(topic="svc.*")):
+            arguments = dict(topic="svc.orders", payload=1, type="t", logical_ts=1)
+            arguments.update(bad)
+            with self.assertRaises((TypeError, ValueError)):
+                request(bus, arguments.pop("topic"), arguments.pop("payload"), producer_id="strat", msg_id="strat:1", **arguments)
+        self.assertEqual(self._leaked(bus), 0)
+
+    def test_the_reply_topic_must_be_an_exact_topic(self):
+        bus = self.bus()
+        for reply_to in ("reply.*", "reply.>", "", "a..b", ".a"):
+            with self.assertRaises(ValueError):
+                request(bus, "svc", 1, type="t", logical_ts=1, producer_id="strat", msg_id="m", reply_to=reply_to)
+        with self.assertRaises(ValueError):
+            request(bus, "svc", 1, type="t", logical_ts=1, producer_id="*", msg_id="m")
+        self.assertEqual(self._leaked(bus, "reply.x"), 0)
+
+    def test_reply_carries_phase_and_schema_version(self):
+        bus = self.bus()
+
+        def respond(delivery):
+            reply(bus, delivery, 1, type="t", logical_ts=5, producer_id="svc", phase=2, schema_version=4)
+
+        bus.subscribe("svc", respond)
+        pending = request(bus, "svc", 1, type="t", logical_ts=1, producer_id="strat", msg_id="strat:1", phase=1)
+        bus.run_until_idle()
+        self.assertEqual((pending.reply.phase, pending.reply.schema_version, pending.reply.logical_ts), (2, 4, 5))
+
     # S14 quiescence
 
     def test_run_until_idle_drains_cascades_and_counts_invocations(self):
@@ -681,6 +842,35 @@ class BusContract:
         publish(bus, "t")
         self.assertEqual(bus.run_until_idle(max_deliveries=2), 2)
 
+    def test_max_deliveries_zero_and_invalid_values(self):
+        bus = self.bus()
+        self.assertEqual(bus.run_until_idle(max_deliveries=0), 0)  # idle
+        bus.subscribe("t", self.rec.handler("s"))
+        publish(bus, "t")
+        with self.assertRaises(NotIdle):
+            bus.run_until_idle(max_deliveries=0)
+        for bad in (-1, 1.5, True, "3"):
+            with self.assertRaises(ValueError):
+                bus.run_until_idle(max_deliveries=bad)
+        self.assertEqual(self.rec.calls, [])
+        self.assertEqual(bus.run_until_idle(), 1)
+
+    def test_the_nesting_check_comes_before_the_limit_check(self):
+        bus = self.bus()
+        errors = []
+
+        def handler(delivery):
+            try:
+                bus.run_until_idle(max_deliveries=0)
+            except BusError as error:
+                errors.append(error)
+
+        bus.subscribe("t", handler)
+        publish(bus, "t", key="a")
+        publish(bus, "t", key="b")
+        bus.run_until_idle()
+        self.assertEqual([type(error) for error in errors], [BusError, BusError])
+
     def test_publishing_after_idle_is_dispatched_by_the_next_run(self):
         bus = self.bus()
         bus.subscribe("t", self.rec.handler("s"))
@@ -705,80 +895,6 @@ class BusContract:
         ):
             with self.assertRaises(BusClosed):
                 call()
-
-    # S12 backpressure
-
-    def test_overflow_raises_to_the_publisher_and_changes_nothing(self):
-        bus = self.bus(queue_capacity=3)
-        bus.subscribe("t", self.rec.handler("s"))
-        for i in range(3):
-            publish(bus, "t", i, ts=i, msg_id="m%d" % i)
-        with self.assertRaises(QueueFull):
-            publish(bus, "t", 3, msg_id="m3")
-        self.assertEqual(self.rec.calls, [])
-        bus.run_until_idle()
-        self.assertEqual(self.rec.ids(), ["m0", "m1", "m2"])
-        receipt = publish(bus, "t", 4, ts=9, msg_id="m4")
-        self.assertEqual(receipt.position, Position("t", 3))  # the refused message was never logged
-        bus.run_until_idle()
-        self.assertEqual(self.rec.ids()[-1], "m4")
-
-    def test_overflow_in_one_subscription_refuses_the_message_for_all(self):
-        bus = self.bus(queue_capacity=2)
-        bus.subscribe("a.*", self.rec.handler("wide"))
-        bus.subscribe("a.y", self.rec.handler("narrow"))
-        publish(bus, "a.x")
-        publish(bus, "a.x")
-        with self.assertRaises(QueueFull):
-            publish(bus, "a.y")
-        bus.run_until_idle()
-        self.assertEqual(self.rec.names(), ["wide", "wide"])
-
-    def test_capacity_counts_per_subscription_and_frees_on_ack(self):
-        bus = self.bus(queue_capacity=1)
-        bus.subscribe("t", self.rec.handler("one"))
-        bus.subscribe("t", self.rec.handler("two"))
-        for i in range(5):
-            publish(bus, "t", i, ts=i)
-            bus.run_until_idle()
-        self.assertEqual(len(self.rec.calls), 10)
-
-    def test_a_handler_that_overflows_is_nacked_not_raised(self):
-        bus = self.bus(queue_capacity=2, max_attempts=2)
-        errors = []
-
-        def handler(delivery):
-            try:
-                publish(bus, "out", delivery.envelope.payload, ts=10)
-            except QueueFull as error:
-                errors.append(error)
-                raise
-
-        bus.subscribe("t", handler)
-        bus.subscribe("out", self.rec.handler("sink"), rank=1)
-        publish(bus, "t", 0, ts=0)
-        publish(bus, "t", 1, ts=1)
-        bus.step()
-        bus.step()  # the sink's queue now holds two messages
-        publish(bus, "t", 2, ts=2)
-        bus.run_until_idle()
-        self.assertEqual(len(errors), 2)  # both attempts at the third message found the sink full
-        self.assertEqual(self.rec.names(), ["sink", "sink"])
-        (letter,) = bus.dead_letters()
-        self.assertEqual((letter.envelope.payload, letter.attempts), (2, 2))
-        self.assertIsInstance(letter.error, QueueFull)
-
-    def test_a_replay_larger_than_the_capacity_is_refused_and_registers_nothing(self):
-        bus = self.bus(queue_capacity=2)
-        bus.subscribe("t", lambda d: None)
-        for i in range(3):
-            publish(bus, "t", i)
-            bus.run_until_idle()
-        with self.assertRaises(QueueFull):
-            bus.subscribe("t", self.rec.handler("s"), start=Start.EARLIEST)
-        publish(bus, "t", 3)
-        bus.run_until_idle()
-        self.assertEqual(self.rec.calls, [])
 
     # subscriptions, patterns, groups
 
@@ -829,16 +945,15 @@ class BusContract:
         bus.subscribe("t.*", self.rec.handler("g1"), group="g")
         bus.subscribe("t.*", self.rec.handler("g2"), group="g")
         bus.subscribe("t.*", self.rec.handler("solo"))
-        for i in range(12):
-            publish(bus, "t.x", i, key="k%d" % (i % 4), ts=i, msg_id="m%d" % i)
+        for i in range(24):
+            publish(bus, "t.x", i, key="k%d" % (i % 12), ts=i, msg_id="m%d" % i)
         bus.run_until_idle()
         group_calls = [call for call in self.rec.calls if call[0] != "solo"]
-        self.assertEqual(sorted(call[1] for call in group_calls), sorted("m%d" % i for i in range(12)))
-        self.assertEqual(len(self.rec.ids("solo")), 12)
-        self.assertEqual(set(self.rec.names()), {"g1", "g2", "solo"})
+        self.assertEqual(sorted(call[1] for call in group_calls), sorted("m%d" % i for i in range(24)))
+        self.assertEqual(len(self.rec.ids("solo")), 24)
         owners = {}
         for name, msg_id, _ in group_calls:
-            owners.setdefault(int(msg_id[1:]) % 4, set()).add(name)
+            owners.setdefault(int(msg_id[1:]) % 12, set()).add(name)
         self.assertTrue(all(len(names) == 1 for names in owners.values()))  # a key stays with one member
 
     def test_group_members_must_read_the_same_stream(self):
@@ -885,12 +1000,14 @@ class BusContract:
         self.assertEqual([r.msg_id for r in (first, second, third, fixed)], ["p1:1", "p1:2", "p2:1", "mine"])
         by_id = {d.envelope.msg_id: d.envelope for d in seen}
         self.assertEqual(
-            dataclasses.astuple(by_id["p1:1"]),
-            ("p1:1", "t", "k", "t", 42, "p1", 1, "c1", "r1", 3, {"x": 1}),
+            tuple(by_id["p1:1"]),
+            ("p1:1", "t", "k", "t", 42, 0, "p1", 1, "c1", "r1", 3, {"x": 1}),
         )
         later = by_id["mine"]
         self.assertEqual((later.seq, later.schema_version, later.correlation_id), (99, 1, None))
-        self.assertEqual([r.position for r in (first, second)], [Position("t", 0), Position("t", 1)])
+        self.assertEqual(
+            [r.position.topic for r in (first, second)], ["t", "t"]
+        )
 
     def test_envelopes_are_immutable(self):
         bus = self.bus()
@@ -898,14 +1015,14 @@ class BusContract:
         bus.subscribe("t", seen.append)
         publish(bus, "t", 1)
         bus.run_until_idle()
-        with self.assertRaises(dataclasses.FrozenInstanceError):
+        with self.assertRaises(AttributeError):
             seen[0].envelope.payload = 2
-        with self.assertRaises(dataclasses.FrozenInstanceError):
+        with self.assertRaises(AttributeError):
             seen[0].attempt = 2
 
-    def test_logical_time_must_be_integer_nanoseconds(self):
+    def test_logical_time_must_be_a_plain_int(self):
         bus = self.bus()
-        for ts in (1.5, "1", None):
+        for ts in (1.5, "1", None, True):
             with self.assertRaises(TypeError):
                 publish(bus, "t", ts=ts)
 
@@ -926,9 +1043,120 @@ class BusContract:
         bus.run_until_idle()
         self.assertEqual(self.rec.ids(), ["after"])
 
+    def test_a_refused_publish_changes_nothing(self):
+        bus = self.bus()
+        for bad in (dict(ts=1.5), dict(ts=True), dict(phase="1"), dict(seq="1"), dict(key=None), dict(producer=7)):
+            with self.assertRaises(TypeError):
+                publish(bus, "t", **bad)
+        with self.assertRaises(ValueError):
+            publish(bus, "t.*")
+        self.assertEqual(publish(bus, "t").msg_id, "p:1")  # the refused calls did not use up a seq
+        seen = []
+        bus.subscribe("t", seen.append, start=Start.EARLIEST)
+        bus.run_until_idle()
+        self.assertEqual(len(seen), 1)  # nor did they reach the log
+
+    def test_rank_must_be_an_int(self):
+        bus = self.bus()
+        for rank in ("1", 1.5, float("nan"), True, None):
+            with self.assertRaises(TypeError):
+                bus.subscribe("t", lambda d: None, rank=rank)
+
+    def test_a_group_accepts_members_that_start_at_latest(self):
+        bus = self.bus()
+        bus.subscribe("t", self.rec.handler("g1"), group="g")
+        bus.subscribe("t", self.rec.handler("g2"), group="g", start=Start.LATEST)
+        publish(bus, "t")
+        bus.run_until_idle()
+        self.assertEqual(len(self.rec.calls), 1)
+
+    def test_a_group_member_cancelling_itself_hands_the_rest_to_the_others(self):
+        bus = self.bus()
+        holder = []
+        holder.append(bus.subscribe("t", self.rec.handler("g1", lambda d: holder[0].cancel()), group="g"))
+        bus.subscribe("t", self.rec.handler("g2"), group="g")
+        for i in range(8):
+            publish(bus, "t", i, key="k%d" % i, ts=i, msg_id="m%d" % i)
+        bus.run_until_idle()
+        self.assertEqual(sorted(self.rec.ids()), sorted("m%d" % i for i in range(8)))
+        self.assertLessEqual(self.rec.names().count("g1"), 1)
+
+    def test_a_group_member_that_nacks_and_cancels_hands_the_retry_to_the_others(self):
+        bus = self.bus()
+        holder = []
+
+        def nack_and_leave(delivery):
+            bus.nack(delivery)
+            holder[0].cancel()
+
+        holder.append(bus.subscribe("t", self.rec.handler("g1", nack_and_leave), group="g"))
+        bus.subscribe("t", self.rec.handler("g2"), group="g")
+        for i in range(8):
+            publish(bus, "t", i, key="k%d" % i, ts=i, msg_id="m%d" % i)
+        bus.run_until_idle()
+        retried = [call for call in self.rec.calls if call[2] == 2]
+        first_member = [call for call in self.rec.calls if call[0] == "g1"]
+        self.assertEqual(len(first_member), len(retried))
+        self.assertTrue(all(call[0] == "g2" for call in retried))
+        self.assertEqual(sorted({call[1] for call in self.rec.calls}), sorted("m%d" % i for i in range(8)))
+
+    def test_a_handler_can_cancel_another_subscription_that_has_messages_queued(self):
+        bus = self.bus()
+        victim = bus.subscribe("t", self.rec.handler("victim"), rank=1)
+        bus.subscribe("t", self.rec.handler("killer", lambda d: victim.cancel()), rank=0)
+        publish(bus, "t")
+        publish(bus, "t", ts=1)
+        bus.run_until_idle()
+        self.assertEqual(self.rec.names(), ["killer", "killer"])
+
+    # closing
+
+    def test_cancel_after_close_is_a_no_op(self):
+        bus = type(self).make_bus()
+        single = bus.subscribe("t", lambda d: None)
+        member = bus.subscribe("t", lambda d: None, group="g")
+        pending = request(bus, "svc", 1, type="t", logical_ts=0, producer_id="p", msg_id="p:1")
+        bus.close()
+        single.cancel()
+        member.cancel()
+        pending.cancel()
+
+    def test_a_handler_that_closes_the_bus_leaves_nothing_behind(self):
+        bus = type(self).make_bus(max_attempts=1)
+
+        def closing(delivery):
+            self.rec.calls.append(("closing", delivery.envelope.msg_id, delivery.attempt))
+            bus.close()
+            raise RuntimeError("after close")
+
+        bus.subscribe("t", closing)
+        bus.subscribe("t", self.rec.handler("other"), rank=1)
+        publish(bus, "t")
+        publish(bus, "t", ts=1)
+        self.assertTrue(bus.step())
+        self.assertEqual(self.rec.names(), ["closing"])
+        with self.assertRaises(BusClosed):
+            bus.step()
+
+    def test_a_closed_bus_refuses_every_call(self):
+        bus = type(self).make_bus()
+        seen = []
+        bus.subscribe("t", seen.append)
+        publish(bus, "t")
+        bus.step()
+        bus.close()
+        for call in (
+            lambda: bus.position_of(seen[0]),
+            lambda: bus.ack(seen[0]),
+            lambda: bus.nack(seen[0]),
+            bus.dead_letters,
+        ):
+            with self.assertRaises(BusClosed):
+                call()
+
 
 def _fake_delivery():
-    return Delivery(Envelope("x", "t", "", "t", 0, "p", 0), 1, 1, 0)
+    return Delivery(Envelope("x", "t", "", "t", 0, 0, "p", 0), 1, 1, 0)
 
 
 class InMemoryBusContract(BusContract, unittest.TestCase):
