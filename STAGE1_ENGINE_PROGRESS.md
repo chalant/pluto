@@ -99,3 +99,38 @@ untouched), and the scenario strategies only pass ids back to `cancel_order`. `t
 Open for the replay step: the sequence restarts at 1 when a blotter is rebuilt (a recovering runtime needs the counter in its
 checkpoint, or ids that survive: the controller rejects an id it already knows as `OrderRejected`).
 Seven files + order id tests: 77 passed.
+
+### Step 4 done: per-strategy event stream, fold, saved sequence
+
+Files: `pluto/broker_service/events.py` (events + `StreamEvent` envelope), `books.py` (`Books`: portfolio, positions, account and
+one `Ledger` per calendar, shared by the service and the fold), `stream.py` (`InMemoryStream` sink, `Replica(Books)`, `fold`).
+
+Stream: `StreamEvent(strategy_id, sequence, calendar_name, event)`; `sequence` is 1, 2, 3... without gaps per book
+(`InMemoryStream` refuses a gap or a repeat); `strategy_id` is the process id given to `BrokerService.set_strategy` (one
+strategy per book). Events, one per write to a ledger of the controller side: `OrderAccepted`, `OrderCancelled`,
+`OrderExpired`, `OrderRejected` (duplicate order id; nothing recorded), `OrderTriggered`, `Fill`, `Commission`, `PricesMarked`,
+`Dividends` (every session start, possibly empty: the due ones are paid), `SessionStarted`, `Split`, `Expiry`, `Revalued`.
+Orders in events are snapshots (`copy.copy`).
+
+Why `PricesMarked`, `SessionStarted`, `OrderTriggered`, `Revalued` exist (found while making the fold exact):
+- `Ledger._update_portfolio` is lazy: every read of `portfolio` after a change compounds `returns` and `pnl`, so where the
+  reads happened changes the last digits (`RevaluationTests` has prices where it does). `Ledger.on_revalue` (set by the
+  service) publishes `Revalued` at each real recomputation; the fold calls `Ledger.revalue()` there. On the 28 examples and
+  scenarios (daily frequency) dropping `Revalued` does not change the state (measured: all 28 still equal), only the unit test
+  with three price steps shows it; minute frequency has a read per minute.
+- the engine's ledger holds the blotter's live `Order` objects (so an order the market changes without filling, a stop or
+  limit reached, shows in the ledger). The fold keeps one live order per id (`Replica.live_order`, updated in place by each
+  event) to reproduce this, including `Ledger.orders(dt)` for earlier times; `OrderTriggered` carries such a change.
+
+`fold(events, replica)` skips an event whose sequence is not above the `stream_sequence` of the ledger of its calendar: folding
+a stream twice, or again after a restore, changes nothing (idempotent, at-least-once friendly). `Ledger.stream_sequence` is
+written by the service (`_publish`) and the fold, saved by `get_state` (new field `stream_sequence = 10` in
+`protos/ledger_state.proto`, regenerated with grpcio-tools like the previous commit) and restored by `restore_state`.
+`STATE_VERSION` is now 2; version 1 states are still read (sequence 0), version 0 and above 2 are refused with the same message
+shape (`format version N, expected 1 to 2`).
+
+Test (`tests/test_pluto_broker_service.py`): for each of the 5 examples and 23 scenarios the run is made with a recording
+service; the state serialised by `get_state` of the engine's ledger equals, byte for byte, the state of the folded ledger;
+also `orders()`, `transactions()`, `orders(dt)`, the saved sequence, ids numbered 1..n after the process id, no rejection,
+folding twice. Unit tests: duplicate, cancel, snapshots, sequence, gap, revaluation, trigger, state versions.
+I also made the fold fail on purpose (skipping `PricesMarked`, `Commission`): the test fails, so it is not vacuous.

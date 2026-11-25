@@ -12,7 +12,9 @@ from protos import ledger_state_pb2 as acc
 # 1: 64-bit (double) values and positions. State without a version was
 # written by the modules with 32-bit fields: its values would parse as
 # unknown fields (silently 0), so it is refused.
-STATE_VERSION = 1
+# 2: adds stream_sequence; version 1 reads with sequence 0.
+STATE_VERSION = 2
+OLDEST_READABLE_VERSION = 1
 
 
 class Ledger(object):
@@ -45,6 +47,16 @@ class Ledger(object):
         self._dirty_account = True
 
         self._last_checkpoint = None
+
+        # the sequence number of the last event of the stream of the book that
+        # this ledger has folded (0: none); written by whoever writes the
+        # ledger from a stream (the broker service)
+        self.stream_sequence = 0
+
+        # called after every revaluation of the portfolio, which is lazy:
+        # it compounds returns and pnl on each read after a change, so the
+        # number of revaluations is part of the state (see the book stream)
+        self.on_revalue = None
 
         self._previous_total_returns = 0.0
 
@@ -214,6 +226,13 @@ class Ledger(object):
 
         # the portfolio has been fully synced
         self._dirty_portfolio = False
+
+        if self.on_revalue is not None:
+            self.on_revalue()
+
+    def revalue(self):
+        """Brings the portfolio up to date, as reading it does."""
+        self._update_portfolio()
 
     def _calculate_period_stats(self, portfolio_value, position_stats):
         if portfolio_value == 0:
@@ -513,11 +532,13 @@ class Ledger(object):
         return self._processed_transactions.get(dt, [])
 
     def get_state(self, dt):
-        # the properties bring the portfolio and the account up to date
+        # the properties bring the portfolio and the account up to date (and
+        # that can publish a revaluation: read the stream sequence after it)
         portfolio = self.portfolio
         account = self.account
         state = acc.LedgerState(
             version=STATE_VERSION,
+            stream_sequence=self.stream_sequence,
             session_count=self._session_count,
             portfolio=cv.to_proto_portfolio(portfolio),
             account=cv.to_proto_account(account),
@@ -539,12 +560,12 @@ class Ledger(object):
 
         l = acc.LedgerState()
         l.ParseFromString(state)
-        if l.version != STATE_VERSION:
+        if not OLDEST_READABLE_VERSION <= l.version <= STATE_VERSION:
             raise ValueError(
                 'cannot restore the ledger state: format version {}, expected'
-                ' {}. State saved before the protobuf fields were widened to'
+                ' {} to {}. State saved before the protobuf fields were widened to'
                 ' 64 bits (no version) cannot be read: its 32-bit values would'
-                ' be lost.'.format(l.version, STATE_VERSION))
+                ' be lost.'.format(l.version, OLDEST_READABLE_VERSION, STATE_VERSION))
 
         position_tracker = self._position_tracker
         for position in l.positions:
@@ -571,6 +592,7 @@ class Ledger(object):
         self._dirty_account = False
 
         self._session_count = l.session_count
+        self.stream_sequence = l.stream_sequence
         for order in [cv.to_zp_order(order) for order in l.orders]:
             self.process_order(order)
         self._start_dt = cv.to_datetime(l.first_session)

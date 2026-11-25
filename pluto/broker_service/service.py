@@ -12,9 +12,12 @@ when:
 - ``start_session`` (dividends and splits) and ``end_session`` (assets that
   expired).
 
-Order status changes and fills are published to the subscribers, in order, as
-``events.StreamEvent`` (see ``events``). The ledgers and blotters can be read
-(``get_ledger``, ``get_positions``, ``get_open_orders``), not written.
+Every write to the book is published to the subscribers, in order, as an
+``events.StreamEvent`` with the sequence number of the stream of the strategy
+(see ``events``; ``stream.fold`` rebuilds the ledgers from them). The sequence
+number of the last event of a ledger is kept in the ledger
+(``Ledger.stream_sequence``, part of its saved state). The ledgers and blotters
+can be read (``get_ledger``, ``get_positions``, ``get_open_orders``), not written.
 
 The order of the writes inside a call is the order of the simulation of
 Zipline, and the floating point sums depend on it: all the transactions of a
@@ -22,17 +25,20 @@ bar are applied, then all the commissions.
 """
 import copy
 
-from zipline import protocol
 from zipline.finance.order import ORDER_STATUS
 
-from pluto.broker_service import events
-from pluto.finance import ledger, position_tracker
+from pluto.broker_service import books, events
 from pluto.trading_calendars import calendar_utils as cu
 
 
 def _snapshot(order):
     # the blotter and the ledger keep mutating their order: events keep a copy
     return copy.copy(order)
+
+
+def _trigger_state(order):
+    # what the market changes of an order that it does not fill
+    return order.dt, order.stop, order.stop_reached, order.limit_reached
 
 
 class BrokerService(object):
@@ -48,17 +54,14 @@ class BrokerService(object):
         data_frequency: str
         """
         self._asset_finder = asset_finder
-        self._start_dt = start_dt
         self._data_frequency = data_frequency
 
         # one book: the calendars' ledgers share the portfolio, the
         # positions and the account
-        self._portfolio = protocol.Portfolio(start_dt, capital)
-        self._positions = protocol.Positions()
-        self._account = protocol.Account()
+        self._books = books.Books(start_dt, capital)
+        self._ledgers = self._books.ledgers
 
         self._market = None
-        self._ledgers = {}
         self._blotters = {}
         self._data_portals = {}
 
@@ -94,13 +97,8 @@ class BrokerService(object):
         self._blotters[calendar_name] = blotter
 
     def add_ledger(self, calendar_name):
-        tracker = position_tracker.PositionTracker(self._positions)
-
-        self._ledgers[calendar_name] = ledger.Ledger(
-            self._start_dt,
-            self._portfolio,
-            self._account,
-            tracker)
+        ledger_ = self._books.add_ledger(calendar_name)
+        ledger_.on_revalue = lambda: self._publish(calendar_name, events.Revalued())
 
     def get_ledger(self, calendar_name):
         return self._ledgers[calendar_name]
@@ -125,7 +123,10 @@ class BrokerService(object):
         ----------
         prices: iterable of (sid, price)
         """
+        prices = tuple(prices)
+
         self._ledgers[calendar_name].mark_prices(prices, dt)
+        self._publish(calendar_name, events.PricesMarked(dt, prices))
 
     def submit(self, orders):
         """Orders relayed by the strategies, in the order they were placed. A
@@ -185,8 +186,18 @@ class BrokerService(object):
         blotter = self._blotters[calendar_name]
         ledger_ = self._ledgers[calendar_name]
 
+        open_orders = [order for orders in blotter.open_orders.values() for order in orders]
+        triggers = [_trigger_state(order) for order in open_orders]
+
         transactions, closed_orders = self._market.get_transactions(
             calendar_name, blotter)
+
+        # the market changes the orders whose stop or limit the price reaches;
+        # the ledger holds these very orders and shows it
+        filled = {transaction['transaction'].order_id for transaction in transactions}
+        for order, trigger in zip(open_orders, triggers):
+            if order.id not in filled and _trigger_state(order) != trigger:
+                self._publish(calendar_name, events.OrderTriggered(_snapshot(order)))
 
         # all the transactions first, then all the commissions, in this order
         # (as zipline's AlgorithmSimulator every_bar); interleaving them
@@ -212,6 +223,9 @@ class BrokerService(object):
 
         for commission in commissions:
             ledger_.process_commission(commission)
+            self._publish(
+                calendar_name,
+                events.Commission(commission['asset'], commission['cost']))
 
         blotter.prune_orders(closed_orders)
 
@@ -236,18 +250,23 @@ class BrokerService(object):
                 dt,
                 self._asset_finder)
         ledger_.process_dividends(dt, cash_dividends, stock_dividends)
+        self._publish(
+            calendar_name,
+            events.Dividends(dt, tuple(cash_dividends), tuple(stock_dividends)))
 
         positions = set([position.asset
                          for position in self.get_positions(calendar_name)
                          if position.amount != 0])
         open_orders = blotter.open_orders
         ledger_.start_of_session(dt)
+        self._publish(calendar_name, events.SessionStarted(dt))
         assets_we_care_about = positions | open_orders.keys()
         if assets_we_care_about:
             splits = data_portal.get_splits(assets_we_care_about, dt)
             if splits:
                 blotter.process_splits(splits)
                 ledger_.process_splits(splits)
+                self._publish(calendar_name, events.Split(tuple(splits)))
 
     def end_session(self, calendar_name, dt):
         """
@@ -279,7 +298,9 @@ class BrokerService(object):
         assets_to_clear = [asset for asset in position_assets if past_auto_close_date(asset)]
 
         for asset in assets_to_clear:
-            ledger_.close_position(asset, dt, data_portal, self._data_frequency)
+            txn = ledger_.close_position(asset, dt, data_portal, self._data_frequency)
+            if txn is not None:
+                self._publish(calendar_name, events.Expiry(txn))
 
         # Remove open orders for any sids that have reached their auto close
         # date. These orders get processed immediately because otherwise they
@@ -303,6 +324,8 @@ class BrokerService(object):
 
     def _publish(self, calendar_name, event):
         self._sequence += 1
+        self._ledgers[calendar_name].stream_sequence = self._sequence
+
         stream_event = events.StreamEvent(
             self._strategy_id,
             self._sequence,
