@@ -2,11 +2,11 @@
 
 ``RuntimeEndpoint`` is what a runtime does with the phases (``pluto.control.phases``): in the ``account`` phase it applies
 the broker state (fills and last sale prices) it receives on its own topic, in the ``trade`` phase it runs the clock event
-(the strategy's callbacks), which sends the watchlist and the orders back through ``send`` onto ``strategy.watchlist`` and
-``strategy.orders`` (``pluto.control.processes.in_memory.BrokerStub``). It says done in the trade phase when the clock event
-has run and its batch of orders is published: the done carries the number of orders it sent, which the broker side checks
-against what it received. A runtime that sent no batch says so in its done (the controllable always sends one, empty
-when nothing was ordered or when it has ended).
+(the strategy's callbacks), which sends the watchlist and the orders back (``send_watchlist``, ``send_orders``) onto
+``strategy.watchlist`` and ``strategy.orders`` (``pluto.control.processes.in_memory.BrokerStub``). It says done in the
+trade phase when the clock event has run and its batch of orders is published: the done carries the number of orders and
+of batches it sent, which the broker side checks against what it received. A runtime that sent no batch says so in its
+done (the controllable always sends one, empty when nothing was ordered or when it has ended).
 
 The runtime itself (``StrategyStub``, the controllable behind it) is not aware of the bus. In a deployment where the runtime
 is another process it is this object, built there, that subscribes.
@@ -15,6 +15,8 @@ import logbook
 
 from pluto.bus import Bus, Delivery
 from pluto.control import phases
+
+from protos import broker_pb2
 
 log = logbook.Logger('RuntimeEndpoint')
 
@@ -37,13 +39,18 @@ class RuntimeEndpoint(object):
         bus.subscribe(phases.account_topic(self._id), self._on_account)
         bus.subscribe(phases.TRADE.topic, self._on_trade)
 
-    def send(self, topic: str, message) -> None:
-        """What the runtime sends to the controller side in the trade phase: its watchlist (``strategy.watchlist``)
-        and its batch of orders (``strategy.orders``), for the clock event ``message.ts``."""
-        if topic == phases.ORDERS_TOPIC:
-            self._batches += 1
-            self._orders += len(message.orders)
+    def send_orders(self, batch: broker_pb2.OrderBatch) -> None:
+        """The batch of orders of the runtime for the clock event ``batch.ts``, on ``strategy.orders``."""
+        self._batches += 1
+        self._orders += len(batch.orders)
 
+        self._send(phases.ORDERS_TOPIC, batch)
+
+    def send_watchlist(self, watchlist: broker_pb2.WatchList) -> None:
+        """The watchlist of the runtime for the clock event ``watchlist.ts``, on ``strategy.watchlist``."""
+        self._send(phases.WATCHLIST_TOPIC, watchlist)
+
+    def _send(self, topic: str, message: broker_pb2.OrderBatch | broker_pb2.WatchList) -> None:
         self._bus.publish(
             topic,
             message,

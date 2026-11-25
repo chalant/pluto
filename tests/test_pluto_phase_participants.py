@@ -155,7 +155,7 @@ class FakeProcess(object):
             ts = phases.pandas_timestamp(event.timestamp) if self.batch_ts is None else self.batch_ts
             ids = ['order-' + self.process_id] if self.order_ids is None else self.order_ids
 
-            self.manager.runtime(self.process_id).send(phases.ORDERS_TOPIC, order_batch(self.process_id, ts, ids))
+            self.manager.runtime(self.process_id).send_orders(order_batch(self.process_id, ts, ids))
 
 
 class FaultyBus(InMemoryBus):

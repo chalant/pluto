@@ -217,3 +217,6 @@ Counts measured on the same run (`buy_and_hold`, 7,312 clock events, one strateg
   twice (a bus that delivers the batches of a producer twice) abort the run in the submit phase; the run test also compares the
   batches of the dones with the batches published. A runtime that itself sends two batches in a tick is not an error (both reach the
   book, in the order placed).
+- **Typed sends**: `RuntimeEndpoint.send(topic, message)` is replaced by `send_orders(batch: OrderBatch)` and `send_watchlist(watchlist:
+  WatchList)` (the topic is no longer an argument; the batch and order counts are kept in `send_orders`); the in-memory `BrokerStub`
+  and the tests call them; `phases.message_type(message: Message)` is typed.

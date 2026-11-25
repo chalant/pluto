@@ -96,7 +96,7 @@ def codec() -> ProtobufCodec:
     return ProtobufCodec(message_types())
 
 
-def message_type(message) -> str:
+def message_type(message: Message) -> str:
     return message.DESCRIPTOR.name
 
 

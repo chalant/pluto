@@ -1,6 +1,5 @@
 from pluto.finance.broker import broker_stub
 
-from pluto.control import phases
 from pluto.control.controllable import server
 from pluto.control.controllable.utils import factory
 from pluto.control.controllable import simulation_controllable
@@ -64,7 +63,7 @@ class BrokerStub(broker_stub.BrokerStub):
         batch = broker_pb2.OrderBatch()
         batch.ParseFromString(_unchunk(request_iterator))
 
-        self._servicer.runtime(self._session_id).send(phases.ORDERS_TOPIC, batch)
+        self._servicer.runtime(self._session_id).send_orders(batch)
 
     def _cancel_all_orders_for_asset(self, request, metadata):
         return self._servicer.CancelAllOrdersForAsset(
@@ -85,7 +84,7 @@ class BrokerStub(broker_stub.BrokerStub):
         watchlist = broker_pb2.WatchList()
         watchlist.ParseFromString(_unchunk(request))
 
-        self._servicer.runtime(self._session_id).send(phases.WATCHLIST_TOPIC, watchlist)
+        self._servicer.runtime(self._session_id).send_watchlist(watchlist)
 
 
 class InMemoryControllableFactory(factory.ControllableFactory):
