@@ -13,6 +13,8 @@ from pluto.bus import InMemoryBus
 from pluto.coms.utils import conversions
 from pluto.control import phases
 from pluto.control.controller import controller, process_manager
+from pluto.control.processes import in_memory
+from pluto.interface.utils import service_access
 
 from protos import broker_pb2, clock_pb2
 
@@ -228,6 +230,16 @@ class RunTests(unittest.TestCase):
             self.tick()
 
         self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [])
+
+    def test_a_runtime_in_another_process_is_not_supported_yet(self):
+        # PlaceOrders, SetWatchList and Stopped over gRPC are not on the bus: they say so instead of leaving the run
+        # to abort on a missing done
+        self.add_process('aaa')
+        context = in_memory.FakeContext(service_access._metadata + (('session_id', 'aaa'),))
+
+        for name in ('PlaceOrders', 'SetWatchList', 'Stopped'):
+            with self.assertRaisesRegex(NotImplementedError, r'{}: .*networked bus'.format(name)):
+                getattr(self.manager, name)(iter(()), context)
 
 
 if __name__ == '__main__':

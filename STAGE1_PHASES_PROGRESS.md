@@ -115,9 +115,10 @@ order id and phase test files, the test command is `pytest tests`.
 - Signals of one tick run one after the other (book, metrics per signal), which keeps today's interleaving for several calendars
   (not exercised through the controller: every run in the suite has one calendar, XNYS); multi-calendar decision schedules need the
   phases per calendar to be rethought (stage 1 stays on today's calendar path).
-- The runtime must run synchronously (`running_behavior.Blocking`); a `NonBlocking` runtime in process would publish from another
-  thread (the in-memory bus is single-threaded) and its trade done would come late or never [INFERENCE: not run]; a missing done
-  aborts the run.
+- Only the in-process runtime that runs synchronously (`running_behavior.Blocking`) is supported; a `NonBlocking` runtime in process
+  would publish from another thread (the in-memory bus is single-threaded) and its batch would come after its done [INFERENCE: not
+  run]; a runtime that sent no batch when its handler returned aborts the run. Out-of-process runtimes need the networked bus
+  (a later stage). Direct (non-bus) calls left: see the list of M1 under "Review fixes".
 - The controller's behavior still reads `broker.get_positions` to price them, and the metrics tracker reads the ledger object of the
   book: two direct reads that a distributed deployment would have to replace (stream fold, price request).
 - `StrategyManager.add_strategy` builds the runtime's endpoint (the in-process wiring); the registry of components of a distributed
@@ -152,3 +153,14 @@ Before: 360 tests passed (341 of `origin/master` and 19 of this branch), 116 s. 
   `publish_done(bus, phase, ts, participant, orders=0, error='')`; the participants' work returns nothing; `BrokerParticipant`
   no longer follows the book's stream (it only did so to fill the dones); `PhaseDriver.drive` returns nothing (the controller
   never read what it returned).
+- **M1 (out-of-process and `NonBlocking` runtimes)**: confirmed: with the bus only the in-process `Blocking` runtime works, the other
+  cases ended in a "no done" abort. `StrategyManager.PlaceOrders`, `SetWatchList` and `Stopped` (gRPC) raise `NotImplementedError`
+  saying that out-of-process runtimes need the networked bus; `receive_orders` / `receive_watchlist` are the bodies of the bus
+  handlers only. Deleted (nothing read them, checked with grep): `_active_processes` (and its `Stopped` decrement), `_watchlist_counter`,
+  `_watchlist_complete`, both locks (the bus handlers run on one thread; they guarded the gRPC threads of the barrier),
+  `get_watchlist` (it waited for the barrier: replaced by the plain `watchlist` property, the assets asked for in the tick; no
+  caller yet, the behavior hook `update_watchlist` is where it belongs) and the session argument of `receive_watchlist`.
+  `dev/README.md` states stage 1 supports only the `Blocking` runtime and lists the direct (non-bus) calls: positions read for
+  pricing, the metrics tracker reading the ledger object, the controller reading `session_ids`, behavior hooks receiving the manager,
+  the broker stub reaching into the servicer (cancel stubs, the runtime's endpoint), `add_strategy` building the endpoint.
+  `session_ids` keeps its name: `service_access.per_session` reads it too.

@@ -68,11 +68,17 @@ Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `pha
 existing `ClockEvent`, `BrokerState`, `OrderBatch`, `WatchList`), so a `SerializingBus(inner, phases.codec())` carries
 a whole run through bytes with identical results (`tests/test_pluto_phases_run.py`). A participant's failure is caught
 where it happens, logged with its traceback and reported in its `done` (the bus redelivers a handler that raises, and a
-phase is not idempotent). What stays direct, in process: the controller's behavior reads the book's positions to
-price them, and the metrics tracker reads the ledger object.
+phase is not idempotent).
 
-The runtimes must run their clock event synchronously (`running_behavior.Blocking`): their batch must be on the bus when
-the trade phase ends, which is what the in-memory stub does. The bus logs every message (retention is open in
+Stage 1 supports only the in-process runtime that runs its clock event synchronously (`running_behavior.Blocking`): its batch
+of orders is on the bus when its handler returns, and the `done` of the trade phase says how many orders it sent. A
+`NonBlocking` runtime would publish from another thread, and a runtime in another process needs the networked bus (a later
+stage): the gRPC `PlaceOrders`, `SetWatchList` and `Stopped` of `StrategyManager` raise `NotImplementedError` (like the cancel
+methods), and a runtime that sent no batch when its handler returned aborts the run. What still does not go through the bus,
+all in process: the controller's behavior reads the book's positions (`get_positions`) to price them; the metrics tracker reads
+the ledger object of the book; the controller reads `strategy_manager.session_ids`; the behavior hooks receive the manager; the
+in-memory broker stub reaches into the servicer (`StrategyManager`) for the cancel stubs and for the runtime's endpoint;
+`StrategyManager.add_strategy` builds the runtime's endpoint. The bus logs every message (retention is open in
 `STAGE1_BUS_PROGRESS.md`).
 
 ## Strategy scripts (interim convention)
