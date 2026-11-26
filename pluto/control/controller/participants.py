@@ -67,7 +67,8 @@ class BrokerParticipant(object):
 
     def _book(self, event) -> None:
         """The writes of the book for one signal, in the order the controller made them. The book is brought up to
-        date (``revalue``) where the metrics tracker will read it: it must be the last write of the phase."""
+        date (``revalue``) where the metrics tracker will read it, and the stream is told that it may read
+        (``observe``): these are the last writes of the phase."""
         broker = self._broker
         signal = event.signal
         calendar_name = signal.calendar_name
@@ -87,10 +88,12 @@ class BrokerParticipant(object):
         elif evt == MINUTE_END:
             broker.sync_last_sale_prices(calendar_name, prices, cts)
             broker.revalue(calendar_name)
+            broker.observe(calendar_name, evt, cts)
 
         elif evt == SESSION_START:
             broker.start_session(calendar_name, cts)
             broker.revalue(calendar_name)
+            broker.observe(calendar_name, evt, cts)
 
         elif evt == BEFORE_TRADING_START:
             broker.sync_last_sale_prices(calendar_name, prices, cts)
@@ -101,6 +104,7 @@ class BrokerParticipant(object):
 
             # todo: we need to ingest data befor calling this...
             broker.revalue(calendar_name)
+            broker.observe(calendar_name, evt, cts)
 
     def _on_account(self, delivery: Delivery) -> None:
         envelope = delivery.envelope

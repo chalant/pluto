@@ -24,7 +24,9 @@ where the metrics tracker is about to read the ledger and before the start of a
 session; it publishes ``Revalued`` when it had something to do. Nothing in the
 service revalues behind the stream's back, and the stream carries every
 revaluation the book made, as long as readers of a ledger call ``revalue``
-first (``get_ledger`` is for reading only).
+first (``get_ledger`` is for reading only). ``observe`` then tells the stream that
+a reader may read: the end of the book's work for SESSION_START, MINUTE_END and
+SESSION_END signals, where the metrics tracker reads.
 
 The order of the writes inside a call is the order of the simulation of
 Zipline, and the floating point sums depend on it: all the transactions of a
@@ -159,6 +161,14 @@ class BrokerService(object):
         happen."""
         if self._ledgers[calendar_name].revalue():
             self._publish(calendar_name, events.Revalued())
+
+    def observe(self, calendar_name, clock_event, dt):
+        """Publishes ``Observed``: the book of the calendar is complete for
+        the clock event (``protos.clock_pb2.EventType``) of the signal at
+        ``dt``, so a consumer of the stream may read its copy of the book now.
+        It is the last call of the book's work for the signal, after the
+        ``revalue`` that brings the portfolio up to date, and writes nothing."""
+        self._publish(calendar_name, events.Observed(clock_event, dt))
 
     def submit(self, orders):
         """Orders relayed by the strategies, in the order they were placed. A

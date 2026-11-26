@@ -103,8 +103,20 @@ class Revalued:
     state of the book."""
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Observed:
+    """An observation point: the book of the calendar is complete for the clock
+    event of the signal (the last write of its phase, the portfolio revalued
+    where a reader is about to read it), so a reader of the book may read now.
+    ``clock_event`` is the clock event (``protos.clock_pb2.EventType``: SESSION_START,
+    MINUTE_END or SESSION_END) and ``dt`` the time of the calendar's signal.
+    It changes nothing in the book: the fold only advances past it."""
+    clock_event: int
+    dt: pd.Timestamp
+
+
 type Event = (OrderAccepted | OrderCancelled | OrderExpired | OrderRejected | OrderTriggered | Fill
-              | Commission | PricesMarked | Dividends | SessionStarted | Split | Expiry | Revalued)
+              | Commission | PricesMarked | Dividends | SessionStarted | Split | Expiry | Revalued | Observed)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

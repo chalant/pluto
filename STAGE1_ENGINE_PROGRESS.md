@@ -113,8 +113,8 @@ Orders in events are snapshots (`copy.copy`).
 Why `PricesMarked`, `SessionStarted`, `OrderTriggered`, `Revalued` exist (found while making the fold exact):
 - `Ledger._update_portfolio` is lazy: every read of `portfolio` after a change compounds `returns` and `pnl`, so where the
   reads happened changes the last digits (`RevaluationTests` has prices where it does). `BrokerService.revalue` (explicit, see
-  Review fixes) publishes `Revalued` at each real recomputation; the fold calls `Ledger.revalue()` there. On the 28 examples and
-  scenarios (daily frequency) dropping `Revalued` does not change the state (measured: all 28 still equal), only the unit test
+  Review fixes) publishes `Revalued` at each real recomputation; the fold calls `Ledger.revalue()` there. On the 26 examples and
+  scenarios (daily frequency) dropping `Revalued` does not change the state (measured: all 26 still equal), only the unit test
   with three price steps shows it; minute frequency has a read per minute.
 - the engine's ledger holds the blotter's live `Order` objects (so an order the market changes without filling, a stop or
   limit reached, shows in the ledger). The fold keeps one live order per id (`Replica.live_order`, updated in place by each
@@ -127,7 +127,7 @@ written by the service (`_publish`) and the fold, saved by `get_state` (new fiel
 `STATE_VERSION` is now 2; version 1 states are still read (sequence 0), version 0 and above 2 are refused with the same message
 shape (`format version N, expected 1 to 2`).
 
-Test (`tests/test_pluto_broker_service.py`): for each of the 5 examples and 23 scenarios the run is made with a recording
+Test (`tests/test_pluto_broker_service.py`): for each of the 5 examples and 21 scenarios the run is made with a recording
 service; the state serialised by `get_state` of the engine's ledger equals, byte for byte, the state of the folded ledger;
 also `orders()`, `transactions()`, `orders(dt)`, the saved sequence, ids numbered 1..n after the process id, no rejection,
 folding twice. Unit tests: duplicate, cancel, snapshots, sequence, gap, revaluation, trigger, state versions.
@@ -220,7 +220,7 @@ file), fresh env (`dev/setup_env.sh`, uv, build_ext): the seven files 71 passed 
 43 broker service tests: 120 passed (82 s). The same 120 under `PYTHONHASHSEED` 1 to 10: 120 passed each. Baseline of
 `origin/master` before the work: the seven files 71 passed (64 s).
 Measured: no result differs (the exact oracle and the stored expected results pass unchanged); the fold equals the engine's
-ledger state byte for byte on the 5 examples and 23 scenarios; a fold that skips `PricesMarked` or `Commission` fails the test.
+ledger state byte for byte on the 5 examples and 21 scenarios; a fold that skips `PricesMarked` or `Commission` fails the test.
 Not exercised by any daily run: `Revalued` mattering (unit test only), `OrderTriggered`, `OrderRejected`.
 
 After the review fixes: fresh clone at `de84e260` (code identical to the final head), fresh env: the seven files 71 passed

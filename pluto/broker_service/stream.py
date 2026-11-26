@@ -120,5 +120,8 @@ def _apply(replica, ledger_, event):
             ledger_.process_transaction(transaction)
         case events.Revalued():
             ledger_.revalue()
+        case events.Observed():
+            # a point where a reader may read: the book does not change
+            pass
         case _:
             raise TypeError('not an event of a book: {!r}'.format(event))

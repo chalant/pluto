@@ -58,6 +58,10 @@ class FakeBroker(object):
     def revalue(self, calendar_name):
         self.calls.append(('revalue', calendar_name))
 
+    def observe(self, calendar_name, clock_event, dt):
+        # publishes a marker on the stream of the book, which the fake does not have: not a write
+        pass
+
     def start_session(self, calendar_name, dt):
         self.calls.append(('start_session', calendar_name, dt))
 
