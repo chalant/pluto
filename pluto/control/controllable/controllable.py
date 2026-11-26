@@ -538,6 +538,9 @@ class Controllable(ABC):
 
     def minute_end(self, dt):
         """Returns whether the minute was the last of the run."""
+        # revalued here, as the perf packet of the end of the minute did when it read the portfolio (see session_end)
+        self._metrics_tracker.ledger.revalue()
+
         return dt == self._end_dt
 
     def session_start(self, dt):
@@ -793,6 +796,12 @@ class Controllable(ABC):
         if self._data_frequency == 'daily':
             blotter.execute_daily_cancel_policy(SESSION_END)
         algo.validate_account_controls()
+
+        # the runtime ledger is dirty after every account update, and what the strategy reads of its portfolio
+        # (returns and pnl compound at each revaluation) depends on where it is revalued: here, as the perf
+        # packet of the end of the session did when it read the portfolio (zipline's handle_market_close does too)
+        metrics_tracker.ledger.revalue()
+
         return dt == self._last_session_close
 
     def get_state(self, dt):

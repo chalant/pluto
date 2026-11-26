@@ -153,3 +153,31 @@ and the same under `PYTHONHASHSEED=1`: **409 passed, 6 subtests passed** (134.9 
 passed, 6 subtests passed (120 s). The seven original test files (`test_pluto_examples`, `_zipline_oracle`, `_isolation`,
 `_assets`, `_scenarios`, `_state`, `_upstream_fixes`) have an empty diff against `6a6941d6`; Pluto equals Zipline at rtol=0,
 atol=0 (the oracle and scenario tests pass unchanged, through the stream consumer).
+
+## Review fixes (read-only review of the branch; no High issue)
+
+### 1. The runtime ledger is revalued again at the end of a session and of a minute
+
+The deleted `handle_market_close` / `handle_minute_close` read `ledger.portfolio`, which revalued the runtime's ledger
+(dirty after every account update). Order in the old `session_end`: expired assets, the daily cancel policy, the account
+controls, then the perf packet (`git show 6a6941d6:pluto/finance/metrics/tracker.py`: `first_session`, then the metrics loop,
+the first read of the portfolio revalues). Restored: `Controllable.session_end` calls `self._metrics_tracker.ledger.revalue()`
+after `algo.validate_account_controls()`, and `minute_end` calls it, as the packet did.
+
+Tests (`tests/test_pluto_runtime_portfolio.py`, strategy in `tests/runtime_portfolio_strategy.py`, reference in
+`tests/resources/runtime_portfolio_records.json`):
+- `test_the_runtime_ledger_is_up_to_date_at_the_end_of_a_session`: in a real run (60 sessions), the runtime ledger is not dirty
+  after any `session_end`. **Fails without the fix** (checked by reverting the change).
+- `MinuteEndTests.test_minute_end_revalues_the_runtime_ledger`: `minute_end` on a dirty ledger leaves it clean (the bundle runs
+  are daily, so a unit test with a real `Ledger`). **Fails without the fix** (checked).
+- `test_the_strategy_sees_the_portfolio_it_saw_before`: the strategy reads `context.portfolio` / `context.account` every fourth
+  day (the days in between are revalued by the runtime itself) and the 15 records (returns, pnl, portfolio value, cash,
+  positions value, leverages) equal bit for bit the ones captured on `6a6941d6` (the code path before step 3, run in a scratch
+  tree built from `git archive`). Honest limit: **this one does not fail without the fix** (the same records with and without
+  it): in daily runs `Ledger.start_of_session` reads the portfolio at every session start, and the recompute at the end of the
+  session leaves the same state, so the strategy-visible sequence does not change; the revalue point matters for the dirty state
+  and for minute runs, which no test bundle run covers. It guards the strategy-visible values of step 3 as a whole.
+- Not used as reference: Zipline. In a first version of the strategy (reading every day) the Pluto runtime's records differed
+  from plain Zipline's from the second record on (pnl -4.0 in Pluto, -4.0000003264 in Zipline), and Pluto's records are the
+  same on master (they equal the `6a6941d6` run): a difference of the runtime's view that exists on master; not looked into
+  (open item).
