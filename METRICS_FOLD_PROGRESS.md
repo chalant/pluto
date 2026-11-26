@@ -207,3 +207,10 @@ is created and nothing writes to it); `pluto/api.pyi` `record()`: recorded varia
   other reference in `pluto/`, `tests/`, `dev/`); `controllable_pb2.py` and `controllable_pb2_grpc.py` regenerated with the
   environment's grpcio-tools 1.85.3 as `dev/README.md` describes (`-I. --python_out=. --grpc_python_out=.`): the diff is the two
   RPCs only. `interface.proto` / `monitor.proto` (the `Monitor` service) are untouched. `RunSetup.clear_perf` kept.
+
+### Verification after the review fixes
+
+Fresh clone of branch `metrics-fold` at `9a806eec` (code identical to the final head: the later commit changes only this file),
+fresh environment, `pytest -p no:randomly -q tests`: **415 passed, 6 subtests passed** (142.5 s), and under `PYTHONHASHSEED=1`:
+**415 passed, 6 subtests passed** (141.9 s) (409 before the fixes: +3 in `test_pluto_runtime_portfolio.py`, +1 duplicate event, +2
+harness). The seven original test files have an empty diff against `6a6941d6`.
