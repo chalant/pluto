@@ -306,6 +306,10 @@ class StrategyTester(object):
                 metrics)):
             pass
 
+        # the controller checks it after the book phase of each tick: an error of the last tick's submit phase is not
+        # raised there
+        metrics.raise_if_failed()
+
         return tracker
 
 

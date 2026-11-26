@@ -181,3 +181,13 @@ Tests (`tests/test_pluto_runtime_portfolio.py`, strategy in `tests/runtime_portf
   from plain Zipline's from the second record on (pnl -4.0 in Pluto, -4.0000003264 in Zipline), and Pluto's records are the
   same on master (they equal the `6a6941d6` run): a difference of the runtime's view that exists on master; not looked into
   (open item).
+
+### 2, 3, 6. The consumer and the harness
+
+- `StreamMetrics.__call__` returns early for an event whose sequence is not above the copy's (`replica.sequence`): an event
+  delivered twice was folded once (the fold skips it) but its `Observed` read the tracker twice. Test:
+  `StreamMetricsUnitTests.test_an_event_delivered_twice_is_folded_and_read_once` (fails without the change: two reads).
+- `StrategyTester.run` calls `metrics.raise_if_failed()` after the loop (an error of the last tick's submit phase, after the
+  controller's check of that tick, was never raised). Tests: `HarnessTests` (a loop without ticks and a consumer that failed:
+  `MetricsError`; fails without the change; and a run without error returns the tracker).
+- `StreamMetrics.replica` is documented as for tests, to be read at observation points only.

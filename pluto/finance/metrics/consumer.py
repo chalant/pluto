@@ -59,6 +59,8 @@ class StreamMetrics(object):
 
     @property
     def replica(self) -> stream.Replica:
+        """The consumer's copy of the book, for tests: the consumer writes it (the fold) and reads it at observation
+        points only; anything else that reads it may revalue it where the book did not, and change the results."""
         return self._replica
 
     def raise_if_failed(self) -> None:
@@ -72,6 +74,10 @@ class StreamMetrics(object):
 
     def __call__(self, stream_event: events.StreamEvent) -> None:
         if self.error is not None:
+            return
+
+        if stream_event.sequence <= self._replica.sequence:
+            # delivered again (at-least-once delivery): already folded, and its observation point already read
             return
 
         try:

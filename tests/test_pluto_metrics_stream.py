@@ -12,6 +12,7 @@ Before the metrics phase was deleted, the frames of the consumer and of the phas
 were asserted identical on all 26 runs, rtol=0, atol=0 (see METRICS_FOLD_PROGRESS.md).
 """
 import itertools
+import types
 import unittest
 from unittest import mock
 
@@ -337,6 +338,54 @@ class StreamMetricsUnitTests(unittest.TestCase):
 
         self.assertIsInstance(consumer.error, ValueError)
         self.assertEqual(consumer.error_sequence, 2)
+
+    def test_an_event_delivered_twice_is_folded_and_read_once(self):
+        tracker = _RecordingTracker()
+        consumer = metrics_consumer.StreamMetrics(START, CAPITAL, tracker)
+        observed = events.StreamEvent('p', 1, 'XNYS', events.Observed(SESSION_END, DT))
+
+        consumer(observed)
+        consumer(observed)
+
+        self.assertIsNone(consumer.error)
+        self.assertEqual([(name, dt) for name, dt, _, _ in tracker.reads], [('end_of_session', DT)])
+        self.assertEqual(consumer.replica.sequence, 1)
+
+        # the next event goes on from there
+        consumer(events.StreamEvent('p', 2, 'XNYS', events.Observed(MINUTE_END, DT)))
+
+        self.assertEqual([name for name, _, _, _ in tracker.reads], ['end_of_session', 'end_of_bar'])
+
+
+class _FailedConsumer(metrics_consumer.StreamMetrics):
+    """A consumer that failed at its last event."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.error = ValueError('the fold failed')
+        self.error_sequence = 9
+
+
+class HarnessTests(unittest.TestCase):
+    def _run(self, consumer_class):
+        broker = types.SimpleNamespace(start_dt=START, capital=CAPITAL, subscribe=lambda callback: None)
+        manager = types.SimpleNamespace(broker=broker)
+        # a loop without ticks: the controller is never driven, so nothing but the check after the loop can raise
+        loop = types.SimpleNamespace(start=lambda process: iter(()))
+        benchmark_source = types.SimpleNamespace(daily_returns_series=pd.Series([0.0, 0.0]))
+
+        with mock.patch.object(metrics_consumer, 'StreamMetrics', consumer_class), \
+                mock.patch.object(test_utils.controller, 'Controller', lambda *args: None):
+            return test_utils.StrategyTester(None, None, 'strategy', manager).run(
+                loop, benchmark_source, [START, DT], None, None, CAPITAL, None)
+
+    def test_an_error_of_the_metrics_consumer_after_the_last_tick_is_raised(self):
+        # the controller checks the consumer after the book phase of each tick: the last tick's submit phase is not covered
+        with self.assertRaisesRegex(metrics_consumer.MetricsError, 'failed at event 9 .*ValueError: the fold failed'):
+            self._run(_FailedConsumer)
+
+    def test_a_run_without_error_returns_the_tracker(self):
+        self.assertIsInstance(self._run(metrics_consumer.StreamMetrics), test_utils.TestMetricsTracker)
 
 
 if __name__ == '__main__':
