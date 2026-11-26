@@ -3,8 +3,6 @@
 A simple Pipeline algorithm that longs the top 3 stocks by RSI and shorts
 the bottom 3 each day.
 """
-import typing
-
 from pluto.api import *
 from pluto.pipeline import Pipeline
 from pluto.pipeline.factors import RSI

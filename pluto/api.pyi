@@ -1,5 +1,4 @@
 import collections
-import typing
 
 from zipline.assets import Asset, Equity, Future
 from zipline.assets.futures import FutureChain

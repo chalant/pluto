@@ -57,9 +57,6 @@ class SimulationControllerBehavior(AbstractControllerBehavior):
         return res
 
     # in simulation all the data is already in the bundle: nothing to ingest.
-    def update_data(self, ts, manager, signals):
-        pass
-
     def ingest_all_data(self, ts, manager, signals):
         pass
 

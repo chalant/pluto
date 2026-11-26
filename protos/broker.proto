@@ -15,7 +15,6 @@ service Broker {
     rpc Stopped(google.protobuf.Empty) returns (google.protobuf.Empty);
     rpc CancelOrder (CancelRequest) returns (google.protobuf.Empty);
     rpc CancelAllOrdersForAsset (Asset) returns (google.protobuf.Empty);
-//    rpc ExecuteCancelPolicy (CancelEvent) returns (google.protobuf.Empty);
 }
 
 message AssetPrice {
