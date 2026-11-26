@@ -55,8 +55,8 @@ class BrokerParticipant(object):
 
     def _book(self, event) -> None:
         """The writes of the book for one signal, in the order the controller made them. The book is brought up to
-        date (``revalue``) where the metrics tracker will read it, and the stream is told that it may read
-        (``observe``): these are the last writes of the phase."""
+        date (``revalue``) where the metrics are read (by the consumer of the stream, from its own copy), and the stream
+        is told that it may read (``observe``): these are the last calls of the phase."""
         broker = self._broker
         signal = event.signal
         calendar_name = signal.calendar_name

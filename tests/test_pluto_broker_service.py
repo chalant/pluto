@@ -62,7 +62,7 @@ class _RecordingBrokerService(service.BrokerService):
 
     def end_session(self, calendar_name, dt):
         super().end_session(calendar_name, dt)
-        # the controller revalues here, before the metrics tracker reads
+        # the controller revalues here, before a reader of the book (the metrics consumer) reads
         self.revalue(calendar_name)
         self._compare(calendar_name, dt)
 

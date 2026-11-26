@@ -91,8 +91,9 @@ There is no strategy database. A run's strategy script is the file
 `<root>/strategies/<strategy_id>.py`: `ControllableService.Initialize`
 (`pluto/control/controllable/server.py`) reads it, and the run's settings live in a
 `StrategySetup` object (`pluto/strategies/setup.py`: `look_back`, `cancel_policy`,
-`shorting`, `asset_classes`, `data_frequency`, `fractional`). `<root>/strategies/states` and
-`<root>/strategies/performance` hold the saved state and the performance packets.
+`shorting`, `asset_classes`, `data_frequency`, `fractional`). `<root>/strategies/states` holds the saved state;
+`<root>/strategies/performance` is created with the layout and nothing writes to it any more (the runtime's performance
+packets are gone: the metrics are computed from the stream of the book).
 `pluto.setup.directory_setup.create_directory(root)` creates the layout, and
 `directory_setup.add_strategy_script(root_dir, name, source_path)` copies a script into place
 (`FileExistsError` if the file exists); `TestClient.add_strategy` and `install-examples` use

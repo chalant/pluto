@@ -191,3 +191,9 @@ Tests (`tests/test_pluto_runtime_portfolio.py`, strategy in `tests/runtime_portf
   controller's check of that tick, was never raised). Tests: `HarnessTests` (a loop without ticks and a consumer that failed:
   `MetricsError`; fails without the change; and a run without error returns the tracker).
 - `StreamMetrics.replica` is documented as for tests, to be read at observation points only.
+
+### 4. Stale text
+
+Docstrings of `BrokerService` (module, `get_ledger`, `revalue`) and of `BrokerParticipant._book` no longer say that the metrics
+tracker reads the ledger; the comment at `tests/test_pluto_broker_service.py:65`; `dev/README.md` (the `performance` directory
+is created and nothing writes to it); `pluto/api.pyi` `record()`: recorded variables are not emitted yet. Text only.
