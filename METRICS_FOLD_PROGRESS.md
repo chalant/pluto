@@ -144,3 +144,12 @@ A metrics consumer error never interrupts a book write (implemented in the consu
 - Live behaviour of a consumer error (see above) is a target only.
 - After the clock is exhausted the controller keeps publishing the last SESSION_END signal (4 extra book phases on
   `buy_and_hold`); the harness tracker ignores them past the number of sessions.
+
+## Verification
+
+Fresh clone of branch `metrics-fold` at `c21cf93d` (code identical to the final head: the later commit changes only this
+file), fresh environment (`dev/setup_env.sh`), `pytest -p no:randomly -q tests`: **409 passed, 6 subtests passed** (140.7 s),
+and the same under `PYTHONHASHSEED=1`: **409 passed, 6 subtests passed** (134.9 s). Baseline `origin/master` (`6a6941d6`): 374
+passed, 6 subtests passed (120 s). The seven original test files (`test_pluto_examples`, `_zipline_oracle`, `_isolation`,
+`_assets`, `_scenarios`, `_state`, `_upstream_fixes`) have an empty diff against `6a6941d6`; Pluto equals Zipline at rtol=0,
+atol=0 (the oracle and scenario tests pass unchanged, through the stream consumer).
