@@ -67,6 +67,8 @@ class BrokerService(object):
         data_frequency: str
         """
         self._asset_finder = asset_finder
+        self._start_dt = start_dt
+        self._capital = capital
         self._data_frequency = data_frequency
 
         # one book: the calendars' ledgers share the portfolio, the
@@ -83,6 +85,16 @@ class BrokerService(object):
         self._subscribers = []
         self._pending = collections.deque()
         self._delivering = False
+
+    @property
+    def start_dt(self):
+        """Start of the book (a consumer of the stream rebuilds the book from it)."""
+        return self._start_dt
+
+    @property
+    def capital(self):
+        """Starting cash of the book."""
+        return self._capital
 
     def attach_market(self, market):
         """The market that fills the open orders.

@@ -11,14 +11,14 @@ controller called its components before the bus:
 phase       rank  topic            published   subscribers                 done
 ==========  ====  ===============  ==========  ==========================  ===========================================
 book        10    phase.book       per signal  broker                      broker
-metrics     20    phase.metrics    per signal  metrics                     metrics
 account     30    phase.account    per tick    broker, then the runtimes   broker, each runtime
 trade       40    phase.trade      per tick    the runtimes                each runtime: its orders and batches sent
 submit      50    phase.submit     per tick    broker                      broker
 ==========  ====  ===============  ==========  ==========================  ===========================================
 
-A signal is one calendar's event of the tick: its two phases run one after the other for each signal, in the order of the
-signals (the calendars' ledgers share a portfolio, so the writes of one signal and the reads of the next do not commute).
+A signal is one calendar's event of the tick: the book phase runs for each signal, one after the other, in the order of the
+signals (the calendars' ledgers share a portfolio, so the writes of one signal and those of the next do not commute).
+The metrics are not a phase: a consumer of the broker service's stream computes them (``pluto.finance.metrics.consumer``).
 
 Messages of the phases carry ``logical_ts`` = the clock time of the tick in nanoseconds and ``phase`` = the rank above;
 a ``done`` has the rank of its phase plus ``DONE_AFTER``. Data between participants travels on their own topics
@@ -57,7 +57,6 @@ class Phase(NamedTuple):
 
 
 BOOK = Phase('book', 10)
-METRICS = Phase('metrics', 20)
 ACCOUNT = Phase('account', 30)
 TRADE = Phase('trade', 40)
 SUBMIT = Phase('submit', 50)
@@ -71,7 +70,6 @@ ORDERS_TOPIC = 'strategy.orders'
 
 CONTROLLER_ID = 'controller'
 BROKER_ID = 'broker'
-METRICS_ID = 'metrics'
 
 
 def account_topic(process_id: str) -> str:

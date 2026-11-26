@@ -2,8 +2,7 @@
 
 ``StreamMetrics`` is a subscriber of the broker service (``broker.subscribe(consumer)``): it folds every event into
 its own copy of the book (``stream.Replica``) and, at each observation point (``events.Observed``: the book is
-complete for a SESSION_START, MINUTE_END or SESSION_END signal), calls the tracker with the ledger of that copy, as the
-metrics phase calls it with the ledger of the book.
+complete for a SESSION_START, MINUTE_END or SESSION_END signal), calls the tracker with the ledger of that copy.
 
 The copy is written by the fold only and read at observation points only: the portfolio is revalued lazily and each
 revaluation compounds returns and pnl, so where the copy revalues (``events.Revalued``, replayed by the fold) and
@@ -11,8 +10,8 @@ where it is read is part of the result; a reader that reads at other points chan
 
 A failure of the tracker (or of the fold) must not reach the book's write that published the event: it is recorded in
 ``error`` (with ``error_sequence``, the sequence number of the event being handled) and the consumer ignores the
-events that follow, since its copy of the book is no longer known to be right. What a run does with a recorded error
-is not decided here.
+events that follow, since its copy of the book is no longer known to be right. What a run does with it is the run's
+policy: a simulated run stops (the controller calls ``raise_if_failed`` after the book phase of each tick).
 """
 from typing import Protocol
 
@@ -24,6 +23,10 @@ from protos.clock_pb2 import (
     MINUTE_END,
     SESSION_END,
     SESSION_START)
+
+
+class MetricsError(RuntimeError):
+    """The metrics consumer of a book failed (see ``StreamMetrics.error``)."""
 
 
 class Tracker(Protocol):
@@ -57,6 +60,15 @@ class StreamMetrics(object):
     @property
     def replica(self) -> stream.Replica:
         return self._replica
+
+    def raise_if_failed(self) -> None:
+        """Raises ``MetricsError`` (from the error that was recorded) if the consumer failed."""
+        error = self.error
+
+        if error is not None:
+            raise MetricsError(
+                'the metrics consumer failed at event {} of the stream of the book: {}: {}'.format(
+                    self.error_sequence, type(error).__name__, error)) from error
 
     def __call__(self, stream_event: events.StreamEvent) -> None:
         if self.error is not None:

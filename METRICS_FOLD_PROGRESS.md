@@ -77,10 +77,70 @@ Kept, and why:
 Measured: full suite on the tree after step 3: **407 passed, 6 subtests passed** (374 on master + the 33 tests of
 `test_pluto_metrics_stream.py`); the equality files, state and isolation: 33 passed.
 
+## Step 2: the harness reads the stream, the metrics phase is gone
+
+Done (commit "Metrics are a consumer of the stream: delete the metrics phase").
+
+- `StrategyTester.run` (`pluto/test_utils/test_utils.py`) builds `TestMetricsTracker`, a `StreamMetrics` consumer over it
+  (`BrokerService.start_dt` / `capital` are now read-only properties of the service) subscribed to `manager.broker`, and hands the
+  consumer to the controller. `_run(...).frame()` of the original tests is unchanged: the frames now come from the stream.
+- `Controller(strategy_manager, market, behavior, metrics=None)`: no `metrics_tracker` parameter, no `METRICS` drive. After the
+  book phase of each tick (all signals) it calls `metrics.raise_if_failed()`: `consumer.MetricsError`
+  ("the metrics consumer failed at event N of the stream of the book: ExcType: message", `__cause__` = the tracker's exception).
+- Deleted: `phases.METRICS`, `phases.METRICS_ID` (the ranks of the other phases are unchanged: 10, 30, 40, 50),
+  `participants.MetricsParticipant`, `participants.MetricsTracker` (the consumer has its own `Tracker` protocol),
+  the controller's direct read of the ledger (`get_ledger` has no production caller now; it stays for
+  `tests/test_pluto_broker_service.py`).
+- Tests of the deleted phase, rewritten (the original equality files are untouched). Every removed or changed assertion:
+  - `tests/test_pluto_phase_participants.py`: `FakeTracker` removed; `FakeBroker.observe` now records `('observe', calendar,
+    clock_event, dt)`; `RunTests.setUp` builds `Controller(manager, None, FakeBehavior(), consumer)` with a real
+    `StreamMetrics`; `test_a_tick_with_two_signals_interleaves_the_book_and_the_metrics_per_signal` is now
+    `..._runs_the_book_phase_per_signal` and expects `('observe','XNYS',MINUTE_END,TS)` where it expected
+    `('end_of_bar','XNYS',TS)` and `('observe','XLON',SESSION_END,TS)` where it expected `('end_of_session','XLON',TS)`;
+    `ParticipantTests` has no metrics participant and `run_signal` drives the book phase only; in
+    `test_the_calls_of_each_clock_event` the tracker reads `end_of_bar`, `start_of_session`, `end_of_session` of MINUTE_END,
+    SESSION_START, SESSION_END are replaced by the `observe` call of the same events (the other three events are unchanged).
+    New: `test_a_failed_metrics_consumer_stops_the_run_after_the_book_phase_of_the_tick` (the book calls are all there, the
+    strategy did not run, nothing submitted).
+  - `tests/test_pluto_phases.py`: `test_dones_of_a_phase_do_not_leak_into_the_next` drives `ACCOUNT` where it drove `METRICS`
+    (same assertion); `test_phases_are_in_the_order_of_the_calls` has no `METRICS` in its list (same assertions: ranks
+    increasing, a gap above `DONE_AFTER`). `test_nobody_listening_aborts` still names participants `'metrics', 'broker'`: they
+    are only labels there, left as they were.
+  - `tests/test_pluto_phases_run.py` `test_what_a_run_publishes`: removed `book count == metrics count` and `metrics done count ==
+    metrics count`; added: no topic of the run has `metrics` in its name.
+  - `tests/test_pluto_metrics_stream.py` (mine, from step 1): the 26 "equal to the metrics phase's frame" tests became "computed
+    from the whole stream" tests (no gap, the consumer's copy has the book's saved state); the old path no longer exists. The
+    frames are still compared with Zipline and with the stored results by the original files, which now run through the
+    consumer. Kept: the extra-read negative test, the observation point test, the unit tests. New: a failing tracker mid-run
+    stops the run at its tick with `MetricsError`, the book complete.
+
+Measured on one `buy_and_hold` run (plain `InMemoryBus`, `exp/measure.py` counting `publish` and the deliveries returned by
+`run_until_idle`): master 85,968 messages / 93,280 deliveries (matches the figures of `STAGE1_PHASES_PROGRESS.md`); after step
+2 **75,888 messages / 83,200 deliveries** (-10,080 each: the 5,040 `phase.metrics` events and their 5,040 dones, 11.7 % of the
+messages). The book phase publishes the marker as an event of the stream (a callback, not a bus message).
+
+Measured: full suite on the tree after step 2: **409 passed, 6 subtests passed** (374 on master; +34 tests in
+`test_pluto_metrics_stream.py`, +1 in `test_pluto_phase_participants.py`).
+
 ## Failure policy of the metrics consumer (owner decision, 2026-11-26)
 
 A metrics consumer error never interrupts a book write (implemented in the consumer). Then:
-- **simulated run (backtest): the run stops at the end of the tick with a clear metrics error** (implemented in step 2);
+- **simulated run (backtest): the run stops with a clear metrics error** (implemented in step 2: the controller checks the
+  consumer's recorded error after the book phase of each tick and raises `MetricsError`; the owner's wording was "at the end
+  of the tick"; it is the first place after the tick's writes of the book where a check is possible, and the strategies do not
+  run that tick);
 - **live: trading continues, an alert is raised and the consumer restarts and replays from its last position.** Live is not
   supported in stage 1; this is the target behaviour, nothing of it is implemented. (The stream's sequence numbers, the
   idempotent fold and the saved `stream_sequence` are what a replay from the last position builds on.)
+
+## Open items (not done, from the map)
+
+- The stream has no initial-book event: the consumer takes `start_dt` and `capital` from the service's properties, out of band.
+- `PricesMarked` carries no price rule/source (it is implicit in `SimulationControllerBehavior.get_last_sale_prices`).
+- No event for capital changes, and no channel for recorded variables (`record()`); the benchmark and the empyrical columns
+  are still computed in the harness class `TestMetricsTracker`, not in product code.
+- Minute frequency and several calendars are not exercised by any test (the bundle runs are daily); `TestMetricsTracker`
+  builds a daily row at each MINUTE_END.
+- Live behaviour of a consumer error (see above) is a target only.
+- After the clock is exhausted the controller keeps publishing the last SESSION_END signal (4 extra book phases on
+  `buy_and_hold`); the harness tracker ignores them past the number of sessions.

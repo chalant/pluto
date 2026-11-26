@@ -118,7 +118,7 @@ class PhaseDriverTests(unittest.TestCase):
         self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
 
         with self.assertRaisesRegex(PhaseError, 'no done from a'):
-            self.driver.drive(phases.METRICS, clock_event(), TS_NS, ('a',))
+            self.driver.drive(phases.ACCOUNT, clock_event(), TS_NS, ('a',))
 
     def test_a_done_is_published_on_the_done_topic_of_its_phase(self):
         FakeParticipant(self.bus, 'a', phases.BOOK)
@@ -133,7 +133,7 @@ class PhaseDriverTests(unittest.TestCase):
 
     def test_phases_are_in_the_order_of_the_calls(self):
         ranks = [phase.rank for phase in (
-            phases.BOOK, phases.METRICS, phases.ACCOUNT, phases.TRADE, phases.SUBMIT)]
+            phases.BOOK, phases.ACCOUNT, phases.TRADE, phases.SUBMIT)]
 
         self.assertEqual(ranks, sorted(set(ranks)))
         # a done comes right after the messages of its phase, before the next phase

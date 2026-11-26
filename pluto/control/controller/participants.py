@@ -2,12 +2,10 @@
 controller called them for before the bus; each says ``done`` when its work of the phase is done.
 
 ``BrokerParticipant`` is the broker side: the book (``BrokerService``) and the strategy registry (``StrategyManager``).
-``MetricsParticipant`` is the metrics tracker's side: it reads the ledger of the book.
+The metrics are not a phase: a consumer of the stream of the book computes them (``pluto.finance.metrics.consumer``);
+the book phase tells the stream where a reader may read (``BrokerService.observe``).
 """
-from typing import Protocol
-
 import logbook
-import pandas as pd
 
 from pluto.bus import Bus, Delivery
 from pluto.coms.utils import conversions
@@ -23,16 +21,6 @@ from protos.clock_pb2 import (
     BEFORE_TRADING_START)
 
 log = logbook.Logger('Participants')
-
-
-class MetricsTracker(Protocol):
-    """What the metrics participant needs of the tracker: it reads the ledger of a calendar at three clock events."""
-
-    def end_of_bar(self, dt: pd.Timestamp, calendar_name: str, ledger) -> None: ...
-
-    def start_of_session(self, dt: pd.Timestamp, calendar_name: str, ledger) -> None: ...
-
-    def end_of_session(self, dt: pd.Timestamp, calendar_name: str, ledger) -> None: ...
 
 
 class BrokerParticipant(object):
@@ -181,41 +169,3 @@ class BrokerParticipant(object):
         self._broker.submit(orders)
 
         manager.clear()
-
-
-class MetricsParticipant(object):
-    def __init__(self, bus: Bus, manager: process_manager.StrategyManager, metrics_tracker: MetricsTracker):
-        self._bus = bus
-        self._broker = manager.broker
-        self._metrics_tracker = metrics_tracker
-
-        bus.subscribe(phases.METRICS.topic, self._on_metrics)
-
-    def _on_metrics(self, delivery: Delivery) -> None:
-        envelope = delivery.envelope
-        phases.report(
-            self._bus,
-            phases.METRICS,
-            envelope.logical_ts,
-            phases.METRICS_ID,
-            lambda: self._observe(envelope.payload),
-            log)
-
-    def _observe(self, event) -> None:
-        """The tracker reads the ledger of the calendar (revalued by the book at the end of its phase)."""
-        signal = event.signal
-        calendar_name = signal.calendar_name
-        cts = phases.pandas_timestamp(signal.timestamp)
-        evt = signal.event
-        tracker = self._metrics_tracker
-
-        if evt == MINUTE_END:
-            observe = tracker.end_of_bar
-        elif evt == SESSION_START:
-            observe = tracker.start_of_session
-        elif evt == SESSION_END:
-            observe = tracker.end_of_session
-        else:
-            return
-
-        observe(cts, calendar_name, self._broker.get_ledger(calendar_name))

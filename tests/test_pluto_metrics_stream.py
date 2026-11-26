@@ -1,11 +1,17 @@
-"""Metrics computed from the event stream of the book equal the metrics of the controller's path.
+"""The metrics are computed from the event stream of the book.
 
 ``pluto.finance.metrics.consumer.StreamMetrics`` subscribes to the broker service, folds the stream into its own copy of
-the book and reads it at the observation points (``events.Observed``); the tracker it calls is a second harness tracker
-(``test_utils.TestMetricsTracker``) of the run. For each of the 5 examples and 21 scenarios its frame must be the one of
-the tracker the metrics phase calls with the ledger of the book: same length, index and columns, every column exact
-(rtol=0, atol=0), lists included. A consumer that reads once more than the book revalued must not be equal.
+the book and reads it at the observation points (``events.Observed``): the harness (``StrategyTester.run``) feeds its
+tracker (``test_utils.TestMetricsTracker``) this way, and the equality tests (examples, oracle, scenarios) compare what
+it computes with Zipline's and with the stored results, exactly. Here: every run of the 5 examples and 21 scenarios is
+computed from its whole stream; a consumer that reads once more than the book revalued does not give the same frame; the
+observation points of the stream; a failing tracker stops a simulated run at its tick with a metrics error, the book
+complete; the consumer's unit tests.
+
+Before the metrics phase was deleted, the frames of the consumer and of the phase's tracker (which read the book's ledger)
+were asserted identical on all 26 runs, rtol=0, atol=0 (see METRICS_FOLD_PROGRESS.md).
 """
+import itertools
 import unittest
 from unittest import mock
 
@@ -30,42 +36,30 @@ ALL_MODULES = dict(examples.EXAMPLE_MODULES)
 ALL_MODULES.update(SCENARIO_MODULES)
 assert len(ALL_MODULES) == len(examples.EXAMPLE_MODULES) + len(SCENARIO_MODULES) == 26
 
+RUNS = itertools.count()
+
 
 class _RecordingService(service.BrokerService):
-    """The broker service of a run, with its stream kept and its start and capital known."""
+    """The broker service of a run, with its stream kept."""
 
     created = []
 
-    def __init__(self, asset_finder, start_dt, capital, data_frequency):
-        super().__init__(asset_finder, start_dt, capital, data_frequency)
-        self.start_dt = start_dt
-        self.capital = capital
+    def __init__(self, *args):
+        super().__init__(*args)
         self.stream = stream.InMemoryStream()
         self.subscribe(self.stream)
 
         self.created.append(self)
 
 
-class _Consumed(object):
-    """A consumer of a run and the tracker it called."""
+class _RecordedConsumer(metrics_consumer.StreamMetrics):
+    """The consumer the harness builds for the run, kept."""
 
-    def __init__(self, consumer, tracker):
-        self.consumer = consumer
-        self.tracker = tracker
+    created = []
 
-    @property
-    def frame(self):
-        return self.tracker.frame()
-
-
-class _Run(object):
-    """What a run of an example or scenario gave: the frame of the metrics phase's tracker, the consumers (by name)
-    with their trackers, the stream."""
-
-    def __init__(self, primary, consumed, broker):
-        self.primary = primary
-        self.consumed = consumed
-        self.broker = broker
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.created.append(self)
 
 
 class _ExtraRevalue(metrics_consumer.StreamMetrics):
@@ -78,36 +72,45 @@ class _ExtraRevalue(metrics_consumer.StreamMetrics):
             self.replica.ledgers[stream_event.calendar_name].revalue()
 
 
-CONSUMERS = {'stream': metrics_consumer.StreamMetrics, 'extra_revalue': _ExtraRevalue}
+class _Run(object):
+    """What a run gave: the frame of the harness (computed by its consumer), the consumer, the frame of a consumer that
+    reads once more than the book revalued, the broker service with its stream."""
+
+    def __init__(self, frame, consumer, extra_frame, broker):
+        self.frame = frame
+        self.consumer = consumer
+        self.extra_frame = extra_frame
+        self.broker = broker
 
 
-def run_with_consumers(pluto_tempdir, name, environ):
-    """Runs ``name`` through the controller's path with the ``CONSUMERS`` subscribed to the book's stream, next to the
-    tracker of the metrics phase; the tracker of each consumer is built like the harness one, with the same
-    arguments."""
+def run_with_consumers(pluto_tempdir, name, environ, modules=ALL_MODULES):
+    """Runs ``name`` through the controller's path, with the consumer of the harness kept and a second consumer, the
+    extra-revalue one, subscribed next to it (its tracker is built like the harness one, with the same arguments)."""
     _RecordingService.created.clear()
-    consumed = {}
+    _RecordedConsumer.created.clear()
+    extras = []
     original_init = test_utils.TestMetricsTracker.__init__
 
     def init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
 
         [broker] = _RecordingService.created
+        twin = test_utils.TestMetricsTracker.__new__(test_utils.TestMetricsTracker)
+        original_init(twin, *args, **kwargs)
 
-        for key, consumer_class in CONSUMERS.items():
-            twin = test_utils.TestMetricsTracker.__new__(test_utils.TestMetricsTracker)
-            original_init(twin, *args, **kwargs)
-
-            consumer = consumer_class(broker.start_dt, broker.capital, twin)
-            broker.subscribe(consumer)
-            consumed[key] = _Consumed(consumer, twin)
+        extra = _ExtraRevalue(broker.start_dt, broker.capital, twin)
+        broker.subscribe(extra)
+        extras.append(twin)
 
     with mock.patch.object(service, 'BrokerService', _RecordingService), \
+            mock.patch.object(metrics_consumer, 'StreamMetrics', _RecordedConsumer), \
             mock.patch.object(test_utils.TestMetricsTracker, '__init__', init):
-        tracker = _run(pluto_tempdir, name, environ, modules=ALL_MODULES)
+        tracker = _run(pluto_tempdir, name, environ, modules=modules)
 
     [broker] = _RecordingService.created
-    return _Run(tracker.frame(), consumed, broker)
+    [consumer] = _RecordedConsumer.created
+    [extra] = extras
+    return _Run(tracker.frame(), consumer, extra.frame(), broker)
 
 
 class StreamMetricsRunTests(ZiplinePlutoFixture):
@@ -121,27 +124,29 @@ class StreamMetricsRunTests(ZiplinePlutoFixture):
 
         return runs[name]
 
-    def check_equal(self, name):
+    def check_computed_from_the_stream(self, name):
         run = self._run(name)
-        consumed = run.consumed['stream']
 
-        self.assertIsNone(consumed.consumer.error)
+        self.assertIsNone(run.consumer.error)
+        self.assertGreater(len(run.frame), 0)
 
-        primary, frame = run.primary, consumed.frame
-        self.assertGreater(len(primary), 0)
-        self.assertEqual(len(primary), len(frame))
-        self.assertTrue((primary.index == frame.index).all())
-        self.assertEqual(set(primary.columns), set(frame.columns))
-        self.assertEqual(test_utils.frame_errors(primary, frame, rtol=0.0, atol=0.0), [])
+        # the consumer folded the whole stream of the book, no gap
+        stream_events = list(run.broker.stream)
+        self.assertGreater(len(stream_events), 0)
+        self.assertEqual([s.sequence for s in stream_events], list(range(1, len(stream_events) + 1)))
+        self.assertEqual(run.consumer.replica.sequence, len(stream_events))
+
+        # and its copy of the book is the book: the same saved state
+        broker_ledger = run.broker.get_ledger('XNYS')
+        last = run.frame['period_close'].iloc[-1]
+        self.assertEqual(run.consumer.replica.ledgers['XNYS'].get_state(last), broker_ledger.get_state(last))
 
     def test_a_read_more_than_the_book_revalued_is_not_equal(self):
         # the compounding of returns is where the extra read shows: market_orders is one of the runs it changes
         run = self._run('market_orders')
-        consumed = run.consumed['extra_revalue']
 
-        self.assertIsNone(consumed.consumer.error)
-        self.assertEqual(len(run.primary), len(consumed.frame))
-        self.assertNotEqual(test_utils.frame_errors(run.primary, consumed.frame), [])
+        self.assertEqual(len(run.frame), len(run.extra_frame))
+        self.assertNotEqual(test_utils.frame_errors(run.frame, run.extra_frame), [])
 
     def test_the_observation_points_follow_the_last_write_of_the_signal(self):
         run = self._run('buy_and_hold')
@@ -164,14 +169,60 @@ class StreamMetricsRunTests(ZiplinePlutoFixture):
 
             self.assertEqual(observed.calendar_name, 'XNYS')
 
-        # two points per session, and the sequence of the stream has no gap with them in it
-        self.assertEqual([s.sequence for s in stream_events], list(range(1, len(stream_events) + 1)))
-        self.assertEqual(sum(1 for _, s in points if s.event.clock_event == SESSION_START), len(run.primary))
+        # one point per session start
+        self.assertEqual(sum(1 for _, s in points if s.event.clock_event == SESSION_START), len(run.frame))
+
+    def test_a_failing_tracker_stops_the_run_at_its_tick(self):
+        failing_session = 5
+        calls = []
+        original = test_utils.TestMetricsTracker.end_of_session
+
+        def end_of_session(tracker, ts, calendar_name, ledger):
+            calls.append(ts)
+
+            if len(calls) == failing_session:
+                raise RuntimeError('the tracker broke')
+
+            return original(tracker, ts, calendar_name, ledger)
+
+        # a strategy script is installed once per root directory: this run has its own name
+        alias = 'market_orders_{}'.format(next(RUNS))
+        _RecordingService.created.clear()
+
+        with mock.patch.object(service, 'BrokerService', _RecordingService), \
+                mock.patch.object(test_utils.TestMetricsTracker, 'end_of_session', end_of_session):
+            with self.assertRaises(metrics_consumer.MetricsError) as raised:
+                _run(self._pluto_tempdir, alias, self._environ, modules={alias: ALL_MODULES['market_orders']})
+
+        # the error names the metrics consumer, the event of the stream and the failure
+        message = str(raised.exception)
+        self.assertIn('metrics consumer', message)
+        self.assertIn('RuntimeError: the tracker broke', message)
+        self.assertIsInstance(raised.exception.__cause__, RuntimeError)
+
+        # it stopped at the tick of the failing read: five sessions started, five ended, nothing was published after
+        # the observation point of the failing tick (the strategies did not run it, nothing was submitted)
+        [broker] = _RecordingService.created
+        stream_events = list(broker.stream)
+        points = [s for s in stream_events if isinstance(s.event, events.Observed)]
+
+        self.assertEqual(len(calls), failing_session)
+        self.assertEqual(sum(1 for s in points if s.event.clock_event == SESSION_START), failing_session)
+        self.assertEqual(sum(1 for s in points if s.event.clock_event == SESSION_END), failing_session)
+        self.assertIs(stream_events[-1], points[-1])
+        self.assertEqual(points[-1].event.dt, calls[-1])
+        self.assertEqual(str(raised.exception).count('event {} '.format(points[-1].sequence)), 1)
+
+        # the book is complete: its ledger is what the whole stream folds to
+        replica = stream.Replica(broker.start_dt, broker.capital)
+        stream.fold(stream_events, replica)
+        self.assertEqual(
+            replica.ledgers['XNYS'].get_state(calls[-1]), broker.get_ledger('XNYS').get_state(calls[-1]))
 
 
 def _make_test(name):
     def test(self):
-        self.check_equal(name)
+        self.check_computed_from_the_stream(name)
     test.__name__ = 'test_' + name
     return test
 
