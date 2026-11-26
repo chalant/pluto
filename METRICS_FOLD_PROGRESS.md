@@ -197,3 +197,13 @@ Tests (`tests/test_pluto_runtime_portfolio.py`, strategy in `tests/runtime_portf
 Docstrings of `BrokerService` (module, `get_ledger`, `revalue`) and of `BrokerParticipant._book` no longer say that the metrics
 tracker reads the ledger; the comment at `tests/test_pluto_broker_service.py:65`; `dev/README.md` (the `performance` directory
 is created and nothing writes to it); `pluto/api.pyi` `record()`: recorded variables are not emitted yet. Text only.
+
+### 5. Dead state and the Watch RPCs
+
+- `MetricsTracker`: `_capital_base`, `_emission_rate`, `_first_session` removed (nothing read them; `_data_frequency` is read by
+  `process_close_position` and `sync_last_sale_prices`). The constructor signature and `handle_market_open(session_label,
+  data_portal)` stay for `test_pluto_state.py`; the docstring says which arguments are unused.
+- `Watch` and `StopWatching` removed from `protos/controllable.proto` (the servicer, the stub and `Process.watch` are gone, no
+  other reference in `pluto/`, `tests/`, `dev/`); `controllable_pb2.py` and `controllable_pb2_grpc.py` regenerated with the
+  environment's grpcio-tools 1.85.3 as `dev/README.md` describes (`-I. --python_out=. --grpc_python_out=.`): the diff is the two
+  RPCs only. `interface.proto` / `monitor.proto` (the `Monitor` service) are untouched. `RunSetup.clear_perf` kept.

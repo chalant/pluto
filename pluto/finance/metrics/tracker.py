@@ -16,9 +16,12 @@ class MetricsTracker(object):
         ----------
         ledger_: pluto.finance.ledger.Ledger
         capital: float
+            Not used: the ledger holds the capital (kept in the signature).
         data_frequency: str
         emission_rate: str
+            Not used (kept in the signature).
         start_dt: pandas.Timestamp
+            Not used: the ledger holds the start (kept in the signature).
         """
         # self._benchmark_source = benchmark_source
         self._ledger = ledger_
@@ -27,10 +30,7 @@ class MetricsTracker(object):
         #     look_back)
 
         self._first_open_session = None
-        self._capital_base = capital
         self._data_frequency = data_frequency
-        self._emission_rate = emission_rate
-        self._first_session = start_dt
         self._last_sync = None
 
     @property

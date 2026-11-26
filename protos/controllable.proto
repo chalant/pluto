@@ -18,9 +18,6 @@ service Controllable {
     //sends broker state
     rpc UpdateAccount (stream Chunk) returns (google.protobuf.Empty);
     rpc Stop (StopRequest) returns (google.protobuf.Empty);
-    // monitor methods
-    rpc Watch (google.protobuf.Empty) returns (google.protobuf.Empty);
-    rpc StopWatching (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 message ClockUpdateResponse {
