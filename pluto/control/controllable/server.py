@@ -21,7 +21,6 @@ from pluto.control.events_log import events_log
 from pluto.control.controllable import commands
 from pluto.control.controllable import state_storage as st
 from pluto.control.controllable.utils import factory
-from pluto.control.controllable import performance_logging as pl
 from pluto.control.controllable import running_behavior
 
 from pluto.data import caching
@@ -38,7 +37,6 @@ from pluto.finance.broker import broker_setup as bks
 from protos import broker_pb2
 from protos import controllable_pb2
 from protos import controllable_pb2_grpc as cbl_rpc
-from protos import interface_pb2_grpc as itf_rpc
 
 from protos.clock_pb2 import (BAR, TRADE_END)
 
@@ -102,7 +100,6 @@ class _Ready(_ServiceState):
 class ControllableService(cbl_rpc.ControllableServicer):
     def __init__(self,
                  directory,
-                 monitor,
                  controllable_factory,
                  mode,
                  rb):
@@ -111,7 +108,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
         Parameters
         ----------
         directory: directory.utils.DirectoryInterface
-        monitor
         controllable_factory
         mode:
         rb:
@@ -119,8 +115,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         self._directory = directory
 
-        self._log_performance = False
-        self._perf_writer = None
         self._stop = False
 
         self._frequency_filter = None
@@ -144,11 +138,8 @@ class ControllableService(cbl_rpc.ControllableServicer):
 
         self._strategies_dir = stg_dir = directory.get_directory('strategies')
         self._states_dir = stg_dir.get_directory('states')
-        self._strategy_performance_dir = stg_dir.get_directory('performance')
 
         self._thread_pool = futures.ThreadPoolExecutor(5)
-
-        self._monitor = monitor
 
         self._cbl_fty = controllable_factory
 
@@ -164,14 +155,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
     @property
     def controllable(self):
         return self._controllable
-
-    @property
-    def log_performance(self):
-        return self._log_performance
-
-    @log_performance.setter
-    def log_performance(self, value):
-        self._log_performance = value
 
     @property
     def recover(self):
@@ -296,23 +279,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
                 state_path,
                 self._thread_pool)
 
-        perf_path = self._strategy_performance_dir.add_file(id_, 'bin').path
-
-        if self._log_performance:
-            self._perf_writer = pl.PerformanceWriter(
-                perf_path,
-                self._thread_pool,
-                id_)
-        else:
-            self._perf_writer = pl.NullPerformanceWriter(
-                self._monitor,
-                id_)
-
-        if request.clear_perf:
-            # clear file if we're in simulation mode
-            with open(perf_path, 'wb') as f:
-                f.truncate(0)
-
         controllable = self._controllable
 
         if controllable:
@@ -369,14 +335,12 @@ class ControllableService(cbl_rpc.ControllableServicer):
         log = events_log.get_events_log(state.mode)
         events = log.read(controllable.current_dt)
         # play all missed events since last checkpoint (controllable is in recovery mode)
-        perf_writer = self._perf_writer
         frequency_filter = self._frequency_filter
         state_storage = self._state_storage
 
         for evt_type, evt in events:
             if evt_type == 'clock':
                 commands.ClockUpdate(
-                    perf_writer,
                     controllable,
                     frequency_filter,
                     evt,
@@ -469,7 +433,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
         if not controllable.ended:
             self._running_behavior.execute(
                 commands.ClockUpdate(
-                    self._perf_writer,
                     controllable,
                     self._frequency_filter,
                     request,
@@ -488,14 +451,6 @@ class ControllableService(cbl_rpc.ControllableServicer):
             not_running=controllable.not_running
         )
 
-    # @service_access.framework_only
-    def Watch(self, request, context):
-        self._perf_writer.observe(pl.Observer(self._monitor))
-
-    # @service_access.framework_only
-    def StopWatching(self, request, context):
-        self._perf_writer.stop_observing()
-
 
 @click.group()
 def cli():
@@ -511,7 +466,6 @@ def cli():
 @click.argument('mode')
 @click.option('-d', '--root-dir', default=path.expanduser("~/.pluto"))
 @click.option('-cu', '--controllable-url')
-@click.option('-lp', '--log-performance')
 @click.option('-ss', '--store-state', is_flag=True)
 @click.option('-re', '--recovery', is_flag=True)
 @click.option('-ee', '--execute-events', is_flag=True)
@@ -521,7 +475,6 @@ def start(
         mode,
         root_dir,
         controllable_url,
-        log_performance,
         store_state,
         recovery,
         execute_events):
@@ -541,7 +494,6 @@ def start(
     mode
     root_dir
     controllable_url: str
-    log_performance
     store_state
     recovery
     execute_events
@@ -564,7 +516,6 @@ def start(
 
     controllable_service = ControllableService(
         du.DirectoryInterface(drs.create_directory(root_dir)),
-        itf_rpc.MonitorStub(channel),
         factory.RemoteControllableFactory(channel),
         mode,
         running_behavior.NonBlocking()
@@ -572,7 +523,6 @@ def start(
 
     controllable_service.store_state = store_state
     controllable_service.recover = recovery
-    controllable_service.log_performance = log_performance
 
     try:
         svr = server.get_server(controllable_service)

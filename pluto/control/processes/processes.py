@@ -9,8 +9,6 @@ import structs
 
 from google.protobuf import empty_pb2 as emp
 
-from dev import events
-
 from pluto.coms.utils import conversions
 from pluto.utils import stream
 
@@ -32,9 +30,6 @@ class ProcessFactory(abc.ABC):
     def _create_process(self, framework_url, session_id, root_dir):
         raise NotImplementedError
 
-    def set_monitor_service(self, monitor_service):
-        pass
-
     def set_broker_service(self, broker_service):
         pass
 
@@ -50,12 +45,6 @@ class StrategyStub(object):
         self._process_id = process_id
         self._controllable = controllable
         self._capital = capital
-
-        try:
-            event_name = 'monitor.{}'.format(self._process_id)
-            events.add_event(event_name)
-        except KeyError:
-            pass
 
     @property
     def capital(self):
@@ -92,21 +81,6 @@ class StrategyStub(object):
 
     def join(self):
         self._controllable.Join(emp.Empty, ())
-
-    def watch(self, watcher):
-        # # subscribe the watcher...
-        # self._controllable.watch(watcher)
-
-        # subscribe to monitor events for this process.
-        events.subscribe(
-            'monitor.{}'.format(self._process_id),
-            watcher.performance_update)
-
-        # make a watch request...
-        self._controllable.Watch(emp.Empty(), ())
-
-    def stop_watching(self):
-        self._controllable.StopWatching(emp.Empty(), ())
 
     def __hash__(self):
         return self._process_id

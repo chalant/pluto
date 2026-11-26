@@ -547,9 +547,10 @@ def record(*args, **kwargs):
 
     Notes
     -----
-    These values will appear in the performance packets and the performance
-    dataframe passed to ``analyze`` and returned from
-    :func:`~zipline.run_algorithm`.
+    Recorded variables are not emitted yet: they stay in the strategy's runtime.
+    The metrics, computed from the event stream of the book, have no channel for
+    them, so they appear in no performance output (Zipline's own ``run_algorithm``
+    does return them).
     """
 
 def schedule_function(func, date_rule=None, time_rule=None, half_days=True, calendar=None):

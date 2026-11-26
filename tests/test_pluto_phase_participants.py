@@ -1,5 +1,5 @@
 """The participants of the phases (pluto/control/controller/participants.py) and the strategy manager on the bus, with a
-fake book, a fake metrics tracker and fake runtimes: what each clock event does, in which order, and what a tick does
+fake book and fake runtimes: what each clock event does, in which order, and what a tick does
 with the orders of several strategies."""
 import types
 import unittest
@@ -14,6 +14,7 @@ from pluto.coms.utils import conversions
 from pluto.control import phases
 from pluto.control.controller import controller, participants, process_manager
 from pluto.control.processes import in_memory
+from pluto.finance.metrics import consumer
 from pluto.interface.utils import service_access
 
 from protos import broker_pb2, clock_pb2, phases_pb2
@@ -58,6 +59,9 @@ class FakeBroker(object):
     def revalue(self, calendar_name):
         self.calls.append(('revalue', calendar_name))
 
+    def observe(self, calendar_name, clock_event, dt):
+        self.calls.append(('observe', calendar_name, clock_event, dt))
+
     def start_session(self, calendar_name, dt):
         self.calls.append(('start_session', calendar_name, dt))
 
@@ -69,26 +73,6 @@ class FakeBroker(object):
             raise ValueError('the book refused the orders')
 
         self.calls.append(('submit', [order.id for order in orders]))
-
-
-class FakeTracker(object):
-    """Records the reads of the ledger in the calls of the broker, so that the order between the two is visible."""
-
-    def __init__(self, broker):
-        self._broker = broker
-
-    def _read(self, name, dt, calendar_name, ledger):
-        assert ledger is self._broker.ledger
-        self._broker.calls.append((name, calendar_name, dt))
-
-    def end_of_bar(self, dt, calendar_name, ledger):
-        self._read('end_of_bar', dt, calendar_name, ledger)
-
-    def start_of_session(self, dt, calendar_name, ledger):
-        self._read('start_of_session', dt, calendar_name, ledger)
-
-    def end_of_session(self, dt, calendar_name, ledger):
-        self._read('end_of_session', dt, calendar_name, ledger)
 
 
 class FakeBehavior(object):
@@ -184,8 +168,10 @@ class RunTests(unittest.TestCase):
         setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
         self.manager = process_manager.StrategyManager(None, setup, bus=self.bus)
         self.broker = self.manager.broker
+        # a consumer of the stream of the book (the fake has none): the controller checks it after the book phase
+        self.metrics = consumer.StreamMetrics(TS, 1000.0, None)
         self.controller = controller.Controller(
-            self.manager, None, FakeTracker(self.broker), FakeBehavior())
+            self.manager, None, FakeBehavior(), self.metrics)
 
     def add_process(self, process_id):
         process = FakeProcess(process_id)
@@ -272,7 +258,7 @@ class RunTests(unittest.TestCase):
             with self.assertRaisesRegex(NotImplementedError, r'{}: .*networked bus'.format(name)):
                 getattr(self.manager, name)(iter(()), context)
 
-    def test_a_tick_with_two_signals_interleaves_the_book_and_the_metrics_per_signal(self):
+    def test_a_tick_with_two_signals_runs_the_book_phase_per_signal(self):
         signals = [
             (TS, clock_pb2.MINUTE_END, _calendar('XNYS')),
             (TS, clock_pb2.SESSION_END, _calendar('XLON'))]
@@ -283,13 +269,34 @@ class RunTests(unittest.TestCase):
             ('set_time', 'XNYS', TS),
             ('sync_last_sale_prices', 'XNYS', [(1, 10.0)], TS),
             ('revalue', 'XNYS'),
-            ('end_of_bar', 'XNYS', TS),
+            ('observe', 'XNYS', clock_pb2.MINUTE_END, TS),
             ('set_time', 'XLON', TS),
             ('sync_last_sale_prices', 'XLON', [(2, 20.0)], TS),
             ('end_session', 'XLON', TS),
             ('revalue', 'XLON'),
-            ('end_of_session', 'XLON', TS),
+            ('observe', 'XLON', clock_pb2.SESSION_END, TS),
             ('submit', [])])
+
+    def test_a_failed_metrics_consumer_stops_the_run_after_the_book_phase_of_the_tick(self):
+        process = self.add_process('aaa')
+        self.metrics.error = ValueError('the tracker broke')
+        self.metrics.error_sequence = 7
+
+        with self.assertRaisesRegex(
+                consumer.MetricsError,
+                r'the metrics consumer failed at event 7 of the stream of the book: ValueError: the tracker broke'):
+            self.tick(clock_pb2.SESSION_END)
+
+        # the book phase ran in full; the strategies did not run, nothing was submitted
+        self.assertEqual(self.broker.calls, [
+            ('set_time', 'XNYS', TS),
+            ('sync_last_sale_prices', 'XNYS', [(1, 10.0)], TS),
+            ('end_session', 'XNYS', TS),
+            ('revalue', 'XNYS'),
+            ('observe', 'XNYS', clock_pb2.SESSION_END, TS)])
+        self.assertEqual(process.account_updates, [])
+        self.assertEqual(process.clock_events, 0)
+        self.assertEqual(self.bus.dead_letters(), ())
 
     def test_the_stale_batch_filter_on_the_bus_path(self):
         self.add_process('aaa')
@@ -333,7 +340,7 @@ class RunTests(unittest.TestCase):
 
 
 class ParticipantTests(unittest.TestCase):
-    """The book and the metrics participants alone, on a bus, with a fake book and a fake tracker."""
+    """The book participant alone, on a bus, with a fake book."""
 
     def setUp(self):
         patch = mock.patch.object(process_manager.service, 'BrokerService', FakeBroker)
@@ -346,7 +353,6 @@ class ParticipantTests(unittest.TestCase):
         self.broker = manager.broker
 
         participants.BrokerParticipant(self.bus, manager)
-        participants.MetricsParticipant(self.bus, manager, FakeTracker(self.broker))
         self.driver = phases.PhaseDriver(self.bus)
 
     def signal(self, evt, calendar_name='XNYS'):
@@ -356,9 +362,8 @@ class ParticipantTests(unittest.TestCase):
             last_sale_prices=[broker_pb2.AssetPrice(sid=sid, price=price) for sid, price in PRICES[calendar_name]])
 
     def run_signal(self, evt):
-        """The book phase and the metrics phase of a signal, as the controller drives them."""
-        for phase, name in ((phases.BOOK, phases.BROKER_ID), (phases.METRICS, phases.METRICS_ID)):
-            self.driver.drive(phase, self.signal(evt), TS.value, (name,), key='XNYS')
+        """The book phase of a signal, as the controller drives it."""
+        self.driver.drive(phases.BOOK, self.signal(evt), TS.value, (phases.BROKER_ID,), key='XNYS')
 
     def test_the_calls_of_each_clock_event(self):
         prices = [(1, 10.0)]
@@ -367,18 +372,18 @@ class ParticipantTests(unittest.TestCase):
                 ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('match', 'XNYS')],
             clock_pb2.TRADE_END: [
                 ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('match', 'XNYS')],
-            # the book is revalued right before the tracker reads it
+            # the book is revalued, then the stream is told that a reader may read: the last calls of the phase
             clock_pb2.MINUTE_END: [
                 ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('revalue', 'XNYS'),
-                ('end_of_bar', 'XNYS', TS)],
+                ('observe', 'XNYS', clock_pb2.MINUTE_END, TS)],
             clock_pb2.SESSION_START: [
                 ('set_time', 'XNYS', TS), ('start_session', 'XNYS', TS), ('revalue', 'XNYS'),
-                ('start_of_session', 'XNYS', TS)],
+                ('observe', 'XNYS', clock_pb2.SESSION_START, TS)],
             clock_pb2.BEFORE_TRADING_START: [
                 ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS)],
             clock_pb2.SESSION_END: [
                 ('set_time', 'XNYS', TS), ('sync_last_sale_prices', 'XNYS', prices, TS), ('end_session', 'XNYS', TS),
-                ('revalue', 'XNYS'), ('end_of_session', 'XNYS', TS)],
+                ('revalue', 'XNYS'), ('observe', 'XNYS', clock_pb2.SESSION_END, TS)],
         }
         self.assertEqual(set(expected), {
             clock_pb2.BAR, clock_pb2.TRADE_END, clock_pb2.MINUTE_END, clock_pb2.SESSION_START,

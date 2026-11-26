@@ -33,8 +33,6 @@ SimulationLoop (24/7 clock)                   pluto/control/loop/simulation_loop
        │   │     the book: ledger, blotter, positions per calendar; stream of its writes
        │   └─ MarketSimulation                pluto/finance/markets/market_simulation.py
        │         fills (slippage, commission) against the bundle
-       ├─ MetricsParticipant                  pluto/control/controller/participants.py
-       │     the metrics tracker, reads the ledger of the book
        └─ RuntimeEndpoint -> StrategyStub -> InMemoryControllableStub
                                               pluto/control/processes/, pluto/control/controllable/
              one Controllable per strategy: pluto TradingAlgorithm, clock, pipeline
@@ -52,13 +50,19 @@ does not call its components: at each clock event it publishes one event per pha
 (`pluto/control/phases.py`), then checks that every participant of the phase said `done` before it publishes the next
 (lock-step; a `done` of a participant that is not expected is accepted; a missing `done`, a `done` that carries an error, a stale or doubled one, or a message the bus gave up on
 raises `PhaseError`, there is no timeout). The order is the order of the calls before the bus, and the floating point
-sums depend on it (transactions before commissions; `revalue` right before each metrics read; the prices of the tick
-are read before its writes; with two calendars the book and metrics phases run signal after signal).
+sums depend on it (transactions before commissions; `revalue` right before each observation point; the prices of the tick
+are read before its writes; with two calendars the book phases run signal after signal).
+
+The metrics are not a phase. The metrics consumer (`pluto/finance/metrics/consumer.py`) subscribes to the broker service, folds
+the stream of the book into its own copy (`Replica`) and, at each `Observed` event (SESSION_START, MINUTE_END, SESSION_END),
+calls its tracker with that copy's ledger (the harness's tracker is `test_utils.TestMetricsTracker`). A failure of the tracker
+never interrupts a write of the book: it is recorded in `consumer.error`, and the controller checks it after the book phase of
+each tick: a simulated run stops there with a `MetricsError`. (Target in live, not implemented: trading continues, an alert is
+raised, the consumer restarts and replays from its last position.)
 
 | phase (rank) | topic | published | subscribers | `done` |
 |---|---|---|---|---|
-| book (10) | `phase.book` | per signal (`SignalEvent`: calendar time, event, last sale prices) | broker: sync prices, match, dividends and splits, expiries, `revalue` where the tracker reads | broker |
-| metrics (20) | `phase.metrics` | per signal | metrics tracker: reads the ledger (`end_of_bar`, `start_of_session`, `end_of_session`) | metrics |
+| book (10) | `phase.book` | per signal (`SignalEvent`: calendar time, event, last sale prices) | broker: sync prices, match, dividends and splits, expiries, `revalue` where the metrics are read, then `observe` (the stream says that a reader may read) | broker |
 | account (30) | `phase.account` (`AccountEvent`) | per tick | broker: sends each strategy its `BrokerState` (fills, last sale prices) on `strategy.account.<process id>`; the runtime applies it | broker, each runtime |
 | trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send their `OrderBatch` on `strategy.orders` (key: process id), taken by the strategy manager | each runtime: the number of orders and of batches it sent; the broker side checks both against what it received, per strategy, in the submit phase |
 | submit (50) | `phase.submit` (`ClockEvent`) | per tick | broker: submits the orders of the tick to the book, starts the next tick | broker |
@@ -75,8 +79,8 @@ of orders is on the bus when its handler returns, and the `done` of the trade ph
 `NonBlocking` runtime would publish from another thread, and a runtime in another process needs the networked bus (a later
 stage): the gRPC `PlaceOrders` and `Stopped` of `StrategyManager` raise `NotImplementedError` (like the cancel
 methods), and a runtime that sent no batch when its handler returned aborts the run. What still does not go through the bus,
-all in process: the controller's behavior reads the book's positions (`get_positions`) to price them; the metrics tracker reads
-the ledger object of the book; the controller reads `strategy_manager.session_ids`; the behavior hooks receive the manager; the
+all in process: the controller's behavior reads the book's positions (`get_positions`) to price them; the metrics consumer is a
+subscriber of the broker service (a callback, not a bus message: it is delivered synchronously, in the order of the stream); the controller reads `strategy_manager.session_ids`; the behavior hooks receive the manager; the
 in-memory broker stub reaches into the servicer (`StrategyManager`) for the cancel stubs and for the runtime's endpoint;
 `StrategyManager.add_strategy` builds the runtime's endpoint. The bus logs every message (retention is open in
 `STAGE1_BUS_PROGRESS.md`).
@@ -87,8 +91,9 @@ There is no strategy database. A run's strategy script is the file
 `<root>/strategies/<strategy_id>.py`: `ControllableService.Initialize`
 (`pluto/control/controllable/server.py`) reads it, and the run's settings live in a
 `StrategySetup` object (`pluto/strategies/setup.py`: `look_back`, `cancel_policy`,
-`shorting`, `asset_classes`, `data_frequency`, `fractional`). `<root>/strategies/states` and
-`<root>/strategies/performance` hold the saved state and the performance packets.
+`shorting`, `asset_classes`, `data_frequency`, `fractional`). `<root>/strategies/states` holds the saved state;
+`<root>/strategies/performance` is created with the layout and nothing writes to it any more (the runtime's performance
+packets are gone: the metrics are computed from the stream of the book).
 `pluto.setup.directory_setup.create_directory(root)` creates the layout, and
 `directory_setup.add_strategy_script(root_dir, name, source_path)` copies a script into place
 (`FileExistsError` if the file exists); `TestClient.add_strategy` and `install-examples` use
@@ -177,6 +182,7 @@ $ENV/bin/python -m pytest -p no:randomly tests
 | `tests/test_pluto_upstream_fixes.py` | the zipline-reloaded fixes mirrored into Pluto's own copies (splits, stock dividends, daily cancel policy) |
 | `tests/test_pluto_order_ids.py` | the deterministic order ids of the strategy's blotter: the process id as namespace plus the sequence of the orders placed, runs and strategies not confused, no number for an order of no shares, a given id kept, a rebuilt blotter continuing from a checkpointed sequence, compact alphanumeric ids |
 | `tests/test_pluto_broker_service.py` | the broker service's stream of the strategy's book: folding it rebuilds the engine's ledger state byte for byte on every example and scenario; duplicate and cancelled orders, revaluation, sequence gaps, two calendars, state versions |
+| `tests/test_pluto_metrics_stream.py` | the metrics computed from the broker service's stream (`pluto/finance/metrics/consumer.py`: a fold of the stream read at the observation points; the harness feeds its tracker this way, so the equality tests above run through it): every example and scenario is computed from its whole stream, an extra read of the copy changes the frame, the observation points, a failing tracker stops a simulated run at its tick with a `MetricsError` and the book complete, the consumer's unit tests |
 | `tests/test_bus_contract.py` | the bus contract (rules S1 to S14) on `InMemoryBus` and on `SerializingBus(InMemoryBus)`, including the delivery trace under different `PYTHONHASHSEED`s |
 | `tests/test_bus_memory.py` | what holds for the in-memory bus only: bounded queues and overflow, log positions, group assignment |
 | `tests/test_bus_serializing.py` | what only the serialising wrapper does: bytes on the inner bus, codecs, undecodable payloads |

@@ -6,10 +6,6 @@ from pluto.control.controllable import simulation_controllable
 from pluto.control.controllable import live_controllable
 from pluto.control.controllable import stub
 
-from pluto.interface import monitor
-
-from pluto.interface.utils import service_access
-
 from protos import broker_pb2
 
 
@@ -101,14 +97,8 @@ class InMemoryControllableFactory(factory.ControllableFactory):
 
 class InMemoryControllableStub(stub.ControllableStub):
     def __init__(self, directory, mode, broker, running_behavior):
-        # creator monitor service
-        mon = monitor.Monitor()
-
-        self._monitor = mon
-
         self._servicer = server.ControllableService(
             directory,
-            InMemoryMonitorStub(mon),
             InMemoryControllableFactory(broker),
             mode,
             running_behavior)
@@ -140,38 +130,3 @@ class InMemoryControllableStub(stub.ControllableStub):
         return self._servicer.UpdateAccount(
             request,
             FakeContext(metadata))
-
-    def _watch(self, request, metadata):
-        return self._servicer.Watch(
-            request,
-            FakeContext(metadata))
-
-    def _stop_watching(self, request, metadata):
-        return self._servicer.StopWatching(
-            request,
-            FakeContext(metadata))
-
-
-class InMemoryMonitorStub(object):
-    def __init__(self, monitor_servicer):
-        self._monitor_server = monitor_servicer
-
-    @service_access.framework_method
-    def Watch(self, request):
-        return self._monitor_server.Watch(
-            request,
-            FakeContext())
-
-    @service_access.framework_method
-    def StopWatching(self, request):
-        return self._monitor_server.StopWatching(
-            request,
-            FakeContext())
-
-    @service_access.framework_method
-    def PerformanceUpdate(self, request_iterator, metadata=None):
-        return self._monitor_server.PerformanceUpdate(
-            request_iterator,
-            FakeContext(metadata))
-
-

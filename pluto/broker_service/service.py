@@ -20,11 +20,14 @@ event is kept in every ledger of the book (``Ledger.stream_sequence``, part of
 its saved state).
 
 Revaluation of the portfolio is an explicit operation (``revalue``), called
-where the metrics tracker is about to read the ledger and before the start of a
-session; it publishes ``Revalued`` when it had something to do. Nothing in the
-service revalues behind the stream's back, and the stream carries every
+where a reader of the book is about to read it (a consumer of the stream that
+computes metrics reads its copy at the observation points) and before the start
+of a session; it publishes ``Revalued`` when it had something to do. Nothing in
+the service revalues behind the stream's back, and the stream carries every
 revaluation the book made, as long as readers of a ledger call ``revalue``
-first (``get_ledger`` is for reading only).
+first (``get_ledger`` is for reading only). ``observe`` then tells the stream that
+a reader may read: the end of the book's work for SESSION_START, MINUTE_END and
+SESSION_END signals, where the metrics are read.
 
 The order of the writes inside a call is the order of the simulation of
 Zipline, and the floating point sums depend on it: all the transactions of a
@@ -65,6 +68,8 @@ class BrokerService(object):
         data_frequency: str
         """
         self._asset_finder = asset_finder
+        self._start_dt = start_dt
+        self._capital = capital
         self._data_frequency = data_frequency
 
         # one book: the calendars' ledgers share the portfolio, the
@@ -81,6 +86,16 @@ class BrokerService(object):
         self._subscribers = []
         self._pending = collections.deque()
         self._delivering = False
+
+    @property
+    def start_dt(self):
+        """Start of the book (a consumer of the stream rebuilds the book from it)."""
+        return self._start_dt
+
+    @property
+    def capital(self):
+        """Starting cash of the book."""
+        return self._capital
 
     def attach_market(self, market):
         """The market that fills the open orders.
@@ -115,7 +130,8 @@ class BrokerService(object):
         self._books.add_ledger(calendar_name)
 
     def get_ledger(self, calendar_name):
-        """The ledger of the calendar, to read (the metrics tracker does):
+        """The ledger of the calendar, to read (the metrics are not read here
+        any more: a consumer of the stream computes them from its own copy):
         only the service writes it. Reading its portfolio revalues it when
         something changed since the last ``revalue``, which the stream does not
         tell: ``revalue`` first."""
@@ -154,11 +170,19 @@ class BrokerService(object):
         """Brings the portfolio of the calendar's ledger up to date, publishing
         ``Revalued`` if it had to. Revaluation compounds returns and pnl each
         time, so where it happens is part of the state: the controller calls
-        this where the ledger is about to be read (the metrics tracker, a
-        checkpoint), which is where the lazy revaluation of the ledger used to
-        happen."""
+        this where the ledger is about to be read (a consumer of the stream
+        reads its copy at the observation points; a checkpoint), which is where
+        the lazy revaluation of the ledger used to happen."""
         if self._ledgers[calendar_name].revalue():
             self._publish(calendar_name, events.Revalued())
+
+    def observe(self, calendar_name, clock_event, dt):
+        """Publishes ``Observed``: the book of the calendar is complete for
+        the clock event (``protos.clock_pb2.EventType``) of the signal at
+        ``dt``, so a consumer of the stream may read its copy of the book now.
+        It is the last call of the book's work for the signal, after the
+        ``revalue`` that brings the portfolio up to date, and writes nothing."""
+        self._publish(calendar_name, events.Observed(clock_event, dt))
 
     def submit(self, orders):
         """Orders relayed by the strategies, in the order they were placed. A

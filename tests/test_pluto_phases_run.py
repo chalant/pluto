@@ -112,25 +112,26 @@ class PhasesRunTests(ZiplinePlutoFixture):
         counts = bus.topics()
         ticks = counts[phases.TRADE.topic]
 
-        # one account, trade and submit phase per tick, one batch of orders per tick, one book and one metrics phase
-        # per signal (a signal per calendar and tick)
+        # one account, trade and submit phase per tick, one batch of orders per tick, one book phase per signal
+        # (a signal per calendar and tick)
         self.assertGreater(ticks, 0)
         self.assertEqual(counts[phases.ACCOUNT.topic], ticks)
         self.assertEqual(counts[phases.SUBMIT.topic], ticks)
         self.assertEqual(counts[phases.ORDERS_TOPIC], ticks)
-        self.assertEqual(counts[phases.BOOK.topic], counts[phases.METRICS.topic])
         self.assertLessEqual(counts[phases.BOOK.topic], ticks)
 
         # the broker state of the strategy, once per tick, on its own topic
         self.assertEqual(counts[ACCOUNT_STATES], ticks)
 
-        # every participant says done once per phase, on the done topic of the phase: book and metrics (1 each per
-        # signal), account (broker and runtime), trade (runtime), submit (broker)
+        # every participant says done once per phase, on the done topic of the phase: book (1 per signal), account
+        # (broker and runtime), trade (runtime), submit (broker)
         self.assertEqual(counts[phases.BOOK.done_topic], counts[phases.BOOK.topic])
-        self.assertEqual(counts[phases.METRICS.done_topic], counts[phases.METRICS.topic])
         self.assertEqual(counts[phases.ACCOUNT.done_topic], 2 * ticks)
         self.assertEqual(counts[phases.TRADE.done_topic], ticks)
         self.assertEqual(counts[phases.SUBMIT.done_topic], ticks)
+
+        # the metrics are not a phase: nothing is published for them on the bus
+        self.assertEqual({topic for topic in counts if 'metrics' in topic}, set())
 
         # the trade done of the strategy says how many orders it sent: the ones of its batches; the fills it was told
         # (in its broker states) are those orders

@@ -13,6 +13,7 @@ from pluto.control.controller import controller
 from pluto.control.controller import behavior as bv
 
 from pluto.finance import metrics as mtr
+from pluto.finance.metrics import consumer
 
 # columns holding lists of dicts, compared after _normalize
 LIST_COLUMNS = ('positions', 'orders', 'transactions')
@@ -292,12 +293,22 @@ class StrategyTester(object):
             capital_base,
             trading_calendar)
 
+        # the metrics are computed from the stream of the book: the consumer folds it into its own copy of the book
+        # and calls the tracker at the observation points
+        broker = self._process_manager.broker
+        metrics = consumer.StreamMetrics(broker.start_dt, broker.capital, tracker)
+        broker.subscribe(metrics)
+
         for _ in loop.start(controller.Controller(
                 self._process_manager,
                 market,
-                tracker,
-                controller_behavior)):
+                controller_behavior,
+                metrics)):
             pass
+
+        # the controller checks it after the book phase of each tick: an error of the last tick's submit phase is not
+        # raised there
+        metrics.raise_if_failed()
 
         return tracker
 
