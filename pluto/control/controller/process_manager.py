@@ -14,7 +14,7 @@ from protos import broker_pb2
 
 _NOT_ON_THE_BUS = (
     '{}: not implemented; the strategy manager takes what the runtimes send on the bus of the run'
-    ' (strategy.orders, strategy.watchlist), and only a runtime in this process that runs its clock event'
+    ' (strategy.orders), and only a runtime in this process that runs its clock event'
     ' synchronously (running_behavior.Blocking) is on it: a runtime in another process needs the networked bus'
     ' (a later stage)')
 
@@ -46,7 +46,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         # what the strategies' runtimes send back
         self._bus.subscribe(phases.ORDERS_TOPIC, self._on_orders)
-        self._bus.subscribe(phases.WATCHLIST_TOPIC, self._on_watchlist)
 
         self._global_ts = None
 
@@ -56,8 +55,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # strategies in the order of their producer ids: registration order is rebuilt when they are submitted)
         self._received_orders = {}
         self._received_batches = {}
-
-        self._watchlist = set()
 
     @property
     def bus(self) -> Bus:
@@ -101,11 +98,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
         envelope = delivery.envelope
         self._check_session(envelope.key)
         self.receive_orders(envelope.key, envelope.payload)
-
-    def _on_watchlist(self, delivery: Delivery) -> None:
-        envelope = delivery.envelope
-        self._check_session(envelope.key)
-        self.receive_watchlist(envelope.payload)
 
     @service_access.framework
     @service_access.per_session
@@ -156,17 +148,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
             'ExecuteCancelPolicy: not implemented; the strategy executes its cancel'
             ' policy and relays the cancelled orders')
 
-    @service_access.framework
-    @service_access.per_session
-    def SetWatchList(self, request_iterator, session_id):
-        raise NotImplementedError(_NOT_ON_THE_BUS.format('SetWatchList'))
-
-    def receive_watchlist(self, watchlist):
-        """The watchlist of a strategy at a clock event (``strategy.watchlist`` on the bus). A watchlist of another
-        clock event than the current one is ignored."""
-        if conversions.to_datetime(watchlist.ts) == self._global_ts:
-            self._watchlist.update(conversions.to_zp_asset(asset) for asset in watchlist.assets)
-
     def set_global_timestamp(self, ts):
         self._global_ts = ts
 
@@ -185,11 +166,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def received_batches(self, process_id) -> int:
         """The number of batches of orders of the strategy in this tick; an empty one counts."""
         return self._received_batches.get(process_id, 0)
-
-    @property
-    def watchlist(self) -> frozenset:
-        """The assets the strategies asked for in this tick."""
-        return frozenset(self._watchlist)
 
     def add_strategy(self, process):
         process_id = process.process_id
@@ -218,7 +194,6 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def clear(self):
         self._received_orders.clear()
         self._received_batches.clear()
-        self._watchlist.clear()
 
         broker_states = self._broker_states
 

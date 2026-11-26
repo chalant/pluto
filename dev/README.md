@@ -60,12 +60,12 @@ are read before its writes; with two calendars the book and metrics phases run s
 | book (10) | `phase.book` | per signal (`SignalEvent`: calendar time, event, last sale prices) | broker: sync prices, match, dividends and splits, expiries, `revalue` where the tracker reads | broker |
 | metrics (20) | `phase.metrics` | per signal | metrics tracker: reads the ledger (`end_of_bar`, `start_of_session`, `end_of_session`) | metrics |
 | account (30) | `phase.account` (`AccountEvent`) | per tick | broker: sends each strategy its `BrokerState` (fills, last sale prices) on `strategy.account.<process id>`; the runtime applies it | broker, each runtime |
-| trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send `WatchList` and `OrderBatch` on `strategy.watchlist` and `strategy.orders` (key: process id), taken by the strategy manager | each runtime: the number of orders and of batches it sent; the broker side checks both against what it received, per strategy, in the submit phase |
+| trade (40) | `phase.trade` (`ClockEvent`) | per tick | the strategies' runtimes run the clock event and send their `OrderBatch` on `strategy.orders` (key: process id), taken by the strategy manager | each runtime: the number of orders and of batches it sent; the broker side checks both against what it received, per strategy, in the submit phase |
 | submit (50) | `phase.submit` (`ClockEvent`) | per tick | broker: submits the orders of the tick to the book, starts the next tick | broker |
 
 Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `phase` = the rank; a `done` (`PhaseDone`, on the
 topic `phase.done.<phase>`; the controller listens to `phase.done.>`, a participant only to the phases it needs) has the rank plus one. Every payload is a protobuf message (`protos/phases.proto` and the
-existing `ClockEvent`, `BrokerState`, `OrderBatch`, `WatchList`), so a `SerializingBus(inner, phases.codec())` carries
+existing `ClockEvent`, `BrokerState`, `OrderBatch`), so a `SerializingBus(inner, phases.codec())` carries
 a whole run through bytes with identical results (`tests/test_pluto_phases_run.py`). A participant's failure is caught
 where it happens, logged with its traceback and reported in its `done` (the bus redelivers a handler that raises, and a
 phase is not idempotent).
@@ -73,7 +73,7 @@ phase is not idempotent).
 Stage 1 supports only the in-process runtime that runs its clock event synchronously (`running_behavior.Blocking`): its batch
 of orders is on the bus when its handler returns, and the `done` of the trade phase says how many orders it sent. A
 `NonBlocking` runtime would publish from another thread, and a runtime in another process needs the networked bus (a later
-stage): the gRPC `PlaceOrders`, `SetWatchList` and `Stopped` of `StrategyManager` raise `NotImplementedError` (like the cancel
+stage): the gRPC `PlaceOrders` and `Stopped` of `StrategyManager` raise `NotImplementedError` (like the cancel
 methods), and a runtime that sent no batch when its handler returned aborts the run. What still does not go through the bus,
 all in process: the controller's behavior reads the book's positions (`get_positions`) to price them; the metrics tracker reads
 the ledger object of the book; the controller reads `strategy_manager.session_ids`; the behavior hooks receive the manager; the

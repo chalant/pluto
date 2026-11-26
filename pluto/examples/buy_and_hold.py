@@ -33,10 +33,6 @@ def initialize(context):
     # context.set_slippage(slippage.VolumeShareSlippage())
 
 
-def before_trading_start(context, data):
-    set_watchlist([symbol(stock) for stock in context.stocks])
-
-
 def handle_data(context, data):
     if not context.has_ordered:
         for stock in context.stocks:

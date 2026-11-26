@@ -1,5 +1,4 @@
 import collections
-import typing
 
 from zipline.assets import Asset, Equity, Future
 from zipline.assets.futures import FutureChain
@@ -812,16 +811,4 @@ def symbols(*args):
     See Also
     --------
     :func:`zipline.api.set_symbol_lookup_date`
-    """
-
-def set_watchlist(assets: typing.Iterable[Asset]) -> None:
-    """
-
-    Parameters
-    ----------
-    assets: typing.Iterable[Asset]
-
-    Returns
-    -------
-
     """

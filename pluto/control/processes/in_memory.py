@@ -49,8 +49,8 @@ class BrokerStub(broker_stub.BrokerStub):
         ----------
         servicer: pluto.control.controller.process_manager.StrategyManager
         '''
-        # the orders and the watchlist of the runtime go onto the bus of the run through its endpoint
-        # (pluto.control.processes.endpoint.RuntimeEndpoint), which counts the orders for its done
+        # the orders of the runtime go onto the bus of the run through its endpoint
+        # (pluto.control.processes.endpoint.RuntimeEndpoint), which counts them for its done
         self._servicer = servicer
         self._session_id = session_id
 
@@ -79,12 +79,6 @@ class BrokerStub(broker_stub.BrokerStub):
         return self._servicer.Stopped(
             request,
             FakeContext(metadata))
-
-    def _set_watchlist(self, request, metadata):
-        watchlist = broker_pb2.WatchList()
-        watchlist.ParseFromString(_unchunk(request))
-
-        self._servicer.runtime(self._session_id).send_watchlist(watchlist)
 
 
 class InMemoryControllableFactory(factory.ControllableFactory):

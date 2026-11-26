@@ -32,10 +32,6 @@ def initialize(context):
     # context.set_slippage(slippage.VolumeShareSlippage())
 
 
-def before_trading_start(context, data):
-    set_watchlist([context.asset])
-
-
 def handle_data(context, data):
     order(context.asset, 10)
     # record(AAPL=data.current(context.asset, 'price'))

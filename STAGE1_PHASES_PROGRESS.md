@@ -220,3 +220,15 @@ Counts measured on the same run (`buy_and_hold`, 7,312 clock events, one strateg
 - **Typed sends**: `RuntimeEndpoint.send(topic, message)` is replaced by `send_orders(batch: OrderBatch)` and `send_watchlist(watchlist:
   WatchList)` (the topic is no longer an argument; the batch and order counts are kept in `send_orders`); the in-memory `BrokerStub`
   and the tests call them; `phases.message_type(message: Message)` is typed.
+
+### Watchlist removed (2026-11-26, owner-approved)
+
+Its only consumer was the superseded live behaviour (`styx/controller_behavior.py`, not on master): each strategy sent a `WatchList` every
+tick (empty except at before-trading-start), the manager merged them into a set nobody read, the behavior hooks were no-ops. Gone:
+`WatchList` / `SetWatchList` (`broker.proto`, regenerated), `strategy.watchlist`, `RuntimeEndpoint.send_watchlist`, the manager's
+`receive_watchlist` / `watchlist`, `behavior.update_watchlist` / `ingest_watchlist_data`, `Controllable.watchlist`, the strategy API
+`set_watchlist` (and its calls in five examples) and the `WatchList` restriction of `pluto/finance/asset_restrictions.py` (never
+installed; the module is deleted, `Controllable` takes `NoRestrictions` from zipline). A `buy_and_hold` run: 85,968 messages (was 93,276),
+93,280 deliveries (was 100,588). Results are unchanged. The mentions above in this file are history.
+
+The replacement is a universe declared at registration (what a strategy needs from the data path), designed later with the data path.

@@ -95,13 +95,7 @@ class FakeBehavior(object):
     def get_last_sale_prices(self, ts, manager, signals):
         return {cal.name: PRICES[cal.name] for _, _, cal in signals}
 
-    def ingest_watchlist_data(self, ts, manager, signals):
-        pass
-
     def ingest_all_data(self, ts, manager, signals):
-        pass
-
-    def update_watchlist(self, ts, manager):
         pass
 
 
@@ -269,12 +263,12 @@ class RunTests(unittest.TestCase):
             self.tick()
 
     def test_a_runtime_in_another_process_is_not_supported_yet(self):
-        # PlaceOrders, SetWatchList and Stopped over gRPC are not on the bus: they say so instead of leaving the run
+        # PlaceOrders and Stopped over gRPC are not on the bus: they say so instead of leaving the run
         # to abort on a missing done
         self.add_process('aaa')
         context = in_memory.FakeContext(service_access._metadata + (('session_id', 'aaa'),))
 
-        for name in ('PlaceOrders', 'SetWatchList', 'Stopped'):
+        for name in ('PlaceOrders', 'Stopped'):
             with self.assertRaisesRegex(NotImplementedError, r'{}: .*networked bus'.format(name)):
                 getattr(self.manager, name)(iter(()), context)
 
@@ -302,28 +296,22 @@ class RunTests(unittest.TestCase):
         self.manager.set_global_timestamp(TS)
         stale = TS - pd.Timedelta(minutes=1)
 
-        def send(ts, order_id, sid):
-            """A batch of one order and a watchlist of one asset, for the clock event ``ts``."""
+        def send(ts, order_id):
+            """A batch of one order for the clock event ``ts``."""
             self.bus.publish(
                 phases.ORDERS_TOPIC,
                 order_batch('aaa', ts, [order_id]),
                 type='OrderBatch', logical_ts=ts.value, producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
-            self.bus.publish(
-                phases.WATCHLIST_TOPIC,
-                broker_pb2.WatchList(ts=phases.proto_timestamp(ts), assets=[conversions.to_proto_asset(_equity(sid))]),
-                type='WatchList', logical_ts=ts.value, producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
             self.bus.run_until_idle()
 
-        # what a runtime sent for another clock event is ignored: its orders and its assets
-        send(stale, 'old', 2)
+        # what a runtime sent for another clock event is ignored: its orders
+        send(stale, 'old')
 
         self.assertEqual(self.manager.new_orders, [])
-        self.assertEqual(self.manager.watchlist, frozenset())
 
-        send(TS, 'new', 1)
+        send(TS, 'new')
 
         self.assertEqual([order.id for order in self.manager.new_orders], ['new'])
-        self.assertEqual([asset.sid for asset in self.manager.watchlist], [1])
 
     def test_a_failure_in_the_account_phase_aborts_the_run(self):
         self.add_process('aaa').fail_account = True

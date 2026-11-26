@@ -57,11 +57,6 @@ class BrokerStub:
                 request_serializer=protos_dot_assets__pb2.Asset.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
-        self.SetWatchList = channel.stream_unary(
-                '/Broker/SetWatchList',
-                request_serializer=protos_dot_data__pb2.Chunk.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
 
 
 class BrokerServicer:
@@ -93,13 +88,6 @@ class BrokerServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SetWatchList(self, request_iterator, context):
-        """rpc ExecuteCancelPolicy (CancelEvent) returns (google.protobuf.Empty);
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
 
 def add_BrokerServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -121,11 +109,6 @@ def add_BrokerServicer_to_server(servicer, server):
             'CancelAllOrdersForAsset': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelAllOrdersForAsset,
                     request_deserializer=protos_dot_assets__pb2.Asset.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'SetWatchList': grpc.stream_unary_rpc_method_handler(
-                    servicer.SetWatchList,
-                    request_deserializer=protos_dot_data__pb2.Chunk.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
     }
@@ -236,33 +219,6 @@ class Broker:
             target,
             '/Broker/CancelAllOrdersForAsset',
             protos_dot_assets__pb2.Asset.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SetWatchList(request_iterator,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.stream_unary(
-            request_iterator,
-            target,
-            '/Broker/SetWatchList',
-            protos_dot_data__pb2.Chunk.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
