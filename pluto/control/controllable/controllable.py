@@ -537,11 +537,8 @@ class Controllable(ABC):
         raise NotImplementedError(self._get_algorithm_class.__name__)
 
     def minute_end(self, dt):
-        return self._get_minute_message(
-            dt,
-            self._algo,
-            self._metrics_tracker,
-            self._data_portal), dt == self._end_dt
+        """Returns whether the minute was the last of the run."""
+        return dt == self._end_dt
 
     def session_start(self, dt):
         # if dt > self._end_dt:
@@ -766,6 +763,8 @@ class Controllable(ABC):
         #     orders[order_id] = order  # update the order state
 
     def session_end(self, dt):
+        """Ends the session: expired assets, the cancel policy, the account controls. Returns whether it was the
+        last session of the run."""
         metrics_tracker = self._metrics_tracker
 
         positions = metrics_tracker.positions
@@ -794,12 +793,7 @@ class Controllable(ABC):
         if self._data_frequency == 'daily':
             blotter.execute_daily_cancel_policy(SESSION_END)
         algo.validate_account_controls()
-        return self._get_daily_message(
-            dt,
-            algo,
-            metrics_tracker,
-            data_portal
-        ), dt == self._last_session_close
+        return dt == self._last_session_close
 
     def get_state(self, dt):
         metrics_tracker = self._metrics_tracker
@@ -939,69 +933,6 @@ class Controllable(ABC):
     @abstractmethod
     def _create_blotter(self, session_id, engine_setup, cancel_policy):
         raise NotImplementedError(self._create_blotter.__name__)
-
-    def _get_daily_message(self,
-                           dt,
-                           algo,
-                           metrics_tracker,
-                           data_portal):
-        """
-
-        Parameters
-        ----------
-        dt
-        algo: pluto.algorithm.TradingAlgorithm
-        metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
-        data_portal: zipline.data.data_portal.DataPortal
-
-        Returns
-        -------
-
-        """
-        """
-        Get a perf message for the given datetime.
-        """
-
-        # self._sync_last_sale_prices(metrics_tracker, dt)
-        perf_message = metrics_tracker.handle_market_close(
-            dt,
-            data_portal
-        )
-        # perf_message['daily_perf']['recorded_vars'] = algo.recorded_vars
-        return perf_message
-
-    def _get_minute_message(self,
-                            dt,
-                            algo,
-                            metrics_tracker,
-                            data_portal):
-        """
-
-        Parameters
-        ----------
-        dt
-        algo
-        metrics_tracker: pluto.finance.metrics.tracker.MetricsTracker
-        data_portal
-
-        Returns
-        -------
-
-        """
-        """
-        Get a perf message for the given datetime.
-        """
-
-        # self._sync_last_sale_prices(metrics_tracker, dt)
-        # rvars = algo.recorded_vars
-
-        minute_message = metrics_tracker.handle_minute_close(
-            dt,
-            data_portal
-        )
-
-        # minute_message['minute_perf']['recorded_vars'] = rvars
-        return minute_message
 
     def get_current_dt(self):
         return self._current_dt

@@ -72,7 +72,6 @@ class AccountUpdate(Command):
 
 class ClockUpdate(Command):
     __slots__ = [
-        '_perf_writer',
         '_controllable',
         '_frequency_filter',
         '_state_store',
@@ -80,7 +79,6 @@ class ClockUpdate(Command):
         '_broker']
 
     def __init__(self,
-                 perf_writer,
                  controllable,
                  frequency_filter,
                  request,
@@ -89,14 +87,12 @@ class ClockUpdate(Command):
 
         Parameters
         ----------
-        perf_writer
         controllable
         frequency_filter
         request
         state_store
         """
         super(ClockUpdate, self).__init__(controllable, request)
-        self._perf_writer = perf_writer
         self._frequency_filter = frequency_filter
         self._state_store = state_store
         self._flag = False
@@ -113,8 +109,6 @@ class ClockUpdate(Command):
         s = controllable.clock.update(conversions.to_datetime(request.timestamp))
 
         if s:
-            writer = self._perf_writer
-
             ts, e = s
 
             if e == SESSION_START:
@@ -124,15 +118,10 @@ class ClockUpdate(Command):
                 controllable.before_trading_starts(ts)
 
             elif e == SESSION_END:
-                packet, end = controllable.session_end(ts)
-                writer.performance_update(packet, end)
-
-                controllable.ended = end
+                controllable.ended = controllable.session_end(ts)
 
             elif e == MINUTE_END:
-                packet, end = controllable.minute_end(ts)
-                writer.performance_update(packet, end)
-                controllable.ended = end
+                controllable.ended = controllable.minute_end(ts)
 
             else:
                 # send orders to broker.

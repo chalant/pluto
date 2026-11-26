@@ -31,14 +31,6 @@ class ControllableStub(object):
         return self._update_account(request, metadata)
 
     @service_access.framework_method
-    def Watch(self, request, metadata=None):
-        return self._watch(request, metadata)
-
-    @service_access.framework_method
-    def StopWatching(self, request, metadata=()):
-        return self._stop_watching(request, metadata)
-
-    @service_access.framework_method
     def Join(self, request, metadata=()):
         return self._join(request, metadata)
 
@@ -64,12 +56,4 @@ class ControllableStub(object):
 
     @abc.abstractmethod
     def _update_account(self, request, metadata):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _watch(self, request, metadata):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _stop_watching(self, request, metadata):
         raise NotImplementedError

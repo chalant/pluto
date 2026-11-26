@@ -1,6 +1,4 @@
-from pluto.finance import metrics as mtr
 from pluto.coms.utils import conversions
-from pluto.finance import returns
 
 from protos import tracker_state_pb2 as trs
 
@@ -32,13 +30,8 @@ class MetricsTracker(object):
         self._capital_base = capital
         self._data_frequency = data_frequency
         self._emission_rate = emission_rate
-        self._metrics = mtr.pluto_metrics()
         self._first_session = start_dt
         self._last_sync = None
-        for metric in self._metrics:
-            metric.initialization(
-                first_session=start_dt,
-                ledger=self._ledger)
 
     @property
     def ledger(self):
@@ -109,155 +102,25 @@ class MetricsTracker(object):
 
         self._last_checkpoint = ledger_.restore_state(tr_state.ledger_state)
 
-    def handle_minute_close(self, dt, data_portal):
-        """
-
-        Handles the close of the given minute in minute emission.
-
-        Parameters
-        ----------
-        dt : Timestamp
-            The minute that is ending
-
-        Returns
-        -------
-        A minute perf packet.
-
-        """
-        # self.sync_last_sale_prices(dt, data_portal) <= this is already done at the update method...
-        ledger_ = self._ledger
-
-        first_session = ledger_.first_session
-
-        packet = {
-            'period_start': first_session,
-            'period_end': dt,
-            'capital_base': self._capital_base,
-            'minute_perf': {
-                'period_open': self._first_open_session,
-                'period_close': dt,
-            },
-            'cumulative_perf': {
-                'period_open': first_session,
-                'period_close': dt,
-            },
-            'progress': None,
-            'cumulative_risk_metrics': {},
-        }
-
-        # updates returns at the end of the minute.
-        # benchmark_source = self._benchmark_source
-        # ledger_.end_of_bar(self._data_frequency)
-        # returns_tracker = self._returns_tracker
-        # benchmark_source.on_minute_end(dt, data_portal, trading_calendar, sessions)
-        # returns_tracker.end_of_bar(self._data_frequency)
-
-        for metric in self._metrics:
-            metric.end_of_bar(
-                packet=packet,
-                ledger=ledger_,
-                # benchmark_source=benchmark_source,
-                dt=dt,
-                data_portal=data_portal,
-                emission_rate=self._emission_rate
-            )
-        return packet
-
     def handle_market_open(self, session_label, data_portal):
         """
 
-        Handles the start of each session.
+        Handles the start of each session: the ledger starts the session.
 
         Parameters
         ----------
         session_label : pandas.Timestamp
             The label of the session that is about to begin.
         data_portal : DataPortal
-            The current data portal.
-        trading_calendar : trading_calendars.TradingCalendar
+            Not used (the tracker computes no metrics: they are computed from the stream of the broker service).
 
         """
-        ledger_ = self._ledger
-        ledger_.start_of_session(session_label)
-
-        # self._returns_tracker.start_of_session(session_label)
-        # self._benchmark_source.on_session_start(session_label)
+        self._ledger.start_of_session(session_label)
 
         self._current_session = session_label
 
         if not self._first_open_session:
             self._first_open_session = session_label
-
-        # the daily packet's period_open: the session's execution open, as
-        # zipline's MetricsTracker.handle_market_open
-        self._market_open, self._market_close = self._execution_open_and_close(
-            data_portal.trading_calendar,
-            session_label,
-        )
-
-        for metric in self._metrics:
-            metric.start_of_session(
-                dt=session_label,
-                session=session_label,
-                ledger=ledger_,
-                data_portal=data_portal)
-
-    def handle_market_close(self, dt, data_portal):
-        first_session = self._ledger.first_session
-
-        packet = {
-            'period_start': first_session,
-            'period_end': dt,
-            'capital_base': self._capital_base,
-            'daily_perf': {
-                'period_open': self._market_open,
-                'period_close': dt,
-            },
-            'cumulative_perf': {
-                'period_open': first_session,
-                'period_close': dt,
-            },
-            # 'progress': self._progress(self),
-            'cumulative_risk_metrics': {},
-        }
-
-        ledger_ = self._ledger
-
-        # returns_tracker = self._returns_tracker
-        # benchmark_source = self._benchmark_source
-        # returns_tracker.end_of_session()
-
-        # benchmark_source.on_session_end(
-        #     data_portal,
-        #     trading_calendar,
-        #     sessions)
-
-        for metric in self._metrics:
-            metric.end_of_session(
-                dt=dt,
-                packet=packet,
-                ledger=ledger_,
-                # benchmark_source=benchmark_source,
-                data_portal=data_portal
-                # returns_tracker=returns_tracker
-            )
-
-        return packet
-
-    @staticmethod
-    def _execution_open_and_close(calendar, session):
-        # mirrors zipline-reloaded 2642caa7 (exchange-calendars 4.x): sessions
-        # are time-zone naive, the execution open is the session's first minute
-        if session.tzinfo is not None:
-            session = session.tz_localize(None)
-
-        open_ = calendar.session_first_minute(session)
-        close = calendar.session_close(session)
-
-        execution_open = open_
-        execution_close = close
-
-        return execution_open, execution_close
 
     def handle_stop(self, dt):
         """

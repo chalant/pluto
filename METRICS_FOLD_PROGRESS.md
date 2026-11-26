@@ -44,6 +44,39 @@ Done (commit "Metrics from the event stream: observation marker and a stream con
 
 Measured: the new file 33 tests pass; with the broker service, phase participants and phase run tests 108 passed.
 
+## Step 3: the runtime's performance packet is gone
+
+Done (commit "Delete the runtime's performance packet computation"). The packet was computed at every `session_end` /
+`minute_end` of the strategy runtime and dropped (nothing consumed it on the simulation path, and it did not equal the
+controller side). The runtime keeps its book (`Ledger` + `MetricsTracker` behind `context.portfolio` / `context.account`).
+
+Removed:
+- `MetricsTracker.handle_market_close`, `handle_minute_close`, `_execution_open_and_close`, the `pluto_metrics()` instances and
+  their loops (`pluto/finance/metrics/tracker.py`); `handle_market_open` now only starts the session of the ledger (its
+  `data_portal` argument stays: `test_pluto_state.py` passes it; it is documented as unused).
+- `Controllable._get_daily_message`, `_get_minute_message`; `session_end(dt)` and `minute_end(dt)` return the `end` flag only (it
+  still drives `controllable.ended`, `commands.ClockUpdate`).
+- `commands.ClockUpdate` takes no performance writer.
+- The writer chain, which had no producer left and no other user (checked with grep over `pluto/`, `tests/`, `dev/`):
+  `pluto/control/controllable/performance_logging.py` (`PerformanceWriter`, `NullPerformanceWriter`, `Observer`, `read_perf`,
+  `write_perf`); in `server.py` the `monitor` constructor argument, `log_performance` (property and `-lp` option), the performance
+  file and `Watch` / `StopWatching`; `ControllableStub.Watch/StopWatching` and their in-memory implementations;
+  `InMemoryMonitorStub`; `StrategyStub.watch/stop_watching` and its `monitor.<id>` event; `ProcessFactory.set_monitor_service`
+  (no caller); `pluto/interface/monitor.py` (`Monitor`, `GeneratorWatcher`, `AbstractWatcher`: only `in_memory.py` imported it).
+
+Kept, and why:
+- `conversions.to_proto_performance_packet` / `from_proto_performance_packet` and the `controller.proto`, `metrics.proto`,
+  `monitor.proto`, `interface.proto` definitions: `tests/test_pluto_state.py` (`PerformancePacketTest`) uses the conversions and the
+  original tests must not change; `pluto/coms/controller.py` (client of the controller service) uses
+  `from_proto_performance_packet`; the `.proto` files are the interface definitions.
+- `RunSetup.clear_perf` and the field of the Run request: `tests/test_pluto_examples.py` sets it. The server no longer reads it.
+- The `performance` directory of the strategies directory (`directory_setup.py`): layout of the directory, unused now.
+- `MetricsTracker(ledger, capital, data_frequency, emission_rate, start_dt)` signature, `get_state` / `restore_state`,
+  `process_*`, `.ledger/.portfolio/.account/.positions`: `test_pluto_state.py` and the runtime's use.
+
+Measured: full suite on the tree after step 3: **407 passed, 6 subtests passed** (374 on master + the 33 tests of
+`test_pluto_metrics_stream.py`); the equality files, state and isolation: 33 passed.
+
 ## Failure policy of the metrics consumer (owner decision, 2026-11-26)
 
 A metrics consumer error never interrupts a book write (implemented in the consumer). Then:
