@@ -71,14 +71,6 @@ def initialize(context):
 
 def before_trading_start(context, data):
     context.pipeline_data = pipeline_output('my_pipeline')
-    pipeline_data = context.pipeline_data
-    # set the assets we want to follow each bar event
-    all_assets = pipeline_data.index
-
-    longs = all_assets[pipeline_data.longs]
-    shorts = all_assets[pipeline_data.shorts]
-
-    set_watchlist(longs.union(shorts))
 
 
 def _test_args():

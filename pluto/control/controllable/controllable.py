@@ -7,7 +7,7 @@ import pandas as pd
 
 import logbook
 
-from zipline.finance import trading
+from zipline.finance import asset_restrictions, trading
 from zipline.gens.sim_engine import SESSION_END
 from zipline.finance.order import ORDER_STATUS
 
@@ -21,7 +21,7 @@ from zipline.utils import api_support
 from pluto.pipeline import domain
 from pluto.coms.utils import conversions
 
-from pluto.finance import ledger, position_tracker, asset_restrictions
+from pluto.finance import ledger, position_tracker
 from pluto.finance.metrics import tracker
 from pluto.finance.broker import broker_setup as brs
 
@@ -176,7 +176,6 @@ class Controllable(ABC):
         self._ended = False
 
         self._transactions = []
-        self._watchlist = frozenset()
 
     @property
     def not_running(self):
@@ -269,14 +268,6 @@ class Controllable(ABC):
     @property
     def current_data(self):
         return self._current_data
-
-    @property
-    def watchlist(self):
-        return self._watchlist
-
-    @watchlist.setter
-    def watchlist(self, assets):
-        self._watchlist = frozenset(assets)
 
     def set_broker(self, broker):
         self._broker = broker

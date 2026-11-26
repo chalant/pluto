@@ -40,10 +40,6 @@ def initialize(context):
     # context.set_slippage(slippage.VolumeShareSlippage())
 
 
-def before_trading_start(context, data):
-    set_watchlist([context.sym])
-
-
 def handle_data(context, data):
     # Skip first 300 days to get full windows
     context.i += 1

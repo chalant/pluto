@@ -117,7 +117,7 @@ class BrokerParticipant(object):
         the last tick) and the last sale prices of the tick, sent on the strategy's own topic."""
         manager = self._manager
 
-        # the stale-batch filter of the manager (``receive_orders``, ``receive_watchlist``): what the runtimes send
+        # the stale-batch filter of the manager (``receive_orders``): what the runtimes send
         # for another clock event than the one they are about to run is ignored
         manager.set_global_timestamp(conversions.to_datetime(event.clock.timestamp))
 
@@ -161,7 +161,7 @@ class BrokerParticipant(object):
 
     def _submit(self) -> None:
         """The orders the strategies sent in this tick reach the book, by strategy in registration order; then the
-        manager starts the next tick (new orders, watchlist and broker states)."""
+        manager starts the next tick (new orders and broker states)."""
         manager = self._manager
         self._check_orders()
         orders = manager.new_orders

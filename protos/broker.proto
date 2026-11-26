@@ -16,12 +16,6 @@ service Broker {
     rpc CancelOrder (CancelRequest) returns (google.protobuf.Empty);
     rpc CancelAllOrdersForAsset (Asset) returns (google.protobuf.Empty);
 //    rpc ExecuteCancelPolicy (CancelEvent) returns (google.protobuf.Empty);
-    rpc SetWatchList(stream Chunk) returns (google.protobuf.Empty);
-}
-
-message WatchList {
-    google.protobuf.Timestamp ts = 1;
-    repeated Asset assets = 2;
 }
 
 message AssetPrice {

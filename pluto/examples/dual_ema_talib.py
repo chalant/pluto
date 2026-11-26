@@ -47,10 +47,6 @@ def initialize(context):
     # context.set_slippage(slippage.VolumeShareSlippage())
 
 
-def before_trading_start(context, data):
-    set_watchlist([context.asset])
-
-
 def handle_data(context, data):
     trailing_window = data.history(context.asset, 'price', 40, '1d')
     if trailing_window.isnull().values.any():

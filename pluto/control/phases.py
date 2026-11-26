@@ -22,8 +22,8 @@ signals (the calendars' ledgers share a portfolio, so the writes of one signal a
 
 Messages of the phases carry ``logical_ts`` = the clock time of the tick in nanoseconds and ``phase`` = the rank above;
 a ``done`` has the rank of its phase plus ``DONE_AFTER``. Data between participants travels on their own topics
-(``strategy.account.<process id>``: the broker state for a runtime, ``strategy.orders`` and ``strategy.watchlist``, key
-the process id: what the runtime sends back), with the rank of the phase that makes them.
+(``strategy.account.<process id>``: the broker state for a runtime, ``strategy.orders``, key the process id: what the
+runtime sends back), with the rank of the phase that makes them.
 
 Payloads are protobuf messages (``protos/clock.proto``, ``broker.proto``, ``phases.proto``), so ``codec()`` serialises every
 one of them.
@@ -68,7 +68,6 @@ DONES = 'phase.done.>'
 DONE_AFTER = 1
 
 ORDERS_TOPIC = 'strategy.orders'
-WATCHLIST_TOPIC = 'strategy.watchlist'
 
 CONTROLLER_ID = 'controller'
 BROKER_ID = 'broker'
@@ -85,7 +84,6 @@ def message_types() -> dict[str, type]:
         clock_pb2.ClockEvent,
         broker_pb2.BrokerState,
         broker_pb2.OrderBatch,
-        broker_pb2.WatchList,
         phases_pb2.SignalEvent,
         phases_pb2.AccountEvent,
         phases_pb2.PhaseDone)}

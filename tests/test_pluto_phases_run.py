@@ -118,9 +118,6 @@ class PhasesRunTests(ZiplinePlutoFixture):
         self.assertEqual(counts[phases.ACCOUNT.topic], ticks)
         self.assertEqual(counts[phases.SUBMIT.topic], ticks)
         self.assertEqual(counts[phases.ORDERS_TOPIC], ticks)
-        # the watchlist goes with every clock update of a running strategy (not after it ended)
-        self.assertGreater(counts[phases.WATCHLIST_TOPIC], 0)
-        self.assertLessEqual(counts[phases.WATCHLIST_TOPIC], ticks)
         self.assertEqual(counts[phases.BOOK.topic], counts[phases.METRICS.topic])
         self.assertLessEqual(counts[phases.BOOK.topic], ticks)
 

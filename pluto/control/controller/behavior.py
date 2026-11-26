@@ -12,15 +12,7 @@ class AbstractControllerBehavior(ABC):
         pass
 
     @abstractmethod
-    def update_watchlist(self, ts: pd.Timestamp, manager: pm.StrategyManager):
-        pass
-
-    @abstractmethod
     def update_data(self, ts: pd.Timestamp, manager: pm.StrategyManager, signals: typing.List):
-        pass
-
-    @abstractmethod
-    def ingest_watchlist_data(self, ts: pd.Timestamp, manager: pm.StrategyManager, signals: typing.List):
         pass
 
     @abstractmethod

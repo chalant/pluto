@@ -813,15 +813,3 @@ def symbols(*args):
     --------
     :func:`zipline.api.set_symbol_lookup_date`
     """
-
-def set_watchlist(assets: typing.Iterable[Asset]) -> None:
-    """
-
-    Parameters
-    ----------
-    assets: typing.Iterable[Asset]
-
-    Returns
-    -------
-
-    """

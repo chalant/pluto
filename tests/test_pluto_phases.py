@@ -159,7 +159,6 @@ class CodecTests(unittest.TestCase):
             'BrokerState': broker_pb2.BrokerState(
                 last_sale_prices=[broker_pb2.AssetPrice(sid=1, price=10.1)], not_running=1),
             'OrderBatch': broker_pb2.OrderBatch(ts=phases.proto_timestamp(TS), ended=True),
-            'WatchList': broker_pb2.WatchList(ts=phases.proto_timestamp(TS)),
             'SignalEvent': phases_pb2.SignalEvent(
                 timestamp=phases.proto_timestamp(TS),
                 signal=clock_pb2.Signal(timestamp=phases.proto_timestamp(TS), event=clock_pb2.SESSION_END,

@@ -42,9 +42,6 @@ class Controller(object):
         behavior = self._behavior
         driver = self._driver
 
-        # data update hook
-        behavior.ingest_watchlist_data(ts, strategy_manager, signals)
-
         # read before any write of this tick: the prices of the positions the book holds now
         last_sale_prices = behavior.get_last_sale_prices(ts, strategy_manager, signals)
 
@@ -117,10 +114,7 @@ class Controller(object):
         # advance all processes; their new orders reach the manager on the bus
         driver.drive(phases.TRADE, clock, ts_ns, runtimes)
 
-        # process watchlist from strategies
-        # ingest for all assets before updating watchlist...
         behavior.ingest_all_data(ts, strategy_manager, signals)
-        behavior.update_watchlist(ts, strategy_manager)
 
         # new orders reach the book
         driver.drive(phases.SUBMIT, clock, ts_ns, (phases.BROKER_ID,))

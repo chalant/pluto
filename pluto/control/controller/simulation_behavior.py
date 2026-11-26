@@ -12,7 +12,6 @@ from protos.clock_pb2 import (
     SESSION_END)
 
 from pluto.control.controller.behavior import AbstractControllerBehavior
-from pluto.control.controller import process_manager as pm
 
 
 class SimulationControllerBehavior(AbstractControllerBehavior):
@@ -58,13 +57,7 @@ class SimulationControllerBehavior(AbstractControllerBehavior):
         return res
 
     # in simulation all the data is already in the bundle: nothing to ingest.
-    def update_watchlist(self, ts, manager: pm.StrategyManager):
-        pass
-
     def update_data(self, ts, manager, signals):
-        pass
-
-    def ingest_watchlist_data(self, ts, manager, signals):
         pass
 
     def ingest_all_data(self, ts, manager, signals):
