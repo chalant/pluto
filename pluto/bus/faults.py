@@ -107,6 +107,7 @@ Rules of the wrapper:
 
 import enum
 import random
+import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -652,15 +653,19 @@ class SeededFaultBus:
     def poll(self, timeout: float = 0.0) -> bool:
         """Release what is held that is due (with `release_on_poll`: skip ahead in time to the next held message and
         release what is due then), then poll the inner bus. True when either moved a message into a queue. Never runs a
-        handler, never sleeps (the wrapper has no clock; `timeout` goes to the inner bus). Not networked: False, at
-        once, nothing to read."""
+        handler. Not networked: False, at once, nothing to read. With `release_on_poll` over an inner bus that cannot
+        wait, a poll that finds nothing sleeps `timeout` seconds, as a poll of a real broker waits for a message that
+        does not come: the caller's deadline is wall-clock and would otherwise be a busy loop."""
         self._check_open()
         if not self.networked:
             return False
         if self._cfg.release_on_poll and (self._held or self._dups):
             self._now = max(self._now, self._next_due())
         moved = self._release() > 0
-        return self._inner.poll(0.0 if moved else timeout) or moved
+        found = self._inner.poll(0.0 if moved else timeout) or moved
+        if not found and timeout > 0 and not self._inner.networked:
+            time.sleep(timeout)
+        return found
 
     def step(self) -> bool:
         self._check_open()
