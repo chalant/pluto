@@ -65,8 +65,15 @@ Fault injection: `SeededFaultBus` (module `pluto.bus.faults`) wraps any bus and 
 networked bus may produce under this contract (duplicates, late arrival across lanes, lost deliveries, restarts,
 publish failures, a silent participant); its docstring has the fault model.
 
-Not here: start from a time, `seek`, deduplication, retention limits for logs (logs are never
-trimmed; open).
+Retention (S16). Logs are unlimited by default. `InMemoryBus(retention=Retention(max_messages=N))` (and `LogBus`) keeps at
+least the newest N entries of each topic, dropping older ones in batches: the memory of the logs is a function of N, not of
+the length of a run. Trimming never loses a delivery (a subscription holds the messages it has not settled); it only ends
+replay: a position older than `oldest(topic)`, and `Start.EARLIEST` once a topic was trimmed, raise `PositionTooOld`, never a
+shorter replay. `trim(position)` is the owner's explicit low-water mark ("everything before this tick is checkpointed"),
+held back by what a live subscription may still resume from. Offsets and positions stay absolute. Idle lanes are freed.
+Dead letters are not trimmed (`dead_letters()[n:]` is how the new ones are found; a failing handler normally aborts a run).
+
+Not here: start from a time, `seek`, deduplication.
 """
 
 from pluto.bus.api import (
@@ -79,8 +86,10 @@ from pluto.bus.api import (
     Handler,
     NotIdle,
     Position,
+    PositionTooOld,
     QueueFull,
     Receipt,
+    Retention,
     Start,
     Subscription,
 )
@@ -108,11 +117,13 @@ __all__ = [
     "LogBus",
     "NotIdle",
     "Position",
+    "PositionTooOld",
     "ProtobufCodec",
     "PublishFailed",
     "QueueFull",
     "Receipt",
     "Request",
+    "Retention",
     "SeededFaultBus",
     "SerializingBus",
     "Start",

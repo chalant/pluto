@@ -639,6 +639,16 @@ class SeededFaultBus:
     def position_of(self, delivery: Delivery) -> Position:
         return self._inner.position_of(delivery)
 
+    def oldest(self, topic: str) -> Position:
+        self._check_open()
+        return self._inner.oldest(topic)
+
+    def trim(self, position: Position) -> Position:
+        """Trims the inner bus's log. A restart of a subscription resumes from its stored checkpoint: if a trim or a
+        window passed it the resume fails with `PositionTooOld`, which is the clear failure retention promises."""
+        self._check_open()
+        return self._inner.trim(position)
+
     # dispatch
 
     @property

@@ -14,8 +14,10 @@ from pluto.bus.api import (
     Handler,
     NotIdle,
     Position,
+    PositionTooOld,
     QueueFull,
     Receipt,
+    Retention,
     Start,
     Subscription,
     exact_topic,
@@ -143,17 +145,23 @@ class InMemoryBus:
     its dispatch key and runs before the receiver drains, normally dead-lettered after `max_attempts`. Size
     `queue_capacity` for the largest burst of one phase.
 
-    Lanes are never freed: use keys of low cardinality (strategy or instrument ids). Logs are never trimmed
-    (retention is open).
+    Lanes are freed when they are idle, so memory follows the keys in flight, not all keys seen. Logs are unlimited unless
+    `retention` (`Retention(max_messages=N)`, S16 of `pluto.bus`) bounds them; dead letters are never trimmed.
     """
 
-    def __init__(self, *, queue_capacity: int = 100_000, max_attempts: int = 3) -> None:
+    def __init__(
+        self, *, queue_capacity: int = 100_000, max_attempts: int = 3, retention: Retention | None = None
+    ) -> None:
         if not _is_int(queue_capacity) or not _is_int(max_attempts) or queue_capacity < 1 or max_attempts < 1:
             raise ValueError("queue_capacity and max_attempts must be ints of at least 1")
+        if retention is not None and not isinstance(retention, Retention):
+            raise TypeError(f"retention must be a Retention or None, got {retention.__class__.__name__}")
         self._capacity = queue_capacity
         self._max_attempts = max_attempts
+        self._window = None if retention is None else retention.max_messages
         self._closed = False
         self._logs: dict[str, list[Envelope]] = {}
+        self._base: dict[str, int] = {}  # topic -> offset of the first entry still in its log (absent: 0)
         self._seq: dict[str, int] = {}
         self._consumers: list[_Consumer] = []  # registration order
         self._groups: dict[str, _Consumer] = {}
@@ -186,8 +194,7 @@ class InMemoryBus:
         if self._closed:
             raise BusClosed("the bus is closed")
         _check_fields(logical_ts, phase, seq, key, producer_id)
-        log = self._logs.get(topic)
-        if log is None:
+        if topic not in self._logs:
             exact_topic(topic)
         consumers = self._routes.get(topic)
         if consumers is None:
@@ -196,8 +203,6 @@ class InMemoryBus:
             if consumer.pending >= self._capacity:
                 raise QueueFull(f"subscription queue for {consumer.pattern!r} is full ({self._capacity})")
         # nothing can be refused from here on: only now does the bus change
-        if log is None:
-            log = self._logs[topic] = []
         if seq is None:
             seq = self._seq[producer_id] = self._seq.get(producer_id, 0) + 1
         if msg_id is None:
@@ -216,8 +221,7 @@ class InMemoryBus:
             schema_version,
             payload,
         )
-        offset = len(log)
-        log.append(envelope)
+        offset = self._log_append(topic, envelope)
         for consumer in consumers:
             self._enqueue(consumer, offset, envelope)
         return Receipt(msg_id, Position(topic, offset))
@@ -291,7 +295,7 @@ class InMemoryBus:
             consumer.members.append(subscription)
             return subscription
         sources = self._replay_sources(topic_or_pattern, tokens, start)
-        replayed = sum(len(self._logs[topic]) - first for topic, first in sources)
+        replayed = sum(self._end(topic) - first for topic, first in sources)
         if replayed > self._capacity:
             raise QueueFull(f"replay of {replayed} messages exceeds the queue capacity {self._capacity}")
         self._next_subscription += 1
@@ -305,8 +309,9 @@ class InMemoryBus:
             self._groups[group] = consumer
         for topic, first in sources:
             log = self._logs[topic]
-            for offset in range(first, len(log)):
-                self._enqueue(consumer, offset, log[offset])
+            base = self._base.get(topic, 0)
+            for offset in range(first, base + len(log)):
+                self._enqueue(consumer, offset, log[offset - base])
         return subscription
 
     def _replay_sources(
@@ -316,15 +321,77 @@ class InMemoryBus:
         if start is None or start is Start.LATEST:
             return []
         if start is Start.EARLIEST:
-            return [(topic, 0) for topic in self._logs if _matches(tokens, tuple(topic.split(".")))]
+            sources = []
+            for topic in self._logs:
+                if _matches(tokens, tuple(topic.split("."))):
+                    if self._base.get(topic, 0) > 0:
+                        raise PositionTooOld(
+                            f"{topic!r} was trimmed: Start.EARLIEST would replay less than the whole log, "
+                            f"subscribe at bus.oldest({topic!r}) for what is left",
+                            None,
+                            self.oldest(topic),
+                        )
+                    sources.append((topic, 0))
+            return sources
         if not isinstance(start, Position):
             raise TypeError(f"start must be a Start, a Position or None, got {start.__class__.__name__}")
         if start.topic != pattern or "*" in tokens or ">" in tokens:
             raise ValueError(f"{start} needs a subscription to exactly that topic, not {pattern!r}")
-        length = len(self._logs.get(start.topic, ()))
-        if not _is_int(start.token) or not 0 <= start.token <= length:
-            raise ValueError(f"{start} is not a position of this bus's log (length {length})")
+        end = self._end(start.topic)
+        if not _is_int(start.token) or not 0 <= start.token <= end:
+            raise ValueError(f"{start} is not a position of this bus's log (end {end})")
+        if start.token < self._base.get(start.topic, 0):
+            raise PositionTooOld(
+                f"{start} is older than what the log of {start.topic!r} still has", start, self.oldest(start.topic)
+            )
         return [(start.topic, start.token)] if start.topic in self._logs else []
+
+    # retention
+
+    def _end(self, topic: str) -> int:
+        """One past the last offset of the topic's log (offsets are absolute: a trimmed log keeps counting)."""
+        return self._base.get(topic, 0) + len(self._logs.get(topic, ()))
+
+    def _log_append(self, topic: str, envelope: Envelope) -> int:
+        """Adds the envelope to the topic's log and applies the window; returns its offset."""
+        log = self._logs.get(topic)
+        if log is None:
+            log = self._logs[topic] = []
+        offset = self._base.get(topic, 0) + len(log)
+        log.append(envelope)
+        window = self._window
+        if window is not None and len(log) > window + (window >> 2):
+            self._drop_front(topic, len(log) - window)
+        return offset
+
+    def _drop_front(self, topic: str, count: int) -> None:
+        """Drops the `count` oldest entries of the topic's log (a `LogBus` drops its positions with them)."""
+        del self._logs[topic][:count]
+        self._base[topic] = self._base.get(topic, 0) + count
+
+    def oldest(self, topic: str) -> Position:
+        self._check_open()
+        exact_topic(topic)
+        return Position(topic, self._base.get(topic, 0))
+
+    def trim(self, position: Position) -> Position:
+        self._check_open()
+        if not isinstance(position, Position):
+            raise TypeError(f"trim needs a Position, got {position.__class__.__name__}")
+        topic = position.topic
+        exact_topic(topic)
+        end = self._end(topic)
+        if not _is_int(position.token) or not 0 <= position.token <= end:
+            raise ValueError(f"{position} is not a position of this bus's log (end {end})")
+        limit = position.token
+        for consumer in self._consumers:
+            cursor = consumer.cursors.get(topic)
+            if cursor is not None and cursor.frontier < limit:
+                limit = cursor.frontier  # a live subscription may still resume from there
+        base = self._base.get(topic, 0)
+        if limit > base:
+            self._drop_front(topic, limit - base)
+        return self.oldest(topic)
 
     def _cancel(self, subscription: _Subscription) -> None:
         if subscription.cancelled:
@@ -432,6 +499,8 @@ class InMemoryBus:
         consumer.pending -= 1
         if lane.queue:
             self._push(lane)
+        else:
+            del consumer.lanes[(lane.topic, lane.key)]  # idle: the next message of the lane makes a new one
         return True
 
     def _drop_stale(self) -> bool:
@@ -486,6 +555,7 @@ class InMemoryBus:
             for subscription in consumer.members:
                 subscription.cancelled = True
         self._logs.clear()
+        self._base.clear()
         self._consumers.clear()
         self._groups.clear()
         self._subscriptions.clear()

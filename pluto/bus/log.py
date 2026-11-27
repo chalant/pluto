@@ -20,11 +20,15 @@ What differs from the in-memory bus (and from the interface's first draft, `plut
   choice is made over everything this bus sent. It does not look for what other processes wrote: idle means idle *here*
   (`networked`); whoever waits for an answer from another process `poll`s for it (the controller's `PhaseDriver` does),
   and `subscribe` reads the whole log first.
-* Each bus mirrors the whole log of its namespace from the start, as the in-memory bus keeps its logs. A `Position` is
-  the broker's position (a stream sequence, an offset), so a bus attached to the same namespace later, in another process,
-  resumes from a stored position. Retention, trimming and the mirror's size are open: a bus that attaches late to a very
-  long stream reads all of it before its first call returns, and the `Log` bounds that read (`JetStreamLog`: its
-  `timeout`, 30 s by default, per request), so a history too long for it is a `BusError`, not a slow start.
+* Each bus mirrors the log of its namespace in memory, as the in-memory bus keeps its logs; `retention=Retention(max_messages=N)`
+  bounds the mirror per topic (trimmed as entries are read, also on the first read of a long stream). A `Position` is the
+  broker's position (a stream sequence, an offset), so a bus attached to the same namespace later, in another process, resumes
+  from a stored position, if the position is still in the log. The log has its own limits (`JetStreamLog(max_messages=,
+  max_age=, max_bytes=)`): a bus that attaches after they dropped the start of the stream cannot replay before the first
+  message it reads (`PositionTooOld`), whatever its own retention. Limits must exceed what one bus publishes between two reads:
+  the read-back of a message the stream already dropped is a `BusError`, not a silent loss. A bus that attaches late to a very
+  long stream reads all of it before its first call returns, and the `Log` bounds that read (`JetStreamLog`: its `timeout`, 30 s
+  by default, per request), so a history too long for it is a `BusError`, not a slow start.
 * Not here: the in-memory bus's `QueueFull` (a rule of the in-memory bus, `pluto.bus.__init__` S12); groups are in-process
   only (the members of a group share one reader); the payload is `bytes` (wrap the bus in `SerializingBus`).
 
@@ -38,12 +42,16 @@ from bisect import bisect_left
 from collections import deque
 from typing import Any, Protocol
 
-from pluto.bus.api import BusError, Envelope, Position, Receipt, exact_topic
+from pluto.bus.api import BusError, Envelope, Position, PositionTooOld, Receipt, Retention, Start, exact_topic
 from pluto.bus.memory import InMemoryBus, _check_fields, _is_int
 
 
 class Log(Protocol):
     """A durable, totally ordered log of one run. Positions are ints, increasing in the order of the log."""
+
+    first_position: int
+    """The position of the first message a new log holds (1 for JetStream). A bus whose first read starts above it knows
+    that the log's own limits dropped the history before it: replay from before that is `PositionTooOld`."""
 
     def append(self, topic: str, data: bytes) -> None:
         """Send a message, in order after the ones appended before; does not wait for the broker."""
@@ -75,10 +83,13 @@ def decode(topic: str, data: bytes) -> Envelope:
 class LogBus(InMemoryBus):
     """The bus over a `Log`; see the module docstring."""
 
-    def __init__(self, log: Log, *, max_attempts: int = 3) -> None:
-        super().__init__(max_attempts=max_attempts)
+    def __init__(self, log: Log, *, max_attempts: int = 3, retention: Retention | None = None) -> None:
+        super().__init__(max_attempts=max_attempts, retention=retention)
         self._log = log
-        self._tokens: dict[str, list[int]] = {}  # per topic: the log position of each mirrored message
+        self._tokens: dict[str, list[int]] = {}  # per topic: the log position of each retained message
+        self._floors: dict[str, int] = {}  # per topic: the lowest position still replayable after a trim
+        self._history_floor = 0  # the log's first position, when its own limits had dropped earlier ones
+        self._seen = False  # has anything been read
         self._frontier = 0  # one past the last log position read
         self._dirty = False  # published since the last read
         self._unresolved: deque[tuple[Receipt, str]] = deque()  # published, position not known yet (in log order)
@@ -155,14 +166,13 @@ class LogBus(InMemoryBus):
                     raise self._failure
                 receipt._position = Position(topic, token)
             envelope = decode(topic, data)
-            log = self._logs.get(topic)
-            if log is None:
-                log = self._logs[topic] = []
-                self._tokens[topic] = []
-            offset = len(log)
-            log.append(envelope)
-            self._tokens[topic].append(token)
+            if not self._seen:
+                self._seen = True
+                if token > self._log.first_position:  # the log's own limits had dropped what came before
+                    self._history_floor = token
+            self._tokens.setdefault(topic, []).append(token)
             self._frontier = token + 1
+            offset = self._log_append(topic, envelope)  # trims the mirror (and, through _drop_front, the tokens)
             consumers = self._routes.get(topic)
             if consumers is None:
                 consumers = self._build_route(topic)
@@ -190,8 +200,68 @@ class LogBus(InMemoryBus):
 
     def position_of(self, delivery) -> Position:
         local = super().position_of(delivery)
-        tokens = self._tokens[local.topic]
-        return Position(local.topic, tokens[local.token] if local.token < len(tokens) else self._frontier)
+        topic = local.topic
+        tokens = self._tokens[topic]
+        index = local.token - self._base.get(topic, 0)
+        if index < 0:  # the subscription's frontier has been trimmed: a position that fails clearly if it is resumed from
+            return Position(topic, self._floor_of(topic) - 1)
+        return Position(topic, tokens[index] if index < len(tokens) else self._frontier)
+
+    # retention: the mirror is trimmed like the in-memory logs; positions are the log's, offsets are local
+
+    def _floor_of(self, topic: str) -> int:
+        """The lowest log position that can still be replayed from in the topic: below it entries were trimmed from the
+        mirror or (`_history_floor`) were never in it, because the log's own limits had dropped them."""
+        return max(self._floors.get(topic, 0), self._history_floor)
+
+    def _drop_front(self, topic: str, count: int) -> None:
+        super()._drop_front(topic, count)
+        tokens = self._tokens[topic]
+        del tokens[:count]
+        self._floors[topic] = tokens[0] if tokens else self._frontier
+
+    def _caught_up(self) -> None:
+        """What this bus published, and (a bus that has read nothing yet) the log's history floor, are in the mirror."""
+        if self._dirty or not self._seen:
+            self._read(complete=not self._seen)
+
+    def oldest(self, topic: str) -> Position:
+        self._check_open()
+        exact_topic(topic)
+        self._caught_up()
+        return Position(topic, self._floor_of(topic))
+
+    def trim(self, position: Position) -> Position:
+        self._check_open()
+        if not isinstance(position, Position):
+            raise TypeError(f"trim needs a Position, got {position.__class__.__name__}")
+        self._caught_up()
+        if not _is_int(position.token) or not 0 <= position.token <= self._frontier:
+            raise ValueError(f"{position} is not a position of this log (end {self._frontier})")
+        tokens = self._tokens.get(position.topic, ())
+        super().trim(Position(position.topic, self._base.get(position.topic, 0) + bisect_left(tokens, position.token)))
+        return self.oldest(position.topic)
+
+    def _replay_sources(self, pattern, tokens, start):
+        if start is Start.EARLIEST and self._history_floor > 0:
+            raise PositionTooOld(
+                "the log's own limits dropped its first messages before this bus read it: Start.EARLIEST would replay "
+                "less than the whole log",
+                None,
+                None if "*" in pattern or ">" in pattern else self.oldest(pattern),
+            )
+        if isinstance(start, Position):
+            if start.topic != pattern or "*" in tokens or ">" in tokens:
+                raise ValueError(f"{start} needs a subscription to exactly that topic, not {pattern!r}")
+            if not _is_int(start.token) or not 0 <= start.token <= self._frontier:
+                raise ValueError(f"{start} is not a position of this log (end {self._frontier})")
+            if start.token < self._floor_of(start.topic):
+                raise PositionTooOld(
+                    f"{start} is older than what the log of {start.topic!r} still has", start, self.oldest(start.topic)
+                )
+            index = bisect_left(self._tokens.get(start.topic, ()), start.token)
+            start = Position(start.topic, self._base.get(start.topic, 0) + index)
+        return super()._replay_sources(pattern, tokens, start)
 
     def _check_open(self) -> None:
         super()._check_open()
@@ -229,6 +299,7 @@ class LogBus(InMemoryBus):
             failure = error
         super().close()
         self._tokens.clear()
+        self._floors.clear()
         self._unresolved.clear()
         try:
             self._log.close()  # which waits for what was appended

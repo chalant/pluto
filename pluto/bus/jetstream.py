@@ -24,7 +24,14 @@ the first failure, so a message the broker refused cannot be lost silently at th
 `BusError`.
 
 JetStream stores to disk with a periodic fsync (`sync_interval`, two minutes by default on the server): a crash of the
-machine can lose acknowledged messages unless the server is configured otherwise. Retention is the stream's: unlimited here.
+machine can lose acknowledged messages unless the server is configured otherwise.
+
+Retention. The stream is the durable log of the run and keeps everything unless `max_messages`, `max_age` or `max_bytes` are
+given (limits policy, the oldest messages are discarded first). `WorkQueue` and `Interest` retention are not usable: they delete
+a message once consumers acknowledged it, and these consumers read without acks and from the start, so every late attach and
+every replay would find the history gone. The stream and the consumer are deleted at close with `drop_on_close`; a process that
+crashed leaves both (the consumer expires after a day, the stream stays), so a long-lived deployment sets limits and an orphaned
+run is removed with `delete_stream(namespace)`.
 """
 
 import asyncio
@@ -115,6 +122,28 @@ class _Loop:
             self._loop.close()
 
 
+def delete_stream(namespace: str, url: str = DEFAULT_URL, timeout: float = 10.0) -> bool:
+    """Deletes the stream of a run (and its consumers): what a crashed run leaves behind, since the stream is the durable log
+    and is only dropped at close on request. True if it was there. Must not be called from a running event loop."""
+
+    async def delete() -> bool:
+        async def quiet(error):
+            pass
+
+        nc = await nats.connect(url, connect_timeout=timeout, allow_reconnect=False, error_cb=quiet)
+        try:
+            return await nc.jetstream(timeout=timeout).delete_stream(namespace)
+        except NotFoundError:
+            return False
+        finally:
+            await nc.close()
+
+    try:
+        return asyncio.run(asyncio.wait_for(delete(), timeout * 2))
+    except Exception as error:
+        raise BusError(f"cannot delete stream {namespace!r}: {error.__class__.__name__}: {error}") from error
+
+
 class JetStreamLog:
     """The log of one run on a JetStream stream. See the module docstring.
 
@@ -130,7 +159,13 @@ class JetStreamLog:
         `FILE` (default) or `MEMORY`.
     timeout: float
         Seconds to wait for the server's answers (own messages coming back, a fetch).
+    max_messages, max_age, max_bytes: optional
+        The stream's limits (messages, seconds, bytes; the oldest messages are discarded first): the log's own
+        retention, which a `LogBus`'s mirror (`Retention`) does not control. Unlimited by default. A bus that attaches
+        after the limits dropped the first messages cannot replay from before the first one it reads (`PositionTooOld`).
     """
+
+    first_position = 1  # JetStream sequences start at 1
 
     def __init__(
         self,
@@ -141,8 +176,18 @@ class JetStreamLog:
         storage: StorageType = StorageType.FILE,
         url: str = DEFAULT_URL,
         timeout: float = 30.0,
+        max_messages: int | None = None,
+        max_age: float | None = None,
+        max_bytes: int | None = None,
     ) -> None:
         self.namespace = namespace or "pluto" + uuid.uuid4().hex[:12]
+        for name, value in (("max_messages", max_messages), ("max_age", max_age), ("max_bytes", max_bytes)):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0):
+                raise ValueError(f"{name} must be a positive number or None, got {value!r}")
+        # the stream's own retention (LimitsPolicy, discard oldest): what the server keeps whatever the buses read
+        self._limits = {
+            key: value for key, value in (("max_msgs", max_messages), ("max_age", max_age), ("max_bytes", max_bytes))
+            if value is not None}
         self._drop_on_close = drop_on_close
         self._timeout = timeout
         self._prefix = self.namespace + "."
@@ -175,7 +220,14 @@ class JetStreamLog:
         created = False
         try:
             if create:
-                await js.add_stream(StreamConfig(name=self.namespace, subjects=[self._prefix + ">"], storage=storage))
+                await js.add_stream(
+                    StreamConfig(
+                        name=self.namespace,
+                        subjects=[self._prefix + ">"],
+                        storage=storage,
+                        **self._limits,
+                    )
+                )
                 created = True
             consumer = f"{self.namespace}-{uuid.uuid4().hex[:8]}"
             sub = await js.pull_subscribe(
@@ -289,7 +341,11 @@ class JetStreamLog:
                 own = int(headers[_NUMBER_HEADER])
                 self._own_read += 1
                 if own != self._own_read:
-                    raise BusError("NATS stored the messages of this log out of order")
+                    raise BusError(
+                        "NATS returned the messages of this log out of order, or dropped some before this log read them "
+                        "back (the stream's limits, max_messages/max_age/max_bytes, are smaller than what was "
+                        "published between two reads)"
+                    )
             entries.append((message.metadata.sequence.stream, message.subject[prefix_length:], message.data, own))
 
     def close(self) -> None:
