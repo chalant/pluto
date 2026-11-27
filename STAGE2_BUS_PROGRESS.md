@@ -231,3 +231,9 @@ Read from that branch (not edited). `PhaseDriver`, `BrokerParticipant` and `Stra
    that exception through.
 6. The contract tests that exercise this (`test_poll_*`, `networked`) run on every bus; a wrapper over `InMemoryBus` passes
    `test_a_bus_nobody_else_writes_to_has_nothing_to_poll` only if `poll(30.0)` returns False at once when `networked` is False.
+
+### Verification of the review fixes
+
+Fresh clone `/home/yves/.cache/hades-pluto-dev/stage2-bus/verify` at `d973fdbf` (code of the head), fresh env, NATS up, `PLUTO_REQUIRE_NATS=1`,
+`pytest tests`: **590 passed, 2 skipped** in 238.6 s; with `PYTHONHASHSEED=1`: **590 passed, 2 skipped** in 233.9 s (the two skips are the
+poll tests that need a second writer, on the two in-memory buses). No stream or consumer left on the server.
