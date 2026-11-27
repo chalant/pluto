@@ -119,6 +119,8 @@ class FakeProcess(object):
         self.batch_ts = None
         # the ids of the orders in its batch: None for one order
         self.order_ids = None
+        # the number of batches it sends in a clock event
+        self.batches = 1
 
     def account_update(self, state):
         if self.fail_account:
@@ -134,6 +136,10 @@ class FakeProcess(object):
             ids = ['order-' + self.process_id] if self.order_ids is None else self.order_ids
 
             self.manager.runtime(self.process_id).send_orders(order_batch(self.process_id, ts, ids))
+
+            for batch in range(2, self.batches + 1):  # more than one batch per clock event: distinct orders
+                self.manager.runtime(self.process_id).send_orders(
+                    order_batch(self.process_id, ts, ['{}-batch{}'.format(i, batch) for i in ids]))
 
 
 class FaultyBus(InMemoryBus):

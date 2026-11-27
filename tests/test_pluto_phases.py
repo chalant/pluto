@@ -6,7 +6,7 @@ import unittest
 import logbook
 import pandas as pd
 
-from pluto.bus import InMemoryBus, SerializingBus
+from pluto.bus import Envelope, InMemoryBus, SerializingBus
 from pluto.control import phases
 
 from protos import broker_pb2, clock_pb2, phases_pb2
@@ -20,6 +20,10 @@ TS_NS = TS.value
 def clock_event():
     return clock_pb2.ClockEvent(timestamp=phases.proto_timestamp(TS), event=clock_pb2.BAR)
 
+
+def event(msg_id='an event', step=None):
+    """An event of the driver, as a participant answers it: its id and, if there is one, its step."""
+    return Envelope(msg_id, 't', '', 't', 0, 0, 'controller', 0, correlation_id=None if step is None else str(step))
 
 class FakeParticipant(object):
     """Says done in a phase, with the work it is given."""
@@ -37,8 +41,8 @@ class FakeParticipant(object):
     def _on_phase(self, delivery):
         self.calls += 1
         envelope = delivery.envelope
-        answers = envelope.msg_id if self._answers is None else self._answers
-        phases.report(self._bus, self._phase, envelope.logical_ts, self.name, self._work, LOG, answers)
+        answers = envelope if self._answers is None else self._answers
+        phases.report(self._bus, self._phase, envelope.logical_ts, self.name, self._work, LOG, answers=answers)
 
 
 class PhaseDriverTests(unittest.TestCase):
@@ -90,8 +94,8 @@ class PhaseDriverTests(unittest.TestCase):
 
     def test_done_of_another_phase_or_time_aborts(self):
         FakeParticipant(self.bus, 'a', phases.BOOK)
-        phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late')
-        phases.publish_done(self.bus, phases.BOOK, TS_NS - 1, 'old')
+        phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late', answers=event('a late event'))
+        phases.publish_done(self.bus, phases.BOOK, TS_NS - 1, 'old', answers=event('an old event'))
 
         with self.assertRaises(PhaseError) as raised:
             self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
@@ -104,7 +108,7 @@ class PhaseDriverTests(unittest.TestCase):
         # two dones of one participant that are not the same message (they answer different events): the second is an
         # error; the same done delivered or published twice is a copy and is ignored (the next test)
         FakeParticipant(self.bus, 'a', phases.BOOK)
-        FakeParticipant(self.bus, 'a', phases.BOOK, answers='another event')
+        FakeParticipant(self.bus, 'a', phases.BOOK, answers=event('another event'))
 
         with self.assertRaisesRegex(PhaseError, 'a said done twice'):
             self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
@@ -209,7 +213,8 @@ class RemoteParticipant(object):
         ts = delivery.envelope.logical_ts
 
         if self._answers:
-            self._bus.arrive(lambda: phases.report(self._bus, self._phase, ts, self.name, self._work, LOG))
+            self._bus.arrive(
+                lambda: phases.report(self._bus, self._phase, ts, self.name, self._work, LOG, answers=event()))
 
 
 class NetworkedPhaseDriverTests(unittest.TestCase):
@@ -279,7 +284,7 @@ class NetworkedPhaseDriverTests(unittest.TestCase):
 
     def test_a_done_of_another_phase_ends_the_wait_at_once(self):
         RemoteParticipant(self.bus, 'a', phases.BOOK, answers=False)
-        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late'))
+        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late', answers=event()))
         driver = phases.PhaseDriver(self.bus, timeout=60)
         started = time.monotonic()
 
@@ -313,7 +318,7 @@ class NetworkedPhaseDriverTests(unittest.TestCase):
             batch.orders.add()
 
         RemoteParticipant(self.bus, 'a', phases.TRADE, answers=False)
-        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'a', orders, batches))
+        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'a', orders, batches, answers=event()))
 
         if batch_arrives:
             for _ in range(batches):
