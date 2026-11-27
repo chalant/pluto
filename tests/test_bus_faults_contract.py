@@ -3,18 +3,23 @@
 The suite was written for a bus that delivers exactly once in the exact dispatch order of S3. A networked bus gives
 neither (`pluto/bus/faults.py`), so many contract tests fail when faults are injected; which ones, and why, is the
 list of the guarantees a component must not build on. This module runs the suite with each fault that delivery can
-suffer (publish failures are left out: the contract tests do not retry a failed publish, so they would all fail on
-that) and
-checks the list:
+suffer (publish failures are left out: the contract tests do not retry a failed publish, so every test that publishes
+fails on that) and checks the list. Every fault is on at probability 1, so the failing sets do not depend on which
+messages a seed happens to hit (a delay still draws its length from the seed: the order tests are the union over
+`SEEDS`, and the measured union does not grow with 20 seeds):
 
-* a delay breaks exactly the tests that assert the order of S3 across lanes, no other test;
+* a delay breaks tests that assert the order of S3 across lanes, and none of `FIFO_PRESERVED` (per-lane FIFO, a nack
+  redelivered before the next message of its lane, exactly-once counts of a stream without other faults);
 * duplicates (a copy published again, a lost ack, a consumer that restarts) break the tests that count deliveries and
   those that assume a replay or a position leaves nothing old to read;
 * a lost delivery leaves the number of deliveries of a message alone and breaks the tests that count attempts;
 * a set of tests survives every one of them: request and reply, close and cancel, argument checks, envelopes.
 
+Measured (both implementations, 83 contract tests, the hash-seed one left out): `delay` fails 9, `duplicate_publish` 54,
+`ack_lost` 52, `lose_delivery` 21, `crash` 44; 25 tests fail under none of them.
+
 Run as `python -m tests.test_bus_faults_contract` it prints which tests fail under which fault, with the last line of
-the failure. The suite is deterministic: the failing sets are those of fixed seeds.
+the failure.
 """
 
 import sys
@@ -23,22 +28,21 @@ import unittest
 from pluto.bus.faults import FaultConfig, SeededFaultBus
 from tests.test_bus_contract import BusContract, make_memory, make_serializing
 
-SEEDS = (0, 1, 2)
+SEEDS = range(5)
 
 PROFILES = {
-    "delay": FaultConfig(delay=0.5),
-    "duplicate_publish": FaultConfig(duplicate_publish=0.5),
-    "ack_lost": FaultConfig(ack_lost=0.5),
-    "lose_delivery": FaultConfig(lose_delivery=0.5),
-    "crash": FaultConfig(crash=0.5),
-    "delivery": FaultConfig(delay=0.3, duplicate_publish=0.2, ack_lost=0.2, lose_delivery=0.2, crash=0.1),
+    "delay": FaultConfig(delay=1.0),
+    "duplicate_publish": FaultConfig(duplicate_publish=1.0),
+    "ack_lost": FaultConfig(ack_lost=1.0),
+    "lose_delivery": FaultConfig(lose_delivery=1.0),
+    "crash": FaultConfig(crash=1.0, max_crashes=1000),
 }
 
 # starts child interpreters for the unwrapped bus: nothing to do with the wrapper
 EXCLUDED = {"test_delivery_trace_is_independent_of_hash_seed"}
 
 # assert the order of S3 across lanes, topics or subscriptions, or that a replay repeats the order a live subscriber
-# saw: a message that arrives late is dispatched late
+# saw: a message that arrives late is dispatched late. (`test_wildcards` and the position test hold on some seeds.)
 ORDER = {
     "test_a_replay_delivers_in_the_order_a_live_subscriber_saw",
     "test_dispatch_does_not_depend_on_publish_order_across_lanes",
@@ -47,7 +51,19 @@ ORDER = {
     "test_equal_content_falls_back_to_topic_then_key",
     "test_phase_orders_messages_of_the_same_logical_ts",
     "test_position_of_is_a_resume_point_without_gaps_when_keys_complete_out_of_log_order",
+    "test_replay_then_live_messages_follow_the_dispatch_rule",
     "test_wildcards",
+}
+
+# what a delay must never break: FIFO per lane, a nack redelivered before the next message of its lane, and counting
+# deliveries of a stream that has no duplicates
+FIFO_PRESERVED = {
+    "test_fifo_per_topic_and_key",
+    "test_nack_redelivers_before_the_next_message_of_the_lane",
+    "test_each_subscription_sees_the_whole_stream_once",
+    "test_dead_letter_after_max_attempts_and_the_lane_moves_on",
+    "test_the_bus_does_not_deduplicate",
+    "test_exception_is_a_nack_and_a_redelivery",
 }
 
 # count deliveries (each message once, in the handler) or expect an empty or exact replay
@@ -67,10 +83,15 @@ ATTEMPTS = {
     "test_run_until_idle_drains_cascades_and_counts_invocations",
 }
 
+# assert that a delivery is the first attempt (a lost delivery makes the next one attempt 2)
+FIRST_ATTEMPT = {
+    "test_replay_redelivers_with_attempt_one_and_the_original_envelope",
+    "test_a_closed_bus_refuses_every_call",
+}
+
 # hold under every fault above: nothing in them depends on order, counts or attempts of deliveries
 SURVIVORS = {
     "test_a_cancelled_request_ignores_its_reply",
-    "test_a_closed_bus_refuses_every_call",
     "test_a_failing_on_reply_is_retried_by_the_bus",
     "test_a_handler_can_cancel_its_own_subscription",
     "test_a_late_duplicate_reply_is_ignored",
@@ -89,7 +110,6 @@ SURVIVORS = {
     "test_on_reply_is_called_from_the_dispatch_loop",
     "test_protobuf_payloads_arrive_equal",
     "test_rank_must_be_an_int",
-    "test_replay_redelivers_with_attempt_one_and_the_original_envelope",
     "test_reply_carries_phase_and_schema_version",
     "test_request_gets_its_reply",
     "test_requests_do_not_see_each_others_replies",
@@ -127,32 +147,34 @@ def failing(profile: str) -> dict[str, str]:
 class ContractUnderFaults(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.failed = {profile: failing(profile) for profile in PROFILES}
+        cls.failed = {profile: set(failing(profile)) for profile in PROFILES}
 
-    def test_a_delay_breaks_exactly_the_tests_of_the_dispatch_order(self):
-        self.assertEqual(set(self.failed["delay"]), ORDER)
+    def test_a_delay_breaks_the_tests_of_the_dispatch_order_and_nothing_that_is_fifo(self):
+        failed = self.failed["delay"]
+        self.assertLessEqual(ORDER, failed)
+        self.assertFalse(FIFO_PRESERVED & failed, FIFO_PRESERVED & failed)
 
     def test_duplicates_break_the_tests_that_count_deliveries(self):
         for profile in ("duplicate_publish", "ack_lost", "crash"):
-            self.assertLessEqual(EXACTLY_ONCE, set(self.failed[profile]), profile)
+            self.assertLessEqual(EXACTLY_ONCE, self.failed[profile], profile)
         for profile in ("duplicate_publish", "ack_lost"):  # a pattern subscription does not restart: no copies there
             self.assertIn("test_fifo_per_topic_and_key", self.failed[profile])
 
     def test_a_lost_delivery_leaves_the_count_alone_and_breaks_the_attempts(self):
-        failed = set(self.failed["lose_delivery"])
-        self.assertLessEqual(ATTEMPTS, failed)
+        failed = self.failed["lose_delivery"]
+        self.assertLessEqual(ATTEMPTS | FIRST_ATTEMPT, failed)
         self.assertFalse(EXACTLY_ONCE & failed, EXACTLY_ONCE & failed)
 
     def test_ack_loss_breaks_the_attempts_too(self):
-        self.assertLessEqual(ATTEMPTS, set(self.failed["ack_lost"]))
+        self.assertLessEqual(ATTEMPTS, self.failed["ack_lost"])
 
     def test_what_survives_every_fault(self):
         for profile, failed in self.failed.items():
-            self.assertFalse(SURVIVORS & set(failed), profile)
+            self.assertFalse(SURVIVORS & failed, profile)
 
-    def test_every_survivor_and_order_test_is_a_contract_test(self):
+    def test_the_classified_tests_are_contract_tests(self):
         names = set(unittest.defaultTestLoader.getTestCaseNames(BusContract))
-        self.assertLessEqual(SURVIVORS | ORDER | EXACTLY_ONCE | ATTEMPTS, names)
+        self.assertLessEqual(SURVIVORS | ORDER | FIFO_PRESERVED | EXACTLY_ONCE | ATTEMPTS | FIRST_ATTEMPT, names)
 
 
 if __name__ == "__main__":

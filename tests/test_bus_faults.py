@@ -18,7 +18,7 @@ import subprocess
 import sys
 import unittest
 
-from pluto.bus import BusClosed, BusError, NotIdle, Position, Start, reply, request
+from pluto.bus import BusClosed, BusError, NotIdle, Position, QueueFull, Start, reply, request
 from pluto.bus.faults import FaultConfig, FaultKind, PublishFailed, SeededFaultBus
 from tests.test_bus_contract import (
     HASH_SEEDS,
@@ -413,8 +413,8 @@ class FaultBusTests:
         self.assertEqual([(d.envelope.msg_id, d.attempts) for d in bus.dead_letters()], [("m0", 3)])
 
     def test_a_crashed_consumer_resumes_at_its_checkpoint_and_reads_again_what_it_had_not_settled(self):
-        # S3 delivers m2, m1, m0 (descending logical time), the log order is m0, m1, m2: after m2 the checkpoint is
-        # still the start of the log
+        # S3 delivers m2, m1, m0 (descending logical time), the log order is m0, m1, m2: the consumer started at the end
+        # of the log, so its checkpoint is the first message logged, whichever comes first
         outcomes = set()
         for seed in range(12):
             bus = self.bus(seed, FaultConfig(crash=1.0, max_crashes=1))
@@ -426,14 +426,83 @@ class FaultBusTests:
             ids = self.rec.ids()
             outcomes.add(tuple(ids))
             crashes = [f for f in bus.fault_log() if f.kind is FaultKind.CRASH]
-            self.assertEqual(len(crashes), 1)
-            self.assertEqual(crashes[0].msg_id, "m1")  # the first delivery has no checkpoint yet: no crash
+            self.assertEqual([f.msg_id for f in crashes], ["m2"])
             self.assertNotEqual(sub.id, first_id)  # a restarted consumer is a new registration
             self.assertEqual(ids[-3:], ["m2", "m1", "m0"])  # read again from the checkpoint, handled or not
             self.assertEqual(sorted(set(ids)), ["m0", "m1", "m2"])
             self.rec.calls.clear()
         # the crash came before or after the handler ran
-        self.assertEqual(outcomes, {("m2", "m2", "m1", "m0"), ("m2", "m1", "m2", "m1", "m0")})
+        self.assertEqual(outcomes, {("m2", "m1", "m0"), ("m2", "m2", "m1", "m0")})
+
+    def test_a_crash_on_the_fourth_of_five_messages_of_a_lane_replays_from_the_fourth(self):
+        bus = self.bus(0)
+        crashed = []
+
+        def handler(delivery):
+            self.rec.calls.append((delivery.envelope.msg_id, delivery.attempt))
+            if delivery.envelope.msg_id == "m3" and not crashed:
+                crashed.append(delivery.envelope.msg_id)
+                bus.crash(sub)  # before the ack of m3
+
+        sub = bus.subscribe("t", handler)
+        for i in range(5):
+            publish(bus, "t", i, key="k", ts=i, msg_id="m%d" % i)
+        bus.run_until_idle()
+        self.assertEqual(self.rec.calls, [("m0", 1), ("m1", 1), ("m2", 1), ("m3", 1), ("m3", 1), ("m4", 1)])
+        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.CRASH])
+
+    def test_the_redelivery_budget_survives_a_crash(self):
+        # S3 delivers m1 (ts 1) before m0 (ts 2): after m1 the checkpoint is still the start of the log, so the crash
+        # during m0 reads m1 again; m1 already had its injected redelivery and gets no second one
+        bus = self.bus(0, FaultConfig(ack_lost=1.0, max_redeliveries=1))
+        crashed = []
+
+        def handler(delivery):
+            self.rec.calls.append((delivery.envelope.msg_id, delivery.attempt))
+            if delivery.envelope.msg_id == "m0" and not crashed:
+                crashed.append(1)
+                bus.crash(sub)
+
+        sub = bus.subscribe("t", handler)
+        publish(bus, "t", key="a", ts=2, msg_id="m0")
+        publish(bus, "t", key="b", ts=1, msg_id="m1")
+        bus.run_until_idle()
+        self.assertEqual(
+            self.rec.calls, [("m1", 1), ("m1", 2), ("m0", 1), ("m1", 1), ("m0", 1), ("m0", 2)]
+        )
+
+    def test_a_crash_whose_replay_does_not_fit_is_skipped_and_the_subscription_lives(self):
+        skipped = 0
+        for seed in range(12):
+            bus = self.bus(seed, FaultConfig(crash=0.5, max_crashes=2), queue_capacity=4)
+            rec = Recorder()
+            bus.subscribe("t", rec.handler("s"))
+            for i in range(4):  # S3 delivers m3 first: the checkpoint stays at the start of the log until m0
+                publish(bus, "t", i, key="k%d" % i, ts=9 - i, msg_id="m%d" % i)
+            late = False
+            for _ in range(100):
+                if not late:
+                    try:
+                        publish(bus, "t", 4, key="k4", ts=1, msg_id="m4")  # the log is now longer than the capacity
+                        late = True
+                    except QueueFull:
+                        pass
+                if not bus.step() and late:
+                    break
+            self.assertEqual(sorted(set(rec.ids())), ["m0", "m1", "m2", "m3", "m4"], "seed %d" % seed)
+            skipped += any(f.kind is FaultKind.CRASH_SKIPPED for f in bus.fault_log())
+        self.assertGreater(skipped, 0)
+
+        bus = self.bus(0, queue_capacity=3)
+        sub = bus.subscribe("t", self.rec.handler("s"))
+        for i in range(3):
+            publish(bus, "t", i, key="k%d" % i, ts=9 - i, msg_id="m%d" % i)
+        bus.step()  # m2: m0 and m1 are unsettled, the checkpoint is the start of the log
+        publish(bus, "t", 3, key="k3", ts=1, msg_id="m3")
+        with self.assertRaises(QueueFull):
+            bus.crash(sub)  # the replay of four messages does not fit in three
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["m2", "m3", "m1", "m0"])  # the old subscription went on
 
     def test_a_consumer_that_starts_at_a_position_crashes_back_to_it(self):
         bus = self.bus(1, FaultConfig(crash=1.0, max_crashes=1))
@@ -455,11 +524,15 @@ class FaultBusTests:
         bus.run_until_idle()
         self.assertEqual([f for f in bus.fault_log() if f.kind is FaultKind.CRASH], [])
         self.assertEqual(len(self.rec.calls), 12)
+        with self.assertRaises(ValueError):
+            bus.crash(bus.subscribe("t.*", self.rec.handler("pattern")))
 
-    def test_a_muted_participant_never_answers_and_a_retry_does_not_help_until_it_is_back(self):
+    def test_a_muted_participant_never_answers_and_comes_back_with_what_it_missed(self):
         bus = self.bus(0)
+        answered = []
 
         def answer(delivery):
+            answered.append(delivery.envelope.msg_id)
             reply(bus, delivery, delivery.envelope.payload * 2, type="t", logical_ts=1, producer_id="svc")
 
         service = bus.subscribe("svc", answer)
@@ -472,24 +545,60 @@ class FaultBusTests:
         pending.send()
         bus.run_until_idle()
         self.assertFalse(pending.done)
+        self.assertEqual(answered, [])
         self.assertEqual(watcher.ids(), ["q1", "q1"])  # the others are not affected
-        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.SWALLOWED] * 2)
-        bus.unmute(service)
-        pending.send()
+        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.MUTED])
+        bus.unmute(service)  # restarts at the checkpoint: nothing was acknowledged, so both requests come
         bus.run_until_idle()
+        self.assertEqual(answered, ["q1", "q1"])
         self.assertTrue(pending.done)
         self.assertEqual(pending.reply.payload, 42)
+        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.MUTED, FaultKind.UNMUTED])
 
     def test_a_participant_can_fall_silent_by_itself(self):
         bus = self.bus(0, FaultConfig(mute=1.0))
-        bus.subscribe("t", self.rec.handler("s"))
+        service = bus.subscribe("t", self.rec.handler("s"))
         for i in range(3):
-            publish(bus, "t", i)
+            publish(bus, "t", i, key="k%d" % i, ts=i, msg_id="m%d" % i)
         bus.run_until_idle()
         self.assertEqual(self.rec.calls, [])
-        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.MUTED, FaultKind.SWALLOWED, FaultKind.SWALLOWED])
+        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.MUTED])  # one delivery in hand, then nothing
+        self.assertEqual(bus.dead_letters(), ())
+        bus.unmute(service)  # a hang that does not end: with mute=1 the first delivery hangs it again
+        bus.run_until_idle()
+        self.assertEqual([f.kind for f in bus.fault_log()], [FaultKind.MUTED, FaultKind.UNMUTED, FaultKind.MUTED])
         with self.assertRaises(ValueError):
             bus.mute(object())
+
+    def test_a_participant_that_hangs_sometimes_reads_everything_once_it_is_back(self):
+        hung = 0
+        for seed in range(6):
+            bus = self.bus(seed, FaultConfig(mute=0.4))
+            rec = Recorder()
+            service = bus.subscribe("t", rec.handler("s"))
+            for i in range(8):
+                publish(bus, "t", i, key="k%d" % i, ts=i, msg_id="m%d" % i)
+            for _ in range(200):
+                bus.run_until_idle()
+                if len(rec.calls) == 8:
+                    break
+                bus.unmute(service)
+            self.assertEqual(rec.ids(), ["m%d" % i for i in range(8)], "seed %d" % seed)  # none comes twice
+            hung += FaultKind.MUTED in {f.kind for f in bus.fault_log()}
+        self.assertGreater(hung, 0)
+
+    def test_a_mute_on_a_pattern_or_a_group_is_permanent(self):
+        bus = self.bus(0)
+        pattern = bus.subscribe("t.*", self.rec.handler("pattern"))
+        member = bus.subscribe("t.a", self.rec.handler("member"), group="g")
+        bus.mute(pattern)
+        bus.mute(member)
+        publish(bus, "t.a")
+        bus.run_until_idle()
+        self.assertEqual(self.rec.calls, [])
+        for subscription in (pattern, member):
+            with self.assertRaises(ValueError):
+                bus.unmute(subscription)
 
     def test_reordering_inside_a_lane_needs_the_contract_violating_flag_and_breaks_fifo(self):
         with self.assertRaises(ValueError):
@@ -585,6 +694,75 @@ class FaultBusTests:
         redelivered = [f for f in log if f.kind is FaultKind.DUPLICATE_DELIVERY]
         self.assertEqual([(f.msg_id, f.subscription) for f in redelivered], [("m0", sub.id), ("m1", sub.id)])
         self.assertTrue(all(isinstance(f.tick, int) and f.detail for f in redelivered))
+
+    def test_every_call_draws_the_same_numbers_whatever_the_configuration(self):
+        def states(faults):
+            bus = self.bus(5, faults)
+            bus.subscribe("t", self.rec.handler("s"))
+            for i in range(60):
+                try:
+                    publish(bus, "t", i, key="k%d" % (i % 5), ts=i, msg_id="m%d" % i)
+                except PublishFailed:
+                    pass
+            published = bus._rng.getstate()
+            for _ in range(10):
+                bus.step()
+            return published, bus._rng.getstate()
+
+        base = states(FaultConfig())
+        for name in (
+            "publish_fail",
+            "publish_ack_lost",
+            "delay",
+            "duplicate_publish",
+            "lose_delivery",
+            "ack_lost",
+            "crash",
+            "mute",
+            "reorder_within_lane",
+        ):
+            with self.subTest(name):
+                faults = FaultConfig(**{name: 0.5}, contract_violating=name == "reorder_within_lane")
+                got = states(faults)
+                self.assertEqual(got[0], base[0])  # after the publishes
+                if name != "mute":  # a muted subscription stops being delivered to
+                    self.assertEqual(got[1], base[1])  # after the same number of deliveries
+
+    def test_a_held_message_the_inner_bus_refuses_is_dropped_logged_and_its_receipt_cannot_be_used(self):
+        if self.implementation != "serializing":
+            self.skipTest("needs a codec that refuses a payload")
+        bus = self.bus(0, FaultConfig(delay=1.0, max_delay=2))
+        bus.subscribe("t", self.rec.handler("s"))
+        receipt = publish(bus, "t", object(), key="bad", msg_id="bad")  # the codec has not seen it yet
+        publish(bus, "t", 1, key="good", msg_id="good")
+        with self.assertRaises(TypeError):
+            bus.run_until_idle()
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["good"])
+        refused = [f for f in bus.fault_log() if f.kind is FaultKind.RELEASE_FAILED]
+        self.assertEqual([f.msg_id for f in refused], ["bad"])
+        with self.assertRaises(ValueError):  # not silently LATEST
+            bus.subscribe("t", self.rec.handler("again"), start=receipt.position)
+
+    def test_a_held_message_waits_while_the_inner_bus_is_full(self):
+        bus = self.bus(0, FaultConfig(delay=1.0, max_delay=1), queue_capacity=2)
+        bus.subscribe("t", self.rec.handler("s"))
+        for i in range(5):
+            publish(bus, "t", i, key="k%d" % i, ts=i, msg_id="m%d" % i)
+        self.assertEqual(bus.in_flight(), 5)
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["m%d" % i for i in range(5)])
+        self.assertEqual(bus.in_flight(), 0)
+        self.assertEqual([f for f in bus.fault_log() if f.kind is FaultKind.RELEASE_FAILED], [])
+
+    def test_bad_arguments_are_not_reported_as_an_injected_failure(self):
+        bus = self.bus(0, FaultConfig(publish_fail=1.0))
+        with self.assertRaises(TypeError):
+            publish(bus, "t", ts=1.5)
+        with self.assertRaises(ValueError):
+            publish(bus, "a.*")
+        with self.assertRaises(PublishFailed):
+            publish(bus, "t")
 
     def test_arguments_of_the_wrapper(self):
         with self.assertRaises(TypeError):
