@@ -154,4 +154,6 @@ the run without faults) and `mute`, `crash`, `publish_fail` (clean `PhaseError`,
 
 ## Final run
 
-(Filled in after the run below.)
+Fresh clone of `stage2-faultbus` at `1785e0cd` (`--no-hardlinks`), new env from `dev/setup_env.sh`: whole `tests/`: **672 passed, 1 skipped**
+(the skip is the release-failure test on the in-memory implementation, which has no codec to refuse a payload), also under
+`PYTHONHASHSEED=1` (672 passed, 1 skipped). Before the review round: 655 passed. The clone and its env were removed.
