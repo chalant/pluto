@@ -159,12 +159,15 @@ class FaultyBus(InMemoryBus):
 class RunTests(unittest.TestCase):
     """A manager with a fake book and a controller driving it through the phases."""
 
+    # the bus of the run: a subclass runs the same tests on a bus that delivers in another order
+    make_bus = FaultyBus
+
     def setUp(self):
         patch = mock.patch.object(process_manager.service, 'BrokerService', FakeBroker)
         patch.start()
         self.addCleanup(patch.stop)
 
-        self.bus = FaultyBus()
+        self.bus = self.make_bus()
         setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
         self.manager = process_manager.StrategyManager(None, setup, bus=self.bus)
         self.broker = self.manager.broker
@@ -220,6 +223,21 @@ class RunTests(unittest.TestCase):
             self.tick()
 
         self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [])
+
+    def test_a_batch_that_arrives_after_its_tick_closed_is_reported_not_dropped(self):
+        self.add_process('aaa')
+        self.tick()
+        self.bus.publish(
+            phases.ORDERS_TOPIC, order_batch('aaa', TS, ['late']), type='OrderBatch', logical_ts=TS.value,
+            producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
+        self.bus.run_until_idle()
+        later = TS + pd.Timedelta(minutes=1)
+
+        with self.assertRaisesRegex(
+                phases.PhaseError,
+                r'phase\.account .*aaa sent a batch of 1 orders for 2020-01-02 14:31:00\+00:00, '
+                r'which arrived after its tick closed'):
+            self.controller.clock_update(later, clock_pb2.BAR, [(later, clock_pb2.BAR, _calendar('XNYS'))])
 
     def test_an_empty_batch_of_another_clock_event_aborts_the_run(self):
         # nothing in it to count: the batch counts are what tell
@@ -337,6 +355,150 @@ class RunTests(unittest.TestCase):
             self.tick()
 
         self.assertEqual(self.bus.dead_letters(), ())
+
+
+class NetworkedBus(InMemoryBus):
+    """An in-memory bus that says it is networked: what is missing may still arrive."""
+
+    @property
+    def networked(self):
+        return True
+
+
+class NetworkedSubmitTests(unittest.TestCase):
+    """The submit phase on a bus that other processes write to: the broker side waits for the batches the event names."""
+
+    def setUp(self):
+        patch = mock.patch.object(process_manager.service, 'BrokerService', FakeBroker)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+        self.bus = NetworkedBus()
+        setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
+        self.manager = process_manager.StrategyManager(None, setup, bus=self.bus)
+        self.broker = self.manager.broker
+        process = FakeProcess('aaa')
+        process.manager = self.manager
+        self.manager.add_strategy(process)
+        self.manager.set_global_timestamp(TS)
+        participants.BrokerParticipant(self.bus, self.manager)
+        self.dones = []
+        self.bus.subscribe(phases.SUBMIT.done_topic, lambda delivery: self.dones.append(delivery.envelope.payload))
+
+    def submit_event(self, orders, batches):
+        self.bus.publish(
+            phases.SUBMIT.topic,
+            phases_pb2.SubmitEvent(
+                clock=clock_pb2.ClockEvent(timestamp=phases.proto_timestamp(TS), event=clock_pb2.BAR),
+                runtimes=[phases_pb2.RuntimeOrders(participant='aaa', orders=orders, batches=batches)]),
+            type='SubmitEvent', logical_ts=TS.value, producer_id=phases.CONTROLLER_ID, phase=phases.SUBMIT.rank)
+
+    def send_batch(self):
+        self.bus.publish(
+            phases.ORDERS_TOPIC, order_batch('aaa', TS, ['order-aaa']), type='OrderBatch', logical_ts=TS.value,
+            producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
+
+    def test_the_submit_waits_for_the_batch_and_goes_on_when_it_arrives(self):
+        self.submit_event(1, 1)
+        self.bus.run_until_idle()
+
+        self.assertEqual(self.dones, [])
+        self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [])
+
+        self.send_batch()
+        self.bus.run_until_idle()
+
+        self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [('submit', ['order-aaa'])])
+        self.assertEqual([(d.participant, d.error) for d in self.dones], [(phases.BROKER_ID, '')])
+
+    def test_a_submit_whose_batches_are_all_there_does_not_wait(self):
+        self.send_batch()
+        self.bus.run_until_idle()
+        self.submit_event(1, 1)
+        self.bus.run_until_idle()
+
+        self.assertEqual([d.error for d in self.dones], [''])
+
+    def test_more_than_announced_is_an_error_not_something_to_wait_for(self):
+        self.send_batch()
+        self.send_batch()
+        self.submit_event(1, 1)
+        self.bus.run_until_idle()
+
+        self.assertEqual(len(self.dones), 1)
+        self.assertIn('aaa sent 1 orders in 1 batches, the broker received 2 in 2', self.dones[0].error)
+
+    def test_a_batch_the_bus_gave_up_on_is_reported_at_once_not_waited_for(self):
+        def broken(delivery):
+            raise RuntimeError('cannot take the batch')
+
+        self.bus.subscribe(phases.ORDERS_TOPIC, broken)
+        # two batches announced, one sent and dead-lettered by the broken subscriber: the second is not coming
+        self.submit_event(2, 2)
+        self.send_batch()
+        self.bus.run_until_idle()
+
+        self.assertEqual(len(self.dones), 1)
+        self.assertIn('the bus gave up on a batch of orders of aaa after 3 attempts: RuntimeError', self.dones[0].error)
+
+    def test_a_second_clear_keeps_the_tick_the_first_closed(self):
+        self.manager.clear()
+        self.manager.clear()
+        self.send_batch()  # for TS, which the first clear closed
+        self.bus.run_until_idle()
+
+        self.assertEqual([(process_id, ts, orders) for process_id, ts, orders in self.manager.take_late_batches()],
+                         [('aaa', TS.value, 1)])
+
+    def test_a_batch_for_a_closed_tick_is_reported_in_the_submit(self):
+        late = TS - pd.Timedelta(minutes=1)
+        self.bus.publish(
+            phases.ORDERS_TOPIC, order_batch('aaa', late, ['old']), type='OrderBatch', logical_ts=late.value,
+            producer_id='aaa', phase=phases.TRADE.rank, key='aaa')
+        self.send_batch()
+        self.submit_event(1, 1)
+        self.bus.run_until_idle()
+
+        self.assertEqual(len(self.dones), 1)
+        self.assertIn('aaa sent a batch of 1 orders for 2020-01-02 14:30:00+00:00, which arrived after its tick closed',
+                      self.dones[0].error)
+        self.assertEqual([call for call in self.broker.calls if call[0] == 'submit'], [])
+
+
+class RuntimeEndpointTests(unittest.TestCase):
+    def test_a_runtime_does_not_trade_on_the_account_of_another_tick(self):
+        patch = mock.patch.object(process_manager.service, 'BrokerService', FakeBroker)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+        bus = InMemoryBus()
+        setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
+        manager = process_manager.StrategyManager(None, setup, bus=bus)
+        process = FakeProcess('aaa')
+        process.manager = manager
+        manager.add_strategy(process)
+        dones = []
+        bus.subscribe(phases.TRADE.done_topic, lambda delivery: dones.append(delivery.envelope.payload))
+        clock = clock_pb2.ClockEvent(timestamp=phases.proto_timestamp(TS), event=clock_pb2.BAR)
+
+        # the trade event of a tick before the account state of the tick: the strategy does not run
+        bus.publish(phases.TRADE.topic, clock, type='ClockEvent', logical_ts=TS.value,
+                    producer_id=phases.CONTROLLER_ID, phase=phases.TRADE.rank)
+        bus.run_until_idle()
+
+        self.assertEqual(process.clock_events, 0)
+        self.assertEqual(len(dones), 1)
+        self.assertIn('before the account state of the tick', dones[0].error)
+
+        # once the state of the tick is applied the same event runs
+        bus.publish(phases.account_topic('aaa'), broker_pb2.BrokerState(), type='BrokerState', logical_ts=TS.value,
+                    producer_id=phases.BROKER_ID, phase=phases.ACCOUNT.rank, key='aaa')
+        bus.publish(phases.TRADE.topic, clock, type='ClockEvent', logical_ts=TS.value,
+                    producer_id=phases.CONTROLLER_ID, phase=phases.TRADE.rank)
+        bus.run_until_idle()
+
+        self.assertEqual(process.clock_events, 1)
+        self.assertEqual(dones[-1].error, '')
 
 
 class ParticipantTests(unittest.TestCase):

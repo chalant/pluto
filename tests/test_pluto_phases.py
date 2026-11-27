@@ -1,5 +1,6 @@
 """The phases of a run on the bus (pluto/control/phases.py): the lock-step of the controller on a bare bus with fake
 participants, and the serialisation of the payloads."""
+import time
 import unittest
 
 import logbook
@@ -152,6 +153,230 @@ class PhaseDriverTests(unittest.TestCase):
         self.assertEqual(order, ['phase.book', 'phase.trade', 'phase.submit'])
 
 
+class RemoteBus(InMemoryBus):
+    """An in-memory bus that looks networked to the driver: what a remote participant publishes is not in the bus
+    until it is polled (``arrive`` queues the publication, one per poll that finds something)."""
+
+    def __init__(self):
+        super().__init__()
+        self.arrivals = []
+        self.polls = 0
+
+    @property
+    def networked(self):
+        return True
+
+    def arrive(self, publish):
+        self.arrivals.append(publish)
+
+    def poll(self, timeout=0.0):
+        self.polls += 1
+
+        if not self.arrivals:
+            time.sleep(min(timeout, 0.005))
+            return False
+
+        self.arrivals.pop(0)()
+        return True
+
+
+class RemoteParticipant(object):
+    """Answers a phase through the bus's arrivals: ``late`` polls after the event, or never."""
+
+    def __init__(self, bus, name, phase, work=lambda: None, answers=True):
+        self.name = name
+        self.calls = 0
+        self._bus = bus
+        self._phase = phase
+        self._work = work
+        self._answers = answers
+
+        bus.subscribe(phase.topic, self._on_phase)
+
+    def _on_phase(self, delivery):
+        self.calls += 1
+        ts = delivery.envelope.logical_ts
+
+        if self._answers:
+            self._bus.arrive(lambda: phases.report(self._bus, self._phase, ts, self.name, self._work, LOG))
+
+
+class NetworkedPhaseDriverTests(unittest.TestCase):
+    """On a bus that other processes write to, the phase ends when the expected dones are in, not when it is idle."""
+
+    def setUp(self):
+        self.bus = RemoteBus()
+
+    def test_waits_for_dones_that_arrive_after_the_bus_went_idle(self):
+        participants = [RemoteParticipant(self.bus, name, phases.BOOK) for name in 'abc']
+        driver = phases.PhaseDriver(self.bus, timeout=10)
+
+        driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b', 'c'))
+
+        self.assertEqual([p.calls for p in participants], [1, 1, 1])
+        self.assertEqual(self.bus.arrivals, [])
+        self.assertGreaterEqual(self.bus.polls, 3)
+
+    def test_the_next_phase_does_not_see_the_dones_of_the_last(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+        RemoteParticipant(self.bus, 'a', phases.ACCOUNT)
+        driver = phases.PhaseDriver(self.bus, timeout=10)
+
+        driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+        driver.drive(phases.ACCOUNT, clock_event(), TS_NS, ('a',))
+
+        # each phase judged its own dones only: nothing of the book phase leaked into the account phase (it would
+        # have been a PhaseError "sent a done of phase.book"), and both remember who said done
+        self.assertEqual(sorted(driver._accepted), ['phase.account', 'phase.book'])
+        self.assertEqual([list(driver._accepted[topic]) for topic in sorted(driver._accepted)], [['a'], ['a']])
+        self.assertEqual(self.bus.arrivals, [])
+
+    def test_a_deadline_that_passed_in_a_long_handler_still_reads_the_log_once(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+        driver = phases.PhaseDriver(self.bus, timeout=0)  # already over when the driver first looks
+
+        # the done is in the log: one last look finds it, it is not a timeout
+        driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual(self.bus.arrivals, [])
+
+    def test_a_participant_that_never_answers_fails_the_phase_after_the_deadline_naming_it(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+        RemoteParticipant(self.bus, 'b', phases.BOOK, answers=False)
+        driver = phases.PhaseDriver(self.bus, timeout=0.2)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, r'phase\.book at .*: no done from b within 0\.2 s') as raised:
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+        self.assertNotIn('no done from a', str(raised.exception))
+        self.assertGreaterEqual(time.monotonic() - started, 0.2)
+
+    def test_a_failure_ends_the_wait_at_once(self):
+        def work():
+            raise ValueError('the strategy broke')
+
+        RemoteParticipant(self.bus, 'a', phases.BOOK, work)
+        RemoteParticipant(self.bus, 'b', phases.BOOK, answers=False)
+        driver = phases.PhaseDriver(self.bus, timeout=60)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, 'a failed: ValueError: the strategy broke'):
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_done_of_another_phase_ends_the_wait_at_once(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK, answers=False)
+        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late'))
+        driver = phases.PhaseDriver(self.bus, timeout=60)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, 'late sent a done of phase.trade'):
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_no_deadline_waits_for_a_slow_participant(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+
+        def slow():
+            time.sleep(0.05)
+
+        RemoteParticipant(self.bus, 'b', phases.BOOK, slow)
+
+        phases.PhaseDriver(self.bus, timeout=None).drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+    def test_a_message_that_is_already_in_the_bus_needs_no_poll(self):
+        FakeParticipant(self.bus, 'a', phases.BOOK)
+
+        phases.PhaseDriver(self.bus, timeout=10).drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual(self.bus.polls, 0)
+
+    def trade_done_then_batch(self, orders=1, batches=1, batch_arrives=True):
+        """Runtime 'a' says done in the trade phase (announcing a batch); the batch itself arrives after the done."""
+        batch = broker_pb2.OrderBatch(ts=phases.proto_timestamp(TS))
+
+        for _ in range(orders):
+            batch.orders.add()
+
+        RemoteParticipant(self.bus, 'a', phases.TRADE, answers=False)
+        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'a', orders, batches))
+
+        if batch_arrives:
+            for _ in range(batches):
+                self.bus.arrive(lambda: self.bus.publish(
+                    phases.ORDERS_TOPIC, batch, type='OrderBatch', logical_ts=TS_NS, producer_id='a',
+                    phase=phases.TRADE.rank, key='a'))
+
+    def test_the_submit_waits_for_the_batch_a_done_announced(self):
+        self.trade_done_then_batch(orders=2, batches=1)
+        driver = phases.PhaseDriver(self.bus, timeout=10)
+
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+
+        # the done is in, the batch is not: the driver goes on reading the log until it is
+        announced = driver.announced_orders(TS_NS, ('a',))
+
+        self.assertEqual([(r.participant, r.orders, r.batches) for r in announced], [('a', 2, 1)])
+        self.assertEqual(self.bus.arrivals, [])
+
+    def test_a_batch_that_never_comes_fails_naming_the_runtime(self):
+        self.trade_done_then_batch(batch_arrives=False)
+        driver = phases.PhaseDriver(self.bus, timeout=0.2)
+
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+
+        with self.assertRaisesRegex(
+                PhaseError, r'phase\.trade at .*: no batch of orders from a within 0\.2 s \(a announced 1 orders in 1 '
+                            r'batches, the log has 0 in 0\)'):
+            driver.announced_orders(TS_NS, ('a',))
+
+    def test_a_runtime_that_announced_nothing_needs_no_batch(self):
+        RemoteParticipant(self.bus, 'a', phases.TRADE)
+        driver = phases.PhaseDriver(self.bus, timeout=0.2)
+
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual([(r.orders, r.batches) for r in driver.announced_orders(TS_NS, ('a',))], [(0, 0)])
+
+
+class InMemoryPhaseDriverTests(unittest.TestCase):
+    def test_a_missing_done_fails_at_once_whatever_the_deadline(self):
+        bus = InMemoryBus()
+        FakeParticipant(bus, 'a', phases.BOOK)
+        driver = phases.PhaseDriver(bus, timeout=60)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, r'no done from b$'):
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_the_bus_says_nothing_can_arrive_from_outside(self):
+        bus = SerializingBus(InMemoryBus(), phases.codec())
+
+        self.assertFalse(bus.networked)
+        self.assertFalse(bus.poll(10))
+
+    def test_what_is_missing_is_not_waited_for_in_memory(self):
+        bus = InMemoryBus()
+        FakeParticipant(bus, 'a', phases.TRADE)
+        driver = phases.PhaseDriver(bus, timeout=60)
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+        started = time.monotonic()
+
+        # a done that announced orders no batch of which is on the bus: the broker side reports it when it checks
+        driver._accepted[phases.TRADE.topic]['a'] = phases_pb2.PhaseDone(
+            phase=phases.TRADE.topic, participant='a', orders=1, batches=1)
+
+        announced = driver.announced_orders(TS_NS, ('a',))
+
+        self.assertEqual([(r.orders, r.batches) for r in announced], [(1, 1)])
+        self.assertLess(time.monotonic() - started, 5)
+
+
 class CodecTests(unittest.TestCase):
     def test_every_message_survives_a_serialising_bus(self):
         messages = {
@@ -166,6 +391,8 @@ class CodecTests(unittest.TestCase):
                 last_sale_prices=[broker_pb2.AssetPrice(sid=2, price=0.1)]),
             'AccountEvent': phases_pb2.AccountEvent(clock=clock_event()),
             'PhaseDone': phases_pb2.PhaseDone(phase='phase.trade', participant='aaa', orders=3, error='e'),
+            'SubmitEvent': phases_pb2.SubmitEvent(
+                clock=clock_event(), runtimes=[phases_pb2.RuntimeOrders(participant='aaa', orders=2, batches=1)]),
         }
         self.assertEqual(set(messages), set(phases.message_types()))
 

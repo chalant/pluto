@@ -25,13 +25,17 @@ class Controller(object):
             strategy_manager: process_manager.StrategyManager,
             market: core.AbstractMarket,
             behavior: bv.AbstractControllerBehavior,
-            metrics: consumer.StreamMetrics | None = None):
+            metrics: consumer.StreamMetrics | None = None,
+            phase_timeout: float | None = phases.DEFAULT_TIMEOUT):
         """
         Parameters
         ----------
         metrics: StreamMetrics, optional
             The consumer of the stream of the book that computes the metrics; the controller checks it after the book
             phase of each tick (``MetricsError``).
+        phase_timeout: float, optional
+            Seconds a phase waits for the dones of its participants on a networked bus (``None``: no deadline); a
+            participant that did not answer fails the phase (``PhaseError`` naming it). Not used on the in-memory bus.
         """
         self._strategy_manager = strategy_manager
         self._behavior = behavior
@@ -43,7 +47,7 @@ class Controller(object):
         # in process, the broker side is a participant on the bus of the run
         bus = strategy_manager.bus
         participants.BrokerParticipant(bus, strategy_manager)
-        self._driver = phases.PhaseDriver(bus)
+        self._driver = phases.PhaseDriver(bus, timeout=phase_timeout)
 
     def clock_update(self, ts, evt, signals):
         strategy_manager = self._strategy_manager
@@ -93,8 +97,8 @@ class Controller(object):
         if self._metrics is not None:
             self._metrics.raise_if_failed()
 
-        # the runtimes of the strategies: a missing done of one aborts the run (fixme of the barrier before the bus:
-        # a process might crash and we would wait forever)
+        # the runtimes of the strategies: a missing done of one aborts the run (on a networked bus after the deadline
+        # of the driver: a process that crashed does not make the controller wait forever)
         runtimes = tuple(strategy_manager.session_ids)
         clock = clock_pb2.ClockEvent(timestamp=stamp, event=evt)
 
@@ -123,5 +127,7 @@ class Controller(object):
 
         behavior.ingest_all_data(ts, strategy_manager, signals)
 
-        # new orders reach the book
-        driver.drive(phases.SUBMIT, clock, ts_ns, (phases.BROKER_ID,))
+        # new orders reach the book: the submit event says what each runtime announced and the log shows has arrived
+        announced = driver.announced_orders(ts_ns, runtimes)
+        driver.drive(
+            phases.SUBMIT, phases_pb2.SubmitEvent(clock=clock, runtimes=announced), ts_ns, (phases.BROKER_ID,))

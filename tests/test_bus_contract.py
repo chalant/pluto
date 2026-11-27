@@ -29,6 +29,8 @@ from pluto.bus import (
     reply,
     request,
 )
+from pluto.bus.log import LogBus
+from tests import nats_support
 
 REPO = Path(__file__).resolve().parent.parent
 HASH_SEEDS = ("1", "2", "3", "4", "5")
@@ -42,7 +44,15 @@ def make_serializing(**options):
     return SerializingBus(InMemoryBus(**options), ProtobufCodec({"timestamp": Timestamp}))
 
 
-FACTORIES = {"memory": make_memory, "serializing": make_serializing}
+def make_nats(**options):
+    """The log-backed bus over a new JetStream stream (imported here: a venv without nats-py skips the NATS class)."""
+    return SerializingBus(
+        LogBus(nats_support.jetstream.JetStreamLog(drop_on_close=True), **options),
+        ProtobufCodec({"timestamp": Timestamp}),
+    )
+
+
+FACTORIES = {"memory": make_memory, "serializing": make_serializing, "nats": make_nats}
 
 
 def publish(bus, topic, payload=None, *, key="", ts=0, producer="p", **fields):
@@ -119,12 +129,14 @@ def scenario_trace(make_bus):
     late = Recorder()
     bus.subscribe("fills.>", late.handler("late"), start=Start.EARLIEST)
     bus.run_until_idle()
-    return {
+    trace = {
         "calls": rec.calls,
         "late": late.calls,
         "checkpoints": checkpoints,
         "dead": [(d.envelope.msg_id, d.attempts, d.error_type, d.error_message) for d in bus.dead_letters()],
     }
+    bus.close()  # a networked bus leaves its stream otherwise
+    return trace
 
 
 class BusContract:
@@ -827,6 +839,43 @@ class BusContract:
         publish(bus, "nobody-listens")
         self.assertEqual(bus.run_until_idle(), 0)
 
+    def test_poll_reads_the_log_and_never_runs_a_handler(self):
+        bus = self.bus()
+        bus.subscribe("t", self.rec.handler("s"))
+        publish(bus, "t")
+        self.assertIsInstance(bus.networked, bool)
+        self.assertIsInstance(bus.poll(0.0), bool)
+        self.assertEqual(self.rec.calls, [])
+        self.assertEqual(bus.run_until_idle(), 1)
+
+    def test_a_bus_nobody_else_writes_to_has_nothing_to_poll(self):
+        bus = self.bus()
+        if bus.networked:
+            self.assertFalse(bus.poll(0.0))  # nothing was published: nothing to find
+        else:
+            self.assertFalse(bus.poll(30.0))  # at once, the test would not end otherwise
+
+    def test_poll_finds_a_message_published_by_another_bus_of_the_same_log(self):
+        bus = self.bus()
+        other = getattr(self, "attach", lambda bus: None)(bus)
+        if other is None:
+            self.skipTest("a bus that is not networked has no other writer")
+        self.addCleanup(other.close)
+        bus.subscribe("t", self.rec.handler("s"))
+        bus.run_until_idle()
+        publish(other, "t", msg_id="from-other")
+        self.assertTrue(bus.poll(5.0))
+        self.assertEqual(self.rec.calls, [])
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["from-other"])
+        self.assertFalse(bus.poll(0.0))
+
+    def test_poll_after_close_raises(self):
+        bus = type(self).make_bus()
+        bus.close()
+        with self.assertRaises(BusClosed):
+            bus.poll()
+
     def test_max_deliveries_stops_a_handler_loop(self):
         bus = self.bus()
         bus.subscribe("ping", lambda d: publish(bus, "pong"))
@@ -919,6 +968,19 @@ class BusContract:
         for topic in ("a.*", "a.>", "*"):
             with self.assertRaises(ValueError):
                 publish(bus, topic)
+
+    def test_topics_with_whitespace_or_control_characters_are_refused_by_every_bus(self):
+        # the grammar is the one a broker can carry (NATS subjects have no whitespace): a topic that works in memory and
+        # not on a networked bus would be a run that works in one mode only, and on a log-backed bus a message refused
+        # after publish returned
+        bus = self.bus()
+        for topic in ("a b", "a\tb", "a.b\n", "a\x00b", " a", "a."):
+            with self.assertRaises(ValueError):
+                publish(bus, topic)
+            with self.assertRaises(ValueError):
+                bus.subscribe(topic, lambda d: None)
+        publish(bus, "a.b")  # and the bus is as it was
+        self.assertEqual(bus.run_until_idle(), 0)
 
     def test_cancel_drops_queued_messages_and_is_idempotent(self):
         bus = self.bus()
@@ -1167,6 +1229,22 @@ class InMemoryBusContract(BusContract, unittest.TestCase):
 class SerializingBusContract(BusContract, unittest.TestCase):
     implementation = "serializing"
     make_bus = staticmethod(make_serializing)
+
+
+@nats_support.needs_server
+class JetStreamBusContract(BusContract, unittest.TestCase):
+    """The same contract over the log-backed bus on a NATS JetStream stream (one new stream per bus, deleted on close)."""
+
+    implementation = "nats"
+    make_bus = staticmethod(make_nats)
+
+    def attach(self, bus):
+        """Another bus on the same log, as another process would build it."""
+        namespace = bus._inner._log.namespace
+        return SerializingBus(
+            LogBus(nats_support.jetstream.JetStreamLog(namespace, create=False), max_attempts=3),
+            ProtobufCodec({"timestamp": Timestamp}),
+        )
 
 
 if __name__ == "__main__":

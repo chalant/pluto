@@ -444,6 +444,10 @@ class InMemoryBus:
             heappop(heap)
         return False
 
+    def _has_pending(self) -> bool:
+        """Whether a delivery is pending (`LogBus` first reads what it published, which may have queued some)."""
+        return self._drop_stale()
+
     def run_until_idle(self, max_deliveries: int | None = None) -> int:
         self._check_open()
         if self._current is not None:
@@ -453,12 +457,21 @@ class InMemoryBus:
         count = 0
         while True:
             if max_deliveries is not None and count >= max_deliveries:
-                if self._drop_stale():
+                if self._has_pending():
                     raise NotIdle(f"messages still pending after {count} deliveries")
                 return count
             if not self.step():
                 return count
             count += 1
+
+    @property
+    def networked(self) -> bool:
+        return False
+
+    def poll(self, timeout: float = 0.0) -> bool:
+        """Nothing can arrive from outside an in-memory bus: False at once."""
+        self._check_open()
+        return False
 
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         self._check_open()

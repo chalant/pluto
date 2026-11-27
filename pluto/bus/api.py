@@ -1,6 +1,6 @@
 """The bus interface: value types, errors and the `Bus` protocol.
 
-Every implementation (in-memory, serialising wrapper, later a networked one) passes the same contract suite
+Every implementation (in-memory, serialising wrapper, log-backed networked bus) passes the same contract suite
 (`tests/test_bus_contract.py`). The rules the interface fixes are in the docstring of `pluto.bus`.
 """
 
@@ -54,11 +54,35 @@ class Position(NamedTuple):
     token: Any
 
 
-class Receipt(NamedTuple):
-    """Returned by `publish` once the message is accepted (in memory: logged and enqueued, not delivered)."""
+class Receipt:
+    """Returned by `publish` once the message is accepted (in memory: logged and enqueued, not delivered).
 
-    msg_id: str
-    position: Position  # of the published message: `start=position` delivers it first
+    `position` is that of the published message: `start=position` delivers it first. A networked bus does not wait
+    for the broker's acknowledgement in `publish`, so it does not know the position yet: `position` then resolves
+    when it is asked for (it waits for the acknowledgement of that message, and of the ones sent before it), and the
+    position is also known to the bus after its next read. `resolved` says whether it is known without waiting. A
+    message the broker did not take raises `BusError` from `position`, or from the bus's next read.
+    """
+
+    __slots__ = ("msg_id", "_position")
+
+    def __init__(self, msg_id: str, position: "Position | Callable[[], Position]") -> None:
+        self.msg_id = msg_id
+        self._position = position
+
+    @property
+    def position(self) -> Position:
+        position = self._position
+        if not isinstance(position, Position):
+            position = self._position = position()
+        return position
+
+    @property
+    def resolved(self) -> bool:
+        return isinstance(self._position, Position)
+
+    def __repr__(self) -> str:
+        return f"Receipt({self.msg_id!r}, {self._position if self.resolved else '<unresolved>'!r})"
 
 
 class Start(enum.Enum):
@@ -96,9 +120,16 @@ type Handler = Callable[[Delivery], None]
 
 
 def topic_tokens(topic_or_pattern: str) -> tuple[str, ...]:
-    """Split a dotted topic or pattern (`*` one token, a final `>` the rest); ValueError when malformed."""
+    """Split a dotted topic or pattern (`*` one token, a final `>` the rest); ValueError when malformed.
+
+    The grammar is the one every bus can carry, so that a run that works on one works on all (a broker's subject syntax,
+    NATS's, refuses whitespace and control characters: a topic the in-memory bus took and a networked bus could not send
+    would be a run that works in one mode and fails in the other, and, on a log-backed bus, a message refused after
+    `publish` returned). Whitespace and control characters are therefore refused by every bus."""
     if not isinstance(topic_or_pattern, str) or not topic_or_pattern:
         raise ValueError(f"topic or pattern must be a non-empty string, got {topic_or_pattern!r}")
+    if any(character.isspace() or not character.isprintable() for character in topic_or_pattern):
+        raise ValueError(f"topic or pattern {topic_or_pattern!r} has whitespace or a control character")
     tokens = tuple(topic_or_pattern.split("."))
     if "" in tokens or ">" in tokens[:-1]:
         raise ValueError(f"malformed topic or pattern {topic_or_pattern!r}")
@@ -141,7 +172,9 @@ class Bus(Protocol):
         schema_version: int = 1,
     ) -> Receipt:
         """Log and enqueue a message; never runs a handler. `seq` defaults to the next number of `producer_id`,
-        `msg_id` to `f"{producer_id}:{seq}"`. A refused publish (`QueueFull`, bad argument) changes nothing."""
+        `msg_id` to `f"{producer_id}:{seq}"`. A refused publish (`QueueFull`, bad argument) changes nothing.
+        A networked bus sends the message without waiting for the broker: the receipt's position resolves later
+        (see `Receipt`), and a message the broker refuses raises `BusError` from the bus's next read."""
 
     def subscribe(
         self,
@@ -179,6 +212,17 @@ class Bus(Protocol):
     def run_until_idle(self, max_deliveries: int | None = None) -> int:
         """Run `step` until nothing is pending (handlers may publish more). Returns the invocations run;
         raises `NotIdle` when `max_deliveries` is reached with messages still pending."""
+
+    @property
+    def networked(self) -> bool:
+        """True when messages can arrive that no handler of this bus object published (another process writes the
+        log). `run_until_idle` is then idle *here*: the caller that waits for an answer from outside `poll`s for it.
+        False in memory: when `run_until_idle` returns, nothing else can arrive."""
+
+    def poll(self, timeout: float = 0.0) -> bool:
+        """Read what other publishers put in the log since this bus last read it, waiting up to `timeout` seconds
+        for the first message when there is none. Returns True when messages were read (they are queued: `step` and
+        `run_until_idle` deliver them). Never runs a handler. Always False, at once, when not `networked`."""
 
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         """The dead-letter records so far, oldest first."""

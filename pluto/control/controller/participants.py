@@ -6,6 +6,7 @@ The metrics are not a phase: a consumer of the stream of the book computes them 
 the book phase tells the stream where a reader may read (``BrokerService.observe``).
 """
 import logbook
+import pandas as pd
 
 from pluto.bus import Bus, Delivery
 from pluto.coms.utils import conversions
@@ -29,19 +30,17 @@ class BrokerParticipant(object):
         self._manager = manager
         self._broker = broker = manager.broker
 
-        # what each runtime says it sent in the trade phase, by process id: (orders, batches)
-        self._sent = {}
+        # the submit event that is waiting for the batches of orders it names (networked bus), if any
+        self._waiting = None
+        # the batches of orders the bus gave up on that nobody reported yet, and how many dead letters were looked at
+        self._dead = []
+        self._letters_seen = 0
 
-        bus.subscribe(phases.TRADE.done_topic, self._on_done)
         bus.subscribe(phases.BOOK.topic, self._on_book)
         bus.subscribe(phases.ACCOUNT.topic, self._on_account)
         bus.subscribe(phases.SUBMIT.topic, self._on_submit)
-
-    def _on_done(self, delivery: Delivery) -> None:
-        done = delivery.envelope.payload
-
-        if not done.error:
-            self._sent[done.participant] = (done.orders, done.batches)
+        # rank 1: after the manager's own subscription took the batch
+        bus.subscribe(phases.ORDERS_TOPIC, self._on_orders_arrived, rank=1)
 
     def _on_book(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
@@ -109,8 +108,13 @@ class BrokerParticipant(object):
         the last tick) and the last sale prices of the tick, sent on the strategy's own topic."""
         manager = self._manager
 
-        # the stale-batch filter of the manager (``receive_orders``): what the runtimes send
-        # for another clock event than the one they are about to run is ignored
+        # a batch that arrived for a tick that was closed is an error (counted by the manager, not applied), not a
+        # silent drop; the stale-batch filter of the manager (``receive_orders``) takes only the batches of this tick
+        late = self._late_batches()
+
+        if late:
+            raise phases.PhaseError('; '.join(late))
+
         manager.set_global_timestamp(conversions.to_datetime(event.clock.timestamp))
 
         for process_id in manager.session_ids:
@@ -126,36 +130,91 @@ class BrokerParticipant(object):
                 phase=phases.ACCOUNT.rank,
                 key=process_id)
 
-    def _check_orders(self) -> None:
-        """Each runtime said how many orders, in how many batches, it sent in the tick: the manager must have received
-        as many (a batch lost on the way, delivered twice, or for another clock event that was ignored, would
-        otherwise go unnoticed, an empty one too)."""
+    def _count_problems(self, announced) -> list[str]:
+        """Each runtime announced how many orders, in how many batches, it sent in the tick (in the submit event, the
+        controller saw the dones): the manager must have received as many (a batch lost on the way, delivered twice, or
+        for another clock event that was ignored, would otherwise go unnoticed, an empty one too)."""
         manager = self._manager
-        sent = self._sent
+        counts = {runtime.participant: (runtime.orders, runtime.batches) for runtime in announced}
         problems = []
 
         for process_id in manager.session_ids:
-            expected = sent.get(process_id, (0, 0))
+            expected = counts.get(process_id, (0, 0))
             received = (manager.received_orders(process_id), manager.received_batches(process_id))
 
             if expected != received:
                 problems.append('{} sent {} orders in {} batches, the broker received {} in {}'.format(
                     process_id, *expected, *received))
 
-        sent.clear()
+        return problems
+
+    def _short(self, announced) -> bool:
+        """Whether a runtime has sent more than the manager has received so far (what is more than announced is an
+        error, not something to wait for)."""
+        manager = self._manager
+
+        return any(
+            manager.received_orders(runtime.participant) < runtime.orders
+            or manager.received_batches(runtime.participant) < runtime.batches
+            for runtime in announced)
+
+    def _late_batches(self) -> list[str]:
+        """The batches that arrived for a tick that was already closed, counted by the manager (it does not apply them)."""
+        return ['{} sent a batch of {} orders for {}, which arrived after its tick closed'.format(
+            process_id, orders, pd.Timestamp(ts, tz='UTC')) for process_id, ts, orders in self._manager.take_late_batches()]
+
+    def _dead_batches(self) -> list[str]:
+        """The batches of orders the bus gave up on (dead-lettered) since the last call, as the problems to report."""
+        letters = self._bus.dead_letters()
+        new = [letter for letter in letters[self._letters_seen:] if letter.envelope.topic == phases.ORDERS_TOPIC]
+        self._letters_seen = len(letters)
+
+        return ['the bus gave up on a batch of orders of {} after {} attempts: {}: {}'.format(
+            letter.envelope.key, letter.attempts, letter.error_type, letter.error_message) for letter in new]
+
+    def _check_orders(self, announced, dead) -> None:
+        problems = dead + self._count_problems(announced) + self._late_batches()
 
         if problems:
             raise phases.PhaseError('; '.join(problems))
 
     def _on_submit(self, delivery: Delivery) -> None:
-        envelope = delivery.envelope
-        phases.report(self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, self._submit, log)
+        self._waiting = delivery.envelope
+        self._submit_when_ready()
 
-    def _submit(self) -> None:
+    def _on_orders_arrived(self, delivery: Delivery) -> None:
+        # after the manager took the batch (rank): a submit that was waiting for batches may go on
+        if self._waiting is not None:
+            self._submit_when_ready()
+
+    def _submit_when_ready(self) -> None:
+        """The submit event names the orders and batches each runtime sent.
+
+        On one stream the controller published the event only after it saw every announced batch in the log, and a log is
+        a prefix, so this participant's mirror has the batches before it has the event and nothing waits. The wait is
+        for a bus that delivers in other legal orders (the batch of another lane after the event: the fault-injecting
+        bus, a delayed delivery): on a networked bus the phase goes on when ``strategy.orders`` brings the missing
+        batches; the controller's deadline names the broker if they never come. A batch the bus gave up on (dead
+        letter) is reported at once instead of waited for. In memory nothing else can arrive: what is missing is an
+        error now."""
+        envelope = self._waiting
+        announced = envelope.payload.runtimes
+        self._dead.extend(self._dead_batches())
+
+        if self._bus.networked and self._short(announced) and not self._dead:
+            return
+
+        self._waiting = None
+        dead, self._dead = self._dead, []
+        phases.report(
+            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced, dead), log)
+
+    def _submit(self, announced, dead) -> None:
         """The orders the strategies sent in this tick reach the book, by strategy in registration order; then the
         manager starts the next tick (new orders and broker states)."""
         manager = self._manager
-        self._check_orders()
+        self._check_orders(announced, dead)
+
         orders = manager.new_orders
 
         # todo: catch any account control errors here...

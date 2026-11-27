@@ -48,6 +48,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._bus.subscribe(phases.ORDERS_TOPIC, self._on_orders)
 
         self._global_ts = None
+        # the last tick that was closed (submitted): batches for it or before are late
+        self._closed_ts = None
 
         self._broker_states = {}
 
@@ -55,6 +57,9 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # strategies in the order of their producer ids: registration order is rebuilt when they are submitted)
         self._received_orders = {}
         self._received_batches = {}
+
+        # the batches that arrived for a tick that was already closed: (process id, clock time ns, orders)
+        self._late_batches = []
 
     @property
     def bus(self) -> Bus:
@@ -106,7 +111,8 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
     def receive_orders(self, session_id, batch):
         """The orders of a strategy's batch, kept in the order they were placed (``strategy.orders`` on the bus). A
-        batch of another clock event than the current one is ignored."""
+        batch of another clock event than the current one is not applied; one for an earlier tick (it arrived after its
+        tick closed) is counted, ``take_late_batches`` hands the records over to be reported."""
         # todo: we receive a single batch of orders per session that contains
         #  the process id
 
@@ -115,12 +121,24 @@ class StrategyManager(brk_rpc.BrokerServicer):
 
         # todo: get portfolio and account data
         # check if it is the event we are waiting for...
-        if conversions.to_datetime(batch.ts) == self._global_ts:
+        batch_ts = conversions.to_datetime(batch.ts)
+
+        if batch_ts == self._global_ts:
             # converted first: a batch is appended whole or not at all
             orders = [conversions.to_zp_order(order) for order in batch.orders]
 
             self._received_orders.setdefault(session_id, []).extend(orders)
             self._received_batches[session_id] = self._received_batches.get(session_id, 0) + 1
+        elif (self._global_ts is not None and batch_ts < self._global_ts) or (
+                self._closed_ts is not None and batch_ts <= self._closed_ts):
+            self._late_batches.append((session_id, batch.ts.ToNanoseconds(), len(batch.orders)))
+
+    def take_late_batches(self):
+        """The batches that arrived for a tick that was already closed since the last call: (process id, the tick's
+        clock time in nanoseconds, number of orders)."""
+        late, self._late_batches = self._late_batches, []
+
+        return late
 
     @service_access.framework
     @service_access.per_session
@@ -192,8 +210,14 @@ class StrategyManager(brk_rpc.BrokerServicer):
         self._service.add_ledger(calendar_name)
 
     def clear(self):
+        """The tick is over: its orders and broker states are cleared and a batch for it that arrives from now on is
+        late (counted, not applied)."""
         self._received_orders.clear()
         self._received_batches.clear()
+
+        if self._global_ts is not None:  # a second clear() with no tick in between keeps the tick closed by the first
+            self._closed_ts = self._global_ts
+            self._global_ts = None
 
         broker_states = self._broker_states
 

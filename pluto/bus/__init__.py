@@ -1,4 +1,4 @@
-"""The message bus: a thin interface, a deterministic in-memory implementation, a serialising wrapper.
+"""The message bus: a thin interface, a deterministic in-memory implementation, a serialising wrapper, and a networked one.
 
 Components talk only through a `Bus` (Execution Topology ET1 to ET9). The in-memory implementation runs on one
 thread and makes every run one of the legal runs of a networked bus. The rules below are the S-rules of the
@@ -29,7 +29,8 @@ S7 Failures. Delivery is at-least-once. A handler that raises, or calls `nack`, 
 S9 Replay. A subscription starts at `Start.EARLIEST`, `Start.LATEST` (default) or a `Position` of an exact topic.
    Each topic has an append-only log, so replay delivers logged messages as if just published, merged by S3.
    A `Position` is opaque and storable (its `token` belongs to the bus that issued it). `Receipt.position` is the
-   published message (inclusive). `Bus.position_of(delivery)` is the subscription's resume position in that
+   published message (inclusive); on a networked bus `publish` does not wait for the broker's acknowledgement and the
+   position resolves when asked for or at the next read. `Bus.position_of(delivery)` is the subscription's resume position in that
    topic: every message below it is settled, so deliveries that complete out of log order (S3 does not follow
    log order across keys) leave no gap; messages above it that were already handled are delivered again.
 S10 Request and reply. `request` and `reply` (module `pluto.bus.request`) are a library over publish and
@@ -45,14 +46,23 @@ S12 Backpressure. A subscription holds at most `queue_capacity` undelivered mess
 S13 Hygiene. No unordered iteration, no randomness, deterministic ids (`seq` per producer, `msg_id` from it),
    deterministic encodings (sorted JSON keys, deterministic protobuf), group members chosen by a stable hash.
 S14 Quiescence. `run_until_idle()` runs handlers until nothing is pending (handlers may publish more) and
-   `step()` runs exactly one, so the controller can drive a phase and a test can assert that nothing is left.
+   `step()` runs exactly one, so the controller can drive a phase and a test can assert that nothing is left. On a
+   networked bus (`networked`) nothing pending means nothing pending *here*: other processes may still publish. Whoever
+   waits for an answer from another process `poll`s for it (`PhaseDriver` does, with a deadline of its own).
+S15 Topics. A topic is dotted tokens of printable characters without whitespace (the grammar a broker can carry, so a
+   run that works on one bus works on all); patterns add `*` (one token) and a final `>` (the rest).
 
 Groups: subscriptions of one `group` share a stream; each (topic, key) lane goes to one member, chosen by a stable
 hash of the lane when it is created (so lanes created by a replay at subscribe time go to the members present
 then). Closing: `close()` cancels every subscription and any later call but `close` and `cancel` raises.
 
-Not here: S4 (the networked merge), seeded fault injection, start from a time, `seek`, deduplication, retention
-limits for logs (logs are never trimmed; open).
+Networked bus: `pluto.bus.log.LogBus` runs this dispatcher over a broker's log (S4: the broker orders by arrival, the reader by
+S3, a phase barrier makes them agree); `pluto.bus.jetstream.JetStreamLog` is the NATS JetStream log (import it explicitly: it
+needs `nats-py`). `networked` and `poll` are what a caller that waits for other processes uses (`PhaseDriver`). Its
+differences (publish does not wait, no `QueueFull`, groups in-process) are in the docstring of `pluto.bus.log`.
+
+Not here: seeded fault injection, start from a time, `seek`, deduplication, retention limits for logs (logs are never
+trimmed; open).
 """
 
 from pluto.bus.api import (
@@ -70,6 +80,7 @@ from pluto.bus.api import (
     Start,
     Subscription,
 )
+from pluto.bus.log import Log, LogBus
 from pluto.bus.memory import InMemoryBus
 from pluto.bus.request import Request, reply, request
 from pluto.bus.serializing import Codec, JsonCodec, ProtobufCodec, SerializingBus
@@ -85,6 +96,8 @@ __all__ = [
     "Handler",
     "InMemoryBus",
     "JsonCodec",
+    "Log",
+    "LogBus",
     "NotIdle",
     "Position",
     "ProtobufCodec",
