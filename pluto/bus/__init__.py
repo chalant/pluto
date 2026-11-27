@@ -61,7 +61,11 @@ S3, a phase barrier makes them agree); `pluto.bus.jetstream.JetStreamLog` is the
 needs `nats-py`). `networked` and `poll` are what a caller that waits for other processes uses (`PhaseDriver`). Its
 differences (publish does not wait, no `QueueFull`, groups in-process) are in the docstring of `pluto.bus.log`.
 
-Not here: seeded fault injection, start from a time, `seek`, deduplication, retention limits for logs (logs are never
+Fault injection: `SeededFaultBus` (module `pluto.bus.faults`) wraps any bus and injects, from a seed, the faults a
+networked bus may produce under this contract (duplicates, late arrival across lanes, lost deliveries, restarts,
+publish failures, a silent participant); its docstring has the fault model.
+
+Not here: start from a time, `seek`, deduplication, retention limits for logs (logs are never
 trimmed; open).
 """
 
@@ -80,6 +84,7 @@ from pluto.bus.api import (
     Start,
     Subscription,
 )
+from pluto.bus.faults import Fault, FaultConfig, FaultKind, PublishFailed, SeededFaultBus
 from pluto.bus.log import Log, LogBus
 from pluto.bus.memory import InMemoryBus
 from pluto.bus.request import Request, reply, request
@@ -93,6 +98,9 @@ __all__ = [
     "DeadLetter",
     "Delivery",
     "Envelope",
+    "Fault",
+    "FaultConfig",
+    "FaultKind",
     "Handler",
     "InMemoryBus",
     "JsonCodec",
@@ -101,9 +109,11 @@ __all__ = [
     "NotIdle",
     "Position",
     "ProtobufCodec",
+    "PublishFailed",
     "QueueFull",
     "Receipt",
     "Request",
+    "SeededFaultBus",
     "SerializingBus",
     "Start",
     "Subscription",

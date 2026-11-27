@@ -35,21 +35,23 @@ Per fault: allowed because, how the wrapper produces it, what a correct consumer
   instead of calling the handler; the inner bus redelivers (`attempt` + 1) and after `max_attempts` dead-letters.
   Consumer: expect `attempt` above 1 on first sight; a message lost more often than the inner bus tries ends in a dead
   letter that nobody handled.
-* Consumer crash and resume (`crash`, `max_crashes`). Allowed: S9, a consumer resumes at the stored `position_of`.
-  Produced: cancel the inner subscription and subscribe again at the position of the last settled delivery, either
-  before the handler ran or after it ran and before the ack (one in two each). Only for exact, ungrouped topics: a
-  position is per topic. Consumer: checkpoint with `position_of`; after a restart everything above the checkpoint
-  comes again, also what it handled, so it is idempotent or rebuilds its state from the checkpoint. The id of the
-  subscription changes (a new registration).
+* Consumer crash and resume (`crash`, `max_crashes`, `SeededFaultBus.crash`). Allowed: S9, a consumer resumes at the
+  stored `position_of`. Produced: subscribe again at the position of the last settled delivery (before any delivery:
+  the first message logged after the subscription), either before the handler ran or after it ran and before the ack
+  (one in two each). Only for exact, ungrouped topics: a position is per topic. Consumer: checkpoint with
+  `position_of`; after a restart everything above the checkpoint comes again, also what it handled, so it is
+  idempotent or rebuilds its state from the checkpoint. The id of the subscription changes (a new registration).
 * Publish failure (`publish_fail`). Allowed: a client may see an error when nothing was sent. Produced: `PublishFailed`
-  before the inner bus saw the message (nothing logged, no `seq` used). Consumer (publisher): retry with the same
-  `msg_id` (`pluto.bus.request.Request.send` does).
+  after the arguments were checked, before the inner bus saw the message (nothing logged, no `seq` used). Consumer
+  (publisher): retry with the same `msg_id` (`pluto.bus.request.Request.send` does).
 * Ambiguous publish (`publish_ack_lost`). Allowed: the ack was lost, the publisher cannot know. Produced: the message is
   published normally (it may be delayed), then `PublishFailed` is raised. Publisher: retry with the same `msg_id`; the
   retry is a duplicate to every consumer.
-* Silent participant (`mute`, `SeededFaultBus.mute`). Allowed: a process that hung or died answers nothing. Produced: a
-  subscription swallows its deliveries: the handler is never called and the deliveries are acknowledged. Waiter: needs a
-  deadline; no answer is a failure to report, not a state of the lock-step.
+* Silent participant (`mute`, `SeededFaultBus.mute`). Allowed: a process that hung or died never acknowledges. Produced:
+  the subscription is cancelled with the delivery in hand unsettled, so nothing reaches its handler, nothing is
+  acknowledged, and what is published meanwhile waits in the log. `unmute` restarts it at its checkpoint like a crash
+  (exact, ungrouped topics: it reads again what it had not settled); on other subscriptions a mute is permanent and
+  `unmute` raises. Waiter: needs a deadline; no answer is a failure to report, not a state of the lock-step.
 
 Contract-violating (negative tests only; need `FaultConfig(contract_violating=True)`):
 
@@ -59,24 +61,40 @@ Contract-violating (negative tests only; need `FaultConfig(contract_violating=Tr
 
 Not modelled (a networked bus does these, the in-process wrapper does not): loss of an accepted message without a
 trace, corruption, per-subscriber lag (all subscribers of a message see it arrive at the same tick), a consumer that
-loses its checkpoint, partitions that split one subscription's lanes in time.
+loses its checkpoint, partitions that split one subscription's lanes in time. Also not modelled, and it matters for
+what `lose_delivery` and `ack_lost` prove: a *late* redelivery. A nack keeps the dispatch key of the message, so the
+redelivery always comes next in its lane, before any later message of any other lane; a real redelivery after an ack
+timeout arrives after the other lanes moved on. A consumer that survives these faults has survived duplicates and
+attempts above 1, not a redelivery out of order across lanes (`delay` and `duplicate_publish` cover that for
+duplicates and arrivals, not for redeliveries). Group-member failover (a member dies and its lanes go to another, with
+the unacked message redelivered there) is not modelled either: grouped subscriptions are never crashed, and a muted
+member is cancelled, so the group's lanes move to the others at once.
 
 Rules of the wrapper:
 
+* Every call draws a fixed number of random numbers whatever the configuration (7 per publish, 5 per delivery), and
+  uses them only where a fault is on: two configurations that differ in one probability take the same stream, so one
+  fault can be dialled up or down while the rest of a scenario stays the same.
 * Delayed and duplicated publishes live in the wrapper until they are released; the returned `Receipt` of a delayed
-  one holds a position that is resolved when it reaches the log, and `subscribe` accepts it as `start`.
+  one holds a position that is resolved when it reaches the log, and `subscribe` accepts it as `start` (`ValueError`
+  if the message was dropped on release).
 * `subscribe` is a barrier: everything held is first put into the inner bus's log (a message published before a
-  subscription started is never delivered to it at `Start.LATEST`, as without faults).
+  subscription started is never delivered to it at `Start.LATEST`, as without faults). Every `Request` subscribes to
+  its reply topic, so every request is a barrier too, and the delays of earlier publishes end there; with the inner
+  bus full the barrier can raise `QueueFull` where the bare inner bus would not.
 * `step` and `run_until_idle` first release what is due, and when the inner bus is idle they skip ahead in time to
   what is held, so a delayed message is always eventually delivered and "idle" means nothing is pending anywhere.
 * The wrapper owns `seq` (per producer, from 1, like the in-memory bus) so that the receipt of a held message has its
   final `msg_id`.
 * Injected redeliveries (`ack_lost`, `lose_delivery`) happen at most `max_redeliveries` times per message and
-  subscription, and count as attempts of the inner bus: keep `max_attempts` of the inner bus above
-  `max_redeliveries` plus the failures the handlers produce themselves, or a message is dead-lettered by the injection.
+  subscription (also across crashes), and count as attempts of the inner bus: keep `max_attempts` of the inner bus
+  above `max_redeliveries` plus the failures the handlers produce themselves, or a message is dead-lettered by the
+  injection.
 * A held message that the inner bus then refuses (other than `QueueFull`, which makes it wait) is dropped and the
   error is raised from the `step` that released it: with delays on, argument errors of a message the wrapper could not
   check itself (a payload the codec cannot encode) surface late.
+* A crash or an unmute subscribes the replacement before it cancels the old subscription; if the replay does not fit
+  (`QueueFull`) the crash is skipped and logged (`CRASH_SKIPPED`), the unmute raises.
 """
 
 import enum
@@ -93,7 +111,6 @@ from pluto.bus.api import (
     DeadLetter,
     Delivery,
     Handler,
-    NotIdle,
     Position,
     QueueFull,
     Receipt,
@@ -120,8 +137,9 @@ class FaultKind(enum.StrEnum):
     LOST_DELIVERY = "lost_delivery"  # the handler was not called, the delivery will come again
     DUPLICATE_DELIVERY = "duplicate_delivery"  # the handler ran, the ack was lost, the delivery will come again
     CRASH = "crash"  # the subscription restarted from its checkpoint
-    MUTED = "muted"  # the subscription went silent with this delivery
-    SWALLOWED = "swallowed"  # a delivery to a silent subscription, acknowledged without a handler call
+    CRASH_SKIPPED = "crash_skipped"  # a crash that did not happen: the replay would not fit in the inner bus
+    MUTED = "muted"  # the subscription went silent: cancelled, its delivery in hand never acknowledged
+    UNMUTED = "unmuted"  # a muted subscription restarted at its checkpoint
     RELEASE_FAILED = "release_failed"  # a held message the inner bus refused, dropped
 
 
@@ -273,6 +291,7 @@ class SeededFaultBus:
         self._dup_count = 0
         self._spent: dict[tuple[int, str, int], int] = {}  # (subscription serial, topic, offset) -> redeliveries
         self._subscriptions: list[_Handle] = []
+        self._waiting: dict[str, list[_Handle]] = {}  # topic -> handles that resume at the next message logged there
         self._log: list[Fault] = []
 
     # diagnosis
@@ -286,12 +305,38 @@ class SeededFaultBus:
         return sum(len(queue) for queue in self._held.values()) + len(self._dups)
 
     def mute(self, subscription: Subscription) -> None:
-        """Make a subscription silent from now on: its deliveries are acknowledged without calling the handler."""
-        self._handle(subscription).muted = True
+        """Make a subscription silent from now on, like a hung or dead process: it is cancelled, nothing reaches its
+        handler, nothing is acknowledged, and what is published meanwhile waits in the log."""
+        handle = self._handle(subscription)
+        if not handle.muted and not handle.cancelled:
+            handle.muted = True
+            self._note(FaultKind.MUTED, handle.topic, "", "", handle.id, "muted by the caller")
+            handle.inner.cancel()
 
     def unmute(self, subscription: Subscription) -> None:
-        """Let a muted subscription answer again (what it swallowed in between is not delivered again)."""
-        self._handle(subscription).muted = False
+        """Let a muted subscription answer again: it restarts at its checkpoint like a crashed consumer and reads again
+        what it had not settled, including what was published while it was silent. Only for an exact topic without a
+        group; on any other a mute is permanent and this raises `ValueError`. `QueueFull` if the replay does not fit."""
+        handle = self._handle(subscription)
+        if not handle.muted or handle.cancelled:
+            return
+        if not handle.exact:
+            raise ValueError("only a subscription to an exact topic without a group can resume: its mute is permanent")
+        if not self._restart(handle):
+            raise QueueFull("the replay of a muted subscription does not fit in the inner bus")
+        handle.muted = False
+        self._note(FaultKind.UNMUTED, handle.topic, "", "", handle.id, f"resumes at {handle.checkpoint}")
+
+    def crash(self, subscription: Subscription) -> None:
+        """Crash a subscription now: it restarts at its checkpoint (an exact topic without a group). Called from its own
+        handler it is a crash before the ack. `QueueFull` if the replay does not fit."""
+        handle = self._handle(subscription)
+        if not handle.exact or handle.muted or handle.cancelled:
+            raise ValueError("only a live subscription to an exact topic without a group can crash and resume")
+        if not self._restart(handle):
+            raise QueueFull("the replay of a crashed subscription does not fit in the inner bus")
+        handle.crashes += 1
+        self._note(FaultKind.CRASH, handle.topic, "", "", handle.id, f"by the caller; resumes at {handle.checkpoint}")
 
     def _handle(self, subscription: Subscription) -> _Handle:
         if not isinstance(subscription, _Handle) or subscription not in self._subscriptions:
@@ -330,17 +375,18 @@ class SeededFaultBus:
         self._check_open()
         cfg = self._cfg
         rng = self._rng
-        # every decision of the call is drawn first, in a fixed order, so a seed's stream does not depend on which
-        # faults were hit
+        # every call draws the same numbers whatever the configuration, so that two configurations that differ in one
+        # probability take the same stream; the amounts are used only when the fault is on
         fail = rng.random() < cfg.publish_fail
         ack_lost = rng.random() < cfg.publish_ack_lost
         hold = rng.random() < cfg.delay
         duplicate = rng.random() < cfg.duplicate_publish
         jump = rng.random() < cfg.reorder_within_lane
-        delay = rng.randint(1, cfg.max_delay) if hold else 0
-        late = rng.randint(1, cfg.max_delay) if duplicate else 0
+        delay = rng.randint(1, cfg.max_delay)
+        late = rng.randint(1, cfg.max_delay)
 
         if fail:
+            _validate(topic, logical_ts, phase, 1 if seq is None else seq, key, producer_id)
             self._note(FaultKind.PUBLISH_FAILED, topic, key, "" if msg_id is None else msg_id)
             raise PublishFailed(f"publish to {topic!r} failed (injected)")
 
@@ -364,6 +410,7 @@ class SeededFaultBus:
         queue = self._held.get(lane)
         if not hold and not queue:
             receipt = self._inner.publish(**args)  # a refusal leaves everything as it was
+            self._logged(topic, receipt.position)
             if seq is None:
                 self._seq[producer_id] = assigned
         else:
@@ -421,6 +468,7 @@ class SeededFaultBus:
                     raise
                 queue.popleft()
                 moved += 1
+                self._logged(item.args["topic"], receipt.position)
                 if item.pending is not None:
                     item.pending.position = receipt.position
             if not queue:
@@ -454,15 +502,26 @@ class SeededFaultBus:
         self._check_open()
         self._flush()  # what was published before the subscription is in the log before it starts
         if isinstance(start, Position) and isinstance(start.token, _Pending):
+            if start.token.position is None:
+                raise ValueError("the message of this receipt was dropped before it reached the log")
             start = start.token.position
         handle = _Handle(len(self._subscriptions) + 1, topic_or_pattern, handler, rank)
         handle.callback = lambda delivery: self._deliver(handle, delivery)
         handle.inner = self._inner.subscribe(topic_or_pattern, handle.callback, group=group, start=start, rank=rank)
         handle.exact = group is None and is_exact(topic_tokens(topic_or_pattern))
         if handle.exact:
-            handle.checkpoint = start if isinstance(start, Position) or start is Start.EARLIEST else None
+            if isinstance(start, Position) or start is Start.EARLIEST:
+                handle.checkpoint = start
+            else:  # a restart resumes at the first message logged from now on
+                self._waiting.setdefault(topic_or_pattern, []).append(handle)
         self._subscriptions.append(handle)
         return handle
+
+    def _logged(self, topic: str, position: Position) -> None:
+        """A message reached the inner bus's log: where a subscription that started at the end of the log resumes."""
+        for handle in self._waiting.pop(topic, ()):
+            if handle.checkpoint is None:
+                handle.checkpoint = position
 
     # delivery
 
@@ -474,13 +533,14 @@ class SeededFaultBus:
         lose = rng.random() < cfg.lose_delivery
         crash = rng.random() < cfg.crash
         ack_lost = rng.random() < cfg.ack_lost
+        before = rng.random() < 0.5  # a crash comes before the handler ran, or after it and before the ack
         envelope = delivery.envelope
         topic, key, msg_id = envelope.topic, envelope.key, envelope.msg_id
+        inner = handle.inner
         self._in_handler = True
         try:
-            if handle.muted or mute:
-                self._note(FaultKind.SWALLOWED if handle.muted else FaultKind.MUTED, topic, key, msg_id, handle.id)
-                handle.muted = True
+            if mute:
+                self._silence(handle, topic, key, msg_id, f"the delivery of attempt {delivery.attempt} is never acked")
                 return
             ident = (handle.serial, topic, delivery.offset)
             spent = self._spent.get(ident, 0)
@@ -492,15 +552,13 @@ class SeededFaultBus:
                 self._inner.nack(delivery)
                 return
             crash = crash and handle.exact and handle.crashes < cfg.max_crashes and handle.checkpoint is not None
-            if crash and rng.random() < 0.5:
-                self._crash(handle, envelope, "before the handler ran")
+            if crash and before and self._crash(handle, envelope, "before the handler ran"):
                 return
             self._outcome_nacked = False
             handle.handler(delivery)
-            if self._closed or handle.cancelled or self._outcome_nacked:
-                return
-            if crash:
-                self._crash(handle, envelope, "after the handler ran, before the ack")
+            if self._closed or handle.cancelled or handle.muted or handle.inner is not inner or self._outcome_nacked:
+                return  # the handler closed, cancelled, muted or restarted the subscription, or nacked
+            if crash and not before and self._crash(handle, envelope, "after the handler ran, before the ack"):
                 return
             if ack_lost and may_repeat:
                 self._spent[ident] = spent + 1
@@ -513,12 +571,34 @@ class SeededFaultBus:
         finally:
             self._in_handler = False
 
-    def _crash(self, handle: _Handle, envelope: Any, when: str) -> None:
-        handle.crashes += 1
-        detail = f"{when}; resumes at {handle.checkpoint}"
-        self._note(FaultKind.CRASH, envelope.topic, envelope.key, envelope.msg_id, handle.id, detail)
+    def _restart(self, handle: _Handle) -> bool:
+        """Subscribe a replacement at the checkpoint, then cancel the old subscription. False when the replay does not
+        fit in the inner bus (`QueueFull`): nothing changed then."""
+        try:
+            replacement = self._inner.subscribe(
+                handle.topic, handle.callback, start=handle.checkpoint, rank=handle.rank
+            )
+        except QueueFull:
+            return False
         handle.inner.cancel()
-        handle.inner = self._inner.subscribe(handle.topic, handle.callback, start=handle.checkpoint, rank=handle.rank)
+        handle.inner = replacement
+        return True
+
+    def _crash(self, handle: _Handle, envelope: Any, when: str) -> bool:
+        """Restart the subscription at its checkpoint; False (and logged) when the replay does not fit."""
+        topic, key, msg_id = envelope.topic, envelope.key, envelope.msg_id
+        detail = f"{when}; resumes at {handle.checkpoint}"
+        if not self._restart(handle):
+            self._note(FaultKind.CRASH_SKIPPED, topic, key, msg_id, handle.id, detail + ": the replay does not fit")
+            return False
+        handle.crashes += 1
+        self._note(FaultKind.CRASH, topic, key, msg_id, handle.id, detail)
+        return True
+
+    def _silence(self, handle: _Handle, topic: str, key: str, msg_id: str, detail: str) -> None:
+        handle.muted = True
+        self._note(FaultKind.MUTED, topic, key, msg_id, handle.id, detail)
+        handle.inner.cancel()
 
     def ack(self, delivery: Delivery) -> None:
         self._inner.ack(delivery)
