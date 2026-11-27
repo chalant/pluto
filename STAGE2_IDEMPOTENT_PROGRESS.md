@@ -194,3 +194,7 @@ keeps its old `batch_ts < global_ts` test for "a batch of an earlier tick": with
 time than the current one is not reported as late (as on `798c6e11`; the count check of the submit phase still aborts the run).
 
 Messages per whole `buy_and_hold` run: unchanged, 75,888 (the step travels in the correlation id of existing messages).
+
+Final run of the review fixes: fresh clone of `stage2-idempotent` at `fe9b61ae` (`--no-hardlinks`), new env from `dev/setup_env.sh`, NATS up,
+`PLUTO_REQUIRE_NATS=1`, whole `tests/`: **1009 passed, 5 skipped** (337 s), and with `PYTHONHASHSEED=1`: **1009 passed, 5 skipped** (330 s)
+(995 before this round: 14 more tests; the same 5 legitimate skips). The original result tests and `tests/test_bus_contract.py` are unchanged.
