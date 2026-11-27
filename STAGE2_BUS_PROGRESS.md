@@ -15,7 +15,7 @@ Out of scope: components in separate processes and their registry, the fault-inj
 - [x] 2. the controller waits for its expected dones
 - [x] 3. explicit cross-producer dependencies inside a phase
 - [x] 4. the NATS implementation
-- [ ] 5. measurements, final run
+- [x] 5. measurements, final run
 
 ## Step 1: `Receipt.position` is resolved when asked for
 
@@ -129,3 +129,34 @@ request answers "did the broker take my messages" and "what is new", and `LogBus
 it is sticky (`LogBus._check_open`). `step` no longer reads the whole log when it has nothing to dispatch (that was a
 `consumer_info` round trip per phase): idle means idle here; a caller that waits for others `poll`s (the `PhaseDriver` does),
 `subscribe` still reads everything first.
+
+## Step 5: measurements and the final run
+
+Machine: 16 cores, shared (load average 10 to 21 during the runs), NATS server v2.15.3 on localhost with the file store; numbers are
+indicative, the modes alternate so compare the pairs. `dev/bench_jetstream_run.py` (`pytest dev/bench_jetstream_run.py -s`) runs
+`buy_and_hold` (7,312 ticks, 75,888 messages through the bus in this version: the metrics phase is gone since the spike) in
+memory, over NATS with `publish` waiting for the broker (`WaitingLog`: each `append` reads the message back before it
+returns: what a synchronous publish costs on the same transport), and over NATS as the bus is (publish does not wait).
+
+| Run of `buy_and_hold` | in memory | NATS, publish waits | NATS, publish does not wait |
+|---|---|---|---|
+| spike (untuned, own adapter, 93,276 messages in that version) | 4.7 s | 78 s | n/a |
+| step 1 as first built (ack by `flush`, then a read request: 2 round trips per step) | 4.6 / 3.6 s | 63.0 / 61.5 s | 58.0 / 58.1 s |
+| as finished (ack is the read-back, one request per step, no idle `consumer_info`) | 4.4 / 3.7 s | 46.0 / 46.1 s | **35.2 / 37.3 s** |
+
+So publishing without waiting is worth about 20 % (46 to 36 s) on the same transport, the single-request read about 40 % on top
+(58 to 36 s), 78 to 36 s from the spike; per message 0.47 ms (36 s / 75,888) against 0.77 ms. What is left per step is one thread
+hop plus one broker round trip (~270 us measured on the log alone) and the decode of the message; further gains (a push
+consumer so that the answer is already there, fewer steps per phase) are not done. The whole-run test over NATS takes 42 s for
+`buy_and_hold`, 8 s for `dividends`, 2 s for `cancel_orders` in the suite.
+
+Full suite, fresh clone `/home/yves/.cache/hades-pluto-dev/stage2-bus/verify` of `stage2-bus` at `317ae25e` (code of the head), fresh env from
+`dev/setup_env.sh`, `pytest tests`:
+
+| | passed | skipped | time |
+|---|---|---|---|
+| NATS up | 581 | 2 (the poll tests that need a second writer, on the two in-memory buses) | 230.6 s |
+| NATS stopped (`stop.sh`, restarted with `start.sh` after) | 476 | 107 (every NATS test: the NATS contract class, `test_bus_jetstream.py`, `test_pluto_jetstream_run.py`, each with "no NATS server at nats://127.0.0.1:4222") | 166.8 s |
+| NATS up, `PYTHONHASHSEED=1` | 581 | 2 | 224.8 s |
+
+The NATS tests add about 64 s (+38 %) to the suite; the whole-run test over NATS is 52 s of it. NATS is running at the end.
