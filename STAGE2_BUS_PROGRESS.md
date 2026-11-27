@@ -160,3 +160,74 @@ Full suite, fresh clone `/home/yves/.cache/hades-pluto-dev/stage2-bus/verify` of
 | NATS up, `PYTHONHASHSEED=1` | 581 | 2 | 224.8 s |
 
 The NATS tests add about 64 s (+38 %) to the suite; the whole-run test over NATS is 52 s of it. NATS is running at the end.
+
+## Review fixes (read-only review `review-stage2-bus`: no High findings)
+
+Medium:
+1. **`close()` no longer swallows a lost or refused message.** `LogBus.close` and `JetStreamLog.close` finish all their cleanup
+   (consumer, stream with `drop_on_close`, connection, loop) and then raise the first failure: a message the server refused, one
+   that was never acknowledged within the timeout, or a cleanup that failed. Idempotent (a second call does nothing).
+   `test_a_message_the_broker_refused…` asserts it, a new test covers a refused message nobody read back.
+2. **A failed `JetStreamLog` open leaves nothing behind**: `_open` closes the connection and deletes the stream it created when
+   `add_stream`/`pull_subscribe` fail; the loop is closed after its thread joined. Tests: `create=False` on a missing stream
+   (no new `jetstream-log` thread, warnings as errors), a patched failing `pull_subscribe` after `create=True` (the stream is gone).
+   `pytest -X dev -W error::ResourceWarning` on `tests/test_bus_jetstream.py` is clean (it was not).
+3. **The NATS whole-run test and `dev/bench_jetstream_run.py` close the bus on failure** (`addCleanup(bus.close)` inside `make()`).
+4. **Topics a broker cannot carry.** Decision: the rule belongs to the **contract, for every bus**, not only to `LogBus`: a topic with
+   whitespace or a control character is refused (`ValueError`, in `api.topic_tokens`, so publish and subscribe, before anything is
+   sent or logged) by the in-memory bus too. Why: ET says what works in one mode works in the other; a topic the in-memory bus took and
+   NATS cannot carry would be a run that passes in memory and fails distributed, and on a log-backed bus a message refused after
+   `publish` returned (sticky failure). New rule S15 in `pluto/bus/__init__.py`, one contract test on all three buses. This is a
+   behaviour change of the in-memory bus for such topics (nothing in `pluto/` or the tests used one: the suite is green).
+
+Low:
+- **Deadline**: `PhaseDriver.drive` and `announced_orders` do one last `poll(0)` and re-assess before they time out (a test with
+  `timeout=0` and a done already in the log).
+- **Broker-side deferral kept**, comment corrected: on one stream the controller published the submit only after it saw every batch,
+  and a log is a prefix, so nothing waits; the wait exists for buses that deliver in other legal orders (the fault-injecting bus).
+  A batch the bus **dead-lettered** is reported at once (`the bus gave up on a batch of orders of aaa after 3 attempts…`) instead of
+  waiting for the controller's deadline (test).
+- `StrategyManager.clear()` keeps `_closed_ts` when called again without a tick in between (test).
+- `_Loop.call` cancels the coroutine on a timeout; `_Loop.stop` closes the loop after the join.
+- `allow_reconnect=False` and the quiet `error_cb` documented (a blip aborts the run loudly; no replay recovery yet); the limits of a
+  late attach to a long stream documented (`log.py`, `jetstream.py`).
+- `Log.append(topic, data)`: the unused `key` is gone (`LogBus`, `JetStreamLog`, the bench).
+- `LogBus.run_until_idle` is no longer a copy: `InMemoryBus.run_until_idle` asks a `_has_pending()` hook, `LogBus` overrides it to
+  read what it published first (a 4-line change in `memory.py`, behaviour unchanged).
+- Tests: a real assertion in `test_the_next_phase_does_not_see_the_dones_of_the_last`; the poll test has a networked branch;
+  `AcrossProcessesTests` processes are daemons and terminated in `finally`; `tests/nats_support.py` (skip without a server, **without
+  JetStream** or without `nats-py`; **`PLUTO_REQUIRE_NATS=1` turns every one of those skips into a failure**, checked); the contract
+  imports `pluto.bus.jetstream` lazily, so a venv without `nats-py` skips the NATS class instead of failing to import.
+- Docs: `api.py` first lines, `pluto/bus/__init__.py` first line (`LogBus`), S14 for a networked bus ("here, not everywhere"), S15;
+  `nats-py>=2.17,<3` in `etc/requirements.txt` (the exact pin stays in `requirements-py313.txt`; `requirements_dev.txt` lists test tools
+  only and nats-py is a runtime dependency of `pluto.bus.jetstream`).
+
+Contract assertions changed: none. Added in this round: `test_topics_with_whitespace_or_control_characters_are_refused_by_every_bus`;
+the poll test `test_a_bus_nobody_else_writes_to_has_nothing_to_poll` gained a branch for networked buses.
+
+### What `SeededFaultBus` (`pluto/bus/faults.py`, branch `stage2-faultbus`) must implement to run under the driver
+
+Read from that branch (not edited). `PhaseDriver`, `BrokerParticipant` and `StrategyManager` use, besides the old interface:
+`bus.networked` (a **property**, bool), `bus.poll(timeout: float = 0.0) -> bool`, and `Receipt` objects with `.position`/`.resolved`.
+
+1. `networked` (property). Its value is the answer to "can a message show up after `run_until_idle` returned?":
+   - if the wrapper can hold a message back across a `run_until_idle`/`step` that returned False (a delayed done, a late duplicate, a
+     delivery that arrives only when polled) then **`networked` must be True** and `poll` must release them. Otherwise the driver
+     stops at the first idle and reports the held done as an immediate `PhaseError: no done from X`.
+   - the current `step`/`run_until_idle` of the wrapper skip ahead in logical time and only return idle when `_held` and `_dups`
+     are empty, so, as written, "nothing can arrive": `networked` is then `self._inner.networked` (False over an in-memory inner,
+     True over a `LogBus` inner). Say which of the two it is in the docstring and keep the value consistent with the behaviour.
+2. `poll(timeout=0.0) -> bool`: `self._check_open()`; never run a handler; release what is due (advance the wrapper's logical `_now`
+   to `_next_due()` and call `_release()`, no real sleeping: the timeout is wall-clock and the wrapper has none) and then
+   `self._inner.poll(timeout)`; return True if either moved something into a queue, False otherwise. Raise `BusClosed` after `close`.
+   One poll may release one item (a test bus does, `RemoteBus` in `tests/test_pluto_phases.py`) or everything due: the driver loops.
+3. `Receipt` is a class now, `Receipt(msg_id, position_or_callable)`, with `.position` (resolves a callable on first use, caches) and
+   `.resolved`; it is not a tuple (no unpacking, no `_replace`). A wrapper that holds a message must return a receipt whose position
+   resolves when the item is released (the resolver releases it, as `_Pending.position` does today), or build the receipt with the
+   inner receipt's resolved/unresolved position.
+4. Topics: S15 (no whitespace or control characters): the wrapper's `_validate` should call `exact_topic`/`topic_tokens` from `api`
+   (the inner bus refuses them too, but only when the item is released, after `publish` returned).
+5. `close()` of a `LogBus` inner can raise (a lost message): the wrapper's `close` should clear its holds, call `inner.close()`, and let
+   that exception through.
+6. The contract tests that exercise this (`test_poll_*`, `networked`) run on every bus; a wrapper over `InMemoryBus` passes
+   `test_a_bus_nobody_else_writes_to_has_nothing_to_poll` only if `poll(30.0)` returns False at once when `networked` is False.
