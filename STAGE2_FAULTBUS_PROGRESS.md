@@ -207,4 +207,8 @@ test still passes; add them to `TOLERATED` then.
 
 ## Final run
 
-(Filled in after the run below.)
+Fresh clone of the rebased `stage2-faultbus` at `0a251a9b` (`--no-hardlinks`), new env from `dev/setup_env.sh` (with `nats-py`), NATS up at
+127.0.0.1:4222, `PLUTO_REQUIRE_NATS=1`, whole `tests/`: **959 passed, 5 skipped** (291 s), and under `PYTHONHASHSEED=1`: **959 passed, 5 skipped**
+(286 s). The skips are the legitimate ones: `test_poll_finds_a_message_published_by_another_bus_of_the_same_log` on the two in-memory
+buses and on the two wrappers over them (4), and the release-failure test on the in-memory implementation (needs a codec to refuse a
+payload). `stage2-bus` alone: 590 passed, 2 skipped. The clone and its env were removed.
