@@ -24,18 +24,21 @@ def clock_event():
 class FakeParticipant(object):
     """Says done in a phase, with the work it is given."""
 
-    def __init__(self, bus, name, phase, work=lambda: None):
+    def __init__(self, bus, name, phase, work=lambda: None, answers=None):
         self.name = name
         self.calls = 0
         self._bus = bus
         self._phase = phase
         self._work = work
+        self._answers = answers
 
         bus.subscribe(phase.topic, self._on_phase)
 
     def _on_phase(self, delivery):
         self.calls += 1
-        phases.report(self._bus, self._phase, delivery.envelope.logical_ts, self.name, self._work, LOG)
+        envelope = delivery.envelope
+        answers = envelope.msg_id if self._answers is None else self._answers
+        phases.report(self._bus, self._phase, envelope.logical_ts, self.name, self._work, LOG, answers)
 
 
 class PhaseDriverTests(unittest.TestCase):
@@ -97,12 +100,20 @@ class PhaseDriverTests(unittest.TestCase):
         self.assertIn('late sent a done of phase.trade', message)
         self.assertIn('old sent a done of phase.book', message)
 
-    def test_done_twice_aborts(self):
+    def test_done_twice_for_different_events_aborts(self):
+        # two dones of one participant that are not the same message (they answer different events): the second is an
+        # error; the same done delivered or published twice is a copy and is ignored (the next test)
         FakeParticipant(self.bus, 'a', phases.BOOK)
-        FakeParticipant(self.bus, 'a', phases.BOOK)
+        FakeParticipant(self.bus, 'a', phases.BOOK, answers='another event')
 
         with self.assertRaisesRegex(PhaseError, 'a said done twice'):
             self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+    def test_a_copy_of_a_done_is_ignored(self):
+        FakeParticipant(self.bus, 'a', phases.BOOK)
+        FakeParticipant(self.bus, 'a', phases.BOOK)  # answers the same event: the same done, the same id
+
+        self.driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
 
     def test_done_of_an_unexpected_participant_is_accepted(self):
         # policy: only the expected participants are required; a participant that joined late may answer

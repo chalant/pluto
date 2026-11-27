@@ -137,12 +137,14 @@ class FakeProcess(object):
 
 
 class FaultyBus(InMemoryBus):
-    """An in-memory bus that loses the batches of orders of some producers, and delivers those of others twice."""
+    """An in-memory bus that loses the batches of orders of some producers, delivers those of others twice (the same
+    message: same id) and sends a second, different batch after those of others."""
 
     def __init__(self):
         super().__init__()
         self.lost = set()
         self.doubled = set()
+        self.extra = set()
 
     def publish(self, topic, payload, **kwargs):
         if topic == phases.ORDERS_TOPIC and kwargs['key'] in self.lost:
@@ -152,6 +154,9 @@ class FaultyBus(InMemoryBus):
 
         if topic == phases.ORDERS_TOPIC and kwargs['key'] in self.doubled:
             super().publish(topic, payload, **kwargs)
+
+        if topic == phases.ORDERS_TOPIC and kwargs['key'] in self.extra:
+            super().publish(topic, payload, **dict(kwargs, msg_id=kwargs['msg_id'] + '/extra'))
 
         return receipt
 
@@ -249,22 +254,40 @@ class RunTests(unittest.TestCase):
                 phases.PhaseError, r'phase\.submit .*aaa sent 0 orders in 1 batches, the broker received 0 in 0'):
             self.tick()
 
-    def test_a_batch_delivered_twice_aborts_the_run(self):
+    def test_a_batch_sent_twice_aborts_the_run(self):
         process = self.add_process('aaa')
         process.order_ids = []
-        self.bus.doubled.add('aaa')
+        self.bus.extra.add('aaa')
 
         with self.assertRaisesRegex(
                 phases.PhaseError, r'phase\.submit .*aaa sent 0 orders in 1 batches, the broker received 0 in 2'):
             self.tick()
 
-    def test_a_batch_of_orders_delivered_twice_aborts_the_run(self):
+    def test_a_batch_of_orders_sent_twice_aborts_the_run(self):
         self.add_process('aaa')
-        self.bus.doubled.add('aaa')
+        self.bus.extra.add('aaa')
 
         with self.assertRaisesRegex(
                 phases.PhaseError, r'phase\.submit .*aaa sent 1 orders in 1 batches, the broker received 2 in 2'):
             self.tick()
+
+    def test_a_batch_delivered_twice_is_one_batch(self):
+        # the same message twice (a publisher's retry, a redelivery): the copy is ignored, the order reaches the book once
+        self.add_process('aaa')
+        self.bus.doubled.add('aaa')
+
+        self.tick()
+
+        self.assertEqual(self.broker.calls[-1], ('submit', ['order-aaa']))
+
+    def test_an_empty_batch_delivered_twice_is_one_batch(self):
+        process = self.add_process('aaa')
+        process.order_ids = []
+        self.bus.doubled.add('aaa')
+
+        self.tick()
+
+        self.assertEqual(self.broker.calls[-1], ('submit', []))
 
     def test_a_runtime_in_another_process_is_not_supported_yet(self):
         # PlaceOrders and Stopped over gRPC are not on the bus: they say so instead of leaving the run
