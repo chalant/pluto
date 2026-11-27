@@ -192,8 +192,8 @@ Low:
   handler (all three buses).
 
 Contract assertions changed: none (`tests/test_bus_contract.py` still untouched). New tests only, in `tests/test_bus_retention.py`.
-Slip, again: I used `sed` once more for an import line in a test file before this round's rule (use the edit tool for every edit); no
-other file was touched that way.
+Slip: in this round I used `sed` once for an import line in `tests/test_bus_retention.py` (the edit tool is the rule); the line was
+checked afterwards and nothing else was touched that way.
 
 ### Final runs of the review fixes
 
