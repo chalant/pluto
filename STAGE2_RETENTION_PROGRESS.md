@@ -7,9 +7,10 @@ Base: `origin/master` = `798c6e11`. Worktree `/home/yves/.cache/hades-pluto-dev/
 ## Status
 
 - [x] 1. measurement (before)
-- [ ] 2. design (below)
-- [ ] 3. implementation, contract tests
-- [ ] 4. measurement (after), final runs
+- [x] 2. design (below)
+- [x] 3. implementation, contract tests
+- [x] 4. measurement (after)
+- [ ] 5. final runs (fresh clone, `PLUTO_REQUIRE_NATS=1`, `PYTHONHASHSEED=1`)
 
 ## 1. Measurement before (`dev/bench_bus_memory.py`, `dev/bench_bus_memory_run.py`)
 
@@ -22,7 +23,7 @@ bytes (a `SerializingBus`). Machine shared; sizes do not depend on load, times d
 | `buy_and_hold`, in memory (`SerializingBus(InMemoryBus)`) | 75,888 | 30.7 MB | n/a | 26 KB (consumers/lanes/cursors 24 KB, routes, subscriptions) | 30.8 MB | 405 B |
 | `buy_and_hold`, over NATS (`LogBus`) | 75,888 | 40.9 MB | 2.7 MB | 27 KB (`_unresolved` 0.8 KB, `_seq` 0.4 KB, lanes 24 KB) | 43.6 MB | 575 B |
 | synthetic, in memory | 1,000,000 | 471.3 MB | n/a | 18 KB | 471.3 MB | 471 B |
-| synthetic, over NATS | 1,000,000 | see below | | | | |
+| synthetic, over NATS | 1,000,000 | 515.3 MB | 36.8 MB | 0.02 MB (consumers 18 KB, unresolved 0.8 KB) | 552.1 MB | 552 B |
 
 Synthetic: 3 topics, 4 keys, 4 producers, 100-byte payloads, a pattern subscription and a topic subscription that stores
 `position_of`, batches of 1,000 drained (a tick loop). Process RSS after the 1M in-memory run: 544 MB (grew by 527 MB).
@@ -96,3 +97,51 @@ Contract (every bus: in-memory, serialising, NATS): a window drops the oldest; `
 a trim, raise `PositionTooOld`; `oldest` as a start replays what is left in order; pending deliveries of a live subscription survive a
 window that passed them; `trim` is clamped to the frontier of a live subscription and not past the log's end; the default keeps unlimited
 replay. Memory-only: batches of the window, lane freeing, `retention` validation. NATS: the stream limits and a late attach, `delete_stream`.
+
+## 3. Implementation (what changed, where)
+
+* `pluto/bus/api.py`: `Retention`, `PositionTooOld`; `Bus.oldest(topic)` and `Bus.trim(position)`.
+* `pluto/bus/memory.py`: `retention=` option; logs keep absolute offsets (`_base[topic]` = offset of the first retained entry;
+  `_log_append`/`_drop_front` are the only places that add to or drop from a log, `LogBus` overrides the second); the window is
+  trimmed in batches; `oldest`, `trim` (clamped to the lowest frontier of the live subscriptions that have the topic);
+  `Start.EARLIEST` and a `Position` below the base raise `PositionTooOld`; idle lanes are freed after the last settle.
+* `pluto/bus/log.py`: the mirror takes `retention=`; `_tokens` is trimmed with its log; per-topic `_floors` and `_history_floor`
+  (the log's first position, when its own limits had dropped earlier messages: `Log.first_position`); `oldest`/`trim` catch up with what
+  the bus published (and with the log on a fresh attach) first; `position_of` of a trimmed frontier returns a position below the floor.
+* `pluto/bus/jetstream.py`: `JetStreamLog(max_messages=, max_age=, max_bytes=)` (limits policy, discard oldest), `first_position = 1`,
+  `delete_stream(namespace)`; the read-back of an own message the stream's limits dropped is a clear `BusError`.
+* `pluto/bus/serializing.py`, `pluto/bus/faults.py`: pass-through of `oldest` and `trim` (the fault bus's restart resumes from a
+  stored checkpoint: a window that passed it makes the restart fail with `PositionTooOld`). The fault bus's own `fault_log()` and its
+  redelivery bookkeeping are test instrumentation and are not trimmed.
+* Tests: `tests/test_bus_retention.py` (59: the contract of retention on in-memory, serialising and NATS, memory-only and NATS-only
+  rules), `tests/test_bus_retention_runs.py` (windowed whole runs, exact frame). `tests/test_bus_contract.py` is **not touched**: the
+  fault bus's contract run lists which of its tests fail under which fault, so the new rules live in their own file.
+* Defaults: `Retention()` is unlimited; `StrategyManager` still builds an unlimited `InMemoryBus` unless a bus is passed (`bus=`); no
+  existing test changed. To bound a real run the owner passes `InMemoryBus(retention=Retention(max_messages=N))` (or the `LogBus`):
+  N only has to exceed one tick's messages on a topic (nothing replays during a run); 1,000 and 200 were run.
+* Contract assertions changed: **none**. Existing files changed: `dev/README.md` (test table, one sentence). Original test files and
+  stored results unchanged.
+* Found on the way: a JetStream stream whose limits are smaller than what one bus publishes between two reads drops messages
+  that bus has not read back yet (the read-back is its acknowledgement): that is now a clear `BusError` naming the limits, and the
+  limits are documented as having to exceed one burst.
+
+## 4. Measurement after
+
+Same runs, `Retention(max_messages=1000)` per topic. Sizes are deep sizes of the bus's structures.
+
+| Run | Before: sum | After: sum | `_logs` before / after | `_tokens` before / after | RSS growth before / after |
+|---|---|---|---|---|---|
+| synthetic, in memory, 1,000,000 messages | 471.3 MB | **1.44 MB** | 471.3 MB / 1.44 MB | n/a | 527 MB / 5.0 MB |
+| synthetic, over NATS, 1,000,000 messages | 552.1 MB | **1.69 MB** | 515.3 MB / 1.57 MB | 36.8 MB / 0.12 MB | 622 MB / 11.0 MB |
+| `buy_and_hold`, in memory, 75,888 messages | 30.7 MB | **4.2 MB** | 30.7 MB / 4.2 MB | n/a | |
+| `buy_and_hold`, over NATS, 75,888 messages | 43.6 MB | **6.0 MB** | 40.9 MB / 5.6 MB | 2.7 MB / 0.40 MB | |
+
+Synthetic: 3 topics, so the bound is 3 x (1,000 to 1,250) entries; `buy_and_hold` has about ten topics, one per phase, per phase
+done, per strategy, and the window holds 1,000 to 1,250 of each: 4.2 MB is the window, and it would stay 4.2 MB for a run ten times
+longer (the 1M-message synthetic run is the proof: 1.44 MB after 1,000,000 messages, 8.8 s against 11.8 s before, and 93 s against 99 s over
+NATS: trimming costs nothing measurable). Everything that was not a log (lanes, cursors, routes, `_seq`, receipts) is unchanged and
+small. The one structure that still grows with the run is the dead-letter list, by design.
+
+## 5. Final runs
+
+(below, after the fresh clone)
