@@ -12,7 +12,7 @@ reproducibly. A new module and new tests only: no existing module (`pluto/contro
 - [x] `tests/test_bus_faults.py` (transparent over the whole contract; determinism; FIFO; one test per fault)
 - [x] `tests/test_bus_faults_contract.py` (the contract suite under faults: which tests fail, as a checked list)
 - [x] protocol analysis (below), checked by a scratch run of whole backtests over the fault bus (not committed)
-- [ ] final run from a fresh clone (see "Final run")
+- [x] final run from a fresh clone (see "Final run")
 
 Not exported from `pluto/bus/__init__.py` (an existing module: import from `pluto.bus.faults`). Its docstring still says
 "Not here: ... seeded fault injection": a one-line follow-up for whoever merges.
@@ -118,3 +118,9 @@ Order of work for the next step (whole backtests over the fault bus, after the d
 all publish sites; a per-tick idempotence record in the three participants and the driver; `receive_orders` dedupe; counts in the
 submit event; a retrying publish helper; then run `delay`, `lose_delivery`, `ack_lost`, `duplicate_publish` (results must equal
 the run without faults) and `mute`, `crash`, `publish_fail` (clean `PhaseError`, or equal results once retries exist).
+
+## Final run
+
+Fresh clone of `stage2-faultbus` at `8d18f6f3` (`--no-hardlinks`), new env from `dev/setup_env.sh`: whole `tests/`: **655 passed**
+(238 of them new: 232 in `tests/test_bus_faults.py`, 6 in `tests/test_bus_faults_contract.py`; the rest unchanged), and the same
+655 under `PYTHONHASHSEED=1`. The clone and its env were removed.
