@@ -11,7 +11,7 @@ instead of a clean abort. No change to any result; the original test files and s
 - [x] 2. deterministic `msg_id`s, publisher retries
 - [x] 3. receiver-side idempotence (participants, endpoint, manager, driver)
 - [x] 4. tests: unit tests per dedup point, whole runs under faults
-- [ ] 5. final run from a fresh clone (see the end)
+- [x] 5. final run from a fresh clone (see the end)
 
 ## 1. Design
 
@@ -156,3 +156,13 @@ No wrong result and no hang in any of the 54 runs.
   the machine is shared and the work added per message is a set lookup and a string format).
 - Suite: 995 passed, 5 skipped in 331 s on the development machine (959 in 291 s before, with 36 new tests; the whole-run test under
   faults is about 50 s of the difference).
+
+## 7. Final run
+
+Fresh clone of `stage2-idempotent` at `d42e4c2a` (`--no-hardlinks`), new env from `dev/setup_env.sh`, NATS up at 127.0.0.1:4222,
+`PLUTO_REQUIRE_NATS=1`, whole `tests/`: **995 passed, 5 skipped** (443 s on a loaded machine), and with `PYTHONHASHSEED=1`: **995 passed,
+5 skipped** (333 s). The skips are the legitimate ones (the poll test that needs a second writer on the four in-memory
+buses and wrappers, the release-failure test on the in-memory implementation). `origin/master` had 959 passed, 5 skipped; the 36 new
+tests are `test_pluto_idempotent.py` (28), `test_pluto_phases.py` (+1), `test_pluto_phase_participants.py` (+2) and the two whole-run tests
+of `test_bus_faults_runs.py` (replacing one) with their subtests. The original result tests and the bus contract are unchanged
+(`git diff origin/master --stat` on them is empty). The clone and its env were removed.
