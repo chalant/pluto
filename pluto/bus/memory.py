@@ -145,8 +145,9 @@ class InMemoryBus:
     its dispatch key and runs before the receiver drains, normally dead-lettered after `max_attempts`. Size
     `queue_capacity` for the largest burst of one phase.
 
-    Lanes are freed when they are idle, so memory follows the keys in flight, not all keys seen. Logs are unlimited unless
-    `retention` (`Retention(max_messages=N)`, S16 of `pluto.bus`) bounds them; dead letters are never trimmed.
+    Idle lanes of a subscription that is not in a group are freed, so its memory follows the keys in flight, not all keys seen
+    (a group's lanes are kept: their owner is chosen when created and stays). Logs are unlimited unless `retention`
+    (`Retention(max_messages=N)`, S16 of `pluto.bus`) bounds them; dead letters are never trimmed.
     """
 
     def __init__(
@@ -499,8 +500,10 @@ class InMemoryBus:
         consumer.pending -= 1
         if lane.queue:
             self._push(lane)
-        else:
-            del consumer.lanes[(lane.topic, lane.key)]  # idle: the next message of the lane makes a new one
+        elif consumer.group is None:
+            # idle: the next message of the lane makes a new one. Not for a group: its lane's owner is chosen when the lane is
+            # created and stays (the contract), so a group keeps its idle lanes (bounded by its keys, not by the run's length)
+            del consumer.lanes[(lane.topic, lane.key)]
         return True
 
     def _drop_stale(self) -> bool:

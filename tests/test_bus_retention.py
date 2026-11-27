@@ -132,6 +132,26 @@ class RetentionContract:
         publish(bus, 't', 61, ts=61)
         self.assertEqual(payloads(bus, positions[-1]), [60, 61])  # the checkpoint after the last handled message
 
+    def test_a_key_keeps_its_group_owner_after_its_lane_went_idle_and_another_member_joined(self):
+        # the owner of a lane is chosen when it is created (a stable hash over the members then) and stays; freeing an idle
+        # lane must not make the next message of the key choose again among the members that joined since
+        bus = self.bus()
+        first, second = Recorder(), Recorder()
+        bus.subscribe('t', first.handler('first'), group='g')
+        keys = ['k%d' % i for i in range(12)]
+        for i, key in enumerate(keys):
+            publish(bus, 't', i, ts=i, key=key)
+        bus.run_until_idle()
+        self.assertEqual(len(first.calls), 12)  # the only member took every key
+
+        bus.subscribe('t', second.handler('second'), group='g')
+        for i, key in enumerate(keys):
+            publish(bus, 't', 100 + i, ts=100 + i, key=key)
+        bus.run_until_idle()
+
+        self.assertEqual(len(first.calls), 24)
+        self.assertEqual(second.calls, [])
+
     def test_replies_work_under_a_window(self):
         bus = self.bus(retention=Retention(max_messages=2))
         bus.subscribe(

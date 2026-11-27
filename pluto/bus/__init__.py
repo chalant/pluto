@@ -70,7 +70,8 @@ least the newest N entries of each topic, dropping older ones in batches: the me
 the length of a run. Trimming never loses a delivery (a subscription holds the messages it has not settled); it only ends
 replay: a position older than `oldest(topic)`, and `Start.EARLIEST` once a topic was trimmed, raise `PositionTooOld`, never a
 shorter replay. `trim(position)` is the owner's explicit low-water mark ("everything before this tick is checkpointed"),
-held back by what a live subscription may still resume from. Offsets and positions stay absolute. Idle lanes are freed.
+held back by what a live subscription may still resume from. Offsets and positions stay absolute. Idle lanes of a subscription
+that is not in a group are freed (a group's lane keeps its owner, chosen when it was created, so its lanes are kept).
 Dead letters are not trimmed (`dead_letters()[n:]` is how the new ones are found; a failing handler normally aborts a run).
 
 Not here: start from a time, `seek`, deduplication.
