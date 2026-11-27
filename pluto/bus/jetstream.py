@@ -51,6 +51,11 @@ from pluto.bus.api import BusError
 
 DEFAULT_URL = os.environ.get("PLUTO_NATS_URL", "nats://127.0.0.1:4222")
 
+_LIMITS_MESSAGE = (
+    "the stream's limits (max_messages, max_age, max_bytes) dropped messages before this log read them: a message of this "
+    "log, or the entries of other writers, are missing. The limits must exceed what is written between two reads"
+)
+
 # a consumer that is not asked for messages for this long (seconds) is deleted by the server
 _CONSUMER_IDLE = 24 * 3600.0
 _BATCH = 1000
@@ -241,6 +246,8 @@ class JetStreamLog:
             self._js = js
             self._outbox: asyncio.Queue = asyncio.Queue()
             self._unacknowledged: set = set()
+            self._ack_seq: dict[int, int] = {}  # own message number -> stream sequence it was stored at, until read back
+            self._read_seq = 0  # the highest stream sequence read
             self._sender = asyncio.create_task(self._send_loop())
         except BaseException:
             # a failed open leaves nothing behind: not the stream this call made, not the connection
@@ -284,12 +291,15 @@ class JetStreamLog:
                 self._fail(error)
                 continue
             self._unacknowledged.add(ack)
-            ack.add_done_callback(self._acknowledged)
+            ack.add_done_callback(lambda done, number=number: self._acknowledged(done, number))
 
-    def _acknowledged(self, ack) -> None:
+    def _acknowledged(self, ack, number: int) -> None:
         self._unacknowledged.discard(ack)
-        if not ack.cancelled() and ack.exception() is not None:
-            self._fail(ack.exception())
+        if ack.cancelled() or ack.exception() is not None:
+            if not ack.cancelled():
+                self._fail(ack.exception())
+        else:
+            self._ack_seq[number] = ack.result().seq
 
     def _fail(self, error: BaseException) -> None:
         if self._failure is None:
@@ -314,8 +324,12 @@ class JetStreamLog:
             try:
                 messages = await sub.fetch(_BATCH, timeout=min(remaining, _SLICE))
             except TimeoutError:
+                if await self._own_message_dropped(check_stream=True):
+                    raise BusError(_LIMITS_MESSAGE) from None
                 continue
             self._take(messages, entries)
+            if self._own_read < self._appended and await self._own_message_dropped(check_stream=False):
+                raise BusError(_LIMITS_MESSAGE)
         if self._failure is not None:
             raise self._failure
         while complete:
@@ -337,16 +351,26 @@ class JetStreamLog:
         for message in messages:
             headers = message.headers or {}
             own = None
+            sequence = message.metadata.sequence.stream
             if headers.get(_LOG_HEADER) == self._id:
                 own = int(headers[_NUMBER_HEADER])
                 self._own_read += 1
+                self._ack_seq.pop(own, None)
                 if own != self._own_read:
-                    raise BusError(
-                        "NATS returned the messages of this log out of order, or dropped some before this log read them "
-                        "back (the stream's limits, max_messages/max_age/max_bytes, are smaller than what was "
-                        "published between two reads)"
-                    )
-            entries.append((message.metadata.sequence.stream, message.subject[prefix_length:], message.data, own))
+                    raise BusError(_LIMITS_MESSAGE)
+            self._read_seq = sequence
+            entries.append((sequence, message.subject[prefix_length:], message.data, own))
+
+    async def _own_message_dropped(self, check_stream: bool) -> bool:
+        """Whether the next own message this log waits for was stored (acknowledged) and is gone: the stream's limits dropped
+        it before it was read. Known without a request when a later message has been read; with one (`check_stream`)
+        when the stream's first message is later than where it was stored."""
+        stored = self._ack_seq.get(self._own_read + 1)
+        if stored is None:
+            return False
+        if self._read_seq > stored:
+            return True
+        return check_stream and (await self._js.stream_info(self.namespace)).state.first_seq > stored
 
     def close(self) -> None:
         """Sends and waits for what was appended, deletes the consumer (and the stream, `drop_on_close`), closes the

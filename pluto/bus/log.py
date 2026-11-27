@@ -47,7 +47,8 @@ from pluto.bus.memory import InMemoryBus, _check_fields, _is_int
 
 
 class Log(Protocol):
-    """A durable, totally ordered log of one run. Positions are ints, increasing in the order of the log."""
+    """A durable, totally ordered log of one run. Positions are consecutive ints (each entry is the previous one plus one:
+    a gap in what a bus reads means the log's own limits dropped entries, and the bus fails instead of going on)."""
 
     first_position: int
     """The position of the first message a new log holds (1 for JetStream). A bus whose first read starts above it knows
@@ -170,6 +171,13 @@ class LogBus(InMemoryBus):
                 self._seen = True
                 if token > self._log.first_position:  # the log's own limits had dropped what came before
                     self._history_floor = token
+            elif token != self._frontier:
+                # positions of a log are consecutive: a gap is entries the log's own limits dropped before this bus read
+                # them (another writer's, or its own). Replaying or going on would be less than the log held, silently
+                self._failure = BusError(
+                    f"the log dropped entries before this bus read them (position {token} after {self._frontier - 1}): "
+                    f"the log's limits must exceed what is written between two reads")
+                raise self._failure
             self._tokens.setdefault(topic, []).append(token)
             self._frontier = token + 1
             offset = self._log_append(topic, envelope)  # trims the mirror (and, through _drop_front, the tokens)

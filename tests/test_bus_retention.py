@@ -8,6 +8,7 @@ the messages it has not settled); a position older than what is kept, and `Start
 `PositionTooOld` instead of replaying less; `trim` is the owner's low-water mark, clamped to what a live subscription may still
 resume from; the default keeps everything.
 """
+import time
 import unittest
 
 from pluto.bus import BusError, InMemoryBus, Position, PositionTooOld, Retention, Start, reply, request
@@ -315,6 +316,54 @@ class JetStreamRetention(RetentionContract, unittest.TestCase):
             bus.step()
         with self.assertRaises(BusError):
             bus.close()
+
+    def closing(self, bus):
+        """Closes the bus at the end of the test, whether or not it failed (a failed bus raises its error at close)."""
+        def close():
+            try:
+                bus.close()
+            except BusError:
+                pass
+
+        self.addCleanup(close)
+        return bus
+
+    def test_entries_of_another_writer_that_the_limits_dropped_fail_the_reader_instead_of_replaying_less(self):
+        jetstream = nats_support.jetstream
+        log = jetstream.JetStreamLog(max_messages=WINDOW, drop_on_close=True)
+        a = self.closing(LogBus(log))
+        b = self.closing(LogBus(jetstream.JetStreamLog(log.namespace, create=False)))
+        a.publish('t', b'a0', type='t', logical_ts=0, producer_id='a')
+        a.run_until_idle()  # a has read its message: position 1
+        for i in range(20):  # b writes and reads back each one; the stream keeps the last five
+            b.publish('t', b'b%d' % i, type='t', logical_ts=i, producer_id='b')
+            b.run_until_idle()
+        seen = []
+
+        # what a would replay from the start is a0 and b15 to b19: less than the log held, with no error
+        with self.assertRaisesRegex(BusError, 'dropped entries.*limits'):
+            a.subscribe('t', lambda delivery: seen.append(delivery.envelope.payload), start=Start.EARLIEST)
+
+        self.assertEqual(seen, [])
+        with self.assertRaises(BusError):  # and the bus stays failed
+            a.run_until_idle()
+
+    def test_an_own_message_that_other_writers_pushed_out_of_the_stream_names_the_limits(self):
+        jetstream = nats_support.jetstream
+        log = jetstream.JetStreamLog(max_messages=WINDOW, drop_on_close=True)
+        first = self.closing(LogBus(log))
+        other = self.closing(LogBus(jetstream.JetStreamLog(log.namespace, create=False)))
+        first.publish('t', b'mine', type='t', logical_ts=0, producer_id='a')
+        time.sleep(0.3)  # stored, not read back
+        for i in range(20):
+            other.publish('t', b'b%d' % i, type='t', logical_ts=i, producer_id='b')
+            other.run_until_idle()
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(BusError, 'limits'):
+            first.run_until_idle()
+
+        self.assertLess(time.monotonic() - started, 10)  # not the generic 30 s wait
 
     def test_a_stream_without_limits_is_replayed_whole_by_a_late_bus(self):
         jetstream = nats_support.jetstream
