@@ -89,8 +89,8 @@ methods), and a runtime that sent no batch when its handler returned aborts the 
 all in process: the controller's behavior reads the book's positions (`get_positions`) to price them; the metrics consumer is a
 subscriber of the broker service (a callback, not a bus message: it is delivered synchronously, in the order of the stream); the controller reads `strategy_manager.session_ids`; the behavior hooks receive the manager; the
 in-memory broker stub reaches into the servicer (`StrategyManager`) for the cancel stubs and for the runtime's endpoint;
-`StrategyManager.add_strategy` builds the runtime's endpoint. The bus logs every message (retention is open in
-`STAGE1_BUS_PROGRESS.md`).
+`StrategyManager.add_strategy` builds the runtime's endpoint. The bus logs every message; its memory is unlimited unless
+`Retention(max_messages=N)` bounds it (`STAGE2_RETENTION_PROGRESS.md`: 471 bytes per message and topic, the logs are the memory).
 
 ## Strategy scripts (interim convention)
 
@@ -195,6 +195,8 @@ $ENV/bin/python -m pytest -p no:randomly tests
 | `tests/test_bus_serializing.py` | what only the serialising wrapper does: bytes on the inner bus, codecs, undecodable payloads |
 | `tests/test_bus_receipt.py` | `Receipt`: a position known at once (in memory) or resolved when asked for (networked) |
 | `tests/test_bus_jetstream.py` | what needs a broker (skipped without a NATS server): publish does not wait, positions resolve later, a bus attached to the same stream resumes from a position and sees what others write, a lost message is a `BusError`, the order of S3 across four producer processes after a barrier |
+| `tests/test_bus_retention.py` | the retention of the logs on every bus that keeps one (in memory, serialising, NATS): a window drops the oldest per topic and never a delivery, a position older than what is kept and `Start.EARLIEST` after a trim raise `PositionTooOld`, `trim` is the owner's low-water mark held back by live subscriptions, absolute offsets, idle lanes freed, the NATS stream's own limits and a late attach, an orphaned stream deleted by name |
+| `tests/test_bus_retention_runs.py` | whole runs (`buy_and_hold`, `dividends`, and `dividends` over NATS) with a retention window of 200 messages per topic on the bus of the run: the frame is the unlimited run's, exact, and no log holds more than the window |
 | `tests/test_pluto_phases.py` | the controller's lock-step (`PhaseDriver`) on a bare bus with fake participants: a missing, failed, stale or doubled `done`, a message the bus gave up on; on a bus that looks networked, the wait for dones that arrive after the bus went idle and the deadline naming who is missing; the phase ranks; every payload through a `SerializingBus` |
 | `tests/test_pluto_phases_run.py` | whole runs driven by phases: `buy_and_hold`, `momentum_pipeline` and two scenarios give the same frames over `InMemoryBus` and `SerializingBus(InMemoryBus)`; the messages of a run and the order counts of its `done`s; a failing strategy aborts the run with a `PhaseError` |
 | `tests/test_pluto_phase_order.py` | whole runs and the fake-book tests with three runtimes on buses that deliver the messages of a phase in a random order (seeded) and in the order of publication: the same frames, the same submitted orders (a run must not rely on S3 between producers) |

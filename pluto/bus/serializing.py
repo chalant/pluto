@@ -132,6 +132,12 @@ class SerializingBus:
     def poll(self, timeout: float = 0.0) -> bool:
         return self._inner.poll(timeout)
 
+    def oldest(self, topic: str) -> Position:
+        return self._inner.oldest(topic)
+
+    def trim(self, position: Position) -> Position:
+        return self._inner.trim(position)
+
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         """Dead letters with decoded payloads; one that cannot be decoded keeps its raw bytes."""
         letters = []
