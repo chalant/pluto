@@ -57,7 +57,11 @@ class Position(NamedTuple):
 class PositionTooOld(BusError):
     """A replay was asked from a place the log no longer has (it was trimmed: `Retention`, `Bus.trim`, or the broker's
     own limits). Never replayed from a later place instead: the caller would miss messages without knowing. `position`
-    is what was asked for (None for `Start.EARLIEST`), `oldest` the earliest place that can still be replayed from."""
+    is what was asked for (None for `Start.EARLIEST`), `oldest` the earliest place that can still be replayed from.
+
+    A position is also refused when nothing was lost in fact: on a networked log a stored position that falls in the gap
+    before the first retained entry of its topic is older than `oldest` although no message of the topic is missing. The
+    bus does not know that, and refusing is the safe answer."""
 
     def __init__(self, message: str, position: "Position | None", oldest: "Position | None") -> None:
         super().__init__(message)
@@ -70,8 +74,10 @@ class Retention:
     """How much of each topic's log a bus keeps. The default keeps everything (unlimited replay).
 
     `max_messages`: per topic, at least the newest `max_messages` entries are kept; older ones are dropped in batches
-    (when more than a quarter more are held), so a topic holds between `max_messages` and 1.25 times that. A hard bound:
-    the memory of the logs is a function of it, not of the length of a run. Pending deliveries are not affected (a
+    (when more than a quarter more are held), so a topic holds between `max_messages` and 1.25 times that. A hard bound on
+    the memory of the logs, a function of it and not of the length of a run, even with a stalled subscription. It is not a
+    bound on a subscription's queue: what a subscription has not settled stays in its lane (bounded by `queue_capacity` in
+    memory, not on a `LogBus`). Pending deliveries are not affected (a
     subscription keeps the messages it has not settled); only replay and resume positions older than the window are.
     """
 
@@ -254,15 +260,18 @@ class Bus(Protocol):
         `run_until_idle` deliver them). Never runs a handler. Always False, at once, when not `networked`."""
 
     def oldest(self, topic: str) -> Position:
-        """The earliest position of the topic's log that can still be replayed from: `Position(topic, 0)`-like for a log
-        that was never trimmed, later for one that was (see `Retention`, `trim`). Subscribing at it replays what is
-        left; a position below it raises `PositionTooOld`."""
+        """The earliest position of the topic that a subscription can start from: the start of the log when nothing was
+        trimmed (the position of its first message, or of the first message it will ever hold), later once the topic was
+        trimmed (see `Retention`, `trim`) or the broker's own limits dropped its start. Subscribing at it replays everything
+        that is left; any position below it raises `PositionTooOld`. Works for a topic that has no log yet."""
 
     def trim(self, position: Position) -> Position:
         """The owner of a run's low-water mark: drop the entries of `position.topic` below `position` from the log (replay
         cannot reach them any more), but never past what a live subscription of the topic still needs (the lowest
         `position_of` its next delivery would give). Returns the oldest position retained afterwards, which is `position`
-        when nothing held it back. `ValueError` for a position beyond the end of the log or of a topic without one."""
+        when nothing held it back; a position at or below `oldest(topic)` trims nothing. `ValueError` for a position the
+        bus could not have issued: beyond the end of the topic's log, and, for a topic that has no log, anything but its
+        `oldest(topic)`."""
 
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         """The dead-letter records so far, oldest first."""

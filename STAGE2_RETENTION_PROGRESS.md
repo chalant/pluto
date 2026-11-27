@@ -148,3 +148,53 @@ Fresh clone `/home/yves/.cache/hades-pluto-dev/stage2-retention/verify` of `stag
 `dev/setup_env.sh`, NATS up, `PLUTO_REQUIRE_NATS=1`, `pytest tests`: **1021 passed, 5 skipped** in 307.6 s; with `PYTHONHASHSEED=1`:
 **1021 passed, 5 skipped** in 301.2 s (the skips are the poll tests that need a second writer, on buses that have none). No stream or
 consumer left on the server.
+
+## 6. Review fixes (read-only review `review-retention`: no way found to lose a delivery in one process)
+
+Corrections of what is written above: **"a hard bound ... even with a stalled subscription" holds for the logs only**: what a
+subscription has not settled stays in its lane, bounded by `queue_capacity` in memory and not bounded on a `LogBus`. **"Idle lanes are freed"
+holds for subscriptions that are not in a group** (item 2). **The fault bus's restart past the window does not become dead letters: it
+aborts the run** (item 3; the sentence in section 3 said "fails with `PositionTooOld`" and was not true of the first version).
+
+High:
+1. **A foreign writer's entries dropped by the stream's limits were lost silently** (`LogBus._read` checked sequence only for the first
+   entry; two buses on one namespace, `max_messages=5`: `EARLIEST` replayed `[a0, b15..b19]`). Positions of a log are consecutive
+   (JetStream sequences are, in a stream whose only subjects are `<namespace>.>`), so once a bus has read anything a position that
+   is not the previous one plus one fails the bus, before the frontier moves, with a `BusError` naming the limits
+   (`Log` protocol: "positions are consecutive"). A trailing own message that other writers pushed out is detected too, cheaply: the
+   acknowledgement carries the stream sequence it was stored at, so a later entry having been read (or the stream's first sequence
+   being later, checked after a one-second wait slice, not on the hot path) means it was dropped: `BusError` naming the limits at once
+   instead of the generic 30 s "did not return". Tests: the reviewer's two-bus shape and the trailing-own shape.
+
+Medium:
+2. **Freeing idle lanes changed group ownership with no retention configured** (the owner is chosen when the lane is created; after a
+   member joined, an idle key moved). Lanes are now freed only when `consumer.group is None`; a group keeps its idle lanes (bounded by
+   its keys). Test `test_a_key_keeps_its_group_owner_after_its_lane_went_idle_and_another_member_joined` on all three buses: it failed
+   (16 != 24) with the old freeing, passes now. Default behaviour with groups is the base's again.
+3. **`SeededFaultBus` restart past the window**: `_restart` now records the `PositionTooOld`; the automatic crash logs `CRASH_SKIPPED` ("the
+   checkpoint is older than what the log keeps; the run is aborted"), the delivery goes on (it is not a handler error: nothing is
+   retried or dead-lettered), and `step`, `run_until_idle`, `poll`, `publish`... raise that `PositionTooOld` outside any handler from then on
+   (explicit `crash()`/`unmute()` raise it directly). Docstring corrected. Tests: 30 messages, window 5, `crash=1.0`: `PositionTooOld`,
+   no dead letters, the bus stays stopped; a window of 100 lets the restart resume.
+
+Low:
+- `trim` of a topic without a log: **one rule for both buses**: only `oldest(topic)` (or below) is accepted (a no-op); anything else is
+  `ValueError`. `InMemoryBus` already did; `LogBus` accepted any position up to the global frontier, now checks the topic. Docstring of
+  `Bus.trim`/`Bus.oldest` rewritten ("`Position(topic, 0)`-like" is gone). Test with a long log of other topics.
+- Stream limits: `max_messages`/`max_bytes` must be ints of at least 1 (not bool, not float), `max_age` a finite number above 0 (not NaN or inf).
+- `delete_stream` refuses (`BusError`) a stream whose subjects are not exactly `[namespace + ".>"]`, and says in its docstring that it also kills a
+  run that is still going.
+- `LogBus.oldest()`/`trim()` read the log once at attach, not at every call while the stream is empty (`_attached`); test counts the reads.
+- `PositionTooOld` is documented as conservative: on a networked log a stored position in the gap before the first retained entry of its
+  topic is refused although nothing of the topic is missing.
+- `Retention` docstring: the bound is on the logs, not on lanes or queues.
+- Tests that were missing: a nacked and a dead-lettered message under a window of 2, group members under a window of 3, `trim` called from inside a
+  handler (all three buses).
+
+Contract assertions changed: none (`tests/test_bus_contract.py` still untouched). New tests only, in `tests/test_bus_retention.py`.
+Slip, again: I used `sed` once more for an import line in a test file before this round's rule (use the edit tool for every edit); no
+other file was touched that way.
+
+### Final runs of the review fixes
+
+(below, after the fresh clone)

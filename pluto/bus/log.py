@@ -92,6 +92,7 @@ class LogBus(InMemoryBus):
         self._history_floor = 0  # the log's first position, when its own limits had dropped earlier ones
         self._seen = False  # has anything been read
         self._frontier = 0  # one past the last log position read
+        self._attached = False  # has the log been read to its end once (its history floor is known)
         self._dirty = False  # published since the last read
         self._unresolved: deque[tuple[Receipt, str]] = deque()  # published, position not known yet (in log order)
         self._failure: BusError | None = None
@@ -159,6 +160,8 @@ class LogBus(InMemoryBus):
         except BusError as error:
             self._failure = error  # a message that was sent may be lost: the bus cannot go on
             raise
+        if complete:
+            self._attached = True
         for token, topic, data, own in entries:
             if own is not None:
                 receipt, sent_to = self._unresolved.popleft()
@@ -229,9 +232,10 @@ class LogBus(InMemoryBus):
         self._floors[topic] = tokens[0] if tokens else self._frontier
 
     def _caught_up(self) -> None:
-        """What this bus published, and (a bus that has read nothing yet) the log's history floor, are in the mirror."""
-        if self._dirty or not self._seen:
-            self._read(complete=not self._seen)
+        """What this bus published, and (the first time) the log's history floor, are in the mirror. A bus that attached to
+        a still empty log reads it once, not at every call."""
+        if self._dirty or not self._attached:
+            self._read(complete=not self._attached)
 
     def oldest(self, topic: str) -> Position:
         self._check_open()
@@ -246,6 +250,8 @@ class LogBus(InMemoryBus):
         self._caught_up()
         if not _is_int(position.token) or not 0 <= position.token <= self._frontier:
             raise ValueError(f"{position} is not a position of this log (end {self._frontier})")
+        if position.topic not in self._logs and position.token > self._floor_of(position.topic):
+            raise ValueError(f"{position} is not a position of this log: the topic has no log")
         tokens = self._tokens.get(position.topic, ())
         super().trim(Position(position.topic, self._base.get(position.topic, 0) + bisect_left(tokens, position.token)))
         return self.oldest(position.topic)

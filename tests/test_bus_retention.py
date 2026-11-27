@@ -8,8 +8,10 @@ the messages it has not settled); a position older than what is kept, and `Start
 `PositionTooOld` instead of replaying less; `trim` is the owner's low-water mark, clamped to what a live subscription may still
 resume from; the default keeps everything.
 """
+import asyncio
 import time
 import unittest
+import uuid
 
 from pluto.bus import BusError, InMemoryBus, Position, PositionTooOld, Retention, Start, reply, request
 from pluto.bus.faults import FaultConfig, FaultKind, SeededFaultBus
@@ -226,6 +228,69 @@ class RetentionContract:
 
         self.assertEqual(bus.trim(bus.oldest('nobody')), bus.oldest('nobody'))
 
+    def test_trim_of_a_topic_without_a_log_accepts_only_its_oldest_whatever_the_rest_of_the_log_holds(self):
+        bus = self.bus()
+        for i in range(10):  # other topics have made the log long: positions of the log are big numbers
+            publish(bus, 'other', i, ts=i)
+        bus.run_until_idle()
+
+        for token in (1, 5, 11):
+            with self.assertRaises(ValueError, msg=token):
+                bus.trim(Position('nobody', token))
+
+        self.assertEqual(bus.trim(bus.oldest('nobody')), bus.oldest('nobody'))
+
+    # what a window or a trim must not disturb
+
+    def test_a_nacked_message_is_redelivered_and_a_dead_lettered_one_is_recorded_whatever_the_window(self):
+        bus = self.bus(retention=Retention(max_messages=2), max_attempts=2)
+        seen = []
+
+        def flaky(delivery):
+            seen.append((delivery.envelope.payload, delivery.attempt))
+            if delivery.attempt == 1 and delivery.envelope.payload % 2 == 0:
+                raise RuntimeError('first attempt of an even one')
+            if delivery.envelope.payload == 7:
+                raise RuntimeError('always')
+
+        bus.subscribe('t', flaky)
+        for i in range(20):
+            publish(bus, 't', i, ts=i, key='k%d' % (i % 3))
+        bus.run_until_idle()
+
+        self.assertEqual(sorted({payload for payload, _ in seen}), list(range(20)))
+        self.assertEqual([attempt for payload, attempt in seen if payload % 2 == 0 and payload != 7], [1, 2] * 10)
+        self.assertEqual([letter.envelope.payload for letter in bus.dead_letters()], [7])
+
+    def test_group_members_get_every_message_once_under_a_window(self):
+        bus = self.bus(retention=Retention(max_messages=3))
+        first, second = Recorder(), Recorder()
+        bus.subscribe('t', first.handler('first'), group='g')
+        bus.subscribe('t', second.handler('second'), group='g')
+        for i in range(60):
+            publish(bus, 't', i, ts=i, key='k%d' % (i % 6), msg_id='m%d' % i)
+        bus.run_until_idle()
+
+        self.assertEqual(sorted(first.ids() + second.ids()), sorted('m%d' % i for i in range(60)))
+        self.assertTrue(first.calls and second.calls)
+
+    def test_trim_from_inside_a_handler_loses_nothing(self):
+        bus = self.bus()
+        seen = []
+
+        def handler(delivery):
+            seen.append(delivery.envelope.payload)
+            bus.trim(bus.position_of(delivery))  # the owner advances its low-water mark as it checkpoints
+
+        bus.subscribe('t', handler)
+        for i in range(30):
+            publish(bus, 't', i, ts=i)
+        bus.run_until_idle()
+
+        self.assertEqual(seen, list(range(30)))
+        with self.assertRaises(PositionTooOld):
+            bus.subscribe('t', lambda delivery: None, start=Start.EARLIEST)
+
     def test_a_closed_bus_refuses_trim_and_oldest(self):
         bus = type(self).make_bus()
         bus.close()
@@ -438,10 +503,16 @@ class JetStreamRetention(RetentionContract, unittest.TestCase):
         self.assertEqual(payloads(second, Start.EARLIEST), [b'%d' % i for i in range(20)])
 
     def test_the_stream_limits_are_validated(self):
-        for name in ('max_messages', 'max_age', 'max_bytes'):
-            for bad in (0, -1, True, 'x'):
-                with self.assertRaises(ValueError):
+        for name in ('max_messages', 'max_bytes'):
+            for bad in (0, -1, True, 1.5, 'x'):
+                with self.assertRaises(ValueError, msg='%s=%r' % (name, bad)):
                     nats_support.jetstream.JetStreamLog(**{name: bad})
+        for bad in (0, -1, True, 'x', float('nan'), float('inf')):
+            with self.assertRaises(ValueError, msg='max_age=%r' % (bad,)):
+                nats_support.jetstream.JetStreamLog(max_age=bad)
+
+        # good ones reach the server and make a stream
+        nats_support.jetstream.JetStreamLog(max_messages=10, max_bytes=10_000, max_age=60.5, drop_on_close=True).close()
 
     def test_an_orphaned_stream_is_deleted_by_name(self):
         jetstream = nats_support.jetstream
@@ -451,6 +522,48 @@ class JetStreamRetention(RetentionContract, unittest.TestCase):
 
         self.assertTrue(jetstream.delete_stream(namespace))
         self.assertFalse(jetstream.delete_stream(namespace))
+
+    def test_delete_stream_refuses_a_stream_that_is_not_a_runs(self):
+        jetstream = nats_support.jetstream
+        namespace = 'foreign' + uuid.uuid4().hex[:8]
+
+        import nats
+        from nats.js.api import StreamConfig
+
+        async def make():
+            nc = await nats.connect(jetstream.DEFAULT_URL)
+            await nc.jetstream().add_stream(StreamConfig(name=namespace, subjects=['other.' + namespace]))
+            await nc.close()
+
+        async def remove():
+            nc = await nats.connect(jetstream.DEFAULT_URL)
+            await nc.jetstream().delete_stream(namespace)
+            await nc.close()
+
+        asyncio.run(make())
+        self.addCleanup(lambda: asyncio.run(remove()))
+
+        with self.assertRaisesRegex(BusError, 'not a run.s stream'):
+            jetstream.delete_stream(namespace)
+
+        # still there: a second refusal, not "False"
+        with self.assertRaises(BusError):
+            jetstream.delete_stream(namespace)
+
+    def test_a_bus_attached_to_an_empty_stream_does_not_read_the_log_at_every_oldest_or_trim(self):
+        jetstream = nats_support.jetstream
+        log = jetstream.JetStreamLog(drop_on_close=True)
+        bus = LogBus(log)
+        self.addCleanup(bus.close)
+        reads = []
+        real = log.read_new
+        log.read_new = lambda *args, **kwargs: (reads.append(args), real(*args, **kwargs))[1]
+
+        for _ in range(5):
+            bus.oldest('t')
+            bus.trim(bus.oldest('t'))
+
+        self.assertEqual(len(reads), 1)  # the attach read, once
 
 
 if __name__ == '__main__':

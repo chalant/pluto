@@ -35,6 +35,7 @@ run is removed with `delete_stream(namespace)`.
 """
 
 import asyncio
+import math
 import os
 import socket
 import threading
@@ -129,7 +130,11 @@ class _Loop:
 
 def delete_stream(namespace: str, url: str = DEFAULT_URL, timeout: float = 10.0) -> bool:
     """Deletes the stream of a run (and its consumers): what a crashed run leaves behind, since the stream is the durable log
-    and is only dropped at close on request. True if it was there. Must not be called from a running event loop."""
+    and is only dropped at close on request. True if it was there. Must not be called from a running event loop.
+
+    It deletes a stream by name, so it also deletes the stream of a run that is still going: call it for runs that are
+    over. It refuses (`BusError`) a stream whose subjects are not exactly the ones a run makes, `<namespace>.>`: a stream
+    that is not a run's is not touched."""
 
     async def delete() -> bool:
         async def quiet(error):
@@ -137,14 +142,22 @@ def delete_stream(namespace: str, url: str = DEFAULT_URL, timeout: float = 10.0)
 
         nc = await nats.connect(url, connect_timeout=timeout, allow_reconnect=False, error_cb=quiet)
         try:
-            return await nc.jetstream(timeout=timeout).delete_stream(namespace)
-        except NotFoundError:
-            return False
+            js = nc.jetstream(timeout=timeout)
+            try:
+                info = await js.stream_info(namespace)
+            except NotFoundError:
+                return False
+            subjects = list(info.config.subjects or [])
+            if subjects != [namespace + ".>"]:
+                raise BusError(f"{namespace!r} is not a run's stream (its subjects are {subjects}): not deleted")
+            return await js.delete_stream(namespace)
         finally:
             await nc.close()
 
     try:
         return asyncio.run(asyncio.wait_for(delete(), timeout * 2))
+    except BusError:
+        raise
     except Exception as error:
         raise BusError(f"cannot delete stream {namespace!r}: {error.__class__.__name__}: {error}") from error
 
@@ -186,9 +199,13 @@ class JetStreamLog:
         max_bytes: int | None = None,
     ) -> None:
         self.namespace = namespace or "pluto" + uuid.uuid4().hex[:12]
-        for name, value in (("max_messages", max_messages), ("max_age", max_age), ("max_bytes", max_bytes)):
-            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0):
-                raise ValueError(f"{name} must be a positive number or None, got {value!r}")
+        for name, value in (("max_messages", max_messages), ("max_bytes", max_bytes)):
+            if value is not None and (value.__class__ is not int or value < 1):
+                raise ValueError(f"{name} must be an int of at least 1 or None, got {value!r}")
+        if max_age is not None and (
+                isinstance(max_age, bool) or not isinstance(max_age, (int, float)) or not math.isfinite(max_age)
+                or max_age <= 0):
+            raise ValueError(f"max_age must be a finite number of seconds above 0 or None, got {max_age!r}")
         # the stream's own retention (LimitsPolicy, discard oldest): what the server keeps whatever the buses read
         self._limits = {
             key: value for key, value in (("max_msgs", max_messages), ("max_age", max_age), ("max_bytes", max_bytes))
