@@ -52,8 +52,13 @@ Groups: subscriptions of one `group` share a stream; each (topic, key) lane goes
 hash of the lane when it is created (so lanes created by a replay at subscribe time go to the members present
 then). Closing: `close()` cancels every subscription and any later call but `close` and `cancel` raises.
 
-Not here: S4 (the networked merge), seeded fault injection, start from a time, `seek`, deduplication, retention
-limits for logs (logs are never trimmed; open).
+Networked bus: `pluto.bus.log.LogBus` runs this dispatcher over a broker's log (S4: the broker orders by arrival, the reader by
+S3, a phase barrier makes them agree); `pluto.bus.jetstream.JetStreamLog` is the NATS JetStream log (import it explicitly: it
+needs `nats-py`). `networked` and `poll` are what a caller that waits for other processes uses (`PhaseDriver`). Its
+differences (publish does not wait, no `QueueFull`, groups in-process) are in the docstring of `pluto.bus.log`.
+
+Not here: seeded fault injection, start from a time, `seek`, deduplication, retention limits for logs (logs are never
+trimmed; open).
 """
 
 from pluto.bus.api import (
@@ -71,6 +76,7 @@ from pluto.bus.api import (
     Start,
     Subscription,
 )
+from pluto.bus.log import Log, LogBus
 from pluto.bus.memory import InMemoryBus
 from pluto.bus.request import Request, reply, request
 from pluto.bus.serializing import Codec, JsonCodec, ProtobufCodec, SerializingBus
@@ -86,6 +92,8 @@ __all__ = [
     "Handler",
     "InMemoryBus",
     "JsonCodec",
+    "Log",
+    "LogBus",
     "NotIdle",
     "Position",
     "ProtobufCodec",

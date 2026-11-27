@@ -74,6 +74,13 @@ a whole run through bytes with identical results (`tests/test_pluto_phases_run.p
 where it happens, logged with its traceback and reported in its `done` (the bus redelivers a handler that raises, and a
 phase is not idempotent).
 
+The bus of a run can be a networked one: `StrategyManager(..., bus=SerializingBus(LogBus(JetStreamLog()), phases.codec()))`
+(`pluto/bus/log.py`, `pluto/bus/jetstream.py`, a NATS server with JetStream; `STAGE2_BUS_PROGRESS.md`). On it the controller's
+phase ends when every expected `done` is in the log, not when the local bus is idle (`PhaseDriver` polls the bus, with a deadline
+of its own, `Controller(phase_timeout=...)`, that names the participant that did not answer); `publish` does not wait for the
+broker; the result of a run in one process is the in-memory result, exact (`tests/test_pluto_jetstream_run.py`). Components in
+other processes, and their registry, are not built yet.
+
 Stage 1 supports only the in-process runtime that runs its clock event synchronously (`running_behavior.Blocking`): its batch
 of orders is on the bus when its handler returns, and the `done` of the trade phase says how many orders it sent. A
 `NonBlocking` runtime would publish from another thread, and a runtime in another process needs the networked bus (a later
@@ -183,11 +190,15 @@ $ENV/bin/python -m pytest -p no:randomly tests
 | `tests/test_pluto_order_ids.py` | the deterministic order ids of the strategy's blotter: the process id as namespace plus the sequence of the orders placed, runs and strategies not confused, no number for an order of no shares, a given id kept, a rebuilt blotter continuing from a checkpointed sequence, compact alphanumeric ids |
 | `tests/test_pluto_broker_service.py` | the broker service's stream of the strategy's book: folding it rebuilds the engine's ledger state byte for byte on every example and scenario; duplicate and cancelled orders, revaluation, sequence gaps, two calendars, state versions |
 | `tests/test_pluto_metrics_stream.py` | the metrics computed from the broker service's stream (`pluto/finance/metrics/consumer.py`: a fold of the stream read at the observation points; the harness feeds its tracker this way, so the equality tests above run through it): every example and scenario is computed from its whole stream, an extra read of the copy changes the frame, the observation points, a failing tracker stops a simulated run at its tick with a `MetricsError` and the book complete, the consumer's unit tests |
-| `tests/test_bus_contract.py` | the bus contract (rules S1 to S14) on `InMemoryBus` and on `SerializingBus(InMemoryBus)`, including the delivery trace under different `PYTHONHASHSEED`s |
+| `tests/test_bus_contract.py` | the bus contract (rules S1 to S14, plus `networked`/`poll`) on `InMemoryBus`, on `SerializingBus(InMemoryBus)` and on `SerializingBus(LogBus(JetStreamLog))` (NATS JetStream; skipped without a server), including the delivery trace under different `PYTHONHASHSEED`s |
 | `tests/test_bus_memory.py` | what holds for the in-memory bus only: bounded queues and overflow, log positions, group assignment |
 | `tests/test_bus_serializing.py` | what only the serialising wrapper does: bytes on the inner bus, codecs, undecodable payloads |
-| `tests/test_pluto_phases.py` | the controller's lock-step (`PhaseDriver`) on a bare bus with fake participants: a missing, failed, stale or doubled `done`, a message the bus gave up on; the phase ranks; every payload through a `SerializingBus` |
+| `tests/test_bus_receipt.py` | `Receipt`: a position known at once (in memory) or resolved when asked for (networked) |
+| `tests/test_bus_jetstream.py` | what needs a broker (skipped without a NATS server): publish does not wait, positions resolve later, a bus attached to the same stream resumes from a position and sees what others write, a lost message is a `BusError`, the order of S3 across four producer processes after a barrier |
+| `tests/test_pluto_phases.py` | the controller's lock-step (`PhaseDriver`) on a bare bus with fake participants: a missing, failed, stale or doubled `done`, a message the bus gave up on; on a bus that looks networked, the wait for dones that arrive after the bus went idle and the deadline naming who is missing; the phase ranks; every payload through a `SerializingBus` |
 | `tests/test_pluto_phases_run.py` | whole runs driven by phases: `buy_and_hold`, `momentum_pipeline` and two scenarios give the same frames over `InMemoryBus` and `SerializingBus(InMemoryBus)`; the messages of a run and the order counts of its `done`s; a failing strategy aborts the run with a `PhaseError` |
+| `tests/test_pluto_phase_order.py` | whole runs and the fake-book tests with three runtimes on buses that deliver the messages of a phase in a random order (seeded) and in the order of publication: the same frames, the same submitted orders (a run must not rely on S3 between producers) |
+| `tests/test_pluto_jetstream_run.py` | whole runs (`buy_and_hold`, `cancel_orders`, `dividends`) with the bus of the run on a NATS JetStream stream: the frame is the in-memory one, exact (skipped without a server; `PLUTO_NATS_URL` to point elsewhere) |
 
 Tolerance policy: **Pluto against the vendored Zipline is exact** (`rtol=0, atol=0`), on every
 common column of the five examples and of the scenarios; against the stored expected set

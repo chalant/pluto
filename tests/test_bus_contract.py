@@ -29,6 +29,8 @@ from pluto.bus import (
     reply,
     request,
 )
+from pluto.bus.jetstream import DEFAULT_URL, JetStreamLog, server_available
+from pluto.bus.log import LogBus
 
 REPO = Path(__file__).resolve().parent.parent
 HASH_SEEDS = ("1", "2", "3", "4", "5")
@@ -42,7 +44,13 @@ def make_serializing(**options):
     return SerializingBus(InMemoryBus(**options), ProtobufCodec({"timestamp": Timestamp}))
 
 
-FACTORIES = {"memory": make_memory, "serializing": make_serializing}
+def make_nats(**options):
+    return SerializingBus(
+        LogBus(JetStreamLog(drop_on_close=True), **options), ProtobufCodec({"timestamp": Timestamp})
+    )
+
+
+FACTORIES = {"memory": make_memory, "serializing": make_serializing, "nats": make_nats}
 
 
 def publish(bus, topic, payload=None, *, key="", ts=0, producer="p", **fields):
@@ -119,12 +127,14 @@ def scenario_trace(make_bus):
     late = Recorder()
     bus.subscribe("fills.>", late.handler("late"), start=Start.EARLIEST)
     bus.run_until_idle()
-    return {
+    trace = {
         "calls": rec.calls,
         "late": late.calls,
         "checkpoints": checkpoints,
         "dead": [(d.envelope.msg_id, d.attempts, d.error_type, d.error_message) for d in bus.dead_letters()],
     }
+    bus.close()  # a networked bus leaves its stream otherwise
+    return trace
 
 
 class BusContract:
@@ -1202,6 +1212,21 @@ class InMemoryBusContract(BusContract, unittest.TestCase):
 class SerializingBusContract(BusContract, unittest.TestCase):
     implementation = "serializing"
     make_bus = staticmethod(make_serializing)
+
+
+@unittest.skipUnless(server_available(), "no NATS server at " + DEFAULT_URL)
+class JetStreamBusContract(BusContract, unittest.TestCase):
+    """The same contract over the log-backed bus on a NATS JetStream stream (one new stream per bus, deleted on close)."""
+
+    implementation = "nats"
+    make_bus = staticmethod(make_nats)
+
+    def attach(self, bus):
+        """Another bus on the same log, as another process would build it."""
+        namespace = bus._inner._log.namespace
+        return SerializingBus(
+            LogBus(JetStreamLog(namespace, create=False), max_attempts=3), ProtobufCodec({"timestamp": Timestamp})
+        )
 
 
 if __name__ == "__main__":
