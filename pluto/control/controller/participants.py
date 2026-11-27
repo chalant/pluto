@@ -32,6 +32,8 @@ class BrokerParticipant(object):
 
         # the submit event that is waiting for the batches of orders it names (networked bus), if any
         self._waiting = None
+        # the ids of the phase events handled in this tick: a copy is ignored (see ``phases.Handled``)
+        self._handled = phases.Handled()
         # the batches of orders the bus gave up on that nobody reported yet, and how many dead letters were looked at
         self._dead = []
         self._letters_seen = 0
@@ -44,13 +46,18 @@ class BrokerParticipant(object):
 
     def _on_book(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        if not self._handled.first(envelope.logical_ts, envelope.msg_id):
+            return  # a copy of the book event: the book is written once (revalue compounds returns)
+
         phases.report(
             self._bus,
             phases.BOOK,
             envelope.logical_ts,
             phases.BROKER_ID,
             lambda: self._book(envelope.payload),
-            log)
+            log,
+            envelope.msg_id)
 
     def _book(self, event) -> None:
         """The writes of the book for one signal, in the order the controller made them. The book is brought up to
@@ -95,15 +102,20 @@ class BrokerParticipant(object):
 
     def _on_account(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        if not self._handled.first(envelope.logical_ts, envelope.msg_id):
+            return  # a copy of the account event: the states are sent once
+
         phases.report(
             self._bus,
             phases.ACCOUNT,
             envelope.logical_ts,
             phases.BROKER_ID,
-            lambda: self._account(envelope.payload, envelope.logical_ts),
-            log)
+            lambda: self._account(envelope.payload, envelope.logical_ts, envelope.msg_id),
+            log,
+            envelope.msg_id)
 
-    def _account(self, event, logical_ts) -> None:
+    def _account(self, event, logical_ts, event_id) -> None:
         """The broker state of each strategy, in registration order: its fills (collected from the book's stream since
         the last tick) and the last sale prices of the tick, sent on the strategy's own topic."""
         manager = self._manager
@@ -121,9 +133,11 @@ class BrokerParticipant(object):
             state = manager.broker_states[process_id]
             state.last_sale_prices.extend(event.last_sale_prices)
 
-            self._bus.publish(
+            phases.publish_with_retry(
+                self._bus,
                 phases.account_topic(process_id),
                 state,
+                msg_id=phases.account_msg_id(process_id, event_id),
                 type=phases.message_type(state),
                 logical_ts=logical_ts,
                 producer_id=phases.BROKER_ID,
@@ -179,6 +193,9 @@ class BrokerParticipant(object):
             raise phases.PhaseError('; '.join(problems))
 
     def _on_submit(self, delivery: Delivery) -> None:
+        if not self._handled.first(delivery.envelope.logical_ts, delivery.envelope.msg_id):
+            return  # a copy of the submit event: the orders reach the book once
+
         self._waiting = delivery.envelope
         self._submit_when_ready()
 
@@ -207,7 +224,8 @@ class BrokerParticipant(object):
         self._waiting = None
         dead, self._dead = self._dead, []
         phases.report(
-            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced, dead), log)
+            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced, dead), log,
+            envelope.msg_id)
 
     def _submit(self, announced, dead) -> None:
         """The orders the strategies sent in this tick reach the book, by strategy in registration order; then the

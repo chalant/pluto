@@ -34,37 +34,52 @@ class RuntimeEndpoint(object):
 
         # what the runtime sent in the trade phase it is running
         self._batches = 0
+        self._event_id = ''  # the trade event being handled: part of the id of its batches
         self._orders = 0
 
         # the tick (logical time) of the last broker state applied
         self._account_ts = None
 
+        # the ids of the events and states handled in this tick: a copy is ignored (see ``phases.Handled``)
+        self._handled = phases.Handled()
+
         bus.subscribe(phases.account_topic(self._id), self._on_account)
         bus.subscribe(phases.TRADE.topic, self._on_trade)
 
     def send_orders(self, batch: broker_pb2.OrderBatch) -> None:
-        """The batch of orders of the runtime for the clock event ``batch.ts``, on ``strategy.orders``."""
+        """The batch of orders of the runtime for the clock event ``batch.ts``, on ``strategy.orders``. Its id is the
+        trade event being handled, the tick and the number of the batch among those of this clock event, so a publish
+        that is retried is the same message and a receiver can tell a copy from the next batch."""
         self._batches += 1
         self._orders += len(batch.orders)
 
-        self._bus.publish(
+        ts = batch.ts.ToNanoseconds()
+
+        phases.publish_with_retry(
+            self._bus,
             phases.ORDERS_TOPIC,
             batch,
+            msg_id=phases.orders_msg_id(self._id, ts, self._event_id, self._batches),
             type=phases.message_type(batch),
-            logical_ts=batch.ts.ToNanoseconds(),
+            logical_ts=ts,
             producer_id=self._id,
             phase=phases.TRADE.rank,
             key=self._id)
 
     def _on_account(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        if not self._handled.first(envelope.logical_ts, envelope.msg_id):
+            return  # a copy of the broker state: applying a tick's state twice would count its fills twice
+
         phases.report(
             self._bus,
             phases.ACCOUNT,
             envelope.logical_ts,
             self._id,
             lambda: self._account(envelope.payload, envelope.logical_ts),
-            log)
+            log,
+            envelope.msg_id)
 
     def _account(self, state, logical_ts) -> None:
         self._process.account_update(state)
@@ -73,6 +88,9 @@ class RuntimeEndpoint(object):
     def _on_trade(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
 
+        if not self._handled.first(envelope.logical_ts, envelope.msg_id):
+            return  # a copy of the trade event: the strategy runs its clock event once
+
         # the explicit dependency on the account phase: the strategy runs on the account of this tick or not at all
         # (the controller publishes the trade event only after the account dones, a bus that reorders must not
         # make a runtime trade on a stale account)
@@ -80,16 +98,18 @@ class RuntimeEndpoint(object):
             error = 'the trade event of tick {} came before the account state of the tick (last applied: {})'.format(
                 envelope.logical_ts, self._account_ts)
             log.error('{}: {}', self._id, error)
-            phases.publish_done(self._bus, phases.TRADE, envelope.logical_ts, self._id, error=error)
+            phases.publish_done(
+                self._bus, phases.TRADE, envelope.logical_ts, self._id, error=error, answers=envelope.msg_id)
             return
 
         self._batches = 0
         self._orders = 0
+        self._event_id = envelope.msg_id
 
         try:
             self._process.clock_event(envelope.payload)
         except Exception as e:
-            phases.fail(self._bus, phases.TRADE, envelope.logical_ts, self._id, e, log)
+            phases.fail(self._bus, phases.TRADE, envelope.logical_ts, self._id, e, log, envelope.msg_id)
             return
 
         if self._batches == 0:
@@ -98,7 +118,14 @@ class RuntimeEndpoint(object):
                 phases.TRADE,
                 envelope.logical_ts,
                 self._id,
-                error='sent no batch of orders (a runtime must run its clock event synchronously)')
+                error='sent no batch of orders (a runtime must run its clock event synchronously)',
+                answers=envelope.msg_id)
         else:
             phases.publish_done(
-                self._bus, phases.TRADE, envelope.logical_ts, self._id, self._orders, self._batches)
+                self._bus,
+                phases.TRADE,
+                envelope.logical_ts,
+                self._id,
+                self._orders,
+                self._batches,
+                answers=envelope.msg_id)

@@ -63,7 +63,7 @@ import pandas as pd
 from google.protobuf import timestamp_pb2
 from google.protobuf.message import Message
 
-from pluto.bus import Bus, Delivery, ProtobufCodec
+from pluto.bus import Bus, Delivery, ProtobufCodec, PublishFailed
 
 from protos import broker_pb2, clock_pb2, phases_pb2
 
@@ -88,6 +88,35 @@ ACCOUNT = Phase('account', 30)
 TRADE = Phase('trade', 40)
 SUBMIT = Phase('submit', 50)
 
+
+def phase_msg_id(phase: Phase, logical_ts: int, key: str = '', n: int = 1) -> str:
+    """The id of an event of ``phase`` at the clock time ``logical_ts`` (``key``: the calendar of a book event): what the
+    message is, not how often it was published. ``n`` numbers the events of the same phase and key at one clock time: a
+    clock time can carry several clock events, each one drives the phases again."""
+    return 'controller/{}/{}/{}/{}'.format(phase.name, logical_ts, n, key)
+
+
+def done_msg_id(participant: str, phase: Phase, logical_ts: int, answers: str = '') -> str:
+    """The id of the done of ``participant`` that answers the event with the id ``answers``."""
+    return '{}/done/{}/{}/{}'.format(participant, phase.name, logical_ts, answers)
+
+
+def account_msg_id(process_id: str, event_id: str) -> str:
+    """The id of the broker state sent to a runtime in answer to the account event ``event_id``."""
+    return 'broker/account/{}/{}'.format(process_id, event_id)
+
+
+def orders_msg_prefix(process_id: str, logical_ts: int) -> str:
+    """What the ids of the batches of orders of a runtime at a clock time begin with."""
+    return '{}/orders/{}/'.format(process_id, logical_ts)
+
+
+def orders_msg_id(process_id: str, logical_ts: int, event_id: str, n: int) -> str:
+    """The id of the ``n``-th batch of orders (1, 2, ...) a runtime sent while it handled the trade event ``event_id``
+    of the tick ``logical_ts``."""
+    return '{}{}/{}'.format(orders_msg_prefix(process_id, logical_ts), event_id, n)
+
+
 # the dones of every phase
 DONES = 'phase.done.>'
 # a done is dispatched right after the messages of its phase
@@ -97,6 +126,9 @@ DONE_AFTER = 1
 # polls the bus in slices of POLL_SLICE seconds
 DEFAULT_TIMEOUT = 300.0
 POLL_SLICE = 0.25
+
+# a publish that fails with PublishFailed is repeated, with the same msg_id, this many times in all
+PUBLISH_ATTEMPTS = 10
 
 ORDERS_TOPIC = 'strategy.orders'
 
@@ -145,6 +177,50 @@ class PhaseError(RuntimeError):
     """A phase did not complete: a participant failed or did not say done."""
 
 
+def publish_with_retry(bus: Bus, topic: str, payload: Message, *, msg_id: str, **fields) -> None:
+    """Publishes with ``msg_id``; a ``PublishFailed`` (the bus says the message may not have been taken, or that it was and
+    it could not tell) is repeated, with the same ``msg_id``, up to ``PUBLISH_ATTEMPTS`` times in all: a copy that the
+    first attempt left in the log is a copy of the same message, which every receiver ignores. ``PhaseError`` after the
+    last attempt. No delay between attempts: the bus has no clock, the budget is a count."""
+    failure = None
+
+    for _ in range(PUBLISH_ATTEMPTS):
+        try:
+            bus.publish(topic, payload, msg_id=msg_id, **fields)
+            return
+        except PublishFailed as e:
+            failure = e
+
+    raise PhaseError('could not publish {} on {} in {} attempts: {}'.format(msg_id, topic, PUBLISH_ATTEMPTS, failure))
+
+
+class Handled(object):
+    """The ids of the messages a receiver handled in the current tick, so that a copy is not handled again.
+
+    ``first(logical_ts, msg_id)`` is True the first time a message is seen and False for a copy: a message of the tick
+    in progress whose id was seen, or any message of an earlier tick (the lock-step closes a tick only when everything
+    that tick needed was handled, so what arrives for it later is a copy). The set is dropped when a newer tick starts: it
+    holds the messages of one tick. Membership tests only: no iteration, deterministic."""
+
+    def __init__(self):
+        self._tick = None
+        self._ids = set()
+
+    def first(self, logical_ts: int, msg_id: str) -> bool:
+        if self._tick is None or logical_ts > self._tick:
+            self._tick = logical_ts
+            self._ids = set()
+        elif logical_ts < self._tick:
+            return False
+
+        if msg_id in self._ids:
+            return False
+
+        self._ids.add(msg_id)
+
+        return True
+
+
 def publish_done(
         bus: Bus,
         phase: Phase,
@@ -152,13 +228,18 @@ def publish_done(
         participant: str,
         orders: int = 0,
         batches: int = 0,
-        error: str = '') -> None:
+        error: str = '',
+        answers: str = '') -> None:
     """Says that ``participant`` finished its work of ``phase`` at ``logical_ts``, or failed (``error``). ``orders`` and
-    ``batches`` are the number of orders, and of batches of orders, a runtime sent in the trade phase."""
-    bus.publish(
+    ``batches`` are the number of orders, and of batches of orders, a runtime sent in the trade phase. ``answers`` is the
+    id of the phase event answered: the id of the done derives from it, so a done published again (a retry) is the same
+    message and the done of another event of the same tick is not."""
+    publish_with_retry(
+        bus,
         phase.done_topic,
         phases_pb2.PhaseDone(
             phase=phase.topic, participant=participant, orders=orders, batches=batches, error=error),
+        msg_id=done_msg_id(participant, phase, logical_ts, answers),
         type=message_type(phases_pb2.PhaseDone),
         logical_ts=logical_ts,
         producer_id=participant,
@@ -166,11 +247,19 @@ def publish_done(
         key=participant)
 
 
-def fail(bus: Bus, phase: Phase, logical_ts: int, participant: str, error: Exception, log: logbook.Logger) -> None:
+def fail(
+        bus: Bus,
+        phase: Phase,
+        logical_ts: int,
+        participant: str,
+        error: Exception,
+        log: logbook.Logger,
+        answers: str = '') -> None:
     """Logs ``error``, which is being handled, with its traceback and reports it in a done: the controller aborts the
     run, and the bus never redelivers the phase (a handler that raises is redelivered, a phase is not idempotent)."""
     log.exception('{} failed in {}', participant, phase.topic)
-    publish_done(bus, phase, logical_ts, participant, error='{}: {}'.format(type(error).__name__, error))
+    publish_done(
+        bus, phase, logical_ts, participant, error='{}: {}'.format(type(error).__name__, error), answers=answers)
 
 
 def report(
@@ -179,14 +268,15 @@ def report(
         logical_ts: int,
         participant: str,
         work: Callable[[], None],
-        log: logbook.Logger) -> None:
+        log: logbook.Logger,
+        answers: str = '') -> None:
     """Runs ``work()`` and says done; a failure is reported (``fail``)."""
     try:
         work()
     except Exception as e:
-        fail(bus, phase, logical_ts, participant, e, log)
+        fail(bus, phase, logical_ts, participant, e, log, answers)
     else:
-        publish_done(bus, phase, logical_ts, participant)
+        publish_done(bus, phase, logical_ts, participant, answers=answers)
 
 
 class PhaseDriver(object):
@@ -209,14 +299,52 @@ class PhaseDriver(object):
         self._producer_id = producer_id
         self._timeout = timeout
         self._dones = []
+        self._tick = None  # the tick being driven
+        self._drives = {}  # (phase name, key) -> how often driven at this clock time
+        self._done_ids = {}  # msg_id -> content of the dones of that tick, to tell a copy from another done
+        self._participants = set()  # who had a done accepted, ever (membership tests only)
+        self._conflicts = []
         self._accepted = {}  # phase topic -> participant -> the done accepted, of the last drive of the phase
         self._batches = {}  # (logical_ts, process id) -> [orders, batches] of the batches of orders seen in the log
+        self._batch_ids = {}  # msg_id -> logical_ts of the batches of orders counted and not yet announced
 
         bus.subscribe(DONES, self._on_done)
         bus.subscribe(ORDERS_TOPIC, self._on_orders, rank=1)
 
+    def _begin(self, logical_ts: int) -> None:
+        """The clock time being driven: the ids of the dones of an earlier one are dropped (see ``_on_done``)."""
+        if self._tick is None or logical_ts > self._tick:
+            self._tick = logical_ts
+            self._done_ids = {}
+            self._drives = {}
+
     def _on_done(self, delivery: Delivery) -> None:
-        self._dones.append((delivery.envelope.logical_ts, delivery.envelope.payload))
+        """Collects a done, once. A done is the same message however often it is delivered or published (its id is
+        ``done_msg_id``): a copy of one of this tick is ignored, so is a copy of a closed tick of a participant that
+        already had a done accepted (the lock-step closed that tick only after every done it needed was in, so what
+        arrives for it now can only be a copy). A done of an earlier tick from anyone else stays an error, so does a
+        done under the id of one accepted but with other content."""
+        envelope = delivery.envelope
+        done = envelope.payload
+        tick = self._tick
+
+        if tick is not None and envelope.logical_ts < tick:
+            if done.participant in self._participants:
+                return
+        elif tick is not None and envelope.logical_ts == tick:
+            known = self._done_ids.get(envelope.msg_id)
+            content = done.SerializeToString(deterministic=True)
+
+            if known is not None:
+                if known != content:
+                    self._conflicts.append('{} said done of {} twice with different content'.format(
+                        done.participant, done.phase))
+                return
+
+            self._done_ids[envelope.msg_id] = content
+
+        self._participants.add(done.participant)
+        self._dones.append((envelope.logical_ts, done))
 
     def _assess(self, phase: Phase, logical_ts: int, expected: Iterable[str]):
         """What the dones so far say: the problems found, and the expected participants that have not reported."""
@@ -256,14 +384,23 @@ class PhaseDriver(object):
         bus = self._bus
         expected = tuple(expected)
         self._dones.clear()
+        self._conflicts.clear()
         self._accepted.pop(phase.topic, None)
         letters = len(bus.dead_letters())
         timed_out = False
         looked = False
 
-        bus.publish(
+        self._begin(logical_ts)
+
+        # the n-th time this phase is driven for this key at this clock time (a clock time can carry several clock
+        # events): the id of the event, so that two events are two messages and a retried publish is one
+        n = self._drives[(phase.name, key)] = self._drives.get((phase.name, key), 0) + 1
+
+        publish_with_retry(
+            bus,
             phase.topic,
             payload,
+            msg_id=phase_msg_id(phase, logical_ts, key, n),
             type=message_type(payload),
             logical_ts=logical_ts,
             producer_id=self._producer_id,
@@ -275,6 +412,7 @@ class PhaseDriver(object):
         while True:
             bus.run_until_idle()
             problems, missing, waiting, seen = self._assess(phase, logical_ts, expected)
+            problems.extend(self._conflicts)
 
             if not waiting or problems or not bus.networked:
                 # complete, failed, or nothing else can arrive
@@ -310,6 +448,11 @@ class PhaseDriver(object):
 
     def _on_orders(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        if envelope.msg_id in self._batch_ids:
+            return  # a copy of a batch already counted (a publisher's retry, a redelivery, a replay)
+
+        self._batch_ids[envelope.msg_id] = envelope.logical_ts
         counts = self._batches.setdefault((envelope.logical_ts, envelope.key), [0, 0])
         counts[0] += len(envelope.payload.orders)
         counts[1] += 1
@@ -365,5 +508,9 @@ class PhaseDriver(object):
 
         for tick, key in [k for k in self._batches if k[0] <= logical_ts]:
             del self._batches[(tick, key)]
+
+        # the ids of this tick stay: a clock event can share its clock time with the next one, and a copy of a batch of
+        # the first must not count for the second
+        self._batch_ids = {msg_id: tick for msg_id, tick in self._batch_ids.items() if tick >= logical_ts}
 
         return announced
