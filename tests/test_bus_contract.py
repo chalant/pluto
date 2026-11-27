@@ -29,8 +29,8 @@ from pluto.bus import (
     reply,
     request,
 )
-from pluto.bus.jetstream import DEFAULT_URL, JetStreamLog, server_available
 from pluto.bus.log import LogBus
+from tests import nats_support
 
 REPO = Path(__file__).resolve().parent.parent
 HASH_SEEDS = ("1", "2", "3", "4", "5")
@@ -45,8 +45,10 @@ def make_serializing(**options):
 
 
 def make_nats(**options):
+    """The log-backed bus over a new JetStream stream (imported here: a venv without nats-py skips the NATS class)."""
     return SerializingBus(
-        LogBus(JetStreamLog(drop_on_close=True), **options), ProtobufCodec({"timestamp": Timestamp})
+        LogBus(nats_support.jetstream.JetStreamLog(drop_on_close=True), **options),
+        ProtobufCodec({"timestamp": Timestamp}),
     )
 
 
@@ -965,6 +967,19 @@ class BusContract:
             with self.assertRaises(ValueError):
                 publish(bus, topic)
 
+    def test_topics_with_whitespace_or_control_characters_are_refused_by_every_bus(self):
+        # the grammar is the one a broker can carry (NATS subjects have no whitespace): a topic that works in memory and
+        # not on a networked bus would be a run that works in one mode only, and on a log-backed bus a message refused
+        # after publish returned
+        bus = self.bus()
+        for topic in ("a b", "a\tb", "a.b\n", "a\x00b", " a", "a."):
+            with self.assertRaises(ValueError):
+                publish(bus, topic)
+            with self.assertRaises(ValueError):
+                bus.subscribe(topic, lambda d: None)
+        publish(bus, "a.b")  # and the bus is as it was
+        self.assertEqual(bus.run_until_idle(), 0)
+
     def test_cancel_drops_queued_messages_and_is_idempotent(self):
         bus = self.bus()
         subscription = bus.subscribe("t", self.rec.handler("gone"))
@@ -1214,7 +1229,7 @@ class SerializingBusContract(BusContract, unittest.TestCase):
     make_bus = staticmethod(make_serializing)
 
 
-@unittest.skipUnless(server_available(), "no NATS server at " + DEFAULT_URL)
+@nats_support.needs_server
 class JetStreamBusContract(BusContract, unittest.TestCase):
     """The same contract over the log-backed bus on a NATS JetStream stream (one new stream per bus, deleted on close)."""
 
@@ -1225,7 +1240,8 @@ class JetStreamBusContract(BusContract, unittest.TestCase):
         """Another bus on the same log, as another process would build it."""
         namespace = bus._inner._log.namespace
         return SerializingBus(
-            LogBus(JetStreamLog(namespace, create=False), max_attempts=3), ProtobufCodec({"timestamp": Timestamp})
+            LogBus(nats_support.jetstream.JetStreamLog(namespace, create=False), max_attempts=3),
+            ProtobufCodec({"timestamp": Timestamp}),
         )
 
 

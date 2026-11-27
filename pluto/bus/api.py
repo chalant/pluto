@@ -1,6 +1,6 @@
 """The bus interface: value types, errors and the `Bus` protocol.
 
-Every implementation (in-memory, serialising wrapper, later a networked one) passes the same contract suite
+Every implementation (in-memory, serialising wrapper, log-backed networked bus) passes the same contract suite
 (`tests/test_bus_contract.py`). The rules the interface fixes are in the docstring of `pluto.bus`.
 """
 
@@ -120,9 +120,16 @@ type Handler = Callable[[Delivery], None]
 
 
 def topic_tokens(topic_or_pattern: str) -> tuple[str, ...]:
-    """Split a dotted topic or pattern (`*` one token, a final `>` the rest); ValueError when malformed."""
+    """Split a dotted topic or pattern (`*` one token, a final `>` the rest); ValueError when malformed.
+
+    The grammar is the one every bus can carry, so that a run that works on one works on all (a broker's subject syntax,
+    NATS's, refuses whitespace and control characters: a topic the in-memory bus took and a networked bus could not send
+    would be a run that works in one mode and fails in the other, and, on a log-backed bus, a message refused after
+    `publish` returned). Whitespace and control characters are therefore refused by every bus."""
     if not isinstance(topic_or_pattern, str) or not topic_or_pattern:
         raise ValueError(f"topic or pattern must be a non-empty string, got {topic_or_pattern!r}")
+    if any(character.isspace() or not character.isprintable() for character in topic_or_pattern):
+        raise ValueError(f"topic or pattern {topic_or_pattern!r} has whitespace or a control character")
     tokens = tuple(topic_or_pattern.split("."))
     if "" in tokens or ">" in tokens[:-1]:
         raise ValueError(f"malformed topic or pattern {topic_or_pattern!r}")
