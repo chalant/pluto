@@ -54,11 +54,35 @@ class Position(NamedTuple):
     token: Any
 
 
-class Receipt(NamedTuple):
-    """Returned by `publish` once the message is accepted (in memory: logged and enqueued, not delivered)."""
+class Receipt:
+    """Returned by `publish` once the message is accepted (in memory: logged and enqueued, not delivered).
 
-    msg_id: str
-    position: Position  # of the published message: `start=position` delivers it first
+    `position` is that of the published message: `start=position` delivers it first. A networked bus does not wait
+    for the broker's acknowledgement in `publish`, so it does not know the position yet: `position` then resolves
+    when it is asked for (it waits for the acknowledgement of that message, and of the ones sent before it), and the
+    position is also known to the bus after its next read. `resolved` says whether it is known without waiting. A
+    message the broker did not take raises `BusError` from `position`, or from the bus's next read.
+    """
+
+    __slots__ = ("msg_id", "_position")
+
+    def __init__(self, msg_id: str, position: "Position | Callable[[], Position]") -> None:
+        self.msg_id = msg_id
+        self._position = position
+
+    @property
+    def position(self) -> Position:
+        position = self._position
+        if not isinstance(position, Position):
+            position = self._position = position()
+        return position
+
+    @property
+    def resolved(self) -> bool:
+        return isinstance(self._position, Position)
+
+    def __repr__(self) -> str:
+        return f"Receipt({self.msg_id!r}, {self._position if self.resolved else '<unresolved>'!r})"
 
 
 class Start(enum.Enum):
@@ -141,7 +165,9 @@ class Bus(Protocol):
         schema_version: int = 1,
     ) -> Receipt:
         """Log and enqueue a message; never runs a handler. `seq` defaults to the next number of `producer_id`,
-        `msg_id` to `f"{producer_id}:{seq}"`. A refused publish (`QueueFull`, bad argument) changes nothing."""
+        `msg_id` to `f"{producer_id}:{seq}"`. A refused publish (`QueueFull`, bad argument) changes nothing.
+        A networked bus sends the message without waiting for the broker: the receipt's position resolves later
+        (see `Receipt`), and a message the broker refuses raises `BusError` from the bus's next read."""
 
     def subscribe(
         self,

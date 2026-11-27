@@ -29,7 +29,8 @@ S7 Failures. Delivery is at-least-once. A handler that raises, or calls `nack`, 
 S9 Replay. A subscription starts at `Start.EARLIEST`, `Start.LATEST` (default) or a `Position` of an exact topic.
    Each topic has an append-only log, so replay delivers logged messages as if just published, merged by S3.
    A `Position` is opaque and storable (its `token` belongs to the bus that issued it). `Receipt.position` is the
-   published message (inclusive). `Bus.position_of(delivery)` is the subscription's resume position in that
+   published message (inclusive); on a networked bus `publish` does not wait for the broker's acknowledgement and the
+   position resolves when asked for or at the next read. `Bus.position_of(delivery)` is the subscription's resume position in that
    topic: every message below it is settled, so deliveries that complete out of log order (S3 does not follow
    log order across keys) leave no gap; messages above it that were already handled are delivered again.
 S10 Request and reply. `request` and `reply` (module `pluto.bus.request`) are a library over publish and
