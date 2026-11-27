@@ -144,4 +144,7 @@ small. The one structure that still grows with the run is the dead-letter list, 
 
 ## 5. Final runs
 
-(below, after the fresh clone)
+Fresh clone `/home/yves/.cache/hades-pluto-dev/stage2-retention/verify` of `stage2-retention` at `d440cf59` (the code of the head), fresh env from
+`dev/setup_env.sh`, NATS up, `PLUTO_REQUIRE_NATS=1`, `pytest tests`: **1021 passed, 5 skipped** in 307.6 s; with `PYTHONHASHSEED=1`:
+**1021 passed, 5 skipped** in 301.2 s (the skips are the poll tests that need a second writer, on buses that have none). No stream or
+consumer left on the server.
