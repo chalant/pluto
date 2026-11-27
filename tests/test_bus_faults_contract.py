@@ -15,8 +15,9 @@ messages a seed happens to hit (a delay still draws its length from the seed: th
 * a lost delivery leaves the number of deliveries of a message alone and breaks the tests that count attempts;
 * a set of tests survives every one of them: request and reply, close and cancel, argument checks, envelopes.
 
-Measured (both implementations, 83 contract tests, the hash-seed one left out): `delay` fails 9, `duplicate_publish` 54,
-`ack_lost` 52, `lose_delivery` 21, `crash` 44; 25 tests fail under none of them.
+Measured (both implementations, 88 contract tests, the hash-seed one left out; poll and topic tests included):
+`delay` fails 9, `duplicate_publish` 55, `ack_lost` 53, `lose_delivery` 22, `crash` 45; 28 tests fail under none of them
+(a 29th, `test_poll_finds_a_message_published_by_another_bus_of_the_same_log`, skips: no second writer).
 
 Run as `python -m tests.test_bus_faults_contract` it prints which tests fail under which fault, with the last line of
 the failure.
@@ -78,6 +79,7 @@ EXACTLY_ONCE = {
 # count the attempts of a message or the invocations of the handlers
 ATTEMPTS = {
     "test_nack_redelivers_before_the_next_message_of_the_lane",
+    "test_poll_reads_the_log_and_never_runs_a_handler",
     "test_dead_letter_after_max_attempts_and_the_lane_moves_on",
     "test_exception_is_a_nack_and_a_redelivery",
     "test_run_until_idle_drains_cascades_and_counts_invocations",
@@ -96,6 +98,7 @@ SURVIVORS = {
     "test_a_handler_can_cancel_its_own_subscription",
     "test_a_late_duplicate_reply_is_ignored",
     "test_a_request_that_cannot_be_published_leaves_no_subscription",
+    "test_a_bus_nobody_else_writes_to_has_nothing_to_poll",
     "test_ack_and_nack_apply_only_to_the_running_delivery",
     "test_an_empty_bus_is_idle",
     "test_cancel_after_close_is_a_no_op",
@@ -109,6 +112,7 @@ SURVIVORS = {
     "test_max_deliveries_stops_a_handler_loop",
     "test_on_reply_is_called_from_the_dispatch_loop",
     "test_protobuf_payloads_arrive_equal",
+    "test_poll_after_close_raises",
     "test_rank_must_be_an_int",
     "test_reply_carries_phase_and_schema_version",
     "test_request_gets_its_reply",
@@ -116,6 +120,7 @@ SURVIVORS = {
     "test_requests_of_one_producer_share_its_reply_inbox",
     "test_the_reply_topic_must_be_an_exact_topic",
     "test_the_request_keeps_the_receipt_of_its_latest_send",
+    "test_topics_with_whitespace_or_control_characters_are_refused_by_every_bus",
 }
 
 FACTORIES = {"memory": make_memory, "serializing": make_serializing}

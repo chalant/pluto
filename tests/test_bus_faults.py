@@ -18,20 +18,38 @@ import subprocess
 import sys
 import unittest
 
-from pluto.bus import BusClosed, BusError, NotIdle, Position, QueueFull, Start, reply, request
+from google.protobuf.timestamp_pb2 import Timestamp
+
+from pluto.bus import (
+    BusClosed,
+    BusError,
+    InMemoryBus,
+    LogBus,
+    NotIdle,
+    Position,
+    ProtobufCodec,
+    QueueFull,
+    Receipt,
+    SerializingBus,
+    Start,
+    reply,
+    request,
+)
 from pluto.bus.faults import FaultConfig, FaultKind, PublishFailed, SeededFaultBus
+from tests import nats_support
 from tests.test_bus_contract import (
     HASH_SEEDS,
     REPO,
     BusContract,
     Recorder,
     make_memory,
+    make_nats,
     make_serializing,
     publish,
     scenario_trace,
 )
 
-FACTORIES = {"memory": make_memory, "serializing": make_serializing}
+FACTORIES = {"memory": make_memory, "serializing": make_serializing, "nats": make_nats}
 
 # every fault the contract allows, at rates that hit a 120 message workload many times
 CHAOS = FaultConfig(
@@ -741,8 +759,8 @@ class FaultBusTests:
         self.assertEqual(self.rec.ids(), ["good"])
         refused = [f for f in bus.fault_log() if f.kind is FaultKind.RELEASE_FAILED]
         self.assertEqual([f.msg_id for f in refused], ["bad"])
-        with self.assertRaises(ValueError):  # not silently LATEST
-            bus.subscribe("t", self.rec.handler("again"), start=receipt.position)
+        with self.assertRaises(BusError):  # not silently LATEST
+            receipt.position
 
     def test_a_held_message_waits_while_the_inner_bus_is_full(self):
         bus = self.bus(0, FaultConfig(delay=1.0, max_delay=1), queue_capacity=2)
@@ -780,6 +798,103 @@ class FaultBusTests:
         bus.run_until_idle()
         self.assertEqual(self.rec.ids(), ["b"])
 
+    def test_without_release_on_poll_the_bus_is_networked_like_its_inner_bus_and_polls_nothing(self):
+        bus = self.bus(0, FaultConfig(delay=1.0, max_delay=3))
+        self.assertIs(bus.networked, False)  # run_until_idle leaves nothing held: nothing can arrive after it
+        bus.subscribe("t", self.rec.handler("s"))
+        publish(bus, "t", msg_id="m0")
+        self.assertEqual(bus.in_flight(), 1)
+        self.assertIs(bus.poll(30.0), False)  # at once, and it does not release: the next step does
+        self.assertEqual(bus.in_flight(), 1)
+        self.assertEqual(bus.run_until_idle(), 1)
+        self.assertEqual(bus.in_flight(), 0)
+
+    def test_with_release_on_poll_held_messages_arrive_only_when_the_caller_polls(self):
+        bus = self.bus(0, FaultConfig(delay=1.0, max_delay=3, release_on_poll=True))
+        self.assertIs(bus.networked, True)
+        bus.subscribe("t", self.rec.handler("s"))
+        for i in range(3):
+            publish(bus, "t", i, key="k%d" % i, ts=i, msg_id="m%d" % i)
+        self.assertEqual(bus.run_until_idle(), 0)  # idle here, three messages still on their way
+        self.assertEqual(bus.in_flight(), 3)
+        self.assertEqual(self.rec.calls, [])
+        polls = 0
+        while bus.in_flight():
+            self.assertTrue(bus.poll(0.0))
+            bus.run_until_idle()
+            polls += 1
+        self.assertLessEqual(polls, 3)
+        self.assertEqual(sorted(self.rec.ids()), ["m0", "m1", "m2"])
+        self.assertIs(bus.poll(0.0), False)  # nothing held, nothing to find
+
+    def test_a_poll_runs_no_handler(self):
+        bus = self.bus(0, FaultConfig(delay=1.0, max_delay=2, release_on_poll=True))
+        bus.subscribe("t", self.rec.handler("s"))
+        publish(bus, "t")
+        self.assertTrue(bus.poll(0.0))
+        self.assertEqual(self.rec.calls, [])
+        self.assertEqual(bus.run_until_idle(), 1)
+
+    def test_the_receipt_of_a_held_message_is_unresolved_until_its_position_is_asked_for(self):
+        bus = self.bus(0, FaultConfig(delay=1.0, max_delay=3))
+        bus.subscribe("t", self.rec.handler("s"))
+        receipt = publish(bus, "t", msg_id="held")
+        self.assertIsInstance(receipt, Receipt)
+        self.assertFalse(receipt.resolved)
+        self.assertEqual(bus.in_flight(), 1)
+        self.assertEqual(receipt.position.topic, "t")  # asking puts everything held into the log
+        self.assertTrue(receipt.resolved)
+        self.assertEqual(bus.in_flight(), 0)
+
+    def test_a_held_message_has_its_topic_checked_when_it_is_published(self):
+        bus = self.bus(0, FaultConfig(delay=1.0))
+        for topic in ("a b", "a\tb", "a.b\n", "a\x00b"):
+            with self.assertRaises(ValueError):
+                publish(bus, topic)
+        self.assertEqual(bus.in_flight(), 0)
+
+    def test_close_lets_the_error_of_the_inner_bus_through_after_clearing_what_is_held(self):
+        class Failing(InMemoryBus):
+            def close(self):
+                super().close()
+                raise RuntimeError("a message was lost")
+
+        bus = SeededFaultBus(Failing(), 0, FaultConfig(delay=1.0))
+        publish(bus, "t")
+        self.assertEqual(bus.in_flight(), 1)
+        with self.assertRaises(RuntimeError):
+            bus.close()
+        self.assertEqual(bus.in_flight(), 0)
+        with self.assertRaises(BusClosed):
+            bus.run_until_idle()
+
+    def test_publishing_does_not_ask_the_inner_bus_for_a_position_and_a_restart_does(self):
+        class Lazy(InMemoryBus):
+            """Receipts that resolve when asked, as a networked bus gives them."""
+
+            asked = 0
+
+            def publish(self, *args, **kwargs):
+                receipt = super().publish(*args, **kwargs)
+
+                def resolve():
+                    self.asked += 1
+                    return receipt.position
+
+                return Receipt(receipt.msg_id, resolve)
+
+        inner = Lazy()
+        bus = SeededFaultBus(inner, 0, FaultConfig())
+        self.addCleanup(bus.close)
+        sub = bus.subscribe("t", self.rec.handler("s"))
+        publish(bus, "t", msg_id="m0")
+        publish(bus, "t", msg_id="m1")
+        self.assertEqual(inner.asked, 0)  # the checkpoint holds the receipt of the first message, unresolved
+        bus.crash(sub)  # nothing settled yet: the restart resolves it and reads from the first message
+        self.assertEqual(inner.asked, 1)
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["m0", "m1"])
+
 
 class TransparentContract(BusContract):
     """The broker-neutral contract over the wrapper without faults: every test of the suite passes."""
@@ -810,6 +925,23 @@ class MemoryTransparentContract(TransparentContract, unittest.TestCase):
 class SerializingTransparentContract(TransparentContract, unittest.TestCase):
     implementation = "serializing"
     make_bus = staticmethod(transparent("serializing"))
+
+
+@nats_support.needs_server
+class JetStreamTransparentContract(TransparentContract, unittest.TestCase):
+    """The wrapper without faults over the log-backed bus on NATS: still the whole contract, `networked` and `poll`
+    included."""
+
+    implementation = "nats"
+    make_bus = staticmethod(transparent("nats"))
+
+    def attach(self, bus):
+        """Another bus on the same log, as another process would build it."""
+        namespace = bus._inner._inner._log.namespace
+        return SerializingBus(
+            LogBus(nats_support.jetstream.JetStreamLog(namespace, create=False), max_attempts=3),
+            ProtobufCodec({"timestamp": Timestamp}),
+        )
 
 
 if __name__ == "__main__":

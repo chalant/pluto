@@ -76,14 +76,22 @@ Rules of the wrapper:
   uses them only where a fault is on: two configurations that differ in one probability take the same stream, so one
   fault can be dialled up or down while the rest of a scenario stays the same.
 * Delayed and duplicated publishes live in the wrapper until they are released; the returned `Receipt` of a delayed
-  one holds a position that is resolved when it reaches the log, and `subscribe` accepts it as `start` (`ValueError`
-  if the message was dropped on release).
+  one is unresolved: asking for its `position` puts everything held into the log (a barrier, like `subscribe`) and
+  returns the inner bus's position (`BusError` if the message was dropped on release).
 * `subscribe` is a barrier: everything held is first put into the inner bus's log (a message published before a
   subscription started is never delivered to it at `Start.LATEST`, as without faults). Every `Request` subscribes to
   its reply topic, so every request is a barrier too, and the delays of earlier publishes end there; with the inner
   bus full the barrier can raise `QueueFull` where the bare inner bus would not.
 * `step` and `run_until_idle` first release what is due, and when the inner bus is idle they skip ahead in time to
   what is held, so a delayed message is always eventually delivered and "idle" means nothing is pending anywhere.
+  Then nothing can arrive after `run_until_idle` returned, so `networked` is that of the inner bus (False over
+  `InMemoryBus`) and `PhaseDriver` treats a missing done as the immediate error it is.
+* `FaultConfig(release_on_poll=True)` is the other mode: `step` never skips ahead, `run_until_idle` returns when the
+  inner bus is idle although messages are held, and they arrive only when the caller `poll`s (a poll skips ahead to the
+  next held message and releases what is due). The bus is then `networked` (True), because messages can arrive after
+  idle: `PhaseDriver` waits for the expected dones with `poll`, as for a participant in another process. This is the
+  mode that tests what a driver that waits does with a late done; over an in-memory inner bus it is the only way
+  to make a delay outlive a `run_until_idle`.
 * The wrapper owns `seq` (per producer, from 1, like the in-memory bus) so that the receipt of a held message has its
   final `msg_id`.
 * Injected redeliveries (`ack_lost`, `lose_delivery`) happen at most `max_redeliveries` times per message and
@@ -100,6 +108,7 @@ Rules of the wrapper:
 import enum
 import random
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from heapq import heappop, heappush
 from typing import Any, NamedTuple
@@ -180,6 +189,7 @@ class FaultConfig:
     mute: float = 0.0
     reorder_within_lane: float = 0.0  # contract-violating
     contract_violating: bool = False  # must be True to use the contract-violating faults
+    release_on_poll: bool = False  # held messages arrive only when the caller polls: the bus is `networked`
 
     def __post_init__(self) -> None:
         for name in (
@@ -200,15 +210,17 @@ class FaultConfig:
                 raise ValueError(f"{name} must be an int of at least {1 if name == 'max_delay' else 0}, got {value!r}")
         if self.reorder_within_lane and not self.contract_violating:
             raise ValueError("reorder_within_lane violates the contract: set contract_violating=True to use it")
+        if self.release_on_poll.__class__ is not bool:
+            raise ValueError(f"release_on_poll must be a bool, got {self.release_on_poll!r}")
 
 
 class _Pending:
-    """The token of the position of a held message: filled in when the message reaches the inner bus's log."""
+    """What a receipt of a held message waits for: the inner bus's receipt, once the message reached its log."""
 
-    __slots__ = ("position",)
+    __slots__ = ("receipt",)
 
     def __init__(self) -> None:
-        self.position: Position | None = None
+        self.receipt: Receipt | None = None
 
 
 class _Item:
@@ -247,7 +259,9 @@ class _Handle:
         self.exact = False  # an exact topic without a group: a crash can resume it from a position
         self.callback: Handler
         self.inner: Subscription
-        self.checkpoint: Position | Start | None = None  # where a restart resumes, None when not known (yet)
+        # where a restart resumes: a position, `Start.EARLIEST`, or the receipt of the first message logged after the
+        # subscription started at the end of the log; None while none of these is known
+        self.checkpoint: Position | Start | Receipt | None = None
         self.crashes = 0
         self.muted = False
         self.cancelled = False
@@ -410,7 +424,7 @@ class SeededFaultBus:
         queue = self._held.get(lane)
         if not hold and not queue:
             receipt = self._inner.publish(**args)  # a refusal leaves everything as it was
-            self._logged(topic, receipt.position)
+            self._logged(topic, receipt)
             if seq is None:
                 self._seq[producer_id] = assigned
         else:
@@ -432,7 +446,7 @@ class SeededFaultBus:
                 self._note(FaultKind.REORDERED, topic, key, final_id, detail=detail)
             else:
                 queue.append(item)
-            receipt = Receipt(final_id, Position(topic, pending))
+            receipt = Receipt(final_id, self._resolver(pending))
         if duplicate:
             self._dup_count += 1
             heappush(self._dups, (self._now + late, self._dup_count, args))
@@ -468,12 +482,24 @@ class SeededFaultBus:
                     raise
                 queue.popleft()
                 moved += 1
-                self._logged(item.args["topic"], receipt.position)
+                self._logged(item.args["topic"], receipt)
                 if item.pending is not None:
-                    item.pending.position = receipt.position
+                    item.pending.receipt = receipt
             if not queue:
                 del self._held[lane]
         return moved
+
+    def _resolver(self, pending: _Pending) -> Callable[[], Position]:
+        """What `Receipt.position` calls for a held message: put everything held into the log (like a subscription, it
+        is a barrier), then the position the inner bus gave it. `BusError` if the message was dropped on release."""
+
+        def resolve() -> Position:
+            self._flush()
+            if pending.receipt is None:
+                raise BusError("the message of this receipt was dropped before it reached the log")
+            return pending.receipt.position
+
+        return resolve
 
     def _next_due(self) -> int:
         due = [queue[0].due for queue in self._held.values()]
@@ -501,10 +527,6 @@ class SeededFaultBus:
     ) -> Subscription:
         self._check_open()
         self._flush()  # what was published before the subscription is in the log before it starts
-        if isinstance(start, Position) and isinstance(start.token, _Pending):
-            if start.token.position is None:
-                raise ValueError("the message of this receipt was dropped before it reached the log")
-            start = start.token.position
         handle = _Handle(len(self._subscriptions) + 1, topic_or_pattern, handler, rank)
         handle.callback = lambda delivery: self._deliver(handle, delivery)
         handle.inner = self._inner.subscribe(topic_or_pattern, handle.callback, group=group, start=start, rank=rank)
@@ -517,11 +539,12 @@ class SeededFaultBus:
         self._subscriptions.append(handle)
         return handle
 
-    def _logged(self, topic: str, position: Position) -> None:
-        """A message reached the inner bus's log: where a subscription that started at the end of the log resumes."""
+    def _logged(self, topic: str, receipt: Receipt) -> None:
+        """A message reached the inner bus's log: where a subscription that started at the end of the log resumes. The
+        receipt stays unresolved until a restart needs its position (a networked bus does not wait in `publish`)."""
         for handle in self._waiting.pop(topic, ()):
             if handle.checkpoint is None:
-                handle.checkpoint = position
+                handle.checkpoint = receipt
 
     # delivery
 
@@ -571,12 +594,16 @@ class SeededFaultBus:
         finally:
             self._in_handler = False
 
+    def _resume_point(self, handle: _Handle) -> Position | Start | None:
+        point = handle.checkpoint
+        return point.position if isinstance(point, Receipt) else point
+
     def _restart(self, handle: _Handle) -> bool:
         """Subscribe a replacement at the checkpoint, then cancel the old subscription. False when the replay does not
         fit in the inner bus (`QueueFull`): nothing changed then."""
         try:
             replacement = self._inner.subscribe(
-                handle.topic, handle.callback, start=handle.checkpoint, rank=handle.rank
+                handle.topic, handle.callback, start=self._resume_point(handle), rank=handle.rank
             )
         except QueueFull:
             return False
@@ -613,6 +640,28 @@ class SeededFaultBus:
 
     # dispatch
 
+    @property
+    def networked(self) -> bool:
+        """True when a message can arrive after `run_until_idle` returned: when the inner bus is networked, or with
+        `FaultConfig.release_on_poll`, where held messages arrive only when the caller polls (the driver then waits
+        for them, as for a remote participant). Otherwise `run_until_idle` skips ahead in time until nothing is held,
+        so when it returns nothing else can arrive, which is what `networked` False tells `PhaseDriver`: a missing
+        done is then an immediate error, and it is one."""
+        return self._cfg.release_on_poll or self._inner.networked
+
+    def poll(self, timeout: float = 0.0) -> bool:
+        """Release what is held that is due (with `release_on_poll`: skip ahead in time to the next held message and
+        release what is due then), then poll the inner bus. True when either moved a message into a queue. Never runs a
+        handler, never sleeps (the wrapper has no clock; `timeout` goes to the inner bus). Not networked: False, at
+        once, nothing to read."""
+        self._check_open()
+        if not self.networked:
+            return False
+        if self._cfg.release_on_poll and (self._held or self._dups):
+            self._now = max(self._now, self._next_due())
+        moved = self._release() > 0
+        return self._inner.poll(0.0 if moved else timeout) or moved
+
     def step(self) -> bool:
         self._check_open()
         if self._in_handler:
@@ -622,8 +671,8 @@ class SeededFaultBus:
             if self._inner.step():
                 self._now += 1
                 return True
-            if not self._held and not self._dups:
-                return False
+            if self._cfg.release_on_poll or (not self._held and not self._dups):
+                return False  # what is held arrives when the caller polls
             due = self._next_due()
             if due > self._now:
                 self._now = due
@@ -639,7 +688,8 @@ class SeededFaultBus:
         count = 0
         while True:
             if max_deliveries is not None and count >= max_deliveries:
-                self._flush()
+                if not self._cfg.release_on_poll:
+                    self._flush()
                 self._inner.run_until_idle(0)  # raises NotIdle when something is pending
                 return count
             if not self.step():
