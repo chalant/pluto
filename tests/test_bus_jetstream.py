@@ -3,20 +3,27 @@
 attached to the same stream (another process) resumes from a position and sees what others write, a lost message is an
 error, the order of S3 is reproduced across processes when the producers are waited for.
 
-They need a NATS server with JetStream at ``PLUTO_NATS_URL`` (default nats://127.0.0.1:4222) and are skipped without one.
-Each test makes its own stream and deletes it.
+They need a NATS server with JetStream at ``PLUTO_NATS_URL`` (default nats://127.0.0.1:4222) and are skipped without one
+(failures with ``PLUTO_REQUIRE_NATS=1``, see ``tests/nats_support.py``). Each test makes its own stream and deletes it.
 """
+import gc
 import multiprocessing
+import threading
 import time
 import unittest
+import uuid
+import warnings
+from unittest import mock
 
-import nats
+from tests import nats_support
 
-from pluto.bus import BusError, JsonCodec, Position, SerializingBus, Start
-from pluto.bus.jetstream import DEFAULT_URL, JetStreamLog, server_available
-from pluto.bus.log import LogBus
+nats_support.require_module()
 
-needs_server = unittest.skipUnless(server_available(), 'no NATS server at ' + DEFAULT_URL)
+import nats  # noqa: E402
+
+from pluto.bus import BusError, JsonCodec, Position, SerializingBus, Start  # noqa: E402
+from pluto.bus.jetstream import DEFAULT_URL, JetStreamLog, server_available  # noqa: E402
+from pluto.bus.log import LogBus  # noqa: E402
 
 
 def put(bus, topic='t', payload=b'x', **fields):
@@ -33,7 +40,7 @@ class ServerTests(unittest.TestCase):
             JetStreamLog(url='nats://127.0.0.1:1')
 
 
-@needs_server
+@nats_support.needs_server
 class JetStreamBusTests(unittest.TestCase):
     def log(self, *args, **kwargs):
         log = JetStreamLog(*args, **kwargs)
@@ -183,7 +190,53 @@ class JetStreamBusTests(unittest.TestCase):
         with self.assertRaises(BusError):
             receipt.position
 
-        bus.close()  # still closes
+        with self.assertRaises(BusError):  # the failure is not swallowed at the end either; the cleanup was done
+            bus.close()
+
+        bus.close()  # idempotent
+
+    def test_close_raises_a_message_the_broker_refused_that_nobody_read_back(self):
+        log = self.log(drop_on_close=False)
+        bus = LogBus(log)
+
+        async def delete():
+            nc = await nats.connect(DEFAULT_URL)
+            await nc.jetstream().delete_stream(log.namespace)
+            await nc.close()
+
+        log._io.call(delete(), 10)
+        put(bus)  # the last message of a run, never read
+
+        with self.assertRaises(BusError):
+            bus.close()
+
+        bus.close()
+
+    def test_a_failed_attach_leaves_nothing_behind(self):
+        threads = {t for t in threading.enumerate() if t.name == 'jetstream-log'}
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')  # an unclosed loop or a task destroyed while pending would show here
+
+            with self.assertRaisesRegex(BusError, 'NATS'):
+                JetStreamLog('nostream' + uuid.uuid4().hex[:8], create=False)
+
+            gc.collect()
+
+        self.assertEqual({t for t in threading.enumerate() if t.name == 'jetstream-log'}, threads)
+
+    def test_a_failed_open_deletes_the_stream_it_created(self):
+        namespace = 'failed' + uuid.uuid4().hex[:8]
+
+        async def refuse(*args, **kwargs):
+            raise RuntimeError('no consumer for you')
+
+        with mock.patch('nats.js.client.JetStreamContext.pull_subscribe', refuse):
+            with self.assertRaises(BusError):
+                JetStreamLog(namespace)
+
+        with self.assertRaises(BusError):  # the stream is gone: attaching to it fails
+            JetStreamLog(namespace, create=False)
 
     def test_closing_sends_what_was_published(self):
         log = self.log(drop_on_close=False)
@@ -223,7 +276,7 @@ def _producer(namespace, name, count, go, finished):
     bus.close()
 
 
-@needs_server
+@nats_support.needs_server
 class AcrossProcessesTests(unittest.TestCase):
     def test_the_order_of_s3_is_reproduced_when_the_consumer_waits_for_the_producers(self):
         """Four processes publish messages of the same logical times: arrival order differs from run to run, the
@@ -239,7 +292,8 @@ class AcrossProcessesTests(unittest.TestCase):
             context = multiprocessing.get_context('spawn')
             go, finished = context.Event(), context.Queue()
             processes = [
-                context.Process(target=_producer, args=(consumer_log.namespace, name, count, go, finished))
+                context.Process(
+                    target=_producer, args=(consumer_log.namespace, name, count, go, finished), daemon=True)
                 for name in names]
 
             try:
@@ -262,6 +316,11 @@ class AcrossProcessesTests(unittest.TestCase):
             finally:
                 for process in processes:
                     process.join(10)
+
+                    if process.is_alive():  # a failed test leaves no producer behind
+                        process.terminate()
+                        process.join(5)
+
                 consumer.close()
 
             traces.append(seen)

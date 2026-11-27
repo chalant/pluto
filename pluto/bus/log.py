@@ -22,7 +22,9 @@ What differs from the in-memory bus (and from the interface's first draft, `plut
   and `subscribe` reads the whole log first.
 * Each bus mirrors the whole log of its namespace from the start, as the in-memory bus keeps its logs. A `Position` is
   the broker's position (a stream sequence, an offset), so a bus attached to the same namespace later, in another process,
-  resumes from a stored position. Retention, trimming and the mirror's size are open.
+  resumes from a stored position. Retention, trimming and the mirror's size are open: a bus that attaches late to a very
+  long stream reads all of it before its first call returns, and the `Log` bounds that read (`JetStreamLog`: its
+  `timeout`, 30 s by default, per request), so a history too long for it is a `BusError`, not a slow start.
 * Not here: the in-memory bus's `QueueFull` (a rule of the in-memory bus, `pluto.bus.__init__` S12); groups are in-process
   only (the members of a group share one reader); the payload is `bytes` (wrap the bus in `SerializingBus`).
 
@@ -36,14 +38,14 @@ from bisect import bisect_left
 from collections import deque
 from typing import Any, Protocol
 
-from pluto.bus.api import BusError, Envelope, NotIdle, Position, Receipt, exact_topic
+from pluto.bus.api import BusError, Envelope, Position, Receipt, exact_topic
 from pluto.bus.memory import InMemoryBus, _check_fields, _is_int
 
 
 class Log(Protocol):
     """A durable, totally ordered log of one run. Positions are ints, increasing in the order of the log."""
 
-    def append(self, topic: str, key: str, data: bytes) -> None:
+    def append(self, topic: str, data: bytes) -> None:
         """Send a message, in order after the ones appended before; does not wait for the broker."""
 
     def read_new(self, wait: float = 0.0, complete: bool = True) -> list[tuple[int, str, bytes, int | None]]:
@@ -117,7 +119,7 @@ class LogBus(InMemoryBus):
         data = encode(
             (msg_id, key, type, logical_ts, phase, producer_id, seq, correlation_id, reply_to, schema_version), payload
         )
-        self._log.append(topic, key, data)
+        self._log.append(topic, data)
         receipt = Receipt(msg_id, lambda: self._position_of_receipt(receipt))
         self._unresolved.append((receipt, topic))
         self._dirty = True
@@ -209,32 +211,28 @@ class LogBus(InMemoryBus):
             self._read(complete=False)  # what this bus sent: no need to ask the broker what else is there
         return super().step()
 
-    def run_until_idle(self, max_deliveries: int | None = None) -> int:
-        self._check_open()
-        self._check_not_handling()
-        if max_deliveries is not None and (not _is_int(max_deliveries) or max_deliveries < 0):
-            raise ValueError(f"max_deliveries must be a non-negative int or None, got {max_deliveries!r}")
-        count = 0
-        while True:
-            if max_deliveries is not None and count >= max_deliveries:
-                if self._dirty:
-                    self._read(complete=False)
-                if self._drop_stale():
-                    raise NotIdle(f"messages still pending after {count} deliveries")
-                return count
-            if not self.step():
-                return count
-            count += 1
+    def _has_pending(self) -> bool:
+        if self._dirty:
+            self._read(complete=False)
+        return super()._has_pending()
 
     def close(self) -> None:
-        was_closed = self._closed
-        if not was_closed:
-            try:
-                self._read(complete=False)  # the receipts get their positions
-            except BusError:
-                pass
+        """Closes the bus and the log, then raises the first failure: a message this bus sent that the broker refused
+        or never returned (a durable log must not lose the end of a run silently). Idempotent: the second call does
+        nothing."""
+        if self._closed:
+            return
+        failure = None
+        try:
+            self._read(complete=False)  # the receipts get their positions; what was sent is checked to have been taken
+        except BusError as error:
+            failure = error
         super().close()
-        if not was_closed:
-            self._tokens.clear()
-            self._unresolved.clear()
+        self._tokens.clear()
+        self._unresolved.clear()
+        try:
             self._log.close()  # which waits for what was appended
+        except BusError as error:
+            failure = failure or error
+        if failure is not None:
+            raise failure

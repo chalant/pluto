@@ -27,8 +27,8 @@ class WaitingLog(JetStreamLog):
         super().__init__(*args, **kwargs)
         self._held = []
 
-    def append(self, topic, key, data):
-        super().append(topic, key, data)
+    def append(self, topic, data):
+        super().append(topic, data)
         self._held.extend(super().read_new(0, False))
 
     def read_new(self, wait=0.0, complete=True):
@@ -50,6 +50,7 @@ class RunBench(ZiplinePlutoFixture):
 
         def make():
             built.append(make_bus())
+            self.addCleanup(built[-1].close)  # a failed run leaves no stream (close is idempotent)
             return built[-1]
 
         started = time.perf_counter()

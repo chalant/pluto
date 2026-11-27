@@ -16,6 +16,13 @@ own and in which order. So one request answers both questions, "did the broker t
 log", and the position of an own message is the stream sequence of its entry. A message the server refuses (no stream, no
 stream responder) or that does not come back within `timeout` seconds is a `BusError`.
 
+The connection does not reconnect (`allow_reconnect=False`): a lost connection, even a blip, is a `BusError` from the next
+call and the run aborts loudly; a silent reconnect could lose messages in flight, and recovery by replay is not built (the
+connection errors nats-py would log are not logged here, they are raised). `close()` finishes all its cleanup and then raises
+the first failure, so a message the broker refused cannot be lost silently at the end of a run. A bus that attaches late
+(`create=False`) to a long stream reads all of it at once, within `timeout` per request: a history longer than that is a
+`BusError`.
+
 JetStream stores to disk with a periodic fsync (`sync_interval`, two minutes by default on the server): a crash of the
 machine can lose acknowledged messages unless the server is configured otherwise. Retention is the stream's: unlimited here.
 """
@@ -55,6 +62,31 @@ def server_available(url: str = DEFAULT_URL, timeout: float = 0.5) -> bool:
         return False
 
 
+def jetstream_available(url: str = DEFAULT_URL, timeout: float = 3.0) -> bool:
+    """Whether a NATS server at the url answers and has JetStream enabled (what the tests that need a broker check:
+    a server without JetStream is as good as none). Must not be called from a running event loop."""
+    if not server_available(url, min(timeout, 1.0)):
+        return False
+
+    async def check() -> bool:
+        async def quiet(error):
+            pass
+
+        nc = await nats.connect(url, connect_timeout=timeout, allow_reconnect=False, error_cb=quiet)
+        try:
+            await nc.jetstream(timeout=timeout).account_info()
+            return True
+        except Exception:
+            return False
+        finally:
+            await nc.close()
+
+    try:
+        return asyncio.run(asyncio.wait_for(check(), timeout * 2))
+    except Exception:
+        return False
+
+
 class _Loop:
     """An asyncio event loop in a thread, for the synchronous callers."""
 
@@ -64,7 +96,12 @@ class _Loop:
         self._thread.start()
 
     def call(self, coroutine: Coroutine, timeout: float | None) -> Any:
-        return asyncio.run_coroutine_threadsafe(coroutine, self._loop).result(timeout)
+        future = asyncio.run_coroutine_threadsafe(coroutine, self._loop)
+        try:
+            return future.result(timeout)
+        except TimeoutError:
+            future.cancel()  # a coroutine that timed out must not go on next to the next call
+            raise
 
     def submit(self, function, *args) -> None:
         """Run `function` on the loop's thread, without waiting."""
@@ -74,6 +111,8 @@ class _Loop:
         if self._loop.is_running():
             self._loop.call_soon_threadsafe(self._loop.stop)
             self._thread.join(5)
+        if not self._thread.is_alive() and not self._loop.is_closed():
+            self._loop.close()
 
 
 class JetStreamLog:
@@ -133,21 +172,36 @@ class JetStreamLog:
         except Exception as error:
             raise BusError(f"cannot connect to NATS at {url}: {error.__class__.__name__}: {error}") from error
         js = nc.jetstream(timeout=self._timeout)
-        if create:
-            await js.add_stream(StreamConfig(name=self.namespace, subjects=[self._prefix + ">"], storage=storage))
-        consumer = f"{self.namespace}-{uuid.uuid4().hex[:8]}"
-        sub = await js.pull_subscribe(
-            self._prefix + ">",
-            durable=consumer,
-            stream=self.namespace,
-            config=ConsumerConfig(
-                ack_policy=AckPolicy.NONE, deliver_policy=DeliverPolicy.ALL, inactive_threshold=_CONSUMER_IDLE
-            ),
-        )
-        self._js = js
-        self._outbox: asyncio.Queue = asyncio.Queue()
-        self._unacknowledged: set = set()
-        self._sender = asyncio.create_task(self._send_loop())
+        created = False
+        try:
+            if create:
+                await js.add_stream(StreamConfig(name=self.namespace, subjects=[self._prefix + ">"], storage=storage))
+                created = True
+            consumer = f"{self.namespace}-{uuid.uuid4().hex[:8]}"
+            sub = await js.pull_subscribe(
+                self._prefix + ">",
+                durable=consumer,
+                stream=self.namespace,
+                config=ConsumerConfig(
+                    ack_policy=AckPolicy.NONE, deliver_policy=DeliverPolicy.ALL, inactive_threshold=_CONSUMER_IDLE
+                ),
+            )
+            self._js = js
+            self._outbox: asyncio.Queue = asyncio.Queue()
+            self._unacknowledged: set = set()
+            self._sender = asyncio.create_task(self._send_loop())
+        except BaseException:
+            # a failed open leaves nothing behind: not the stream this call made, not the connection
+            try:
+                if created:
+                    await js.delete_stream(self.namespace)
+            except BaseException:
+                pass
+            try:
+                await nc.close()
+            except BaseException:
+                pass
+            raise
         return nc, sub, consumer
 
     def _call(self, coroutine, timeout: float | None = None):
@@ -163,7 +217,7 @@ class JetStreamLog:
 
     # Log
 
-    def append(self, topic: str, key: str, data: bytes) -> None:
+    def append(self, topic: str, data: bytes) -> None:
         self._appended += 1
         self._io.submit(self._outbox.put_nowait, (self._prefix + topic, data, self._appended))
 
@@ -239,29 +293,45 @@ class JetStreamLog:
             entries.append((message.metadata.sequence.stream, message.subject[prefix_length:], message.data, own))
 
     def close(self) -> None:
+        """Sends and waits for what was appended, deletes the consumer (and the stream, `drop_on_close`), closes the
+        connection and the loop, then raises the first failure: a message the server refused or did not acknowledge, or
+        a cleanup that failed. Idempotent: the second call does nothing."""
         if self._closed:
             return
         self._closed = True
+        failure = None
         try:
-            self._call(self._shutdown())
-        except BusError:
-            pass
+            failure = self._call(self._shutdown(), self._timeout * 3)
+        except BusError as error:
+            failure = error
         finally:
             self._io.stop()
+        if failure is not None:
+            raise failure
 
-    async def _shutdown(self) -> None:
-        # what was appended is sent and acknowledged before the connection goes
+    async def _shutdown(self) -> BusError | None:
+        """Everything is closed whatever fails; returns the first failure instead of raising it."""
         loop = asyncio.get_running_loop()
         end = loop.time() + self._timeout
         while (not self._outbox.empty() or self._unacknowledged) and loop.time() < end:
             await asyncio.sleep(0.002)
+        failure = self._failure
+        if failure is None and (not self._outbox.empty() or self._unacknowledged):
+            failure = BusError("NATS did not acknowledge the messages this log appended before it closed")
         self._sender.cancel()
         await asyncio.gather(self._sender, return_exceptions=True)
         try:
-            await self._js.delete_consumer(self.namespace, self._consumer)
-            if self._drop_on_close:
-                await self._js.delete_stream(self.namespace)
-        except NotFoundError:
-            pass
+            try:
+                await self._js.delete_consumer(self.namespace, self._consumer)
+                if self._drop_on_close:
+                    await self._js.delete_stream(self.namespace)
+            except NotFoundError:
+                pass
+            except Exception as error:
+                failure = failure or BusError(f"NATS cleanup failed: {error.__class__.__name__}: {error}")
         finally:
-            await self._nc.close()
+            try:
+                await self._nc.close()
+            except Exception as error:
+                failure = failure or BusError(f"NATS close failed: {error.__class__.__name__}: {error}")
+        return failure
