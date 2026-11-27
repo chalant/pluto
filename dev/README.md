@@ -71,8 +71,11 @@ Messages carry `logical_ts` = the clock time of the tick in nanoseconds and `pha
 topic `phase.done.<phase>`; the controller listens to `phase.done.>`, a participant only to the phases it needs) has the rank plus one. Every payload is a protobuf message (`protos/phases.proto` and the
 existing `ClockEvent`, `BrokerState`, `OrderBatch`), so a `SerializingBus(inner, phases.codec())` carries
 a whole run through bytes with identical results (`tests/test_pluto_phases_run.py`). A participant's failure is caught
-where it happens, logged with its traceback and reported in its `done` (the bus redelivers a handler that raises, and a
-phase is not idempotent).
+where it happens, logged with its traceback and reported in its `done`. The phases are idempotent: every message has a
+deterministic `msg_id` and carries the driver's step (its correlation id), a receiver ignores a copy, a publisher retries a
+`PublishFailed` with the same id (`pluto/control/phases.py`), so a duplicate delivery, a copy published later, a restart of a
+consumer and a failed or ambiguous publish give the identical result (`tests/test_bus_faults_runs.py`,
+`STAGE2_IDEMPOTENT_PROGRESS.md`); a participant that never answers is still a `PhaseError`.
 
 The bus of a run can be a networked one: `StrategyManager(..., bus=SerializingBus(LogBus(JetStreamLog()), phases.codec()))`
 (`pluto/bus/log.py`, `pluto/bus/jetstream.py`, a NATS server with JetStream; `STAGE2_BUS_PROGRESS.md`). On it the controller's

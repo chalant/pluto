@@ -32,6 +32,8 @@ class BrokerParticipant(object):
 
         # the submit event that is waiting for the batches of orders it names (networked bus), if any
         self._waiting = None
+        # the ids of the phase events handled in this tick: a copy is ignored (see ``phases.Handled``)
+        self._handled = phases.Handled()
         # the batches of orders the bus gave up on that nobody reported yet, and how many dead letters were looked at
         self._dead = []
         self._letters_seen = 0
@@ -44,13 +46,18 @@ class BrokerParticipant(object):
 
     def _on_book(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        if not self._handled.first(phases.step_of(envelope), envelope.msg_id):
+            return  # a copy of the book event: the book is written once (revalue compounds returns)
+
         phases.report(
             self._bus,
             phases.BOOK,
             envelope.logical_ts,
             phases.BROKER_ID,
             lambda: self._book(envelope.payload),
-            log)
+            log,
+            answers=envelope)
 
     def _book(self, event) -> None:
         """The writes of the book for one signal, in the order the controller made them. The book is brought up to
@@ -95,22 +102,27 @@ class BrokerParticipant(object):
 
     def _on_account(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        if not self._handled.first(phases.step_of(envelope), envelope.msg_id):
+            return  # a copy of the account event: the states are sent once
+
         phases.report(
             self._bus,
             phases.ACCOUNT,
             envelope.logical_ts,
             phases.BROKER_ID,
-            lambda: self._account(envelope.payload, envelope.logical_ts),
-            log)
+            lambda: self._account(envelope.payload, envelope.logical_ts, envelope),
+            log,
+            answers=envelope)
 
-    def _account(self, event, logical_ts) -> None:
+    def _account(self, event, logical_ts, envelope) -> None:
         """The broker state of each strategy, in registration order: its fills (collected from the book's stream since
         the last tick) and the last sale prices of the tick, sent on the strategy's own topic."""
         manager = self._manager
 
         # a batch that arrived for a tick that was closed is an error (counted by the manager, not applied), not a
         # silent drop; the stale-batch filter of the manager (``receive_orders``) takes only the batches of this tick
-        late = self._late_batches()
+        late = self._batch_problems()
 
         if late:
             raise phases.PhaseError('; '.join(late))
@@ -121,9 +133,12 @@ class BrokerParticipant(object):
             state = manager.broker_states[process_id]
             state.last_sale_prices.extend(event.last_sale_prices)
 
-            self._bus.publish(
+            phases.publish_with_retry(
+                self._bus,
                 phases.account_topic(process_id),
                 state,
+                msg_id=phases.account_msg_id(process_id, envelope.msg_id),
+                correlation_id=envelope.correlation_id,
                 type=phases.message_type(state),
                 logical_ts=logical_ts,
                 producer_id=phases.BROKER_ID,
@@ -158,10 +173,15 @@ class BrokerParticipant(object):
             or manager.received_batches(runtime.participant) < runtime.batches
             for runtime in announced)
 
-    def _late_batches(self) -> list[str]:
-        """The batches that arrived for a tick that was already closed, counted by the manager (it does not apply them)."""
+    def _batch_problems(self) -> list[str]:
+        """The batches that arrived for a tick that was already closed (counted by the manager, it does not apply them),
+        and the copies of a batch that contradict it."""
+        manager = self._manager
+
         return ['{} sent a batch of {} orders for {}, which arrived after its tick closed'.format(
-            process_id, orders, pd.Timestamp(ts, tz='UTC')) for process_id, ts, orders in self._manager.take_late_batches()]
+            process_id, orders, pd.Timestamp(ts, tz='UTC')) for process_id, ts, orders in manager.take_late_batches()
+        ] + ['{} sent two batches of orders under the id {} that differ'.format(process_id, msg_id)
+             for process_id, msg_id in manager.take_conflicting_batches()]
 
     def _dead_batches(self) -> list[str]:
         """The batches of orders the bus gave up on (dead-lettered) since the last call, as the problems to report."""
@@ -173,12 +193,17 @@ class BrokerParticipant(object):
             letter.envelope.key, letter.attempts, letter.error_type, letter.error_message) for letter in new]
 
     def _check_orders(self, announced, dead) -> None:
-        problems = dead + self._count_problems(announced) + self._late_batches()
+        problems = dead + self._count_problems(announced) + self._batch_problems()
 
         if problems:
             raise phases.PhaseError('; '.join(problems))
 
     def _on_submit(self, delivery: Delivery) -> None:
+        envelope = delivery.envelope
+
+        if not self._handled.first(phases.step_of(envelope), envelope.msg_id):
+            return  # a copy of the submit event: the orders reach the book once
+
         self._waiting = delivery.envelope
         self._submit_when_ready()
 
@@ -207,7 +232,8 @@ class BrokerParticipant(object):
         self._waiting = None
         dead, self._dead = self._dead, []
         phases.report(
-            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced, dead), log)
+            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced, dead), log,
+            answers=envelope)
 
     def _submit(self, announced, dead) -> None:
         """The orders the strategies sent in this tick reach the book, by strategy in registration order; then the
