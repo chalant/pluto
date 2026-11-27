@@ -7,11 +7,11 @@ instead of a clean abort. No change to any result; the original test files and s
 
 ## Status
 
-- [ ] 1. design (this file, before code)
-- [ ] 2. deterministic `msg_id`s, publisher retries
-- [ ] 3. receiver-side idempotence (participants, endpoint, manager, driver)
-- [ ] 4. tests: unit tests per dedup point, whole runs under faults
-- [ ] 5. measurements, final run
+- [x] 1. design (this file, before code)
+- [x] 2. deterministic `msg_id`s, publisher retries
+- [x] 3. receiver-side idempotence (participants, endpoint, manager, driver)
+- [x] 4. tests: unit tests per dedup point, whole runs under faults
+- [ ] 5. final run from a fresh clone (see the end)
 
 ## 1. Design
 
@@ -78,3 +78,81 @@ what tells a copy from the message after it. Two refinements keep real faults de
 * More than `PUBLISH_ATTEMPTS` consecutive publish failures: `PhaseError`.
 * A late **redelivery** across lanes after the tick closed is tolerated by the "older tick" rule, but the fault bus does not model it
   (its redeliveries are immediate, see `STAGE2_FAULTBUS_PROGRESS.md`): not tested.
+
+## 2. What was built (and one correction of the design)
+
+**Correction: a clock time is not a tick.** The first version of the ids (`<kind>/<clock time>/...`) failed on the fault-free run:
+`Controller.clock_update` is called more than once with the same clock time (for example the session start and the first bar of a
+day share it), so two clock events carried the same ids and the second was taken for a copy of the first. The identity of a
+message is therefore **(kind, clock time, the n-th drive of that phase and key at that clock time)**, and everything that answers an
+event derives its id from the **id of the event** it answers: `controller/<phase>/<clock ns>/<n>/<key>` for an event (`n` counted by
+the driver per phase and key, reset when the clock time advances), `<participant>/done/<phase>/<clock ns>/<event id>`,
+`broker/account/<process id>/<account event id>`, `<process id>/orders/<clock ns>/<trade event id>/<k>`. The sets of ids are kept per
+**clock time** (not per clock event): a late copy of the first event's message during the second is still recognised. "Older" in the
+rule above means an earlier clock time.
+
+| Piece | Change |
+|---|---|
+| `pluto/control/phases.py` | `phase_msg_id`, `done_msg_id`, `account_msg_id`, `orders_msg_id`/`orders_msg_prefix`; `publish_with_retry` (same id, `PUBLISH_ATTEMPTS` = 10, then `PhaseError` naming id and topic); `Handled` (ids of the clock time in progress, membership only); `publish_done`/`fail`/`report` take `answers` (the event answered); `PhaseDriver`: the phase event is published with retry and its id, dones are collected once (`_done_ids` per clock time with their content, a copy of a closed clock time from a participant already accepted is ignored, a contradicting done is a problem), batches counted once (`_batch_ids`, kept for the current clock time) |
+| `controller/participants.py` | `BrokerParticipant`: book, account and submit events handled once (`Handled`), the account states published with retry under `account_msg_id`, dones carry the event id |
+| `processes/endpoint.py` | `RuntimeEndpoint`: broker states and trade events handled once; `send_orders` publishes with retry under `orders_msg_id` (trade event id, batch number); dones carry the event id |
+| `controller/process_manager.py` | `receive_orders(session_id, batch, msg_id=None)`: a copy of a batch of this clock time is ignored, also after the tick closed; a batch of an earlier clock time under the deterministic id of that process is a copy; any other batch of a closed tick is a late batch as before |
+| `broker_service/`, `finance/metrics/consumer.py` | **no change**: the book stream is not on the bus; `StreamMetrics` already skips a sequence it folded (observation point included) and `stream.fold` refuses gaps; a pinning test (`StreamTests`). The book phase runs once, so `observe` and the book writes are not repeated |
+| the bus | **no change** (the contract and every bus module untouched): `PublishFailed` was already exported by `pluto.bus` and documented as "retry with the same `msg_id`" |
+
+Not dedup-protected on purpose: a muted participant (no done is a failure), a done that is not from a known participant for an earlier
+tick (`sent a done of ...`), a second *different* done of a participant for the same event.
+
+### Changed assertions of existing tests (all in tests that are ours, none in the original result tests nor the bus contract)
+
+| Test | Before | Now |
+|---|---|---|
+| `test_pluto_phases.py` `test_done_twice_aborts` | two participants answer the same event: `a said done twice` | renamed `..._for_different_events_aborts`: the second answers another event (`answers='another event'`); and new `test_a_copy_of_a_done_is_ignored` for the same event. `FakeParticipant` takes `answers` and, by default, answers the event it received |
+| `test_pluto_phase_participants.py` `test_a_batch_delivered_twice_aborts_the_run`, `test_a_batch_of_orders_delivered_twice_aborts_the_run` | the bus publishes the batch twice with its kwargs: `received 2 in 2` | the same message twice is now one batch: `test_a_batch_delivered_twice_is_one_batch`, `test_an_empty_batch_delivered_twice_is_one_batch`; the two abort tests keep their assertions with a second **distinct** batch (`FaultyBus.extra`, `test_a_batch_sent_twice_aborts_the_run`, `test_a_batch_of_orders_sent_twice_aborts_the_run`). `test_pluto_phase_order.py` runs them on the shuffled and arrival buses unchanged |
+| `tests/test_bus_faults_runs.py` | "identical, or a PhaseError" for each fault | rewritten: identical at rtol 0 for every fault but the muted participant, on three runs |
+
+## 3. Tests
+
+- `tests/test_pluto_idempotent.py` (28): `Handled`; `publish_with_retry` (retry with the same id, budget then `PhaseError`, other errors not retried); the driver (a retried event and its ambiguous copies, one done from three answers, two events of one clock time are two ids, a late copy of a closed tick's done ignored for a known participant and an error for a stranger, a contradicting done, a batch twice counted once); the participants and the endpoint on a fake book (book, account, broker state, trade, submit and batch events published twice change nothing); `receive_orders` (copy in the tick, after it, of an earlier clock time, another batch is late, two clock events at one clock time); the metrics stream. **Mutation check** (each dedup point patched out, one at a time): `Handled` -> 9 tests fail, the driver's `_on_done` -> 3, `_on_orders` -> 1, the manager's id check -> 5, `publish_with_retry` -> 4.
+- `tests/test_bus_faults_runs.py` (2 tests, 64 + 12 subtests, about 50 s): `buy_and_hold` (to 2008-01-25: orders and fills), `dividends` (a cash dividend on a position), `cancel_orders`; the default mode (2 seeds, 1 for `cancel_orders`) and `release_on_poll` (1 seed, two of the runs); each of delay, lost delivery, duplicate delivery, late duplicate, crash and resume, publish failure, ambiguous publish failure: **identical frame at rtol 0 / atol 0**, and the fault must be in the fault log; the muted participant: `PhaseError` (`no done from ...` or `no batch of orders from ...`), never a frame, never a hang (alarm).
+
+## 4. Result per fault (whole `buy_and_hold` 2008 to 2013, 7,312 ticks, `SeededFaultBus(SerializingBus(InMemoryBus))`, seeds 1 to 3)
+
+Before = `STAGE2_FAULTBUS_PROGRESS.md` (the driver of `stage2-bus`, probability 0.1; delay 0.3). After = this branch, the same faults, both modes (`default`: `networked` False, `poll`: `release_on_poll`); counts of faults injected in a run are in the last column of the first seed.
+
+| Fault | Before (both modes) | After, default | After, poll | Faults injected (seed 1) |
+|---|---|---|---|---|
+| duplicate delivery (`ack_lost`) | `PhaseError: said done twice` or a stale done, 3/3 | **identical 3/3** | **identical 3/3** | 8,985 |
+| late duplicate publish (`duplicate_publish`) | `PhaseError` (done twice / stale done), 3/3 | **identical 3/3** | **identical 3/3** | 7,381 |
+| consumer crash and resume (`crash`) | `PhaseError: said done twice`, 3/3 | **identical 3/3** | **identical 3/3** | 24 (the cap: 3 restarts of each of 8 subscriptions) |
+| transient publish failure (`publish_fail`) | raw `PublishFailed` or `PhaseError`, 3/3 | **identical 3/3** | **identical 3/3** | 8,369 |
+| ambiguous publish failure (`publish_ack_lost`) | `PhaseError: said done twice`, raw `PublishFailed`, 3/3 | **identical 3/3** | **identical 3/3** | 8,538 |
+| delay | identical 3/3 | identical 3/3 | identical 3/3 | 22,674 |
+| lost delivery | identical 3/3 | identical 3/3 | identical 3/3 | 9,207 |
+| all of them at once (0.05 each, delay 0.2) | not run | **identical 3/3** | **identical 3/3** | 16,000 delayed, 4,000 to 5,000 of each other kind |
+| muted participant (`mute`) | `PhaseError: no done from ...` | `PhaseError: no done from ...` (at once) 3/3 | `PhaseError: no done from ... within 2 s` 3/3 | 1 |
+
+No wrong result and no hang in any of the 54 runs.
+
+## 5. Still not tolerated
+
+- A participant that never answers (`mute`, a process that died): a clean `PhaseError` naming it; nothing can stand for a message that
+  does not come.
+- A real process crash that loses the process's memory (the ids it handled, the strategy's state): the fault bus models a restart of
+  the **subscription** (the in-memory handlers survive); a runtime restarting empty needs its state restored, a later stage.
+- More than 10 consecutive failures of one publish: `PhaseError`. At 10 % that is a chance of 1e-10 per message (about 8e-6 per run).
+- A copy that differs from its original under the same id: the driver reports a contradicting done; for a batch or a state the first
+  one wins, silently.
+- A **late redelivery** across lanes (after an ack timeout) is covered by the "older clock time" rule but not tested: the fault bus
+  redelivers immediately.
+- Duplicates of messages the bus does not carry (the book stream, `Observed`) are not a bus fault here; they rely on the sequence
+  number the metrics consumer already checks.
+
+## 6. Measurements
+
+- Messages of a whole `buy_and_hold` run (2008 to 2013, `SerializingBus(InMemoryBus)` counting every `publish`): **75,888**, as on
+  `origin/master`: the ids and the retries add no message when nothing fails (counting script in the scratch directory).
+- Time of that run in memory: 5.7 s (`STAGE2_BUS_PROGRESS.md` has 4.4 and 3.7 s for it on another day; not re-measured on `master` here,
+  the machine is shared and the work added per message is a set lookup and a string format).
+- Suite: 995 passed, 5 skipped in 331 s on the development machine (959 in 291 s before, with 36 new tests; the whole-run test under
+  faults is about 50 s of the difference).

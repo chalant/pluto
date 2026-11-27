@@ -51,6 +51,17 @@ one of these, each explicit:
 * the order of the strategies is rebuilt from the registration order (``StrategyManager.new_orders``), not taken from the
   delivery order of their batches.
 
+Copies and retries. The bus delivers at least once and a publisher may have to publish again: a message must be harmless when it
+comes twice. Every message has a deterministic ``msg_id`` that says what it is, not how often it was sent (``phase_msg_id``,
+``done_msg_id``, ``account_msg_id``, ``orders_msg_id``; the done, the state and the batches derive theirs from the event they answer,
+so a clock time that carries several clock events keeps them apart); a publisher that gets ``PublishFailed`` publishes again with
+the same id (``publish_with_retry``, ``PUBLISH_ATTEMPTS`` times, then ``PhaseError``); a receiver ignores a copy: the participants
+and the endpoint keep the ids they handled at the clock time in progress (``Handled``) and ignore any message of an earlier one,
+the driver does the same for dones and batches, the strategy manager for batches (``StrategyManager.receive_orders``). That is
+enough because of the lock-step: the next clock time starts only when everything the last needed was handled, so what arrives for
+an earlier one is a copy. What stays an error: a participant that does not answer, a done from a participant the driver never
+heard of for another tick, a done that contradicts the one accepted under its id, a batch of a closed tick under another id.
+
 Payloads are protobuf messages (``protos/clock.proto``, ``broker.proto``, ``phases.proto``), so ``codec()`` serialises every
 one of them.
 """
@@ -256,7 +267,8 @@ def fail(
         log: logbook.Logger,
         answers: str = '') -> None:
     """Logs ``error``, which is being handled, with its traceback and reports it in a done: the controller aborts the
-    run, and the bus never redelivers the phase (a handler that raises is redelivered, a phase is not idempotent)."""
+    run. The failure is the answer to the event: a handler that raises would be redelivered, and a participant that
+    ignores the copy (``Handled``) would never answer it again."""
     log.exception('{} failed in {}', participant, phase.topic)
     publish_done(
         bus, phase, logical_ts, participant, error='{}: {}'.format(type(error).__name__, error), answers=answers)
