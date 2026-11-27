@@ -125,6 +125,13 @@ class SerializingBus:
     def run_until_idle(self, max_deliveries: int | None = None) -> int:
         return self._inner.run_until_idle(max_deliveries)
 
+    @property
+    def networked(self) -> bool:
+        return self._inner.networked
+
+    def poll(self, timeout: float = 0.0) -> bool:
+        return self._inner.poll(timeout)
+
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         """Dead letters with decoded payloads; one that cannot be decoded keeps its raw bytes."""
         letters = []

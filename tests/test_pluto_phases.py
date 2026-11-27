@@ -1,5 +1,6 @@
 """The phases of a run on the bus (pluto/control/phases.py): the lock-step of the controller on a bare bus with fake
 participants, and the serialisation of the payloads."""
+import time
 import unittest
 
 import logbook
@@ -150,6 +151,152 @@ class PhaseDriverTests(unittest.TestCase):
         self.bus.run_until_idle()
 
         self.assertEqual(order, ['phase.book', 'phase.trade', 'phase.submit'])
+
+
+class RemoteBus(InMemoryBus):
+    """An in-memory bus that looks networked to the driver: what a remote participant publishes is not in the bus
+    until it is polled (``arrive`` queues the publication, one per poll that finds something)."""
+
+    def __init__(self):
+        super().__init__()
+        self.arrivals = []
+        self.polls = 0
+
+    @property
+    def networked(self):
+        return True
+
+    def arrive(self, publish):
+        self.arrivals.append(publish)
+
+    def poll(self, timeout=0.0):
+        self.polls += 1
+
+        if not self.arrivals:
+            time.sleep(min(timeout, 0.005))
+            return False
+
+        self.arrivals.pop(0)()
+        return True
+
+
+class RemoteParticipant(object):
+    """Answers a phase through the bus's arrivals: ``late`` polls after the event, or never."""
+
+    def __init__(self, bus, name, phase, work=lambda: None, answers=True):
+        self.name = name
+        self.calls = 0
+        self._bus = bus
+        self._phase = phase
+        self._work = work
+        self._answers = answers
+
+        bus.subscribe(phase.topic, self._on_phase)
+
+    def _on_phase(self, delivery):
+        self.calls += 1
+        ts = delivery.envelope.logical_ts
+
+        if self._answers:
+            self._bus.arrive(lambda: phases.report(self._bus, self._phase, ts, self.name, self._work, LOG))
+
+
+class NetworkedPhaseDriverTests(unittest.TestCase):
+    """On a bus that other processes write to, the phase ends when the expected dones are in, not when it is idle."""
+
+    def setUp(self):
+        self.bus = RemoteBus()
+
+    def test_waits_for_dones_that_arrive_after_the_bus_went_idle(self):
+        participants = [RemoteParticipant(self.bus, name, phases.BOOK) for name in 'abc']
+        driver = phases.PhaseDriver(self.bus, timeout=10)
+
+        driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b', 'c'))
+
+        self.assertEqual([p.calls for p in participants], [1, 1, 1])
+        self.assertEqual(self.bus.arrivals, [])
+        self.assertGreaterEqual(self.bus.polls, 3)
+
+    def test_the_next_phase_does_not_see_the_dones_of_the_last(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+        RemoteParticipant(self.bus, 'a', phases.ACCOUNT)
+        driver = phases.PhaseDriver(self.bus, timeout=10)
+
+        driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+        driver.drive(phases.ACCOUNT, clock_event(), TS_NS, ('a',))
+
+    def test_a_participant_that_never_answers_fails_the_phase_after_the_deadline_naming_it(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+        RemoteParticipant(self.bus, 'b', phases.BOOK, answers=False)
+        driver = phases.PhaseDriver(self.bus, timeout=0.2)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, r'phase\.book at .*: no done from b within 0\.2 s') as raised:
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+        self.assertNotIn('no done from a', str(raised.exception))
+        self.assertGreaterEqual(time.monotonic() - started, 0.2)
+
+    def test_a_failure_ends_the_wait_at_once(self):
+        def work():
+            raise ValueError('the strategy broke')
+
+        RemoteParticipant(self.bus, 'a', phases.BOOK, work)
+        RemoteParticipant(self.bus, 'b', phases.BOOK, answers=False)
+        driver = phases.PhaseDriver(self.bus, timeout=60)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, 'a failed: ValueError: the strategy broke'):
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_a_done_of_another_phase_ends_the_wait_at_once(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK, answers=False)
+        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'late'))
+        driver = phases.PhaseDriver(self.bus, timeout=60)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, 'late sent a done of phase.trade'):
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_no_deadline_waits_for_a_slow_participant(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+
+        def slow():
+            time.sleep(0.05)
+
+        RemoteParticipant(self.bus, 'b', phases.BOOK, slow)
+
+        phases.PhaseDriver(self.bus, timeout=None).drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+    def test_a_message_that_is_already_in_the_bus_needs_no_poll(self):
+        FakeParticipant(self.bus, 'a', phases.BOOK)
+
+        phases.PhaseDriver(self.bus, timeout=10).drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual(self.bus.polls, 0)
+
+
+class InMemoryPhaseDriverTests(unittest.TestCase):
+    def test_a_missing_done_fails_at_once_whatever_the_deadline(self):
+        bus = InMemoryBus()
+        FakeParticipant(bus, 'a', phases.BOOK)
+        driver = phases.PhaseDriver(bus, timeout=60)
+        started = time.monotonic()
+
+        with self.assertRaisesRegex(PhaseError, r'no done from b$'):
+            driver.drive(phases.BOOK, clock_event(), TS_NS, ('a', 'b'))
+
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_the_bus_says_nothing_can_arrive_from_outside(self):
+        bus = SerializingBus(InMemoryBus(), phases.codec())
+
+        self.assertFalse(bus.networked)
+        self.assertFalse(bus.poll(10))
 
 
 class CodecTests(unittest.TestCase):

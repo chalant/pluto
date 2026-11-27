@@ -206,6 +206,17 @@ class Bus(Protocol):
         """Run `step` until nothing is pending (handlers may publish more). Returns the invocations run;
         raises `NotIdle` when `max_deliveries` is reached with messages still pending."""
 
+    @property
+    def networked(self) -> bool:
+        """True when messages can arrive that no handler of this bus object published (another process writes the
+        log). `run_until_idle` is then idle *here*: the caller that waits for an answer from outside `poll`s for it.
+        False in memory: when `run_until_idle` returns, nothing else can arrive."""
+
+    def poll(self, timeout: float = 0.0) -> bool:
+        """Read what other publishers put in the log since this bus last read it, waiting up to `timeout` seconds
+        for the first message when there is none. Returns True when messages were read (they are queued: `step` and
+        `run_until_idle` deliver them). Never runs a handler. Always False, at once, when not `networked`."""
+
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         """The dead-letter records so far, oldest first."""
 

@@ -827,6 +827,41 @@ class BusContract:
         publish(bus, "nobody-listens")
         self.assertEqual(bus.run_until_idle(), 0)
 
+    def test_poll_reads_the_log_and_never_runs_a_handler(self):
+        bus = self.bus()
+        bus.subscribe("t", self.rec.handler("s"))
+        publish(bus, "t")
+        self.assertIsInstance(bus.networked, bool)
+        self.assertIsInstance(bus.poll(0.0), bool)
+        self.assertEqual(self.rec.calls, [])
+        self.assertEqual(bus.run_until_idle(), 1)
+
+    def test_a_bus_nobody_else_writes_to_has_nothing_to_poll(self):
+        bus = self.bus()
+        if not bus.networked:
+            self.assertFalse(bus.poll(30.0))  # at once, the test would not end otherwise
+
+    def test_poll_finds_a_message_published_by_another_bus_of_the_same_log(self):
+        bus = self.bus()
+        other = getattr(self, "attach", lambda bus: None)(bus)
+        if other is None:
+            self.skipTest("a bus that is not networked has no other writer")
+        self.addCleanup(other.close)
+        bus.subscribe("t", self.rec.handler("s"))
+        bus.run_until_idle()
+        publish(other, "t", msg_id="from-other")
+        self.assertTrue(bus.poll(5.0))
+        self.assertEqual(self.rec.calls, [])
+        bus.run_until_idle()
+        self.assertEqual(self.rec.ids(), ["from-other"])
+        self.assertFalse(bus.poll(0.0))
+
+    def test_poll_after_close_raises(self):
+        bus = type(self).make_bus()
+        bus.close()
+        with self.assertRaises(BusClosed):
+            bus.poll()
+
     def test_max_deliveries_stops_a_handler_loop(self):
         bus = self.bus()
         bus.subscribe("ping", lambda d: publish(bus, "pong"))

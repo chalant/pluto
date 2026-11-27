@@ -1,9 +1,11 @@
 """The phases of a simulated run, on the bus.
 
 The controller owns the clock. At each tick it drives the run through phases: it publishes one event per phase on the
-phase's topic and waits, lock-step, until the bus is idle and every participant of the phase said ``done``. A missing
-``done`` (or one that carries an error) aborts the run with a ``PhaseError``; nothing waits for a timeout, so a run
-stays deterministic. Only the participants the controller expects are required: a ``done`` from an unexpected participant
+phase's topic and waits, lock-step, until every participant it expects said ``done`` (``PhaseDriver``): on the in-memory
+bus the participants answer while the bus runs, so a missing ``done`` is known when it is idle; on a networked bus the
+driver goes on reading the log until the dones are in, for at most a deadline of its own (the bus has no clock). A
+missing ``done`` (or one that carries an error) aborts the run with a ``PhaseError``. Only the participants the
+controller expects are required: a ``done`` from an unexpected participant
 is accepted (one for another phase or tick, or a doubled one, is an error). The order of the phases is the order the
 controller called its components before the bus:
 
@@ -28,6 +30,7 @@ runtime sends back), with the rank of the phase that makes them.
 Payloads are protobuf messages (``protos/clock.proto``, ``broker.proto``, ``phases.proto``), so ``codec()`` serialises every
 one of them.
 """
+import time
 from collections.abc import Callable, Iterable
 from typing import NamedTuple
 
@@ -65,6 +68,11 @@ SUBMIT = Phase('submit', 50)
 DONES = 'phase.done.>'
 # a done is dispatched right after the messages of its phase
 DONE_AFTER = 1
+
+# a phase on a networked bus waits this long (seconds) for its dones, then fails naming who is missing; the controller
+# polls the bus in slices of POLL_SLICE seconds
+DEFAULT_TIMEOUT = 300.0
+POLL_SLICE = 0.25
 
 ORDERS_TOPIC = 'strategy.orders'
 
@@ -157,17 +165,53 @@ def report(
 
 
 class PhaseDriver(object):
-    """The controller's side of the lock-step: publishes a phase event and checks the dones of the phase."""
+    """The controller's side of the lock-step: publishes a phase event and checks the dones of the phase.
 
-    def __init__(self, bus: Bus, producer_id: str = CONTROLLER_ID):
+    A phase is complete when every expected participant's done is in, not when the bus is idle. On the in-memory
+    bus the two are the same (when ``run_until_idle`` returns nothing else can arrive: a missing done is a
+    ``PhaseError`` at once). On a networked bus the dones come from other processes: the driver delivers what it has,
+    ``poll``s the bus for more and goes on until all are in, a participant failed, or ``timeout`` seconds passed
+    (``PhaseError`` naming who is missing). The deadline is the controller's: the bus has no clock."""
+
+    def __init__(self, bus: Bus, producer_id: str = CONTROLLER_ID, timeout: float | None = DEFAULT_TIMEOUT):
+        """
+        Parameters
+        ----------
+        timeout: float, optional
+            Seconds a phase may wait for its dones on a networked bus (``None``: no deadline); not used in memory.
+        """
         self._bus = bus
         self._producer_id = producer_id
+        self._timeout = timeout
         self._dones = []
 
         bus.subscribe(DONES, self._on_done)
 
     def _on_done(self, delivery: Delivery) -> None:
         self._dones.append((delivery.envelope.logical_ts, delivery.envelope.payload))
+
+    def _assess(self, phase: Phase, logical_ts: int, expected: Iterable[str]):
+        """What the dones so far say: the problems found, and the expected participants that have not reported."""
+        problems = []
+        seen = {}
+        reported = set()
+
+        for done_ts, done in self._dones:
+            if done.phase != phase.topic or done_ts != logical_ts:
+                problems.append('{} sent a done of {} at {}'.format(
+                    done.participant, done.phase, pd.Timestamp(done_ts, tz='UTC')))
+                continue
+
+            reported.add(done.participant)
+
+            if done.participant in seen:
+                problems.append('{} said done twice'.format(done.participant))
+            elif done.error:
+                problems.append('{} failed: {}'.format(done.participant, done.error))
+            else:
+                seen[done.participant] = done
+
+        return problems, sorted(set(expected) - set(seen)), set(expected) - reported
 
     def drive(
             self,
@@ -176,15 +220,16 @@ class PhaseDriver(object):
             logical_ts: int,
             expected: Iterable[str],
             key: str = '') -> None:
-        """Publishes ``payload`` on the topic of ``phase`` and runs the bus until it is idle. ``expected`` are the
-        participants that must say done; ``PhaseError`` if one did not, one failed, or the bus gave up on a delivery.
+        """Publishes ``payload`` on the topic of ``phase`` and runs the bus until every ``expected`` participant said
+        done (see the class); ``PhaseError`` if one did not, one failed, or the bus gave up on a delivery.
         A done of a participant that is not expected is accepted (policy: only the expected ones are required, a
         participant that joined late may answer); it is an error only if it is not of this phase and tick or is
         doubled."""
         bus = self._bus
-        dones = self._dones
-        dones.clear()
+        expected = tuple(expected)
+        self._dones.clear()
         letters = len(bus.dead_letters())
+        timed_out = False
 
         bus.publish(
             phase.topic,
@@ -194,25 +239,28 @@ class PhaseDriver(object):
             producer_id=self._producer_id,
             phase=phase.rank,
             key=key)
-        bus.run_until_idle()
 
-        problems = []
-        seen = {}
+        deadline = None if self._timeout is None else time.monotonic() + self._timeout
 
-        for done_ts, done in dones:
-            if done.phase != phase.topic or done_ts != logical_ts:
-                problems.append('{} sent a done of {} at {}'.format(
-                    done.participant, done.phase, pd.Timestamp(done_ts, tz='UTC')))
-            elif done.participant in seen:
-                problems.append('{} said done twice'.format(done.participant))
-            elif done.error:
-                problems.append('{} failed: {}'.format(done.participant, done.error))
-            else:
-                seen[done.participant] = done
+        while True:
+            bus.run_until_idle()
+            problems, missing, waiting = self._assess(phase, logical_ts, expected)
 
-        missing = sorted(set(expected) - set(seen))
+            if not waiting or problems or not bus.networked:
+                # complete, failed, or nothing else can arrive
+                break
+
+            wait = POLL_SLICE if deadline is None else min(POLL_SLICE, deadline - time.monotonic())
+
+            if wait <= 0:
+                timed_out = True
+                break
+
+            bus.poll(wait)
+
         if missing:
-            problems.append('no done from {}'.format(', '.join(missing)))
+            problems.append('no done from {}{}'.format(
+                ', '.join(missing), ' within {:g} s'.format(self._timeout) if timed_out else ''))
 
         for letter in bus.dead_letters()[letters:]:
             problems.append('the bus gave up on a message of {} after {} attempts: {}: {}'.format(

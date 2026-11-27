@@ -460,6 +460,15 @@ class InMemoryBus:
                 return count
             count += 1
 
+    @property
+    def networked(self) -> bool:
+        return False
+
+    def poll(self, timeout: float = 0.0) -> bool:
+        """Nothing can arrive from outside an in-memory bus: False at once."""
+        self._check_open()
+        return False
+
     def dead_letters(self) -> tuple[DeadLetter, ...]:
         self._check_open()
         return tuple(self._dead)
