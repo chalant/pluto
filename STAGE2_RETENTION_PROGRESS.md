@@ -197,4 +197,7 @@ checked afterwards and nothing else was touched that way.
 
 ### Final runs of the review fixes
 
-(below, after the fresh clone)
+Fresh clone `/home/yves/.cache/hades-pluto-dev/stage2-retention/verify` of `stage2-retention` at `08bc0939` (the code of the head; the head only adds
+this note), fresh env from `dev/setup_env.sh`, NATS up, `PLUTO_REQUIRE_NATS=1`, `pytest tests`: **1042 passed, 5 skipped** in 313.5 s; with
+`PYTHONHASHSEED=1`: **1042 passed, 5 skipped** in 368.1 s (the skips are the poll tests that need a second writer, on buses that have none). No
+stream or consumer left on the server.
