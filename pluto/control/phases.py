@@ -27,6 +27,24 @@ a ``done`` has the rank of its phase plus ``DONE_AFTER``. Data between participa
 (``strategy.account.<process id>``: the broker state for a runtime, ``strategy.orders``, key the process id: what the
 runtime sends back), with the rank of the phase that makes them.
 
+What a message may rely on. A run must give the same result on any legal run of the bus: the messages of one
+``(logical_ts, phase)`` from different producers may reach a reader in any order, and a reader may deliver in the order of
+the log instead of S3 (``tests/test_pluto_phase_order.py`` runs whole runs and the fake-book runs on buses that do both). So
+no handler relies on the order of messages of different producers inside a phase; what it needs from another producer is
+one of these, each explicit:
+
+* the ``done`` barrier: the controller publishes the next phase only after every expected ``done`` of the last one is in
+  the log, so everything a participant published before its ``done`` is before the next phase event (a log is a prefix:
+  a reader that sees the event has seen all of it). The writes of the book (``book``) and the broker states of the
+  tick (``account``) are ready for the next phase this way, and so are the batches of orders (``trade``) for ``submit``;
+* data on the receiver's own topic: a runtime applies the broker state it receives on ``strategy.account.<id>``, not
+  the controller's ``phase.account`` event, so it needs no order between the two;
+* counts: a runtime's ``trade`` done says how many orders and batches it sent, the broker side checks them against what
+  it received before it submits, so an orders message that was not handled (lost, doubled, stale) is a ``PhaseError``, never
+  a silent difference;
+* the order of the strategies is rebuilt from the registration order (``StrategyManager.new_orders``), not taken from the
+  delivery order of their batches.
+
 Payloads are protobuf messages (``protos/clock.proto``, ``broker.proto``, ``phases.proto``), so ``codec()`` serialises every
 one of them.
 """

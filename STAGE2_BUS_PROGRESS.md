@@ -13,7 +13,7 @@ Out of scope: components in separate processes and their registry, the fault-inj
 
 - [x] 1. `Receipt.position` without a synchronous acknowledgement
 - [x] 2. the controller waits for its expected dones
-- [ ] 3. explicit cross-producer dependencies inside a phase
+- [x] 3. explicit cross-producer dependencies inside a phase
 - [ ] 4. the NATS implementation
 - [ ] 5. measurements, final run
 
@@ -43,3 +43,27 @@ before); deadline over? stop; `poll`}. The deadline is the controller's (`PhaseD
 within 0.2 s` names who is missing. It is never used in memory. Tests: `tests/test_pluto_phases.py` (`NetworkedPhaseDriverTests`,
 a bus that looks networked and delivers what a remote participant publishes one poll at a time; `InMemoryPhaseDriverTests`);
 contract: 4 new tests for `networked`/`poll` (one skips on a bus that is not networked). Existing assertions changed: none.
+
+## Step 3: what a run relies on between producers of one phase
+
+Method: instead of only reading the code, `tests/test_pluto_phase_order.py` runs on buses that deliver in other legal orders
+than S3: `ShuffledBus` (a seeded random order inside each `(logical_ts, phase)`; per-lane FIFO kept) and `ArrivalBus` (strictly
+the order of publication). Whole runs (`buy_and_hold`, `cancel_orders`, `dividends`) and the fake-book tests of the strategy manager
+with three runtimes (`tests/test_pluto_phase_participants.py` `RunTests`, now with a `make_bus` hook, run again on both buses)
+give exactly the frame / the same calls. No result changed.
+
+Cross-producer dependencies found (message of one producer needed by another handler) and how each is made explicit:
+
+| # | Dependency | State before | Now |
+|---|---|---|---|
+| 1 | A runtime's account update needs the broker's state of the tick (the spike's worry: `strategy.account.<id>` from `broker` sorts before the controller's `phase.account` at the same `(ts, phase)` only by producer id) | already explicit: `RuntimeEndpoint` subscribes to its own `strategy.account.<id>` and ignores `phase.account`; no change | documented in `phases.py`; the shuffled and arrival runs prove it |
+| 2 | The runtime's trade needs its account state (and the book written) | the controller publishes the next phase only after every expected done of the last: barrier | the barrier of step 2 (a log is a prefix: a reader that sees the event has seen everything published before its `done`); documented |
+| 3 | Submit needs the batches of orders and the trade dones the broker side handled (`_sent`, `received_*`) | the counts in the trade done are checked at submit: a batch not handled is a `PhaseError` (loud), orders at `(ts,40)` < dones `(ts,41)` < submit `(ts,50)` | no change; same barrier; documented |
+| 4 | The stale-batch filter of `StrategyManager.receive_orders` needs `_global_ts` set by the account handler | account barrier before trade | no change (a wrong filter shows in the counts of 3) |
+| 5 | Order of the strategies in `new_orders` | rebuilt from the registration order (review fix H1) | tests of 3 runtimes run on both buses |
+| 6 | `PhaseDriver` dones | collected and judged as a set, order-insensitive | step 2 waits for the set |
+
+So no code had to change for this step: the dependencies were already explicit or protected by the barrier. What the step
+adds is the test that proves it (two orderings, whole runs and multi-runtime) and the explanation in the module docstring of
+`pluto/control/phases.py`. Not in scope and still open: the direct (non-bus) reads of the book by the controller's behavior and
+the metrics tracker (`STAGE1_PHASES_PROGRESS.md`, "Left open").

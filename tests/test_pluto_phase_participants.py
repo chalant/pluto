@@ -159,12 +159,15 @@ class FaultyBus(InMemoryBus):
 class RunTests(unittest.TestCase):
     """A manager with a fake book and a controller driving it through the phases."""
 
+    # the bus of the run: a subclass runs the same tests on a bus that delivers in another order
+    make_bus = FaultyBus
+
     def setUp(self):
         patch = mock.patch.object(process_manager.service, 'BrokerService', FakeBroker)
         patch.start()
         self.addCleanup(patch.stop)
 
-        self.bus = FaultyBus()
+        self.bus = self.make_bus()
         setup = types.SimpleNamespace(start=TS, capital=1000.0, data_frequency='minute', leverage=1.0)
         self.manager = process_manager.StrategyManager(None, setup, bus=self.bus)
         self.broker = self.manager.broker
