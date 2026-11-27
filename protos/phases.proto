@@ -6,7 +6,7 @@ import "protos/clock.proto";
 import "protos/broker.proto";
 
 // Payloads of the phase topics of a simulated run (pluto/control/phases.py).
-// The trade and submit phases carry a ClockEvent.
+// The trade phase carries a ClockEvent, the submit phase a SubmitEvent.
 
 // phase.book and phase.metrics: the signal of one calendar at a tick
 message SignalEvent {
@@ -19,6 +19,19 @@ message SignalEvent {
 message AccountEvent {
     ClockEvent clock = 1;
     repeated AssetPrice last_sale_prices = 2;
+}
+
+// what a runtime announced in its trade done: the orders and batches of orders it sent in the tick
+message RuntimeOrders {
+    string participant = 1;
+    uint32 orders = 2;
+    uint32 batches = 3;
+}
+
+// phase.submit: the tick, with what every runtime announced in its trade done and the controller saw arrive in the log
+message SubmitEvent {
+    ClockEvent clock = 1;
+    repeated RuntimeOrders runtimes = 2;      // in the order the controller expects the runtimes (registration order)
 }
 
 // phase.done: a participant has finished its work of a phase

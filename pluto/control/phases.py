@@ -36,12 +36,18 @@ one of these, each explicit:
 * the ``done`` barrier: the controller publishes the next phase only after every expected ``done`` of the last one is in
   the log, so everything a participant published before its ``done`` is before the next phase event (a log is a prefix:
   a reader that sees the event has seen all of it). The writes of the book (``book``) and the broker states of the
-  tick (``account``) are ready for the next phase this way, and so are the batches of orders (``trade``) for ``submit``;
-* data on the receiver's own topic: a runtime applies the broker state it receives on ``strategy.account.<id>``, not
-  the controller's ``phase.account`` event, so it needs no order between the two;
-* counts: a runtime's ``trade`` done says how many orders and batches it sent, the broker side checks them against what
-  it received before it submits, so an orders message that was not handled (lost, doubled, stale) is a ``PhaseError``, never
-  a silent difference;
+  tick (``account``) are ready for the next phase this way. A ``done`` can come before data published on another topic
+  (the batch of orders a runtime announces in its ``trade`` done): the controller then waits for the data it was
+  announced (``PhaseDriver.announced_orders``, deadline naming the runtime) before it publishes ``submit``;
+* the account state before the trade event: a runtime applies the broker state it receives on its own topic
+  ``strategy.account.<id>`` (not the controller's ``phase.account`` event, so it needs no order between the two), and it
+  refuses a ``phase.trade`` of a tick whose state it has not applied (a ``done`` with an error), so a bus that reorders
+  or a driver that pipelines phases cannot make it trade on a stale account;
+* counts: a runtime's ``trade`` done says how many orders and batches it sent, the controller puts what it accepted into
+  the ``submit`` event (``SubmitEvent``; the broker side does not learn it from a second subscription to the dones), the
+  broker side checks them against what it received, waiting on a networked bus for what is missing, so an orders message
+  that was not handled (lost, doubled) is a ``PhaseError``; a batch that arrives after its tick closed is counted by the
+  strategy manager and reported, never dropped silently;
 * the order of the strategies is rebuilt from the registration order (``StrategyManager.new_orders``), not taken from the
   delivery order of their batches.
 
@@ -110,7 +116,8 @@ def message_types() -> dict[str, type]:
         broker_pb2.OrderBatch,
         phases_pb2.SignalEvent,
         phases_pb2.AccountEvent,
-        phases_pb2.PhaseDone)}
+        phases_pb2.PhaseDone,
+        phases_pb2.SubmitEvent)}
 
 
 def codec() -> ProtobufCodec:
@@ -202,8 +209,11 @@ class PhaseDriver(object):
         self._producer_id = producer_id
         self._timeout = timeout
         self._dones = []
+        self._accepted = {}  # phase topic -> participant -> the done accepted, of the last drive of the phase
+        self._batches = {}  # (logical_ts, process id) -> [orders, batches] of the batches of orders seen in the log
 
         bus.subscribe(DONES, self._on_done)
+        bus.subscribe(ORDERS_TOPIC, self._on_orders, rank=1)
 
     def _on_done(self, delivery: Delivery) -> None:
         self._dones.append((delivery.envelope.logical_ts, delivery.envelope.payload))
@@ -229,7 +239,7 @@ class PhaseDriver(object):
             else:
                 seen[done.participant] = done
 
-        return problems, sorted(set(expected) - set(seen)), set(expected) - reported
+        return problems, sorted(set(expected) - set(seen)), set(expected) - reported, seen
 
     def drive(
             self,
@@ -246,6 +256,7 @@ class PhaseDriver(object):
         bus = self._bus
         expected = tuple(expected)
         self._dones.clear()
+        self._accepted.pop(phase.topic, None)
         letters = len(bus.dead_letters())
         timed_out = False
 
@@ -262,7 +273,7 @@ class PhaseDriver(object):
 
         while True:
             bus.run_until_idle()
-            problems, missing, waiting = self._assess(phase, logical_ts, expected)
+            problems, missing, waiting, seen = self._assess(phase, logical_ts, expected)
 
             if not waiting or problems or not bus.networked:
                 # complete, failed, or nothing else can arrive
@@ -276,6 +287,8 @@ class PhaseDriver(object):
 
             bus.poll(wait)
 
+        self._accepted[phase.topic] = seen
+
         if missing:
             problems.append('no done from {}{}'.format(
                 ', '.join(missing), ' within {:g} s'.format(self._timeout) if timed_out else ''))
@@ -287,3 +300,55 @@ class PhaseDriver(object):
         if problems:
             raise PhaseError('{} at {}: {}'.format(
                 phase.topic, pd.Timestamp(logical_ts, tz='UTC'), '; '.join(problems)))
+
+    def _on_orders(self, delivery: Delivery) -> None:
+        envelope = delivery.envelope
+        counts = self._batches.setdefault((envelope.logical_ts, envelope.key), [0, 0])
+        counts[0] += len(envelope.payload.orders)
+        counts[1] += 1
+
+    def announced_orders(self, logical_ts: int, runtimes: Iterable[str]) -> list[phases_pb2.RuntimeOrders]:
+        """What each runtime announced in its trade done (orders, batches), once the log shows that many batches of
+        orders of the tick: the submit phase starts only then, so the broker side has them (a log is a prefix: it reads
+        every batch before the submit event). The counts go into the submit event, which is where the broker side learns
+        them, not from a second subscription to the dones.
+
+        A done can come before the batch it announces (another topic, another lane): on a networked bus the driver
+        waits for the batches the way it waits for dones, ``PhaseError`` naming the runtimes whose batches did not come
+        within the deadline. In memory nothing else can arrive: what is missing is reported by the broker side when it
+        checks the counts, as before."""
+        bus = self._bus
+        dones = self._accepted.get(TRADE.topic, {})
+        announced = [
+            phases_pb2.RuntimeOrders(
+                participant=runtime,
+                orders=dones[runtime].orders if runtime in dones else 0,
+                batches=dones[runtime].batches if runtime in dones else 0)
+            for runtime in runtimes]
+        deadline = None if self._timeout is None else time.monotonic() + self._timeout
+
+        while True:
+            bus.run_until_idle()
+            short = [a for a in announced
+                     if self._batches.get((logical_ts, a.participant), (0, 0))[0] < a.orders
+                     or self._batches.get((logical_ts, a.participant), (0, 0))[1] < a.batches]
+
+            if not short or not bus.networked:
+                break
+
+            wait = POLL_SLICE if deadline is None else min(POLL_SLICE, deadline - time.monotonic())
+
+            if wait <= 0:
+                raise PhaseError('{} at {}: no batch of orders from {} within {:g} s ({})'.format(
+                    TRADE.topic, pd.Timestamp(logical_ts, tz='UTC'), ', '.join(a.participant for a in short),
+                    self._timeout, '; '.join(
+                        '{} announced {} orders in {} batches, the log has {} in {}'.format(
+                            a.participant, a.orders, a.batches, *self._batches.get((logical_ts, a.participant), (0, 0)))
+                        for a in short)))
+
+            bus.poll(wait)
+
+        for tick, key in [k for k in self._batches if k[0] <= logical_ts]:
+            del self._batches[(tick, key)]
+
+        return announced

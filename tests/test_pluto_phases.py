@@ -279,6 +279,53 @@ class NetworkedPhaseDriverTests(unittest.TestCase):
 
         self.assertEqual(self.bus.polls, 0)
 
+    def trade_done_then_batch(self, orders=1, batches=1, batch_arrives=True):
+        """Runtime 'a' says done in the trade phase (announcing a batch); the batch itself arrives after the done."""
+        batch = broker_pb2.OrderBatch(ts=phases.proto_timestamp(TS))
+
+        for _ in range(orders):
+            batch.orders.add()
+
+        RemoteParticipant(self.bus, 'a', phases.TRADE, answers=False)
+        self.bus.arrive(lambda: phases.publish_done(self.bus, phases.TRADE, TS_NS, 'a', orders, batches))
+
+        if batch_arrives:
+            for _ in range(batches):
+                self.bus.arrive(lambda: self.bus.publish(
+                    phases.ORDERS_TOPIC, batch, type='OrderBatch', logical_ts=TS_NS, producer_id='a',
+                    phase=phases.TRADE.rank, key='a'))
+
+    def test_the_submit_waits_for_the_batch_a_done_announced(self):
+        self.trade_done_then_batch(orders=2, batches=1)
+        driver = phases.PhaseDriver(self.bus, timeout=10)
+
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+
+        # the done is in, the batch is not: the driver goes on reading the log until it is
+        announced = driver.announced_orders(TS_NS, ('a',))
+
+        self.assertEqual([(r.participant, r.orders, r.batches) for r in announced], [('a', 2, 1)])
+        self.assertEqual(self.bus.arrivals, [])
+
+    def test_a_batch_that_never_comes_fails_naming_the_runtime(self):
+        self.trade_done_then_batch(batch_arrives=False)
+        driver = phases.PhaseDriver(self.bus, timeout=0.2)
+
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+
+        with self.assertRaisesRegex(
+                PhaseError, r'phase\.trade at .*: no batch of orders from a within 0\.2 s \(a announced 1 orders in 1 '
+                            r'batches, the log has 0 in 0\)'):
+            driver.announced_orders(TS_NS, ('a',))
+
+    def test_a_runtime_that_announced_nothing_needs_no_batch(self):
+        RemoteParticipant(self.bus, 'a', phases.TRADE)
+        driver = phases.PhaseDriver(self.bus, timeout=0.2)
+
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual([(r.orders, r.batches) for r in driver.announced_orders(TS_NS, ('a',))], [(0, 0)])
+
 
 class InMemoryPhaseDriverTests(unittest.TestCase):
     def test_a_missing_done_fails_at_once_whatever_the_deadline(self):
@@ -298,6 +345,22 @@ class InMemoryPhaseDriverTests(unittest.TestCase):
         self.assertFalse(bus.networked)
         self.assertFalse(bus.poll(10))
 
+    def test_what_is_missing_is_not_waited_for_in_memory(self):
+        bus = InMemoryBus()
+        FakeParticipant(bus, 'a', phases.TRADE)
+        driver = phases.PhaseDriver(bus, timeout=60)
+        driver.drive(phases.TRADE, clock_event(), TS_NS, ('a',))
+        started = time.monotonic()
+
+        # a done that announced orders no batch of which is on the bus: the broker side reports it when it checks
+        driver._accepted[phases.TRADE.topic]['a'] = phases_pb2.PhaseDone(
+            phase=phases.TRADE.topic, participant='a', orders=1, batches=1)
+
+        announced = driver.announced_orders(TS_NS, ('a',))
+
+        self.assertEqual([(r.orders, r.batches) for r in announced], [(1, 1)])
+        self.assertLess(time.monotonic() - started, 5)
+
 
 class CodecTests(unittest.TestCase):
     def test_every_message_survives_a_serialising_bus(self):
@@ -313,6 +376,8 @@ class CodecTests(unittest.TestCase):
                 last_sale_prices=[broker_pb2.AssetPrice(sid=2, price=0.1)]),
             'AccountEvent': phases_pb2.AccountEvent(clock=clock_event()),
             'PhaseDone': phases_pb2.PhaseDone(phase='phase.trade', participant='aaa', orders=3, error='e'),
+            'SubmitEvent': phases_pb2.SubmitEvent(
+                clock=clock_event(), runtimes=[phases_pb2.RuntimeOrders(participant='aaa', orders=2, batches=1)]),
         }
         self.assertEqual(set(messages), set(phases.message_types()))
 

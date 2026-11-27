@@ -127,5 +127,7 @@ class Controller(object):
 
         behavior.ingest_all_data(ts, strategy_manager, signals)
 
-        # new orders reach the book
-        driver.drive(phases.SUBMIT, clock, ts_ns, (phases.BROKER_ID,))
+        # new orders reach the book: the submit event says what each runtime announced and the log shows has arrived
+        announced = driver.announced_orders(ts_ns, runtimes)
+        driver.drive(
+            phases.SUBMIT, phases_pb2.SubmitEvent(clock=clock, runtimes=announced), ts_ns, (phases.BROKER_ID,))

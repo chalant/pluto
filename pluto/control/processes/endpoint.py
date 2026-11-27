@@ -36,6 +36,9 @@ class RuntimeEndpoint(object):
         self._batches = 0
         self._orders = 0
 
+        # the tick (logical time) of the last broker state applied
+        self._account_ts = None
+
         bus.subscribe(phases.account_topic(self._id), self._on_account)
         bus.subscribe(phases.TRADE.topic, self._on_trade)
 
@@ -60,14 +63,26 @@ class RuntimeEndpoint(object):
             phases.ACCOUNT,
             envelope.logical_ts,
             self._id,
-            lambda: self._account(envelope.payload),
+            lambda: self._account(envelope.payload, envelope.logical_ts),
             log)
 
-    def _account(self, state) -> None:
+    def _account(self, state, logical_ts) -> None:
         self._process.account_update(state)
+        self._account_ts = logical_ts
 
     def _on_trade(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+
+        # the explicit dependency on the account phase: the strategy runs on the account of this tick or not at all
+        # (the controller publishes the trade event only after the account dones, a bus that reorders must not
+        # make a runtime trade on a stale account)
+        if self._account_ts != envelope.logical_ts:
+            error = 'the trade event of tick {} came before the account state of the tick (last applied: {})'.format(
+                envelope.logical_ts, self._account_ts)
+            log.error('{}: {}', self._id, error)
+            phases.publish_done(self._bus, phases.TRADE, envelope.logical_ts, self._id, error=error)
+            return
+
         self._batches = 0
         self._orders = 0
 
