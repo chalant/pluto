@@ -3,7 +3,8 @@
 Base: `origin/master` = `dc3e9aa4`. Worktree `/home/yves/.cache/hades-pluto-dev/stage2-faultbus/wt`, env `.../stage2-faultbus/env`
 (`dev/setup_env.sh`), scratch `.../stage2-faultbus/scratch`. Task: `SeededFaultBus`, a seeded fault-injecting wrapper over any
 `Bus` (Execution Topology ET5 and ET8), so that the failure paths that only exist distributed are tested in one process,
-reproducibly. A new module and new tests only: no existing module (`pluto/control/`, `pluto/bus/*`) touched, no new dependency.
+reproducibly. A new module and new tests; the only existing file touched is `pluto/bus/__init__.py` (docstring line and exports); no
+`pluto/control/` change, no new dependency.
 
 ## Status
 
@@ -14,8 +15,8 @@ reproducibly. A new module and new tests only: no existing module (`pluto/contro
 - [x] protocol analysis (below), checked by a scratch run of whole backtests over the fault bus (not committed)
 - [x] final run from a fresh clone (see "Final run")
 
-Not exported from `pluto/bus/__init__.py` (an existing module: import from `pluto.bus.faults`). Its docstring still says
-"Not here: ... seeded fault injection": a one-line follow-up for whoever merges.
+Exported from `pluto/bus/__init__.py` (`SeededFaultBus`, `FaultConfig`, `Fault`, `FaultKind`, `PublishFailed`); its stale "Not here: seeded
+fault injection" line was fixed (the only change to an existing module, besides the new import).
 
 ## Fault model
 
@@ -29,23 +30,30 @@ have *arrived*, and across processes only after barriers; S1 (FIFO per lane) is 
 | late duplicate (`duplicate_publish`) | S7: no dedup, publishers retry | a second copy (same envelope) is published 1 to `max_delay` ticks later: after later messages of its lane, to every subscriber, `attempt` 1 | idempotent on `msg_id`, also for a copy that arrives after the protocol moved on |
 | delayed arrival (`delay`, `max_delay`) | S1: nothing across lanes; S3 orders what has arrived | a publish is held 1 to `max_delay` ticks, every later publish of the same (topic, key) waits behind it (FIFO kept); the inner bus dispatches by S3 what it has | never infer from a dispatched message that an earlier-sorting one does not exist; wait for explicit evidence (a count, a done, a deadline), not "idle" |
 | lost delivery (`lose_delivery`) | S7: never acked, so redelivered | `nack` instead of calling the handler; counts as an attempt; after the inner `max_attempts` a dead letter | expect `attempt` > 1 on first sight; a dead letter is a failure to report |
-| consumer crash and resume (`crash`, `max_crashes`) | S9: resume at the stored `position_of` | cancel the inner subscription, subscribe again at the position of the last settled delivery, before the handler ran or after it ran and before the ack (1 in 2). Exact, ungrouped topics only (a position is per topic) | checkpoint with `position_of`; everything above the checkpoint comes again, handled or not: idempotent, or rebuild state from the checkpoint. The subscription id changes |
-| publish failure (`publish_fail`) | a client may see an error with nothing sent | `PublishFailed` before the inner bus saw the message (nothing logged, no `seq` used) | retry with the same `msg_id` |
+| consumer crash and resume (`crash`, `max_crashes`, `SeededFaultBus.crash`) | S9: resume at the stored `position_of` | subscribe the replacement at the position of the last settled delivery (before any: the first message logged after the subscription), then cancel the old subscription; before the handler ran or after it ran and before the ack (1 in 2). If the replay does not fit in the inner bus (`QueueFull`) the crash is skipped and logged (`crash_skipped`). Exact, ungrouped topics only (a position is per topic) | checkpoint with `position_of`; everything above the checkpoint comes again, handled or not: idempotent, or rebuild state from the checkpoint. The subscription id changes |
+| publish failure (`publish_fail`) | a client may see an error with nothing sent | `PublishFailed` after the arguments were checked, before the inner bus saw the message (nothing logged, no `seq` used) | retry with the same `msg_id` |
 | ambiguous publish (`publish_ack_lost`) | the ack was lost, the publisher cannot know | published normally (maybe delayed), then `PublishFailed` | retry with the same `msg_id`: a duplicate to every consumer |
-| silent participant (`mute`, `SeededFaultBus.mute/unmute`) | a hung or dead process | a subscription swallows deliveries (acknowledged, handler never called) | a waiter needs a deadline; no answer is a failure, not a state |
+| silent participant (`mute`, `SeededFaultBus.mute/unmute`) | a hung or dead process never acknowledges | the subscription is cancelled with the delivery in hand unsettled (nothing reaches the handler, nothing is acked, what is published meanwhile waits in the log); `unmute` restarts it at its checkpoint like a crash (exact, ungrouped topics: it reads again what it had not settled); on a pattern or group member a mute is permanent and `unmute` raises | a waiter needs a deadline; no answer is a failure, not a state |
 
 Contract-violating, only with `FaultConfig(contract_violating=True)`: `reorder_within_lane` (a message jumps ahead of the held
 one before it in its lane: S1 broken). The FIFO check of the tests must fail under it (tested).
 
 Not modelled: silent loss of an accepted message, corruption, per-subscriber lag (all subscribers see a message arrive at the
-same tick), loss of a checkpoint, partitions. Rules of the wrapper: a delayed publish's `Receipt.position` is a token resolved when
-the message reaches the log and `subscribe(start=...)` accepts it; `subscribe` is a barrier (what is held is logged first, so
-`Start.LATEST` still skips what was published before); `step`/`run_until_idle` skip ahead in time when the inner bus is idle, so
-held messages are always delivered and "idle" means nothing pending anywhere; the wrapper owns `seq` (per producer, from 1, like
-the in-memory bus); injected redeliveries are capped by `max_redeliveries` per message and subscription (keep the inner
-`max_attempts` above it); a retried publish is a new call: same `msg_id` (explicit), next `seq`. Every decision comes from one
-`random.Random(seed)`, a fixed number of draws per publish and per delivery, so a seed's stream does not depend on which faults
-were hit.
+same tick), loss of a checkpoint, partitions, **late redelivery** (after other lanes moved on, as after an ack timeout) and
+**group-member failover**; see "What this evidence does not cover" below for what that means for `lose_delivery`.
+
+Rules of the wrapper: every publish draws 7 and every delivery 5 random numbers whatever the configuration (the amounts are used
+only when a fault is on), so two configurations that differ in one probability take the same stream (tested: equal RNG state after
+N publishes and N deliveries); a delayed publish's `Receipt.position` is a token resolved when the message reaches the log and
+`subscribe(start=...)` accepts it (`ValueError` if the message was dropped on release); `subscribe` is a barrier: what is held is
+logged first, so `Start.LATEST` still skips what was published before. **Every `Request` subscribes to its reply topic, so every
+request flushes all held messages** (the delays of earlier publishes end there), and with the inner bus full the barrier can raise
+`QueueFull` where the bare bus would not; `step`/`run_until_idle` skip ahead in time when the inner bus is idle, so held messages are
+always delivered and "idle" means nothing pending anywhere; the wrapper owns `seq` (per producer, from 1, like the in-memory bus);
+injected redeliveries are capped by `max_redeliveries` per message and subscription, also across crashes (keep the inner
+`max_attempts` above it); a retried publish is a new call: same `msg_id` (explicit), next `seq`; a held message the inner bus
+refuses (other than `QueueFull`, which makes it wait) is dropped, logged as `release_failed` and its error raised from the step that
+released it; `publish_fail` checks the arguments first, so bad arguments are never reported as an injected failure.
 
 ## Evidence
 
@@ -58,22 +66,33 @@ fault; duplicates have the same `msg_id`; one focused test per fault.
 ### The contract suite under faults (`tests/test_bus_faults_contract.py`, `python -m tests.test_bus_faults_contract`)
 
 Publish failures are left out (the contract tests do not retry, so every test that publishes fails on `PublishFailed`: 82 of 84
-fail with `publish_fail`, which only shows that a publisher must retry). For each other fault, on both implementations and seeds
-0 to 2 (fault probability 0.5 per decision):
+fail with `publish_fail`, which only shows that a publisher must retry). Every other fault is on at **probability 1**, on both
+implementations; the hash-seed test is left out (83 tests). A delay still draws its length from the seed, so its failing set is the
+union over seeds: the first version of the check used probability 0.5 and seeds 0 to 2, which was seed luck (it missed one order test
+and put two attempt tests among the survivors, and the counts were wrong). Measured now, 3 seeds and 20 seeds give the same unions:
 
 | Fault | Contract tests that fail | Why |
 |---|---|---|
-| `delay` | **8**: `test_dispatch_picks_lowest_logical_ts_then_producer_then_seq`, `test_dispatch_is_across_topics_too`, `test_dispatch_does_not_depend_on_publish_order_across_lanes`, `test_phase_orders_messages_of_the_same_logical_ts`, `test_equal_content_falls_back_to_topic_then_key`, `test_wildcards`, `test_a_replay_delivers_in_the_order_a_live_subscriber_saw`, `test_position_of_is_a_resume_point_without_gaps_when_keys_complete_out_of_log_order` | exactly the ones asserting the exact global S3 order across lanes; including that a replay equals what a live subscriber saw (replay merges the whole log by S3, live dispatch saw only what had arrived). No other test fails: everything else in the contract survives a delay |
-| `lose_delivery` | 14: the attempt counters (`test_nack_redelivers_before_the_next_message_of_the_lane`, `test_dead_letter_after_max_attempts_and_the_lane_moves_on`, `test_exception_is_a_nack_and_a_redelivery`, `test_ack_after_nack_wins_and_an_exception_always_nacks`, `test_latest_skips_the_log_and_gets_new_messages`, `test_handler_rank_orders_the_handlers_of_a_message`, `test_wildcards`...) and invocation counts (`test_run_until_idle_drains_cascades_and_counts_invocations`, `test_subscribing_never_delivers_inline`, `test_max_deliveries_equal_to_the_work_is_not_an_error`: a lost delivery is an invocation); group and cancel tests that count them | the handler still sees each message once, but `attempt` is not 1 and the bus ran more invocations. `test_each_subscription_sees_the_whole_stream_once` still passes |
-| `ack_lost` | 52 | exactly-once delivery: `test_each_subscription_sees_the_whole_stream_once`, `test_fifo_per_topic_and_key` (93 != 60), `test_the_bus_does_not_deduplicate`, replay, resume and position tests (a message handled before the checkpoint comes again), every exact-sequence assertion, plus attempts |
-| `duplicate_publish` | 54 | the same, from a copy in the log (replay of the log shows it too) |
-| `crash` | 27 | exactly-once on exact topics (`test_each_subscription_sees_the_whole_stream_once`, replay, resume, position tests); `test_position_of_is_a_resume_point_without_gaps...` raises `BusError`: a stored `Delivery` of a subscription that restarted is dead, only stored positions survive; pattern and group tests are unaffected (they do not crash) |
+| `delay` | **9** (3 on every seed, 9 over the seeds): `test_a_replay_delivers_in_the_order_a_live_subscriber_saw`, `test_dispatch_does_not_depend_on_publish_order_across_lanes`, `test_replay_then_live_messages_follow_the_dispatch_rule`, `test_dispatch_picks_lowest_logical_ts_then_producer_then_seq`, `test_dispatch_is_across_topics_too`, `test_phase_orders_messages_of_the_same_logical_ts`, `test_equal_content_falls_back_to_topic_then_key`, `test_wildcards`, `test_position_of_is_a_resume_point_without_gaps_when_keys_complete_out_of_log_order` | exactly the ones asserting the exact global S3 order across lanes, including that a replay (of the whole log, merged by S3) equals what a live subscriber saw (it saw what had arrived). Whether a given order test fails depends on the delays drawn; the checked claim is `ORDER` is in the union and `FIFO_PRESERVED` (per-lane FIFO, nack redelivered before the next message of the lane, `test_each_subscription_sees_the_whole_stream_once`, dead letters, no dedup) never fails |
+| `lose_delivery` | **21**: attempt counters (`test_nack_redelivers_before_the_next_message_of_the_lane`, `test_dead_letter_after_max_attempts_and_the_lane_moves_on`, `test_exception_is_a_nack_and_a_redelivery`, `test_ack_after_nack_wins_and_an_exception_always_nacks`, `test_latest_skips_the_log_and_gets_new_messages`, `test_handler_rank_orders_the_handlers_of_a_message`, `test_wildcards`, `test_replay_leaves_existing_subscriptions_alone`), the two that assert a first attempt (`test_replay_redelivers_with_attempt_one_and_the_original_envelope`, `test_a_closed_bus_refuses_every_call`), invocation counts (`test_run_until_idle_drains_cascades_and_counts_invocations`, `test_subscribing_never_delivers_inline`, `test_step_runs_exactly_one_handler`, `test_publish_never_runs_a_handler`, `test_max_deliveries_equal_to_the_work_is_not_an_error`, `test_max_deliveries_zero_and_invalid_values`: a lost delivery is an invocation), group, cancel, close and exit tests that count them (`test_a_group_member_that_nacks_and_cancels_hands_the_retry_to_the_others`, `test_cancelling_a_group_member_hands_its_keys_to_the_others`, `test_a_handler_that_closes_the_bus_leaves_nothing_behind`, `test_an_exit_request_propagates_and_leaves_the_message_pending`) and `test_position_of_is_a_resume_point_without_gaps_when_keys_complete_out_of_log_order` | the handler still sees each message once, but `attempt` is not 1 and the bus ran more invocations. The exactly-once tests (`test_each_subscription_sees_the_whole_stream_once` and the rest of `EXACTLY_ONCE`) still pass |
+| `ack_lost` | **52** | exactly-once delivery: `test_each_subscription_sees_the_whole_stream_once`, `test_fifo_per_topic_and_key` (93 != 60), `test_the_bus_does_not_deduplicate`, replay, resume and position tests (a message handled before the checkpoint comes again), every exact-sequence assertion, plus the attempt counters |
+| `duplicate_publish` | **54** | the same, from a copy in the log (a replay of the log shows it too) |
+| `crash` | **44** (42 on every seed) | exactly-once on exact topics (`test_each_subscription_sees_the_whole_stream_once`, replay, resume, position tests) and everything that holds a `Delivery` or a subscription id across a restart (`test_position_of_is_a_resume_point_without_gaps...` raises `BusError`: a stored `Delivery` of a restarted subscription is dead, only stored positions survive); `test_fifo_per_topic_and_key` (a pattern subscription) is unaffected |
 
-27 tests pass under every one of these faults (request and reply, close and cancel, argument checks, envelopes, repeatability:
-the list `SURVIVORS` of the module). `test_delivery_trace_is_repeatable` passing under all faults is the determinism evidence.
+**25** tests pass under every one of these faults (request and reply, close and cancel, argument checks, envelopes, repeatability:
+the set `SURVIVORS` of the module). `test_delivery_trace_is_repeatable` passing under all faults is the determinism evidence.
 Those are the guarantees to rely on; the others (exactly-once, S3 order across lanes, `attempt` = 1, replay = live) the phase
-protocol **must not rely on**. The checks in the module: delay fails exactly the 8 order tests; duplicates fail the exactly-once
-tests; a lost delivery fails the attempt tests but not the exactly-once ones; the survivors never fail.
+protocol **must not rely on**. The checks in the module: `ORDER` (9) is in the failures of a delay and `FIFO_PRESERVED` never is;
+duplicates fail `EXACTLY_ONCE`; a lost delivery fails the attempt tests (`ATTEMPTS`, `FIRST_ATTEMPT`) but not `EXACTLY_ONCE`;
+`SURVIVORS` never fail. A new contract test that asserts an order, a count or an attempt is not in a set: it goes unnoticed by
+these checks, and `python -m tests.test_bus_faults_contract` lists it.
+
+What this evidence does *not* cover: a **late redelivery**. A nack keeps the message's dispatch key, so `lose_delivery` and
+`ack_lost` always redeliver next in the lane, before any other lane's later message; a real redelivery after an ack timeout comes
+after other lanes moved on. So "results identical under `lose_delivery`" (the backtest runs below) says nothing about redelivery
+interleaved with other lanes; `delay` and `duplicate_publish` cover late arrival of first deliveries and of copies, not of
+redeliveries. Group-member failover is not modelled either (grouped subscriptions are never crashed; a muted member is cancelled
+and its lanes pass to the others at once).
 
 ## Where the current phase protocol breaks under each fault
 
@@ -81,8 +100,10 @@ From reading `pluto/control/phases.py`, `controller/participants.py`, `controlle
 and `processes/endpoint.py` (master `dc3e9aa4`), then checked by running whole `buy_and_hold` backtests (the 2008 example, a
 strategy, serialising wrapper inside the fault bus) with one fault at a time (probability 0.1, 3 seeds; scratch script, not committed;
 `delay` 0.3). Results: `ack_lost`, `duplicate_publish`, `crash`, `mute`, `publish_ack_lost`, `publish_fail`: every run aborted with a
-`PhaseError` (or a raw `PublishFailed`) within the first ticks; `delay` (22,000 delayed messages) and `lose_delivery` (8,300 lost
-deliveries): results identical to the run without faults.
+`PhaseError` (or a raw `PublishFailed`) within the first ticks; `delay` (about 22,800 delayed messages) and `lose_delivery` (about
+8,300 lost deliveries): results identical to the run without faults. (`mute` aborted with `'no done from broker'` or an order-count
+mismatch: a muted subscription of the broker to `phase.done.trade` never learns the counts, which is the "second subscription"
+finding below.)
 
 Why the last two pass: `PhaseDriver.drive` ends in `run_until_idle`, and the wrapper makes "idle" mean nothing is pending *anywhere*,
 so a delay never outlives a phase; a lost delivery is redelivered inside the same phase. That is a property of the in-process
@@ -119,8 +140,18 @@ all publish sites; a per-tick idempotence record in the three participants and t
 submit event; a retrying publish helper; then run `delay`, `lose_delivery`, `ack_lost`, `duplicate_publish` (results must equal
 the run without faults) and `mute`, `crash`, `publish_fail` (clean `PhaseError`, or equal results once retries exist).
 
+## Review round (agent `review-faultbus`, 7 findings, all fixed)
+
+| # | Fix |
+|---|---|
+| 1 High | contract-under-faults sets were seed luck: probability-1 profiles, `ORDER` (now 9, with `test_replay_then_live_messages_follow_the_dispatch_rule`) in the union of a delay, `FIFO_PRESERVED` never fails under a delay, `SURVIVORS` 25 (the two `attempt == 1` tests moved to `FIRST_ATTEMPT`), all counts corrected here and in the module docstring |
+| 2 | a fixed number of draws per call (7 per publish, 5 per delivery); test of equal RNG state across configurations |
+| 3 | a crash subscribes the replacement first, cancels after; `QueueFull` skips the crash (`crash_skipped`); tested with a small `queue_capacity` |
+| 4 | `mute` cancels the subscription with the delivery unsettled (a hung consumer never acks); `unmute` restarts at the checkpoint (exact, ungrouped topics) and a muted pattern or group member is permanent (`unmute` raises); tested: the unmuted participant gets what it missed |
+| 5 | tests: crash on the 4th of 5 messages replays from the 4th (a mutant resuming at `EARLIEST` fails it), the redelivery budget survives a crash (a mutant keyed by subscription id fails it); new `SeededFaultBus.crash()`. To make a checkpoint always exist, a subscription that started at the end of the log resumes at the first message logged after it |
+| 6 | "late redelivery" and "group-member failover" in the not-modelled list, with what it means for the `lose_delivery` evidence |
+| 7 | unused import removed; `start=` from the receipt of a dropped message raises `ValueError`; `publish_fail` validates first; tests for `release_failed` and the `QueueFull` wait; `subscribe` and `Request` flushing documented; exports and the stale docstring line in `pluto/bus/__init__.py` |
+
 ## Final run
 
-Fresh clone of `stage2-faultbus` at `8d18f6f3` (`--no-hardlinks`), new env from `dev/setup_env.sh`: whole `tests/`: **655 passed**
-(238 of them new: 232 in `tests/test_bus_faults.py`, 6 in `tests/test_bus_faults_contract.py`; the rest unchanged), and the same
-655 under `PYTHONHASHSEED=1`. The clone and its env were removed.
+(Filled in after the run below.)
