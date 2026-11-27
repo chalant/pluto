@@ -61,9 +61,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # the batches that arrived for a tick that was already closed: (process id, clock time ns, orders)
         self._late_batches = []
 
-        # the ids of the batches taken at this clock time (a copy is ignored, see receive_orders)
-        self._ids = set()
-        self._ids_ts = None
+        # the batches taken, by id: (step of the drive, content); a copy of one is ignored, see receive_orders
+        self._taken = {}
+        self._newest = 0  # the newest step among them
+        self._conflicting = []
 
     @property
     def bus(self) -> Bus:
@@ -106,24 +107,24 @@ class StrategyManager(brk_rpc.BrokerServicer):
     def _on_orders(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
         self._check_session(envelope.key)
-        self.receive_orders(envelope.key, envelope.payload, envelope.msg_id)
+        self.receive_orders(envelope.key, envelope.payload, envelope.msg_id, phases.step_of(envelope))
 
     @service_access.framework
     @service_access.per_session
     def PlaceOrders(self, request_iterator, session_id):
         raise NotImplementedError(_NOT_ON_THE_BUS.format('PlaceOrders'))
 
-    def receive_orders(self, session_id, batch, msg_id=None):
+    def receive_orders(self, session_id, batch, msg_id=None, step=None):
         """The orders of a strategy's batch, kept in the order they were placed (``strategy.orders`` on the bus). A
         batch of another clock event than the current one is not applied; one for an earlier tick (it arrived after its
         tick closed) is counted, ``take_late_batches`` hands the records over to be reported.
 
-        A batch is one message however often it is delivered or published: with its ``msg_id`` a copy of a batch taken at
-        this clock time is ignored, also after the tick closed (the ids are kept for the clock time, not the tick: the
-        next clock event can share it). A copy of a batch of an earlier clock time is recognised by the deterministic id
-        of its batches (``phases.orders_msg_id``): the lock-step closed that tick only after every batch it announced
-        was taken, so a batch of it under that id can only be a copy. A batch of a closed tick under any other id is
-        late, as before."""
+        A batch is one message however often it is delivered or published: with its ``msg_id`` a copy of a batch that was
+        taken is ignored, in its tick or after it closed. A batch is a copy only if its id is one of the batches actually
+        taken: the manager keeps those of the last ``phases.COPY_WINDOW`` drives (``step``: the drive of the trade event,
+        the id's drive counter) and no more; a batch of a closed tick under any other id, or whose copy came later than
+        the window, is late and is reported, never dropped silently. A copy whose content differs from the batch taken
+        under its id is recorded (``take_conflicting_batches``)."""
         # todo: we receive a single batch of orders per session that contains
         #  the process id
 
@@ -133,18 +134,19 @@ class StrategyManager(brk_rpc.BrokerServicer):
         # todo: get portfolio and account data
         # check if it is the event we are waiting for...
         batch_ts = conversions.to_datetime(batch.ts)
-        ts_ns = batch.ts.ToNanoseconds()
 
-        if msg_id is not None and self._ids_ts == ts_ns and msg_id in self._ids:
-            return
+        if msg_id is not None:
+            taken = self._taken.get(msg_id)
+
+            if taken is not None:
+                if taken[1] != batch.SerializeToString(deterministic=True):
+                    self._conflicting.append((session_id, msg_id))
+
+                return
 
         if batch_ts == self._global_ts:
             if msg_id is not None:
-                if self._ids_ts != ts_ns:
-                    self._ids_ts = ts_ns
-                    self._ids = set()
-
-                self._ids.add(msg_id)
+                self._take(msg_id, step, batch.SerializeToString(deterministic=True))
 
             # converted first: a batch is appended whole or not at all
             orders = [conversions.to_zp_order(order) for order in batch.orders]
@@ -153,18 +155,18 @@ class StrategyManager(brk_rpc.BrokerServicer):
             self._received_batches[session_id] = self._received_batches.get(session_id, 0) + 1
         elif (self._global_ts is not None and batch_ts < self._global_ts) or (
                 self._closed_ts is not None and batch_ts <= self._closed_ts):
-            if msg_id is not None and self._is_copy_of_older(session_id, ts_ns, msg_id):
-                return
+            self._late_batches.append((session_id, batch.ts.ToNanoseconds(), len(batch.orders)))
 
-            self._late_batches.append((session_id, ts_ns, len(batch.orders)))
+    def _take(self, msg_id, step, content):
+        """Remembers the batch taken under ``msg_id``; forgets those of drives older than the window."""
+        if step is None:
+            step = self._newest
+        elif step > self._newest:
+            self._newest = step
+            floor = step - phases.COPY_WINDOW
+            self._taken = {i: taken for i, taken in self._taken.items() if taken[0] > floor}
 
-    def _is_copy_of_older(self, session_id, ts_ns, msg_id) -> bool:
-        if self._ids_ts is None or ts_ns >= self._ids_ts:
-            return False
-
-        prefix = phases.orders_msg_prefix(session_id, ts_ns)
-
-        return msg_id.startswith(prefix)
+        self._taken[msg_id] = (step, content)
 
     def take_late_batches(self):
         """The batches that arrived for a tick that was already closed since the last call: (process id, the tick's
@@ -172,6 +174,13 @@ class StrategyManager(brk_rpc.BrokerServicer):
         late, self._late_batches = self._late_batches, []
 
         return late
+
+    def take_conflicting_batches(self):
+        """The copies of a batch whose content differs from the batch taken under their id, since the last call:
+        (process id, msg_id)."""
+        conflicting, self._conflicting = self._conflicting, []
+
+        return conflicting
 
     @service_access.framework
     @service_access.per_session

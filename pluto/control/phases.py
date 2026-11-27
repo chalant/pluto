@@ -5,8 +5,8 @@ phase's topic and waits, lock-step, until every participant it expects said ``do
 bus the participants answer while the bus runs, so a missing ``done`` is known when it is idle; on a networked bus the
 driver goes on reading the log until the dones are in, for at most a deadline of its own (the bus has no clock). A
 missing ``done`` (or one that carries an error) aborts the run with a ``PhaseError``. Only the participants the
-controller expects are required: a ``done`` from an unexpected participant
-is accepted (one for another phase or tick, or a doubled one, is an error). The order of the phases is the order the
+controller expects are required: a ``done`` from an unexpected participant is accepted (one for another phase or tick is an
+error; the same done twice is one done, two dones that differ are an error). The order of the phases is the order the
 controller called its components before the bus:
 
 ==========  ====  ===============  ==========  ==========================  ===========================================
@@ -46,21 +46,26 @@ one of these, each explicit:
 * counts: a runtime's ``trade`` done says how many orders and batches it sent, the controller puts what it accepted into
   the ``submit`` event (``SubmitEvent``; the broker side does not learn it from a second subscription to the dones), the
   broker side checks them against what it received, waiting on a networked bus for what is missing, so an orders message
-  that was not handled (lost, doubled) is a ``PhaseError``; a batch that arrives after its tick closed is counted by the
-  strategy manager and reported, never dropped silently;
+  that was not handled (lost, sent twice with another id) is a ``PhaseError``; a batch that arrives after its tick closed is
+  counted by the strategy manager and reported, never dropped silently (a copy of a batch it took is not late);
 * the order of the strategies is rebuilt from the registration order (``StrategyManager.new_orders``), not taken from the
   delivery order of their batches.
 
 Copies and retries. The bus delivers at least once and a publisher may have to publish again: a message must be harmless when it
 comes twice. Every message has a deterministic ``msg_id`` that says what it is, not how often it was sent (``phase_msg_id``,
-``done_msg_id``, ``account_msg_id``, ``orders_msg_id``; the done, the state and the batches derive theirs from the event they answer,
-so a clock time that carries several clock events keeps them apart); a publisher that gets ``PublishFailed`` publishes again with
-the same id (``publish_with_retry``, ``PUBLISH_ATTEMPTS`` times, then ``PhaseError``); a receiver ignores a copy: the participants
-and the endpoint keep the ids they handled at the clock time in progress (``Handled``) and ignore any message of an earlier one,
-the driver does the same for dones and batches, the strategy manager for batches (``StrategyManager.receive_orders``). That is
-enough because of the lock-step: the next clock time starts only when everything the last needed was handled, so what arrives for
-an earlier one is a copy. What stays an error: a participant that does not answer, a done from a participant the driver never
-heard of for another tick, a done that contradicts the one accepted under its id, a batch of a closed tick under another id.
+``done_msg_id``, ``account_msg_id``, ``orders_msg_id``), and a **step**: the driver numbers its drives 1, 2, 3, ... (one per phase
+event; it only grows) and puts the number in the correlation id of the event and of everything that answers it (the done, the
+broker state, the batches of orders: ``step_of``), whose ids derive from the id of the event. The clock cannot order the messages:
+several clock events share a clock time, and the minute clock goes back inside a session. A publisher that gets ``PublishFailed``
+publishes again with the same id (``publish_with_retry``, ``PUBLISH_ATTEMPTS`` times, then ``PhaseError``). A receiver ignores a
+copy: the participants and the endpoint keep the ids they handled in the step in progress (``Handled``) and ignore any message of
+an earlier step; the driver does the same for dones (a done of an earlier drive) and for the batches it counts; the strategy
+manager keeps the batches it took for the last ``COPY_WINDOW`` drives, by id, and takes a batch for a copy only if it is one of
+them. That is enough because of the lock-step: the next drive starts only when everything the last needed was handled, so what
+arrives for an earlier one is a copy. What stays an error: a participant that does not answer, a done that contradicts the one
+accepted under its id, a copy of a batch that differs from it, a batch of a closed tick that was not taken (late, also when its
+copy would be older than the window), and the states a runtime is sent twice with other content (the first one wins: the broker
+publishes them itself).
 
 Payloads are protobuf messages (``protos/clock.proto``, ``broker.proto``, ``phases.proto``), so ``codec()`` serialises every
 one of them.
@@ -74,7 +79,7 @@ import pandas as pd
 from google.protobuf import timestamp_pb2
 from google.protobuf.message import Message
 
-from pluto.bus import Bus, Delivery, ProtobufCodec, PublishFailed
+from pluto.bus import Bus, Delivery, Envelope, ProtobufCodec, PublishFailed
 
 from protos import broker_pb2, clock_pb2, phases_pb2
 
@@ -100,16 +105,15 @@ TRADE = Phase('trade', 40)
 SUBMIT = Phase('submit', 50)
 
 
-def phase_msg_id(phase: Phase, logical_ts: int, key: str = '', n: int = 1) -> str:
-    """The id of an event of ``phase`` at the clock time ``logical_ts`` (``key``: the calendar of a book event): what the
-    message is, not how often it was published. ``n`` numbers the events of the same phase and key at one clock time: a
-    clock time can carry several clock events, each one drives the phases again."""
-    return 'controller/{}/{}/{}/{}'.format(phase.name, logical_ts, n, key)
+def phase_msg_id(phase: Phase, logical_ts: int, key: str, step: int) -> str:
+    """The id of the event of ``phase`` that the driver published at its drive number ``step`` (``key``: the calendar of a
+    book event; ``logical_ts``: the clock time): what the message is, not how often it was published."""
+    return 'controller/{}/{}/{}/{}'.format(step, phase.name, logical_ts, key)
 
 
-def done_msg_id(participant: str, phase: Phase, logical_ts: int, answers: str = '') -> str:
-    """The id of the done of ``participant`` that answers the event with the id ``answers``."""
-    return '{}/done/{}/{}/{}'.format(participant, phase.name, logical_ts, answers)
+def done_msg_id(participant: str, event_id: str) -> str:
+    """The id of the done of ``participant`` that answers the event with the id ``event_id``."""
+    return '{}/done/{}'.format(participant, event_id)
 
 
 def account_msg_id(process_id: str, event_id: str) -> str:
@@ -117,15 +121,9 @@ def account_msg_id(process_id: str, event_id: str) -> str:
     return 'broker/account/{}/{}'.format(process_id, event_id)
 
 
-def orders_msg_prefix(process_id: str, logical_ts: int) -> str:
-    """What the ids of the batches of orders of a runtime at a clock time begin with."""
-    return '{}/orders/{}/'.format(process_id, logical_ts)
-
-
-def orders_msg_id(process_id: str, logical_ts: int, event_id: str, n: int) -> str:
-    """The id of the ``n``-th batch of orders (1, 2, ...) a runtime sent while it handled the trade event ``event_id``
-    of the tick ``logical_ts``."""
-    return '{}{}/{}'.format(orders_msg_prefix(process_id, logical_ts), event_id, n)
+def orders_msg_id(process_id: str, event_id: str, n: int) -> str:
+    """The id of the ``n``-th batch of orders (1, 2, ...) a runtime sent while it handled the trade event ``event_id``."""
+    return '{}/orders/{}/{}'.format(process_id, event_id, n)
 
 
 # the dones of every phase
@@ -140,6 +138,11 @@ POLL_SLICE = 0.25
 
 # a publish that fails with PublishFailed is repeated, with the same msg_id, this many times in all
 PUBLISH_ATTEMPTS = 10
+
+# the strategy manager remembers the batches of orders it took for this many drives (steps of the driver): a copy of one is
+# ignored. A drive is a phase event; a clock event is at least four of them (book per signal, account, trade, submit), so
+# the window is about 16 clock events. A copy that comes later is reported as a late batch, never dropped silently.
+COPY_WINDOW = 64
 
 ORDERS_TOPIC = 'strategy.orders'
 
@@ -192,7 +195,12 @@ def publish_with_retry(bus: Bus, topic: str, payload: Message, *, msg_id: str, *
     """Publishes with ``msg_id``; a ``PublishFailed`` (the bus says the message may not have been taken, or that it was and
     it could not tell) is repeated, with the same ``msg_id``, up to ``PUBLISH_ATTEMPTS`` times in all: a copy that the
     first attempt left in the log is a copy of the same message, which every receiver ignores. ``PhaseError`` after the
-    last attempt. No delay between attempts: the bus has no clock, the budget is a count."""
+    last attempt. No delay between attempts: the bus has no clock, the budget is a count.
+
+    Only ``PublishFailed`` is retried (``BusClosed``, ``QueueFull``, bad arguments and every other error escape at once).
+    Only the fault-injecting bus raises it today: the JetStream bus reports a message the broker refused as a plain
+    ``BusError`` from its next read, so a real transient publish error is not retried yet (the bus needs to say which of
+    its errors are transient; a later stage)."""
     failure = None
 
     for _ in range(PUBLISH_ATTEMPTS):
@@ -205,24 +213,36 @@ def publish_with_retry(bus: Bus, topic: str, payload: Message, *, msg_id: str, *
     raise PhaseError('could not publish {} on {} in {} attempts: {}'.format(msg_id, topic, PUBLISH_ATTEMPTS, failure))
 
 
-class Handled(object):
-    """The ids of the messages a receiver handled in the current tick, so that a copy is not handled again.
+def step_of(envelope: Envelope) -> int | None:
+    """The step of the driver that a message belongs to: the drive that published the event, carried in the correlation id
+    of the event and of everything that answers it (done, broker state, batch of orders). None for a message that does not
+    carry one. The step only grows, one per ``PhaseDriver.drive``, whatever the clock does: the clock times of a run are
+    not ordered (the minute clock goes back inside a session) and several clock events can share one."""
+    correlation = envelope.correlation_id
 
-    ``first(logical_ts, msg_id)`` is True the first time a message is seen and False for a copy: a message of the tick
-    in progress whose id was seen, or any message of an earlier tick (the lock-step closes a tick only when everything
-    that tick needed was handled, so what arrives for it later is a copy). The set is dropped when a newer tick starts: it
-    holds the messages of one tick. Membership tests only: no iteration, deterministic."""
+    return int(correlation) if correlation is not None and correlation.isdigit() else None
+
+
+class Handled(object):
+    """The ids of the messages a receiver handled in the current step, so that a copy is not handled again.
+
+    ``first(step, msg_id)`` is True the first time a message is seen and False for a copy: a message of the step in
+    progress whose id was seen, or any message of an earlier step (the lock-step moves to the next drive only when
+    everything the last needed was handled, so what arrives for it later is a copy). The set is dropped when a later step
+    starts: it holds the messages of one drive. A message without a step (``None``) is taken for one of the step in
+    progress. Membership tests only: no iteration, deterministic."""
 
     def __init__(self):
-        self._tick = None
+        self._step = None
         self._ids = set()
 
-    def first(self, logical_ts: int, msg_id: str) -> bool:
-        if self._tick is None or logical_ts > self._tick:
-            self._tick = logical_ts
-            self._ids = set()
-        elif logical_ts < self._tick:
-            return False
+    def first(self, step: int | None, msg_id: str) -> bool:
+        if step is not None:
+            if self._step is None or step > self._step:
+                self._step = step
+                self._ids = set()
+            elif step < self._step:
+                return False
 
         if msg_id in self._ids:
             return False
@@ -230,6 +250,9 @@ class Handled(object):
         self._ids.add(msg_id)
 
         return True
+
+
+LOG = logbook.Logger('phases')
 
 
 def publish_done(
@@ -240,22 +263,30 @@ def publish_done(
         orders: int = 0,
         batches: int = 0,
         error: str = '',
-        answers: str = '') -> None:
+        *,
+        answers: Envelope) -> None:
     """Says that ``participant`` finished its work of ``phase`` at ``logical_ts``, or failed (``error``). ``orders`` and
     ``batches`` are the number of orders, and of batches of orders, a runtime sent in the trade phase. ``answers`` is the
-    id of the phase event answered: the id of the done derives from it, so a done published again (a retry) is the same
-    message and the done of another event of the same tick is not."""
-    publish_with_retry(
-        bus,
-        phase.done_topic,
-        phases_pb2.PhaseDone(
-            phase=phase.topic, participant=participant, orders=orders, batches=batches, error=error),
-        msg_id=done_msg_id(participant, phase, logical_ts, answers),
-        type=message_type(phases_pb2.PhaseDone),
-        logical_ts=logical_ts,
-        producer_id=participant,
-        phase=phase.rank + DONE_AFTER,
-        key=participant)
+    event answered: the id of the done derives from its id, so a done published again (a retry) is the same message and the
+    done of another event is not, and the done carries its step.
+
+    A done that cannot be published (``PUBLISH_ATTEMPTS`` failures) is logged with its cause and not raised: the
+    controller reports the missing done (it cannot do more than say who did not answer; the cause is here)."""
+    try:
+        publish_with_retry(
+            bus,
+            phase.done_topic,
+            phases_pb2.PhaseDone(
+                phase=phase.topic, participant=participant, orders=orders, batches=batches, error=error),
+            msg_id=done_msg_id(participant, answers.msg_id),
+            correlation_id=answers.correlation_id,
+            type=message_type(phases_pb2.PhaseDone),
+            logical_ts=logical_ts,
+            producer_id=participant,
+            phase=phase.rank + DONE_AFTER,
+            key=participant)
+    except PhaseError as e:
+        LOG.error('{} could not say done in {}: {}', participant, phase.topic, e)
 
 
 def fail(
@@ -265,7 +296,8 @@ def fail(
         participant: str,
         error: Exception,
         log: logbook.Logger,
-        answers: str = '') -> None:
+        *,
+        answers: Envelope) -> None:
     """Logs ``error``, which is being handled, with its traceback and reports it in a done: the controller aborts the
     run. The failure is the answer to the event: a handler that raises would be redelivered, and a participant that
     ignores the copy (``Handled``) would never answer it again."""
@@ -281,12 +313,14 @@ def report(
         participant: str,
         work: Callable[[], None],
         log: logbook.Logger,
-        answers: str = '') -> None:
-    """Runs ``work()`` and says done; a failure is reported (``fail``)."""
+        *,
+        answers: Envelope) -> None:
+    """Runs ``work()`` and says done; a failure is reported (``fail``). If ``work`` fails because a message it needs to
+    publish could not be (``PhaseError``), that is the failure reported."""
     try:
         work()
     except Exception as e:
-        fail(bus, phase, logical_ts, participant, e, log, answers)
+        fail(bus, phase, logical_ts, participant, e, log, answers=answers)
     else:
         publish_done(bus, phase, logical_ts, participant, answers=answers)
 
@@ -311,51 +345,40 @@ class PhaseDriver(object):
         self._producer_id = producer_id
         self._timeout = timeout
         self._dones = []
-        self._tick = None  # the tick being driven
-        self._drives = {}  # (phase name, key) -> how often driven at this clock time
-        self._done_ids = {}  # msg_id -> content of the dones of that tick, to tell a copy from another done
-        self._participants = set()  # who had a done accepted, ever (membership tests only)
+        self._step = 0  # the drives so far: it only grows, whatever the clock does (the minute clock goes back in a session)
+        self._done_ids = {}  # msg_id -> content of the dones of this drive, to tell a copy from another done
         self._conflicts = []
         self._accepted = {}  # phase topic -> participant -> the done accepted, of the last drive of the phase
         self._batches = {}  # (logical_ts, process id) -> [orders, batches] of the batches of orders seen in the log
-        self._batch_ids = {}  # msg_id -> logical_ts of the batches of orders counted and not yet announced
+        self._batch_ids = set()  # msg_ids of the batches of orders counted and not yet announced
 
         bus.subscribe(DONES, self._on_done)
         bus.subscribe(ORDERS_TOPIC, self._on_orders, rank=1)
 
-    def _begin(self, logical_ts: int) -> None:
-        """The clock time being driven: the ids of the dones of an earlier one are dropped (see ``_on_done``)."""
-        if self._tick is None or logical_ts > self._tick:
-            self._tick = logical_ts
-            self._done_ids = {}
-            self._drives = {}
-
     def _on_done(self, delivery: Delivery) -> None:
-        """Collects a done, once. A done is the same message however often it is delivered or published (its id is
-        ``done_msg_id``): a copy of one of this tick is ignored, so is a copy of a closed tick of a participant that
-        already had a done accepted (the lock-step closed that tick only after every done it needed was in, so what
-        arrives for it now can only be a copy). A done of an earlier tick from anyone else stays an error, so does a
-        done under the id of one accepted but with other content."""
+        """Collects a done, once. A done is the same message however often it is delivered or published (its id derives
+        from the id of the event it answers): a copy of one of this drive is ignored, a done under the id of one accepted
+        but with other content is a problem. A done of an earlier drive (its step, carried in its correlation id, is
+        below the driver's) is a copy: that drive ended only when every done it needed was accepted, or the run
+        aborted. A done without a step is taken for one of this drive and judged by its phase and clock time."""
         envelope = delivery.envelope
         done = envelope.payload
-        tick = self._tick
+        step = step_of(envelope)
 
-        if tick is not None and envelope.logical_ts < tick:
-            if done.participant in self._participants:
-                return
-        elif tick is not None and envelope.logical_ts == tick:
-            known = self._done_ids.get(envelope.msg_id)
-            content = done.SerializeToString(deterministic=True)
+        if step is not None and step < self._step:
+            return
 
-            if known is not None:
-                if known != content:
-                    self._conflicts.append('{} said done of {} twice with different content'.format(
-                        done.participant, done.phase))
-                return
+        known = self._done_ids.get(envelope.msg_id)
+        content = done.SerializeToString(deterministic=True)
 
-            self._done_ids[envelope.msg_id] = content
+        if known is not None:
+            if known != content:
+                self._conflicts.append('{} said done of {} twice with different content'.format(
+                    done.participant, done.phase))
 
-        self._participants.add(done.participant)
+            return
+
+        self._done_ids[envelope.msg_id] = content
         self._dones.append((envelope.logical_ts, done))
 
     def _assess(self, phase: Phase, logical_ts: int, expected: Iterable[str]):
@@ -391,8 +414,8 @@ class PhaseDriver(object):
         """Publishes ``payload`` on the topic of ``phase`` and runs the bus until every ``expected`` participant said
         done (see the class); ``PhaseError`` if one did not, one failed, or the bus gave up on a delivery.
         A done of a participant that is not expected is accepted (policy: only the expected ones are required, a
-        participant that joined late may answer); it is an error only if it is not of this phase and tick or is
-        doubled."""
+        participant that joined late may answer); it is an error only if it is not of this phase and tick, or if the
+        participant said two different dones (the same done twice is one done)."""
         bus = self._bus
         expected = tuple(expected)
         self._dones.clear()
@@ -402,17 +425,16 @@ class PhaseDriver(object):
         timed_out = False
         looked = False
 
-        self._begin(logical_ts)
-
-        # the n-th time this phase is driven for this key at this clock time (a clock time can carry several clock
-        # events): the id of the event, so that two events are two messages and a retried publish is one
-        n = self._drives[(phase.name, key)] = self._drives.get((phase.name, key), 0) + 1
+        self._step += 1
+        step = self._step
+        self._done_ids = {}
 
         publish_with_retry(
             bus,
             phase.topic,
             payload,
-            msg_id=phase_msg_id(phase, logical_ts, key, n),
+            msg_id=phase_msg_id(phase, logical_ts, key, step),
+            correlation_id=str(step),
             type=message_type(payload),
             logical_ts=logical_ts,
             producer_id=self._producer_id,
@@ -460,11 +482,15 @@ class PhaseDriver(object):
 
     def _on_orders(self, delivery: Delivery) -> None:
         envelope = delivery.envelope
+        step = step_of(envelope)
+
+        if step is not None and step != self._step:
+            return  # a batch of another drive than the trade phase in progress: a copy (the manager reports a late one)
 
         if envelope.msg_id in self._batch_ids:
             return  # a copy of a batch already counted (a publisher's retry, a redelivery, a replay)
 
-        self._batch_ids[envelope.msg_id] = envelope.logical_ts
+        self._batch_ids.add(envelope.msg_id)
         counts = self._batches.setdefault((envelope.logical_ts, envelope.key), [0, 0])
         counts[0] += len(envelope.payload.orders)
         counts[1] += 1
@@ -518,11 +544,9 @@ class PhaseDriver(object):
 
             bus.poll(wait)
 
-        for tick, key in [k for k in self._batches if k[0] <= logical_ts]:
-            del self._batches[(tick, key)]
-
-        # the ids of this tick stay: a clock event can share its clock time with the next one, and a copy of a batch of
-        # the first must not count for the second
-        self._batch_ids = {msg_id: tick for msg_id, tick in self._batch_ids.items() if tick >= logical_ts}
+        # the batches of this clock event are announced and counted: what comes later for it is a copy or late (the
+        # manager reports a late one), and the next clock event starts from nothing
+        self._batches.clear()
+        self._batch_ids = set()
 
         return announced
