@@ -14,7 +14,7 @@ Out of scope: components in separate processes and their registry, the fault-inj
 - [x] 1. `Receipt.position` without a synchronous acknowledgement
 - [x] 2. the controller waits for its expected dones
 - [x] 3. explicit cross-producer dependencies inside a phase
-- [ ] 4. the NATS implementation
+- [x] 4. the NATS implementation
 - [ ] 5. measurements, final run
 
 ## Step 1: `Receipt.position` is resolved when asked for
@@ -67,3 +67,65 @@ So no code had to change for this step: the dependencies were already explicit o
 adds is the test that proves it (two orderings, whole runs and multi-runtime) and the explanation in the module docstring of
 `pluto/control/phases.py`. Not in scope and still open: the direct (non-bus) reads of the book by the controller's behavior and
 the metrics tracker (`STAGE1_PHASES_PROGRESS.md`, "Left open").
+
+### Review input of the fault-bus worker (applied to steps 2 and 3)
+
+From `/home/yves/.cache/hades-pluto-dev/stage2-faultbus/wt/STAGE2_FAULTBUS_PROGRESS.md` ("where the phase protocol breaks"):
+with a driver that waits for dones, a runtime's trade done can come before its order batch, and a late batch was dropped
+silently by the stale filter. Changes (results unchanged, whole suite green):
+
+| Item | Change |
+|---|---|
+| Submit must wait for the batches the dones announce | the **controller** waits (`PhaseDriver.announced_orders`): after the trade phase it reads the log (`poll`, deadline of the driver) until it has seen every announced batch and order count of the tick on `strategy.orders` (the driver subscribes to it), `PhaseError` naming the runtimes whose batch did not come (`no batch of orders from a within 300 s (a announced 1 orders in 1 batches, the log has 0 in 0)`). In memory nothing can arrive: it does not wait and the broker side reports the mismatch as before. Because a log is a prefix, the broker side then has every batch before it reads the submit event |
+| The broker learns the counts from its own second subscription to the dones | gone: `BrokerParticipant` no longer subscribes to the trade dones. The counts travel **in the submit event** (new `SubmitEvent{clock, runtimes[RuntimeOrders{participant, orders, batches}]}` in `protos/phases.proto`, `phases_pb2.py` regenerated; `phases.message_types()` has `SubmitEvent`); the controller builds it from the dones it accepted |
+| Broker side waits too | on a networked bus `BrokerParticipant` defers the submit while a runtime has sent fewer orders or batches than the event names (it goes on when `strategy.orders` brings them: a second, rank-1 subscription to that topic), and more than announced is an immediate error; in memory a mismatch is an immediate error, as before. Its own deadline is the controller's (the submit phase's missing done names the broker) |
+| A late batch silently dropped | `StrategyManager.receive_orders` now counts a batch for an earlier or an already closed tick (`clear()` closes the tick: `_closed_ts`) instead of dropping it; `take_late_batches()`; the broker participant reports them (`aaa sent a batch of 1 orders for <tick>, which arrived after its tick closed`) in the submit phase of the tick and in the account phase of the next, as a `PhaseError` |
+| Account state before trade must stay an explicit dependency | documented in `phases.py` (already) and now **enforced** in `RuntimeEndpoint`: it records the tick of the last broker state it applied and answers a `phase.trade` of another tick with a done carrying an error, without running the strategy |
+
+Not done (next step by decision): idempotent handlers, deterministic `msg_id`s for retries and duplicates. No fault-injecting bus here.
+Tests: `tests/test_pluto_phases.py` (3 networked `announced_orders` tests, 1 in-memory), `tests/test_pluto_phase_participants.py`
+(`NetworkedSubmitTests` 4, `RuntimeEndpointTests` 1, one late-batch test in `RunTests`), the codec test has `SubmitEvent`.
+Assertions changed: none (new tests only; `CodecTests` lists one more message).
+
+## Step 4: the NATS implementation in product code
+
+Files: `pluto/bus/log.py` (`Log` protocol, `LogBus`), `pluto/bus/jetstream.py` (`JetStreamLog`, `server_available`,
+`DEFAULT_URL` = `PLUTO_NATS_URL` or `nats://127.0.0.1:4222`), `etc/requirements-py313.txt` pins `nats-py==2.17.0` (Apache-2.0,
+pure Python, no dependencies). `pluto.bus` exports `Log` and `LogBus`; `jetstream` is imported explicitly (it needs `nats-py`).
+The spike's Kafka log (`spike-broker` branch, `spike/kafka_log.py`, same two operations) is **not** in product code.
+
+Design (from the spike, `/home/yves/.cache/hades-pluto-dev/spike-broker/REPORT.md`): the broker is a durable, totally ordered log
+of one run (one stream per run, one subject per topic, the position is the stream sequence); the dispatcher of `InMemoryBus` runs
+on the reader's side over a mirror of the log (`LogBus` subclasses it), so S3, rank, nack/redelivery, dead letters, groups and
+positions are the in-memory ones and the contract suite passes unchanged. Differences, all in the docstring of `pluto/bus/log.py`:
+`publish` sends at once and does not wait (step 1; the acknowledgements are collected at the next read, a refusal is a sticky
+`BusError`), the bus reads its own messages back, `step` reads the log first when this bus published or has nothing to dispatch,
+no `QueueFull`, groups in-process only, payload `bytes` (wrap in `SerializingBus`), each bus mirrors the whole stream.
+`JetStreamLog`: an event loop thread (nats-py is asyncio only), a sender task that publishes in order with `publish_async`, a
+durable pull consumer without acks, `fetch` with the server's no-wait batches (one request when this log's own acknowledged
+messages are known to be there, `consumer_info` first otherwise), `poll(timeout)` = a fetch that waits.
+
+Tests: `tests/test_bus_contract.py` is parameterised over `InMemoryBus`, `SerializingBus(InMemoryBus)` and
+`SerializingBus(LogBus(JetStreamLog))` (a new stream per bus, deleted on close; skipped without a server); `tests/test_bus_jetstream.py`
+(15: publish does not wait, resolution of positions, replay/resume on a new bus of the stream, refusal, close sends, `poll`, order of
+S3 across four producer processes after a barrier, no server); `tests/test_pluto_jetstream_run.py` (`buy_and_hold`, `cancel_orders`,
+`dividends` over NATS: frame equal to the in-memory run at rtol=0, no dead letters). Without a server every NATS test is skipped.
+
+Contract suite changes (the suite is ours): **assertions changed: none**. Added: `test_poll_reads_the_log_and_never_runs_a_handler`,
+`test_a_bus_nobody_else_writes_to_has_nothing_to_poll`, `test_poll_finds_a_message_published_by_another_bus_of_the_same_log`
+(skips on a bus without a second writer: in memory and serialising), `test_poll_after_close_raises` (step 2); a third class
+`JetStreamBusContract` with an `attach` hook; the factory `make_nats`; `scenario_trace` closes its bus before returning (so a
+networked bus leaves no stream; the trace it returns is unchanged); `FACTORIES` has `"nats"` for the hash-seed test.
+
+Found while testing (not bugs of the product): two buses on one stream must not assume what the other has published is in
+their log yet (weak quiescence): the tests wait for what they expect, like the controller; one lane (topic, key) is FIFO in log
+order, S3 only orders across lanes.
+
+Revision after the first measurement (see step 5): the acknowledgement of a publish is now the message coming back. Each
+message of a `JetStreamLog` carries a header with the log's id and its number; `read_new(wait, complete)` returns entries
+`(position, topic, data, own)` and does not return before every message appended so far has been read back, in order, so one
+request answers "did the broker take my messages" and "what is new", and `LogBus` resolves the receipts from the entries (the
+`Log` protocol lost `flush`). A refusal (no stream) is caught from the ack futures by a done-callback and raised by the next read;
+it is sticky (`LogBus._check_open`). `step` no longer reads the whole log when it has nothing to dispatch (that was a
+`consumer_info` round trip per phase): idle means idle here; a caller that waits for others `poll`s (the `PhaseDriver` does),
+`subscribe` still reads everything first.

@@ -1,7 +1,8 @@
 """`LogBus`: the bus over a broker that is used as a durable, totally ordered log of one run (a namespace).
 
-A `Log` does only what a broker can guarantee: take messages in order (`append` sends and does not wait; `flush` waits for the
-acknowledgements, which carry the positions) and hand back everything appended since the last read (`read_new`). Everything else of the `Bus`
+A `Log` does only what a broker can guarantee: take messages in order (`append` sends and does not wait) and hand back
+everything appended since the last read (`read_new`), the log's own messages among them, which is how the bus learns that
+the broker took them and at which position. Everything else of the `Bus`
 contract is the dispatcher of `InMemoryBus`, run on the reader's side over a mirror of the log: lanes, the S3 dispatch
 order, rank, acknowledgement, redelivery and dead letters, groups, positions. That is what makes the delivery of a
 networked run one of the legal runs of the in-memory bus (and the same test suite passes on both): the broker gives order
@@ -9,15 +10,16 @@ of arrival, the reader gives the order of S3.
 
 What differs from the in-memory bus (and from the interface's first draft, `pluto.bus.__init__`):
 
-* `publish` does not wait for the broker. The log sends the message at once and the acknowledgement is collected at the
-  next read of the bus (`step`, `run_until_idle`, `poll`, `subscribe`, `close`) or when the receipt's position is asked
-  for; the broker's refusal (or a lost acknowledgement) raises `BusError` there, and from then on at every read (the bus
-  cannot go on after a message it sent was lost). Nothing is dispatched inside `publish` (S2).
+* `publish` does not wait for the broker. The log sends the message at once; the bus learns that the broker took it, and
+  its position, when it reads the message back (the next `step` after a publish, `run_until_idle`, `poll`, `subscribe`,
+  `close`) or when the receipt's position is asked for; the broker's refusal (or a message that does not come back) raises
+  `BusError` there, and from then on at every read (the bus cannot go on after a message it sent was lost). Nothing is
+  dispatched inside `publish` (S2).
 * The bus reads its own messages back from the log: one path for local and remote messages, and the position of a message
-  is the log's. `step` reads the log before it dispatches whenever this bus published since its last read, or when it has
-  nothing to dispatch (to see what other processes wrote), so the S3 choice is made over everything in the log at that
-  time. Idle means idle *here*: other processes may still publish (`networked`); whoever waits for an answer from another
-  process `poll`s for it (the controller's `PhaseDriver` does).
+  is the log's. `step` reads the log before it dispatches whenever this bus published since its last read, so the S3
+  choice is made over everything this bus sent. It does not look for what other processes wrote: idle means idle *here*
+  (`networked`); whoever waits for an answer from another process `poll`s for it (the controller's `PhaseDriver` does),
+  and `subscribe` reads the whole log first.
 * Each bus mirrors the whole log of its namespace from the start, as the in-memory bus keeps its logs. A `Position` is
   the broker's position (a stream sequence, an offset), so a bus attached to the same namespace later, in another process,
   resumes from a stored position. Retention, trimming and the mirror's size are open.
@@ -31,6 +33,7 @@ What differs from the in-memory bus (and from the interface's first draft, `plut
 import json
 import struct
 from bisect import bisect_left
+from collections import deque
 from typing import Any, Protocol
 
 from pluto.bus.api import BusError, Envelope, NotIdle, Position, Receipt, exact_topic
@@ -43,17 +46,16 @@ class Log(Protocol):
     def append(self, topic: str, key: str, data: bytes) -> None:
         """Send a message, in order after the ones appended before; does not wait for the broker."""
 
-    def flush(self) -> list[int]:
-        """Send what `append` took and wait for the broker's acknowledgement of all of it: the position of each message,
-        in the order of the `append`s. `BusError` when the broker did not take a message."""
-
-    def read_new(self, wait: float = 0.0, complete: bool = True) -> list[tuple[int, str, bytes]]:
-        """(position, topic, data) of what was appended since the previous call, in log order. `complete`: up to the
-        end of the log at the time of the call (what other processes wrote too); if not, at least what this log
-        appended and flushed. Waits up to `wait` seconds for the first message when there is none."""
+    def read_new(self, wait: float = 0.0, complete: bool = True) -> list[tuple[int, str, bytes, int | None]]:
+        """(position, topic, data, own) of what was appended since the previous call, in log order; `own` is the
+        number (1, 2, ...) of the entry among the messages this log appended, None for another writer's. Does not
+        return before every message appended so far has come back (the broker has taken them; `BusError` if it did not,
+        or not in order). `complete`: up to the end of the log at the time of the call (what other processes wrote
+        too); if not, as far as this log's own messages. Waits up to `wait` seconds for the first message when there
+        is none."""
 
     def close(self) -> None:
-        """Wait for what was appended, release the connection. Idempotent."""
+        """Wait for what was appended to be taken, release the connection. Idempotent."""
 
 
 def encode(fields: tuple, payload: bytes) -> bytes:
@@ -77,7 +79,7 @@ class LogBus(InMemoryBus):
         self._tokens: dict[str, list[int]] = {}  # per topic: the log position of each mirrored message
         self._frontier = 0  # one past the last log position read
         self._dirty = False  # published since the last read
-        self._unresolved: list[tuple[Receipt, str]] = []  # sent or unsent, position not known yet
+        self._unresolved: deque[tuple[Receipt, str]] = deque()  # published, position not known yet (in log order)
         self._failure: BusError | None = None
 
     @property
@@ -122,38 +124,34 @@ class LogBus(InMemoryBus):
         return receipt
 
     def _position_of_receipt(self, receipt: Receipt) -> Position:
-        self._flush()
+        """Asked for: read what this bus sent back (the broker took it, in order), which resolves the receipts."""
+        if self._closed:
+            raise BusError(f"the position of message {receipt.msg_id!r} is unknown: the bus was closed before it")
+        self._read(complete=False)
         if not receipt.resolved:
             raise BusError(f"the position of message {receipt.msg_id!r} is unknown: the bus lost it")
         return receipt.position
 
-    def _flush(self) -> None:
-        """Send what is unsent; the receipts get their positions."""
-        if self._failure is not None:
-            raise self._failure
-        if not self._unresolved:
-            return
-        try:
-            positions = self._log.flush()
-        except BusError as error:
-            self._failure = error
-            raise
-        except Exception as error:
-            self._failure = BusError(f"the log did not take the messages: {error.__class__.__name__}: {error}")
-            self._failure.__cause__ = error
-            raise self._failure from error
-        for (receipt, topic), position in zip(self._unresolved, positions, strict=True):
-            receipt._position = Position(topic, position)
-        self._unresolved.clear()
-
     # reading the log
 
     def _read(self, wait: float = 0.0, complete: bool = True) -> int:
-        """Flush, read the log, enqueue what is new for the subscriptions that exist. Returns how many messages."""
-        self._flush()
+        """Read the log (what this bus sent comes back first), enqueue what is new for the subscriptions that exist.
+        Returns how many messages."""
+        if self._failure is not None:
+            raise self._failure
         self._dirty = False
-        entries = self._log.read_new(wait, complete)
-        for token, topic, data in entries:
+        try:
+            entries = self._log.read_new(wait, complete)
+        except BusError as error:
+            self._failure = error  # a message that was sent may be lost: the bus cannot go on
+            raise
+        for token, topic, data, own in entries:
+            if own is not None:
+                receipt, sent_to = self._unresolved.popleft()
+                if sent_to != topic:
+                    self._failure = BusError("the log returned the messages of this bus out of order")
+                    raise self._failure
+                receipt._position = Position(topic, token)
             envelope = decode(topic, data)
             log = self._logs.get(topic)
             if log is None:
@@ -193,19 +191,22 @@ class LogBus(InMemoryBus):
         tokens = self._tokens[local.topic]
         return Position(local.topic, tokens[local.token] if local.token < len(tokens) else self._frontier)
 
+    def _check_open(self) -> None:
+        super()._check_open()
+        if self._failure is not None:
+            raise self._failure  # a message this bus sent was lost: nothing can be trusted after it
+
     def _check_not_handling(self) -> None:
         if self._current is not None:
             raise BusError("step and run_until_idle cannot be called from a handler: no nested delivery")
 
-    # dispatch: read the log first
+    # dispatch: the messages this bus published are read back first
 
     def step(self) -> bool:
         self._check_open()
         self._check_not_handling()
         if self._dirty:
             self._read(complete=False)  # what this bus sent: no need to ask the broker what else is there
-        if not self._drop_stale():
-            self._read()  # idle here: see what other processes wrote
         return super().step()
 
     def run_until_idle(self, max_deliveries: int | None = None) -> int:
@@ -216,7 +217,8 @@ class LogBus(InMemoryBus):
         count = 0
         while True:
             if max_deliveries is not None and count >= max_deliveries:
-                self._read()
+                if self._dirty:
+                    self._read(complete=False)
                 if self._drop_stale():
                     raise NotIdle(f"messages still pending after {count} deliveries")
                 return count
@@ -228,11 +230,11 @@ class LogBus(InMemoryBus):
         was_closed = self._closed
         if not was_closed:
             try:
-                self._flush()  # what was published is not lost by closing; the receipts get their positions
+                self._read(complete=False)  # the receipts get their positions
             except BusError:
                 pass
         super().close()
         if not was_closed:
             self._tokens.clear()
             self._unresolved.clear()
-            self._log.close()
+            self._log.close()  # which waits for what was appended

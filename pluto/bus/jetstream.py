@@ -9,8 +9,12 @@ sequence.
 
 `nats-py` is asyncio only: the client runs on an event loop of its own in a thread, and every call blocks on it, except
 `append`: it hands the message to a sender task of that loop, which publishes in order (`publish_async`, one connection, so
-the order of the stream is the order of the appends) and does not wait; `flush` waits for the acknowledgements of everything
-appended so far. A message that is not acknowledged within `timeout` seconds, or that the server refuses, is a `BusError`.
+the order of the stream is the order of the appends) and does not wait. The acknowledgement of a message is its coming back:
+every message this log appended carries a header with the log's id and its number, and `read_new` does not return before
+all the messages appended so far have been read back (the broker has stored them, in order), saying which entries are its
+own and in which order. So one request answers both questions, "did the broker take my messages" and "what is new in the
+log", and the position of an own message is the stream sequence of its entry. A message the server refuses (no stream, no
+stream responder) or that does not come back within `timeout` seconds is a `BusError`.
 
 JetStream stores to disk with a periodic fsync (`sync_interval`, two minutes by default on the server): a crash of the
 machine can lose acknowledged messages unless the server is configured otherwise. Retention is the stream's: unlimited here.
@@ -36,6 +40,9 @@ DEFAULT_URL = os.environ.get("PLUTO_NATS_URL", "nats://127.0.0.1:4222")
 # a consumer that is not asked for messages for this long (seconds) is deleted by the server
 _CONSUMER_IDLE = 24 * 3600.0
 _BATCH = 1000
+_SLICE = 1.0  # a request for own messages that are not stored yet waits this long, then looks at the failures again
+_LOG_HEADER = "Pluto-Log"
+_NUMBER_HEADER = "Pluto-N"
 
 
 def server_available(url: str = DEFAULT_URL, timeout: float = 0.5) -> bool:
@@ -83,7 +90,7 @@ class JetStreamLog:
     storage: StorageType
         `FILE` (default) or `MEMORY`.
     timeout: float
-        Seconds to wait for the server's answers (acknowledgements of a flush, a fetch).
+        Seconds to wait for the server's answers (own messages coming back, a fetch).
     """
 
     def __init__(
@@ -100,10 +107,10 @@ class JetStreamLog:
         self._drop_on_close = drop_on_close
         self._timeout = timeout
         self._prefix = self.namespace + "."
+        self._id = uuid.uuid4().hex[:12]
         self._appended = 0  # messages handed to the log
-        self._flushed = 0  # of those, the ones a flush waited for
-        self._acked = 0  # the highest stream sequence acknowledged
-        self._read = 0  # the highest stream sequence read
+        self._own_read = 0  # of those, the ones read back
+        self._failure: BusError | None = None
         self._closed = False
         if not server_available(url, timeout=3.0):
             raise BusError(f"cannot connect to NATS at {url}: nothing accepts connections there")
@@ -139,7 +146,7 @@ class JetStreamLog:
         )
         self._js = js
         self._outbox: asyncio.Queue = asyncio.Queue()
-        self._pending: asyncio.Queue = asyncio.Queue()
+        self._unacknowledged: set = set()
         self._sender = asyncio.create_task(self._send_loop())
         return nc, sub, consumer
 
@@ -158,80 +165,84 @@ class JetStreamLog:
 
     def append(self, topic: str, key: str, data: bytes) -> None:
         self._appended += 1
-        self._io.submit(self._outbox.put_nowait, (self._prefix + topic, data))
-
-    def flush(self) -> list[int]:
-        count = self._appended - self._flushed
-        if count == 0:
-            return []
-        self._flushed = self._appended
-        positions = self._call(self._acknowledged(count))
-        self._acked = max(self._acked, positions[-1])
-        return positions
+        self._io.submit(self._outbox.put_nowait, (self._prefix + topic, data, self._appended))
 
     async def _send_loop(self) -> None:
-        """Publishes what `append` hands over, in order, and passes the futures of the acknowledgements on."""
+        """Publishes what `append` hands over, in order. A refusal is kept; it is raised by the next read."""
         while True:
-            subject, data = await self._outbox.get()
+            subject, data, number = await self._outbox.get()
             try:
-                ack = await self._js.publish_async(subject, data)
+                ack = await self._js.publish_async(
+                    subject, data, headers={_LOG_HEADER: self._id, _NUMBER_HEADER: str(number)})
             except Exception as error:
-                ack = asyncio.get_running_loop().create_future()
-                ack.set_exception(error)
-            self._pending.put_nowait(ack)
+                self._fail(error)
+                continue
+            self._unacknowledged.add(ack)
+            ack.add_done_callback(self._acknowledged)
 
-    async def _acknowledged(self, count: int) -> list[int]:
-        async def collect():
-            acks = [await self._pending.get() for _ in range(count)]
-            return [ack.seq for ack in await asyncio.gather(*acks)]
+    def _acknowledged(self, ack) -> None:
+        self._unacknowledged.discard(ack)
+        if not ack.cancelled() and ack.exception() is not None:
+            self._fail(ack.exception())
 
-        return await asyncio.wait_for(collect(), self._timeout)
+    def _fail(self, error: BaseException) -> None:
+        if self._failure is None:
+            self._failure = BusError(f"NATS did not take a message: {error.__class__.__name__}: {error}")
+            self._failure.__cause__ = error
 
-    def read_new(self, wait: float = 0.0, complete: bool = True) -> list[tuple[int, str, bytes]]:
-        return self._call(self._fetch(wait, complete), self._timeout + wait)
+    def read_new(self, wait: float = 0.0, complete: bool = True) -> list[tuple[int, str, bytes, int | None]]:
+        return self._call(self._fetch(wait, complete), self._timeout * 2 + wait)
 
-    async def _fetch(self, wait: float, complete: bool) -> list[tuple[int, str, bytes]]:
-        entries: list[tuple[int, str, bytes]] = []
+    async def _fetch(self, wait: float, complete: bool) -> list[tuple[int, str, bytes, int | None]]:
+        entries: list[tuple[int, str, bytes, int | None]] = []
         sub = self._sub
-        while True:
-            if self._acked > self._read:
-                # this log's own acknowledged messages are there: one request reads them (and what is behind them)
-                batch = _BATCH
-            elif not complete:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._timeout
+        while self._own_read < self._appended:
+            # this log's own messages are on their way back: a request returns them (and what is behind them) as soon as stored
+            if self._failure is not None:
+                raise self._failure
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise BusError("NATS did not return the messages this log appended in time")
+            try:
+                messages = await sub.fetch(_BATCH, timeout=min(remaining, _SLICE))
+            except TimeoutError:
+                continue
+            self._take(messages, entries)
+        if self._failure is not None:
+            raise self._failure
+        while complete:
+            pending = (await sub.consumer_info()).num_pending
+            if pending == 0:
+                if entries or wait <= 0:
+                    break
+                try:
+                    messages = await sub.fetch(_BATCH, timeout=wait)
+                except TimeoutError:
+                    break
+                self._take(messages, entries)
                 break
-            else:
-                pending = (await sub.consumer_info()).num_pending
-                if pending == 0:
-                    if entries or wait <= 0:
-                        break
-                    try:
-                        messages = await sub.fetch(_BATCH, timeout=wait)
-                    except TimeoutError:
-                        break
-                    self._take(messages, entries)
-                    continue
-                batch = min(pending, _BATCH)
-            self._take(await sub.fetch(batch, timeout=self._timeout), entries)
-            if not complete and self._acked <= self._read:
-                break
+            self._take(await sub.fetch(min(pending, _BATCH), timeout=self._timeout), entries)
         return entries
 
     def _take(self, messages, entries) -> None:
         prefix_length = len(self._prefix)
         for message in messages:
-            sequence = message.metadata.sequence.stream
-            entries.append((sequence, message.subject[prefix_length:], message.data))
-            self._read = sequence
+            headers = message.headers or {}
+            own = None
+            if headers.get(_LOG_HEADER) == self._id:
+                own = int(headers[_NUMBER_HEADER])
+                self._own_read += 1
+                if own != self._own_read:
+                    raise BusError("NATS stored the messages of this log out of order")
+            entries.append((message.metadata.sequence.stream, message.subject[prefix_length:], message.data, own))
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         try:
-            try:
-                self.flush()  # what was appended is sent and acknowledged before the connection goes
-            except BusError:
-                pass
             self._call(self._shutdown())
         except BusError:
             pass
@@ -239,6 +250,11 @@ class JetStreamLog:
             self._io.stop()
 
     async def _shutdown(self) -> None:
+        # what was appended is sent and acknowledged before the connection goes
+        loop = asyncio.get_running_loop()
+        end = loop.time() + self._timeout
+        while (not self._outbox.empty() or self._unacknowledged) and loop.time() < end:
+            await asyncio.sleep(0.002)
         self._sender.cancel()
         await asyncio.gather(self._sender, return_exceptions=True)
         try:
