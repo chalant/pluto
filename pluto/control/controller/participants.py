@@ -32,6 +32,9 @@ class BrokerParticipant(object):
 
         # the submit event that is waiting for the batches of orders it names (networked bus), if any
         self._waiting = None
+        # the batches of orders the bus gave up on that nobody reported yet, and how many dead letters were looked at
+        self._dead = []
+        self._letters_seen = 0
 
         bus.subscribe(phases.BOOK.topic, self._on_book)
         bus.subscribe(phases.ACCOUNT.topic, self._on_account)
@@ -160,8 +163,17 @@ class BrokerParticipant(object):
         return ['{} sent a batch of {} orders for {}, which arrived after its tick closed'.format(
             process_id, orders, pd.Timestamp(ts, tz='UTC')) for process_id, ts, orders in self._manager.take_late_batches()]
 
-    def _check_orders(self, announced) -> None:
-        problems = self._count_problems(announced) + self._late_batches()
+    def _dead_batches(self) -> list[str]:
+        """The batches of orders the bus gave up on (dead-lettered) since the last call, as the problems to report."""
+        letters = self._bus.dead_letters()
+        new = [letter for letter in letters[self._letters_seen:] if letter.envelope.topic == phases.ORDERS_TOPIC]
+        self._letters_seen = len(letters)
+
+        return ['the bus gave up on a batch of orders of {} after {} attempts: {}: {}'.format(
+            letter.envelope.key, letter.attempts, letter.error_type, letter.error_message) for letter in new]
+
+    def _check_orders(self, announced, dead) -> None:
+        problems = dead + self._count_problems(announced) + self._late_batches()
 
         if problems:
             raise phases.PhaseError('; '.join(problems))
@@ -176,25 +188,33 @@ class BrokerParticipant(object):
             self._submit_when_ready()
 
     def _submit_when_ready(self) -> None:
-        """The submit event names the orders and batches each runtime sent. On a networked bus a batch can still be on its
-        way when the event is handled (the controller saw it in the log, but this subscription may lag): the phase waits
-        for the batch, the controller's deadline names the broker if it never comes. In memory nothing else can arrive:
-        what is missing is an error now."""
+        """The submit event names the orders and batches each runtime sent.
+
+        On one stream the controller published the event only after it saw every announced batch in the log, and a log is
+        a prefix, so this participant's mirror has the batches before it has the event and nothing waits. The wait is
+        for a bus that delivers in other legal orders (the batch of another lane after the event: the fault-injecting
+        bus, a delayed delivery): on a networked bus the phase goes on when ``strategy.orders`` brings the missing
+        batches; the controller's deadline names the broker if they never come. A batch the bus gave up on (dead
+        letter) is reported at once instead of waited for. In memory nothing else can arrive: what is missing is an
+        error now."""
         envelope = self._waiting
         announced = envelope.payload.runtimes
+        self._dead.extend(self._dead_batches())
 
-        if self._bus.networked and self._short(announced):
+        if self._bus.networked and self._short(announced) and not self._dead:
             return
 
         self._waiting = None
+        dead, self._dead = self._dead, []
         phases.report(
-            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced), log)
+            self._bus, phases.SUBMIT, envelope.logical_ts, phases.BROKER_ID, lambda: self._submit(announced, dead), log)
 
-    def _submit(self, announced) -> None:
+    def _submit(self, announced, dead) -> None:
         """The orders the strategies sent in this tick reach the book, by strategy in registration order; then the
         manager starts the next tick (new orders and broker states)."""
         manager = self._manager
-        self._check_orders(announced)
+        self._check_orders(announced, dead)
+
         orders = manager.new_orders
 
         # todo: catch any account control errors here...

@@ -850,7 +850,9 @@ class BusContract:
 
     def test_a_bus_nobody_else_writes_to_has_nothing_to_poll(self):
         bus = self.bus()
-        if not bus.networked:
+        if bus.networked:
+            self.assertFalse(bus.poll(0.0))  # nothing was published: nothing to find
+        else:
             self.assertFalse(bus.poll(30.0))  # at once, the test would not end otherwise
 
     def test_poll_finds_a_message_published_by_another_bus_of_the_same_log(self):

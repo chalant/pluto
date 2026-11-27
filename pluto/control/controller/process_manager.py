@@ -214,8 +214,10 @@ class StrategyManager(brk_rpc.BrokerServicer):
         late (counted, not applied)."""
         self._received_orders.clear()
         self._received_batches.clear()
-        self._closed_ts = self._global_ts
-        self._global_ts = None
+
+        if self._global_ts is not None:  # a second clear() with no tick in between keeps the tick closed by the first
+            self._closed_ts = self._global_ts
+            self._global_ts = None
 
         broker_states = self._broker_states
 

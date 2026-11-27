@@ -259,6 +259,7 @@ class PhaseDriver(object):
         self._accepted.pop(phase.topic, None)
         letters = len(bus.dead_letters())
         timed_out = False
+        looked = False
 
         bus.publish(
             phase.topic,
@@ -280,6 +281,12 @@ class PhaseDriver(object):
                 break
 
             wait = POLL_SLICE if deadline is None else min(POLL_SLICE, deadline - time.monotonic())
+
+            if wait <= 0 and not looked:
+                # the deadline may have passed in a long local handler: what is already in the log has not been read
+                looked = True
+                bus.poll(0)
+                continue
 
             if wait <= 0:
                 timed_out = True
@@ -327,6 +334,8 @@ class PhaseDriver(object):
             for runtime in runtimes]
         deadline = None if self._timeout is None else time.monotonic() + self._timeout
 
+        looked = False
+
         while True:
             bus.run_until_idle()
             short = [a for a in announced
@@ -337,6 +346,12 @@ class PhaseDriver(object):
                 break
 
             wait = POLL_SLICE if deadline is None else min(POLL_SLICE, deadline - time.monotonic())
+
+            if wait <= 0 and not looked:
+                # the deadline may have passed in a long local handler: what is already in the log has not been read
+                looked = True
+                bus.poll(0)
+                continue
 
             if wait <= 0:
                 raise PhaseError('{} at {}: no batch of orders from {} within {:g} s ({})'.format(

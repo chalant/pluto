@@ -45,5 +45,8 @@ grpcio
 grpcio-tools
 protobuf>=7.35.1,<8
 
+# The networked message bus (pluto.bus.jetstream: NATS JetStream; exact version in requirements-py313.txt)
+nats-py>=2.17,<3
+
 # Technical indicators (optional pipeline terms)
 TA-Lib

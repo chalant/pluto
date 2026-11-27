@@ -225,6 +225,21 @@ class NetworkedPhaseDriverTests(unittest.TestCase):
         driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
         driver.drive(phases.ACCOUNT, clock_event(), TS_NS, ('a',))
 
+        # each phase judged its own dones only: nothing of the book phase leaked into the account phase (it would
+        # have been a PhaseError "sent a done of phase.book"), and both remember who said done
+        self.assertEqual(sorted(driver._accepted), ['phase.account', 'phase.book'])
+        self.assertEqual([list(driver._accepted[topic]) for topic in sorted(driver._accepted)], [['a'], ['a']])
+        self.assertEqual(self.bus.arrivals, [])
+
+    def test_a_deadline_that_passed_in_a_long_handler_still_reads_the_log_once(self):
+        RemoteParticipant(self.bus, 'a', phases.BOOK)
+        driver = phases.PhaseDriver(self.bus, timeout=0)  # already over when the driver first looks
+
+        # the done is in the log: one last look finds it, it is not a timeout
+        driver.drive(phases.BOOK, clock_event(), TS_NS, ('a',))
+
+        self.assertEqual(self.bus.arrivals, [])
+
     def test_a_participant_that_never_answers_fails_the_phase_after_the_deadline_naming_it(self):
         RemoteParticipant(self.bus, 'a', phases.BOOK)
         RemoteParticipant(self.bus, 'b', phases.BOOK, answers=False)

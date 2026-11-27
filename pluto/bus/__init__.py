@@ -1,4 +1,4 @@
-"""The message bus: a thin interface, a deterministic in-memory implementation, a serialising wrapper.
+"""The message bus: a thin interface, a deterministic in-memory implementation, a serialising wrapper, and a networked one.
 
 Components talk only through a `Bus` (Execution Topology ET1 to ET9). The in-memory implementation runs on one
 thread and makes every run one of the legal runs of a networked bus. The rules below are the S-rules of the
@@ -46,7 +46,11 @@ S12 Backpressure. A subscription holds at most `queue_capacity` undelivered mess
 S13 Hygiene. No unordered iteration, no randomness, deterministic ids (`seq` per producer, `msg_id` from it),
    deterministic encodings (sorted JSON keys, deterministic protobuf), group members chosen by a stable hash.
 S14 Quiescence. `run_until_idle()` runs handlers until nothing is pending (handlers may publish more) and
-   `step()` runs exactly one, so the controller can drive a phase and a test can assert that nothing is left.
+   `step()` runs exactly one, so the controller can drive a phase and a test can assert that nothing is left. On a
+   networked bus (`networked`) nothing pending means nothing pending *here*: other processes may still publish. Whoever
+   waits for an answer from another process `poll`s for it (`PhaseDriver` does, with a deadline of its own).
+S15 Topics. A topic is dotted tokens of printable characters without whitespace (the grammar a broker can carry, so a
+   run that works on one bus works on all); patterns add `*` (one token) and a final `>` (the rest).
 
 Groups: subscriptions of one `group` share a stream; each (topic, key) lane goes to one member, chosen by a stable
 hash of the lane when it is created (so lanes created by a replay at subscribe time go to the members present

@@ -428,6 +428,28 @@ class NetworkedSubmitTests(unittest.TestCase):
         self.assertEqual(len(self.dones), 1)
         self.assertIn('aaa sent 1 orders in 1 batches, the broker received 2 in 2', self.dones[0].error)
 
+    def test_a_batch_the_bus_gave_up_on_is_reported_at_once_not_waited_for(self):
+        def broken(delivery):
+            raise RuntimeError('cannot take the batch')
+
+        self.bus.subscribe(phases.ORDERS_TOPIC, broken)
+        # two batches announced, one sent and dead-lettered by the broken subscriber: the second is not coming
+        self.submit_event(2, 2)
+        self.send_batch()
+        self.bus.run_until_idle()
+
+        self.assertEqual(len(self.dones), 1)
+        self.assertIn('the bus gave up on a batch of orders of aaa after 3 attempts: RuntimeError', self.dones[0].error)
+
+    def test_a_second_clear_keeps_the_tick_the_first_closed(self):
+        self.manager.clear()
+        self.manager.clear()
+        self.send_batch()  # for TS, which the first clear closed
+        self.bus.run_until_idle()
+
+        self.assertEqual([(process_id, ts, orders) for process_id, ts, orders in self.manager.take_late_batches()],
+                         [('aaa', TS.value, 1)])
+
     def test_a_batch_for_a_closed_tick_is_reported_in_the_submit(self):
         late = TS - pd.Timedelta(minutes=1)
         self.bus.publish(
