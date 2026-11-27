@@ -122,6 +122,7 @@ from pluto.bus.api import (
     Delivery,
     Handler,
     Position,
+    PositionTooOld,
     QueueFull,
     Receipt,
     Start,
@@ -307,6 +308,7 @@ class SeededFaultBus:
         self._spent: dict[tuple[int, str, int], int] = {}  # (subscription serial, topic, offset) -> redeliveries
         self._subscriptions: list[_Handle] = []
         self._waiting: dict[str, list[_Handle]] = {}  # topic -> handles that resume at the next message logged there
+        self._aborted: PositionTooOld | None = None  # a restart whose checkpoint the inner bus's log no longer has
         self._log: list[Fault] = []
 
     # diagnosis
@@ -608,6 +610,9 @@ class SeededFaultBus:
             )
         except QueueFull:
             return False
+        except PositionTooOld as error:
+            self._aborted = error  # the checkpoint is gone: the run cannot honour the restart, and must not go on
+            raise
         handle.inner.cancel()
         handle.inner = replacement
         return True
@@ -616,7 +621,14 @@ class SeededFaultBus:
         """Restart the subscription at its checkpoint; False (and logged) when the replay does not fit."""
         topic, key, msg_id = envelope.topic, envelope.key, envelope.msg_id
         detail = f"{when}; resumes at {handle.checkpoint}"
-        if not self._restart(handle):
+        try:
+            restarted = self._restart(handle)
+        except PositionTooOld:
+            self._note(
+                FaultKind.CRASH_SKIPPED, topic, key, msg_id, handle.id,
+                detail + ": the checkpoint is older than what the log keeps; the run is aborted")
+            return False
+        if not restarted:
             self._note(FaultKind.CRASH_SKIPPED, topic, key, msg_id, handle.id, detail + ": the replay does not fit")
             return False
         handle.crashes += 1
@@ -644,8 +656,11 @@ class SeededFaultBus:
         return self._inner.oldest(topic)
 
     def trim(self, position: Position) -> Position:
-        """Trims the inner bus's log. A restart of a subscription resumes from its stored checkpoint: if a trim or a
-        window passed it the resume fails with `PositionTooOld`, which is the clear failure retention promises."""
+        """Trims the inner bus's log. A crash restarts a subscription at its stored checkpoint: if a trim or a retention
+        window has passed the checkpoint the restart cannot resume (`PositionTooOld` from the inner bus). That is not a
+        handler failure to retry and dead-letter: the wrapper records it (a `CRASH_SKIPPED` fault), the delivery goes on, and
+        `step`, `run_until_idle` and every later call (`poll`, `publish`, ...) raise that `PositionTooOld`, outside any
+        handler. The run stops; a consumer's window must exceed the messages between its checkpoint and its crash."""
         self._check_open()
         return self._inner.trim(position)
 
@@ -685,6 +700,7 @@ class SeededFaultBus:
             moved = self._release()
             if self._inner.step():
                 self._now += 1
+                self._raise_aborted()  # a restart that could not resume stops the run here, outside the handler
                 return True
             if self._cfg.release_on_poll or (not self._held and not self._dups):
                 return False  # what is held arrives when the caller polls
@@ -723,3 +739,8 @@ class SeededFaultBus:
     def _check_open(self) -> None:
         if self._closed:
             raise BusClosed("the bus is closed")
+        self._raise_aborted()
+
+    def _raise_aborted(self) -> None:
+        if self._aborted is not None:
+            raise self._aborted

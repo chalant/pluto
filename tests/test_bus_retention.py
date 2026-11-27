@@ -12,6 +12,7 @@ import time
 import unittest
 
 from pluto.bus import BusError, InMemoryBus, Position, PositionTooOld, Retention, Start, reply, request
+from pluto.bus.faults import FaultConfig, FaultKind, SeededFaultBus
 from pluto.bus.log import LogBus
 from tests import nats_support
 from tests.test_bus_contract import Recorder, make_memory, make_nats, make_serializing, publish
@@ -232,6 +233,44 @@ class RetentionContract:
         for call in (lambda: bus.oldest('t'), lambda: bus.trim(Position('t', 0))):
             with self.assertRaises(BusError):
                 call()
+
+
+class FaultBusRetention(unittest.TestCase):
+    """A crashed subscription restarts at its checkpoint (`SeededFaultBus`): past the window that is a loud end of the run."""
+
+    def faulty(self, window):
+        bus = SeededFaultBus(InMemoryBus(retention=Retention(max_messages=window)), 1, FaultConfig(crash=1.0, max_crashes=3))
+        self.addCleanup(bus.close)
+        return bus
+
+    def test_a_restart_whose_checkpoint_the_window_passed_aborts_the_run_it_is_not_a_dead_letter(self):
+        bus = self.faulty(WINDOW)
+        seen = []
+        bus.subscribe('t', lambda delivery: seen.append(delivery.envelope.payload))
+        for i in range(30):  # the checkpoint (before the first message) is far older than the window
+            publish(bus, 't', i, ts=i)
+
+        with self.assertRaises(PositionTooOld):
+            bus.run_until_idle()
+
+        self.assertEqual(bus.dead_letters(), ())  # not a handler error that was retried and given up on
+        self.assertIn(FaultKind.CRASH_SKIPPED, [fault.kind for fault in bus.fault_log()])
+        for call in (bus.step, bus.run_until_idle, bus.poll, lambda: publish(bus, 't', 99)):
+            with self.assertRaises(PositionTooOld):  # and the bus stays stopped
+                call()
+
+    def test_a_window_larger_than_the_messages_since_the_checkpoint_lets_the_restart_resume(self):
+        bus = self.faulty(100)
+        seen = []
+        bus.subscribe('t', lambda delivery: seen.append(delivery.envelope.payload))
+        for i in range(30):
+            publish(bus, 't', i, ts=i)
+
+        bus.run_until_idle()
+
+        self.assertEqual(bus.dead_letters(), ())
+        self.assertEqual(sorted(set(seen)), list(range(30)))  # a crash replays what it had handled, nothing is missing
+        self.assertTrue(any(fault.kind is FaultKind.CRASH for fault in bus.fault_log()))
 
 
 class InMemoryRetention(RetentionContract, unittest.TestCase):
