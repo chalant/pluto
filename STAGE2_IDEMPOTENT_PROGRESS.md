@@ -162,7 +162,7 @@ No wrong result and no hang in any of the 54 runs.
 Fresh clone of `stage2-idempotent` at `d42e4c2a` (`--no-hardlinks`), new env from `dev/setup_env.sh`, NATS up at 127.0.0.1:4222,
 `PLUTO_REQUIRE_NATS=1`, whole `tests/`: **995 passed, 5 skipped** (443 s on a loaded machine), and with `PYTHONHASHSEED=1`: **995 passed,
 5 skipped** (333 s). The skips are the legitimate ones (the poll test that needs a second writer on the four in-memory
-buses and wrappers, the release-failure test on the in-memory implementation). `origin/master` had 959 passed, 5 skipped; the 36 new
-tests are `test_pluto_idempotent.py` (28), `test_pluto_phases.py` (+1), `test_pluto_phase_participants.py` (+2) and the two whole-run tests
-of `test_bus_faults_runs.py` (replacing one) with their subtests. The original result tests and the bus contract are unchanged
+buses and wrappers, the release-failure test on the in-memory implementation). `origin/master` had 959 passed, 5 skipped: 36 more
+tests, 28 of them in `test_pluto_idempotent.py` (the rest in `test_pluto_phases.py`, `test_pluto_phase_participants.py` and
+`test_bus_faults_runs.py`, which now has two tests instead of one). The original result tests and the bus contract are unchanged
 (`git diff origin/master --stat` on them is empty). The clone and its env were removed.
