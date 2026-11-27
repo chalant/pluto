@@ -152,8 +152,59 @@ the run without faults) and `mute`, `crash`, `publish_fail` (clean `PhaseError`,
 | 6 | "late redelivery" and "group-member failover" in the not-modelled list, with what it means for the `lose_delivery` evidence |
 | 7 | unused import removed; `start=` from the receipt of a dropped message raises `ValueError`; `publish_fail` validates first; tests for `release_failed` and the `QueueFull` wait; `subscribe` and `Request` flushing documented; exports and the stale docstring line in `pluto/bus/__init__.py` |
 
+## Integration on top of `stage2-bus` (`cfca03fd`)
+
+The branch was rebased onto the local `stage2-bus` (`git rebase --onto stage2-bus dc3e9aa4 stage2-faultbus`; one conflict, the
+docstring and imports of `pluto/bus/__init__.py`). The earlier sections describe the wrapper before the rebase; this is what the new
+interface changed.
+
+**`SeededFaultBus` on the new `Bus` interface** (`pluto/bus/faults.py`):
+
+| Interface item | What the wrapper does |
+|---|---|
+| `networked` | `inner.networked`, or True with `FaultConfig(release_on_poll=True)`. Reason: `PhaseDriver.drive` loops `run_until_idle`, "everything in?", `if not bus.networked: stop`, else `poll`. Its `run_until_idle`/`step` skip ahead in logical time until nothing is held, so by default nothing can arrive after idle and a missing done is the immediate error it should be: `networked` is then the inner bus's (False over `InMemoryBus`). In the new mode `release_on_poll` the wrapper returns idle while messages are held and releases them only in `poll`, so messages can arrive after idle: `networked` is True and the driver waits with its deadline. That is the mode in which a delay can outlive `run_until_idle` over an in-memory inner bus; it is what tests a driver that waits |
+| `poll(timeout)` | not networked: False at once. Otherwise release what is due (`release_on_poll`: first skip ahead in logical time to the next held message), then `inner.poll`; True if either moved something; never runs a handler. With `release_on_poll` over an inner bus that cannot wait, a poll that found nothing sleeps `timeout` (the driver's deadline is wall-clock: otherwise a busy loop). `BusClosed` after close |
+| `Receipt` class | a held message's receipt is `Receipt(msg_id, resolver)`: asking for `position` is a barrier (puts everything held into the log, like `subscribe`) and returns the inner position (`BusError` if the message was dropped on release; before: `ValueError` at `subscribe`). A direct publish returns the inner receipt; the first-logged checkpoint of a subscription that started at the end of the log keeps the inner **receipt** unresolved until a restart needs its position (a networked bus does not wait in `publish`; test with receipts that count their resolutions) |
+| S15 topics | `_validate` goes through `exact_topic`, which refuses whitespace and control characters: a held message is refused at `publish`, not on release (test) |
+| `close()` | holds cleared, then `inner.close()`, whose error goes through (test with an inner whose `close` raises) |
+
+Tests: `tests/test_bus_faults.py` has the transparent contract over **three** implementations now (memory, serializing, NATS: `JetStreamTransparentContract`, skipped without a server, a failure with `PLUTO_REQUIRE_NATS=1`) and tests for each item above, `release_on_poll` (a delayed message arrives only on poll, a poll runs no handler, without the mode a poll releases nothing). `tests/test_bus_faults_contract.py` classifies the five contract tests added on `stage2-bus` (88 contract tests, hash-seed one left out): `test_poll_reads_the_log_and_never_runs_a_handler` counts invocations (fails under every fault but a delay: in `ATTEMPTS`); the other three that run (`test_a_bus_nobody_else_writes_to_has_nothing_to_poll`, `test_poll_after_close_raises`, `test_topics_with_whitespace_or_control_characters_are_refused_by_every_bus`) pass under all faults (`SURVIVORS`, now 28); `test_poll_finds_a_message_published_by_another_bus_of_the_same_log` skips on these buses. Measured failing sets now: `delay` 9, `duplicate_publish` 55, `ack_lost` 53, `lose_delivery` 22, `crash` 45; 28 pass under all (29 with the skipped one).
+
+### Whole backtests with the new driver (`buy_and_hold`, 2008 to 2013, 3 seeds each, `tests/test_bus_faults_runs.py` is the short committed version)
+
+Setup: `SeededFaultBus(SerializingBus(InMemoryBus))` as the bus of the run (`process_manager.InMemoryBus` patched, as `tests/test_pluto_phases_run.py` does), `PhaseDriver` deadline patched to 2 s (1 s in the test), a 150 s alarm per run, one fault at a time (probability 0.1; `delay` 0.3 with `max_delay` 6; `mute` 0.02), in both modes: **default** (`networked` False: the driver never waits) and **poll** (`release_on_poll`: `networked` True, the driver waits with `poll`; the in-memory inner bus needs this mode for the waits to matter, because by default the wrapper never returns idle while holding a message). Outcome per run, compared with the run without faults at exact tolerance:
+
+| Fault | default mode | poll mode |
+|---|---|---|
+| `delay` (22,700 delayed messages) | **identical** (3/3) | **identical** (3/3); also `delay` 1.0 with `max_delay` 30 (all 75,888 messages delayed): identical 3/3 |
+| `lose_delivery` (9,000 lost deliveries) | **identical** (3/3) | **identical** (3/3); also delay 0.5 + `lose_delivery` 0.3 together (37,800 delayed, 27,200 lost): identical 3/3 |
+| `ack_lost` | `PhaseError ... said done twice` (3/3; the broker and/or a runtime; phase account, submit or book) | `PhaseError`: `said done twice` (2/3), `broker sent a done of phase.submit at <earlier tick>` (1/3: a stale done) |
+| `duplicate_publish` | `PhaseError ... broker said done twice` / `<runtime> said done twice` (3/3) | `PhaseError ... sent a done of phase.<x> at <tick>` (3/3: late copies of dones arriving in a later phase; the broker's or a runtime's) |
+| `crash` | `PhaseError ... said done twice` (3/3) | the same (3/3) |
+| `mute` | `PhaseError ... no done from <runtime or broker>` at once (3/3) | `PhaseError ... no done from <...> within 2 s` (3/3): the driver's deadline, named participants |
+| `publish_ack_lost` | `PhaseError ... said done twice` (2/3), raw **`PublishFailed`** from `phase.submit` (1/3) | the same |
+| `publish_fail` | raw **`PublishFailed`** from `phase.account` (1/3), `PhaseError ... failed: PublishFailed ... strategy.orders` (1/3), `PhaseError ... sent 0 orders in 1 batches, the broker received 0 in 2` (1/3) | the same |
+
+**No wrong result and no hang in any run** (48 runs plus 6 heavy-delay ones; every outcome is an identical frame or an abort). Aborts are
+expected until the handlers are idempotent. Worth reporting about them:
+
+* **The new driver tolerates a delay and a lost delivery** in both modes, which the old one did only by accident of `run_until_idle`
+  (the earlier experiment): in poll mode `run_until_idle` returns with messages held and the driver's wait, `announced_orders` and the
+  counts in the submit event carry the run to the identical frame, with every message delayed up to 30 ticks. That is the evidence
+  that the explicit waits of `stage2-bus` work. It does **not** cover a late *redelivery* across lanes (not modelled, see above).
+* **A raw `PublishFailed` escapes the controller** (`publish_fail` 1/3, `publish_ack_lost` 1/3): the driver's own publish of a phase
+  event is not retried and not wrapped in a `PhaseError`. An abort, but not a clean one. Idempotent handlers need a publish retry with
+  the same `msg_id` (the "retry" items of the analysis above).
+* **A late duplicate done is an abort** in poll mode (`sent a done of phase.<x> at <earlier>`): the driver treats a done that is not of
+  the phase and tick as an error, not as an already-counted copy. With deterministic `msg_id`s on dones it can ignore a copy.
+* `mute` of the broker's subscription or a runtime's gives `no done from ...` in default mode, and in poll mode the same after the
+  deadline with the names; a muted participant is the case the deadline exists for.
+
+`tests/test_bus_faults_runs.py` (7 s, 16 subtests, a short `buy_and_hold` to 2008-02-15): for each fault and mode, the outcome must be
+the baseline frame or a `PhaseError`/`PublishFailed`, `delay` and `lose_delivery` must be identical, a fault must have been injected,
+`networked` must be what the mode says, and an alarm cuts a hang. When handlers become idempotent more faults move to identical and the
+test still passes; add them to `TOLERATED` then.
+
 ## Final run
 
-Fresh clone of `stage2-faultbus` at `1785e0cd` (`--no-hardlinks`), new env from `dev/setup_env.sh`: whole `tests/`: **672 passed, 1 skipped**
-(the skip is the release-failure test on the in-memory implementation, which has no codec to refuse a payload), also under
-`PYTHONHASHSEED=1` (672 passed, 1 skipped). Before the review round: 655 passed. The clone and its env were removed.
+(Filled in after the run below.)
